@@ -1,0 +1,10 @@
+# SYNTHETIC fixture for research/fairmind-e analysis tests. Hand-constructed coverage rates; not study data.
+system_id,coverage_rate_pre,coverage_rate_post
+S1,0.33,0.83
+S2,0.50,0.83
+S3,0.17,0.67
+S4,0.50,0.67
+S5,0.67,0.67
+S6,0.33,0.83
+S7,0.83,1.00
+S8,0.50,0.67

@@ -1,0 +1,14 @@
+# SYNTHETIC fixture for research/fairmind-e analysis tests. Hand-constructed ratings; not reviewer-study data.
+rater_id,rater_role,profile_id,recommendation,decision_confidence_1_5,decisive_controls,time_to_decision_s
+R1,GRC,P1,go,5,ENV-1;ENV-2,42.0
+R1,GRC,P2,go,4,ENV-1;ENV-3,55.5
+R1,GRC,P3,go,3,ENV-3,61.0
+R1,GRC,P4,no_go,5,ENV-4;ENV-6,38.0
+R2,ML_ENG,P1,go,4,ENV-1,47.0
+R2,ML_ENG,P2,go,4,ENV-2;ENV-3,52.0
+R2,ML_ENG,P3,no_go,3,ENV-3;ENV-5,66.5
+R2,ML_ENG,P4,no_go,5,ENV-6,35.0
+R3,ESG,P1,go,4,ENV-2,44.0
+R3,ESG,P2,no_go,2,ENV-4,71.0
+R3,ESG,P3,no_go,3,ENV-5;ENV-6,58.0
+R3,ESG,P4,no_go,4,ENV-4;ENV-6,40.5

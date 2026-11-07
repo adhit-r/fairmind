@@ -1,0 +1,34 @@
+# FairMind-E cloud billing template (measurement_method=cloud_billing).
+# Operator-filled manual-entry path: real cloud billing and carbon exports lag
+# hours to days behind execution, so the harness NEVER queries or simulates a
+# billing API. After invoices or provider carbon reports post, copy the
+# figures into data rows below, then re-run:
+#   python3 research/fairmind-e/measurement/harness.py --methods cloud_billing --billing-file <this file>
+# Rows produced from this file carry provenance_class=vendor_reported
+# (confidence capped at 0.60 by the platform rules).
+#
+# How to fill each column:
+#   workload_id            one of: classical_ml_training, transformer_finetune,
+#                          rag_inference, batch_embeddings
+#   iteration              integer 1..N matching the harness iteration the
+#                          cloud execution corresponds to
+#   provider               e.g. aws, gcp, azure
+#   service                e.g. ec2, sagemaker, compute-engine
+#   region                 provider region string, e.g. ap-south-1
+#   billing_period_start   ISO date the invoice line covers (YYYY-MM-DD)
+#   billing_period_end     ISO date (YYYY-MM-DD)
+#   duration_seconds       billed runtime if the provider reports it, else blank
+#   energy_kwh             energy figure from the provider, else blank
+#   location_kg_co2e       location-based emissions from the provider, else blank
+#   market_kg_co2e         market-based emissions from the provider, else blank
+#   carbon_intensity_basis average or marginal (as stated by the provider)
+#   invoice_reference      invoice or report id for auditability
+#   notes                  anything needed to re-derive the figure later
+#
+# Leave unknown numeric fields BLANK. Do not estimate here: estimates belong
+# to the manual_flop method. An entry with neither energy_kwh nor a kg_co2e
+# figure is recorded as method unavailable.
+#
+# Commented example (remove the leading '#' only when replacing with real data):
+# classical_ml_training,1,aws,ec2,ap-south-1,2026-08-01,2026-08-01,190,0.021,0.0089,0.0071,average,INV-2026-08-0042,copied from AWS Customer Carbon Footprint export
+workload_id,iteration,provider,service,region,billing_period_start,billing_period_end,duration_seconds,energy_kwh,location_kg_co2e,market_kg_co2e,carbon_intensity_basis,invoice_reference,notes

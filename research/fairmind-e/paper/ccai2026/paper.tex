@@ -1,0 +1,326 @@
+\documentclass[10pt]{article}
+
+% LEGACY PRE-PORT DRAFT. Do not submit or cite this file. The current
+% CCAI submission source of truth is submission.tex, with the official
+% tackling_climate_workshop_style.sty and the measured M5 results.
+%
+% CCAI (NeurIPS-style) approximation for the reviewable PDF. Port to the
+% official climatechange.ai template before OpenReview submission.
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{1.1em}{0.5em}
+\titlespacing*{\subsection}{0pt}{0.9em}{0.4em}
+\setlength{\parskip}{2pt}
+
+\title{\vspace{-1.2em}\textbf{Gating AI Deployment on Environmental Evidence Quality}}
+\author{
+  Adhithya Rajasekaran\\
+  Axonome\\
+  \texttt{adhithya@axonome.xyz}\\
+  \small ORCID 0009-0004-1682-7958
+}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-2.2em}
+
+\begin{abstract}
+Carbon-aware governance proposals gate AI deployment on impact magnitude: a
+carbon budget, a readiness level, or a risk rating. None of them asks whether
+the carbon number itself can be trusted. We present FairMind-E, an
+environmental governance module deployed inside an open AI-governance
+platform, that makes measurement provenance a first-class release criterion.
+Each assessment maps its measurement source to one of five provenance classes,
+which cap a numeric evidence-confidence score (vendor-reported figures cap at
+0.60; undisclosed provenance forces 0.0); confidence crossed with an impact
+tier in a $3{\times}3$ decision matrix yields \emph{go},
+\emph{conditional\_go}, or \emph{no\_go}, and the recommendation blocks the
+platform's deployment-approval workflow. Offsets and renewable certificates
+never improve confidence, tier, or recommendation. On a 14-case hand-labeled
+fixture set the full mechanism reproduces all expected decisions, while
+ablated gates that see only carbon magnitude agree with at most half of them
+--- a consistency check, not a field result, which is why we also present the
+design of two studies, instrumented and ready to run with pre-registration planned: a
+measurement study in which identical workloads measured three ways (power
+tracker, cloud billing, analytic FLOP estimate) receive different confidence
+scores and can flip the gate at identical true impact, and a two-arm expert
+panel testing whether the matrix changes reviewer coverage and agreement. We
+seek workshop feedback on both study designs before data collection completes.
+\end{abstract}
+
+\section{The gap: a measurement layer with no trust layer}
+
+Regulators and standards bodies are building the measurement layer for AI's
+environmental footprint: quantification-methods inventories
+(CEN/CLC/TR~18145~\cite{cen18145}), sustainability overviews
+(ISO/IEC~TR~20226~\cite{iso20226}), measurement frameworks in progress
+(IEEE~P7100), and a G7-commissioned inventory that catalogues thirteen
+measurement, monitoring, and reporting initiatives~\cite{g7overview}. The EU
+AI Act anticipates harmonised standards for ``reporting and documentation
+processes to improve AI systems' resource performance'' (Article~40), and
+GPAI technical documentation must state known or estimated energy consumption
+(Annex~XI)~\cite{euaiact}. Yet none of these instruments --- and none of the
+thirteen catalogued initiatives --- defines how the \emph{quality} of an
+environmental claim should condition a deployment decision.
+
+Recent governance research gates on magnitude. Carbon-Aware Governance Gates
+embeds carbon budgets in governance layers, with provenance recorded only in
+audit logs~\cite{cagg}; G-TRACE gates on sustainability readiness levels,
+arguing that ``launch blocking without carbon sign-off creates financial-grade
+controls''~\cite{gtrace}; risk-management integrations treat AI carbon as a
+risk dimension in banking frameworks~\cite{tkachenko}. Meanwhile, measurement
+research has established that reliability varies sharply with disclosure:
+metadata-completeness tiers across 5{,}227 public models span roughly
+$1.2\times$ to $2\times$ estimation error~\cite{huggingcarbon}, and
+spend-based fallbacks in tiered Scope~3 accounting overestimate by
+10--40$\times$~\cite{fourtier}. Adjacent work has begun to act on estimate
+trust --- conformal calibration inside a carbon budget gate for agentic
+AI~\cite{greensarc}, confidence-gated filtering of industrial emissions
+predictions~\cite{trustpems} --- and evidence-driven release gates are
+established for functional quality~\cite{selftesting}. The two literatures
+have not been connected: a system can sit comfortably under its carbon budget
+while its carbon number is untrustworthy, and every published gate would pass
+it.
+
+FairMind-E connects them. Our claim is narrow and, to our knowledge, unheld:
+environmental \emph{evidence quality} --- not only impact magnitude --- should
+gate AI deployment, operationalized as a provenance-derived confidence score
+crossed with an impact tier. The intellectual ancestry is the data-quality
+tradition in life-cycle assessment (pedigree matrices and data quality
+indicators~\cite{weidema}) and the NUSAP uncertainty pedigree~\cite{nusap};
+recent work recommends DQI-style disclosure for AI-assisted product
+footprinting but proposes no score, no thresholds, and no
+gate~\cite{suhcriteria}. We bring that tradition, inverted, into AI release
+governance: they assess AI that produces carbon numbers; we score carbon
+numbers to gate the AI.
+
+\section{Mechanism}
+
+\textbf{Provenance classes and confidence.} Every assessment declares its
+measurement source, normalized to one of five provenance classes with bounded
+confidence ranges: \emph{measured} (hardware telemetry; 0.85--1.00),
+\emph{tool\_estimated} (software power trackers; 0.60--0.85),
+\emph{vendor\_reported} (cloud-provider figures; 0.40--0.60), \emph{manual}
+(analytic FLOP estimates; 0.20--0.40), and \emph{unknown} (0.0). A
+caller-supplied score is honored but never allowed to exceed its provenance
+cap: a claimed 0.95 on vendor-reported data becomes 0.60, and unknown
+provenance forces 0.0 regardless of any claimed score. Provenance is
+categorical and reported separately from quantified uncertainty (a percent
+figure), so a precise-looking number cannot launder a weak source.
+
+\textbf{Impact tiers.} Metrics map to low, medium, or high impact per
+lifecycle phase (training, fine-tuning, inference, LLM inference), using
+location-based carbon for tiering so market instruments cannot lower a gate
+outcome. The thresholds are explicitly provisional and are recalibrated from
+the measurement study (Section~\ref{sec:studies}); an
+intensity-versus-baseline ratio can raise a tier at any confidence but lower
+it only with measured-grade confidence.
+
+\textbf{The decision matrix.} Confidence bands (measured $\geq 0.70$;
+estimated 0.35--0.69; unknown $< 0.35$) cross with impact tiers
+(Table~\ref{tab:matrix}). Confidence 0.0 short-circuits to \emph{no\_go}
+before matrix lookup: an undisclosed claim never passes. A
+\emph{conditional\_go} cannot be approved until it carries a dated, owned
+mitigation or an explicit exception (owner, expiry, rationale) --- the
+exception path makes reviewer overrides auditable instead of informal. Six
+controls (ENV-1..ENV-6: boundary, energy accounting, dual location/market
+carbon, per-functional-unit efficiency, evidence confidence with disclosed
+uncertainty, mitigation/exception) define coverage, and disclosed offsets are
+recorded but never subtracted from emissions and never improve any gate
+output.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Impact $\backslash$ Confidence & measured & estimated & unknown \\
+\midrule
+low    & go              & go              & conditional\_go \\
+medium & conditional\_go & conditional\_go & no\_go \\
+high   & conditional\_go & no\_go          & no\_go \\
+\bottomrule
+\end{tabular}
+\caption{The impact $\times$ evidence-confidence decision matrix. Confidence
+exactly 0.0 (undisclosed provenance) returns \emph{no\_go} for every tier,
+before matrix lookup.}
+\label{tab:matrix}
+\end{table}
+
+\section{Implementation and consistency evaluation}
+
+FairMind-E ships inside FairMind, an open AI-governance platform, not as a
+standalone proposal. The decision engine is a framework-agnostic Python
+package (57 unit tests covering every matrix cell, band boundary, provenance
+cap, and the undisclosed-evidence short-circuit). Assessments persist as
+versioned governance evidence; a release gate hooks the platform's existing
+deployment-approval workflow and returns HTTP~409 with the blocking reason
+when the latest assessment is \emph{no\_go} or an unmitigated
+\emph{conditional\_go} (15 integration tests). Reviewers get a UI tab with
+the matrix position, control coverage, mitigation tracker, and version trail;
+disclosures export in an ESRS~E1-shaped format~\cite{csrd}. The mechanism is
+therefore machine-checkable end to end: given the same assessment payload,
+the gate decision is deterministic and reproducible.
+
+\textbf{Fixture consistency check.} On 14 hand-labeled cases spanning all
+matrix cells, mitigation states, exception paths, and offset disclosures, the
+full mechanism reproduces 14/14 expected labels. Ablations degrade sharply
+(Table~\ref{tab:ablation}): a carbon-only gate (magnitude thresholds, no
+evidence dimension) agrees on 7/14; a generic sustainability score on 6/14;
+no environmental gate on 3/14; removing only the exception path or the
+mitigation-review requirement costs 1--3 cases each. We state the boundary
+plainly: the authors wrote both the fixtures and the engine, so this is a
+consistency and ablation illustration --- evidence that the confidence
+dimension is load-bearing in the mechanism --- and not an empirical
+validation. That is what the two studies are for.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Gate variant & Exact matches & Accuracy \\
+\midrule
+FairMind-E (full mechanism)     & 14/14 & 100.0\% \\
+no exception path               & 13/14 & 92.9\% \\
+offset-credit gate              & 13/14 & 92.9\% \\
+no mitigation-review gate       & 11/14 & 78.6\% \\
+carbon-only gate                & 7/14  & 50.0\% \\
+generic sustainability score    & 6/14  & 42.9\% \\
+no environmental gate           & 3/14  & 21.4\% \\
+\bottomrule
+\end{tabular}
+\caption{Hand-labeled fixture ablation (14 cases). A consistency check on
+author-written fixtures, not an empirical validation; reported to show the
+evidence-confidence dimension is load-bearing.}
+\label{tab:ablation}
+\end{table}
+
+\section{Validation studies (designed and instrumented, pre-data)}
+\label{sec:studies}
+
+\textbf{Measurement study.} Four workloads (classical ML training,
+transformer fine-tune, RAG inference, batch embeddings) $\times$ 5
+iterations, each physical run measured three ways: a software power tracker
+(tool\_estimated), operator-filled cloud billing (vendor\_reported), and a
+documented analytic FLOP estimate (manual). The harness never fabricates:
+missing dependencies or billing entries yield
+\texttt{method\_available=false} rows. Outputs feed method-agreement
+statistics (pairwise MAPE, Bland-Altman limits of agreement) that recalibrate
+the provisional tier thresholds and confidence ranges. The design isolates
+the paper's central question: the same run, at identical true impact, carries
+different provenance under each method --- we report how often the gate
+decision flips on provenance alone, a quantity no magnitude-only gate can
+express.
+
+\textbf{Expert panel.} Twelve synthetic system profiles cover all nine matrix
+cells (boundary cells doubled with differing mitigation states), each
+validated against the production engine; 15 raters (5 GRC, 5 ML engineering,
+5 ESG) rate 8 profiles each under a counterbalanced assignment (10 ratings
+per profile, at least 3 per role). Two arms: baseline (raw measurements only)
+versus module (full FairMind-E output). Pre-specified hypotheses: H1,
+displayed confidence correlates negatively with recommendation ordinal
+(Spearman); H2, the module arm raises ENV control coverage against a
+per-profile gold checklist (Wilcoxon signed-rank on paired coverage rates);
+H3, the matrix improves inter-rater agreement (mean pairwise Cohen's
+$\kappa$ and Fleiss' $\kappa$ with bootstrapped CIs, target
+$\kappa > 0.60$). The analysis pipeline is implemented with exact statistics,
+environment-independent bootstrap intervals, and hand-verified test vectors,
+so results are computable the day collection closes.
+
+\section{Pathway to impact}
+
+The near-term impact channel is regulatory: Article~40's harmonised standards
+for resource-performance reporting do not yet exist, and the standards
+bodies' current deliverables contain no environmental
+item~\cite{euaiact,facctreg}. A provenance-scored, platform-integrated gate
+is a concrete, testable proposal for what those standards could require ---
+anticipatory infrastructure rather than commentary. The mechanism is deployed
+in an open platform; the fixtures, profiles, harness, and analysis code are
+public in the project repository; and both studies are designed for
+independent replication. We ask the workshop for critique of the two study
+designs --- particularly the panel's baseline-arm construction and the
+defensibility of provenance caps --- while changes are still cheap.
+
+\paragraph{Limitations.} The fixture evaluation is author-constructed and
+non-empirical by design; the measurement study is single-site in its first
+run; the panel targets 15 raters, sized for feasibility rather than power on
+small effects. Impact-tier thresholds remain provisional until recalibrated.
+
+\begin{thebibliography}{19}
+\small
+
+\bibitem{cagg} Carbon-Aware Governance Gates (CAGG): embedding carbon
+budgets, energy provenance, and sustainability-aware validation in
+governance layers. arXiv:2602.19718v2, 2026.
+
+\bibitem{gtrace} G-TRACE: an AI Sustainability Pyramid for carbon-aware
+governance readiness. arXiv:2511.04776v3, 2026.
+
+\bibitem{tkachenko} N. Tkachenko. Sustainable integration of frontier AI in
+banking: carbon-aware risk management frameworks. \emph{Journal of Financial
+Compliance}, 2025. (Preprint: arXiv:2410.01818.)
+
+\bibitem{huggingcarbon} Hugging Carbon: estimation reliability tiers for the
+carbon footprint of 5{,}227 public models. arXiv:2605.01549v2, 2026.
+
+\bibitem{fourtier} Four-tier Scope~3 methodology for AI inference under
+CSRD. arXiv:2606.10660, 2026.
+
+\bibitem{greensarc} Green SARC: predictive cost and carbon governance for
+agentic AI with split-conformal calibration. arXiv:2606.15954, 2026.
+
+\bibitem{trustpems} Trust-aware predictive emissions monitoring:
+confidence-gated filtering of industrial emissions estimates.
+arXiv:2606.06156, 2026.
+
+\bibitem{selftesting} Automated self-testing as a quality gate:
+evidence-driven release decisions. arXiv:2603.15676, 2026.
+
+\bibitem{suhcriteria} Criteria for credible AI-assisted carbon footprinting
+systems. arXiv:2509.00240, 2025.
+
+\bibitem{weidema} B.~P. Weidema and M.~S. Wesn{\ae}s. Data quality management
+for life cycle inventories --- an example of using data quality indicators.
+\emph{Journal of Cleaner Production}, 4(3--4):167--174, 1996.
+
+\bibitem{nusap} S.~O. Funtowicz and J.~R. Ravetz. \emph{Uncertainty and
+Quality in Science for Policy}. Kluwer, 1990.
+
+\bibitem{scoping} Toward sustainable generative AI: a scoping review of
+carbon footprint methods and tools. \emph{IEEE Access}, 14, 2026.
+doi:10.1109/ACCESS.2026.3659894.
+
+\bibitem{luccioni} A.~S. Luccioni, S. Viguier, and A.-L. Ligozat. Evaluating
+the social and environmental impact of generative AI. arXiv:2306.05949,
+2023.
+
+\bibitem{euaiact} Regulation (EU) 2024/1689 (AI Act), Article~40 and
+Annex~XI \S1(2d).
+
+\bibitem{csrd} Directive (EU) 2022/2464 (CSRD) and ESRS~E1 (climate change),
+2023.
+
+\bibitem{cen18145} CEN/CLC/TR 18145:2025. Environmentally sustainable
+artificial intelligence: quantification methods inventory. 2025.
+
+\bibitem{iso20226} ISO/IEC TR 20226:2025. Artificial intelligence ---
+environmental sustainability aspects. 2025.
+
+\bibitem{g7overview} G7 French Presidency. Overview of initiatives for the
+measurement and monitoring of energy and resource use of AI models. May
+2026.
+
+\bibitem{facctreg} Regulating the environmental footprint of AI: the
+regulatory landscape. arXiv:2603.00068, 2026 (FAccT).
+
+\end{thebibliography}
+
+\end{document}

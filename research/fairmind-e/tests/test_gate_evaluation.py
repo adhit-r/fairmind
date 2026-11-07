@@ -1,11 +1,30 @@
 import csv
 import importlib.util
 import pathlib
+import sys
 import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+def backend_importable() -> bool:
+    """True when apps/backend's domain gate can be imported (backend venv)."""
+    backend_root = ROOT.parents[1] / "apps" / "backend"
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    try:
+        import src.domain.environmental  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+BACKEND_SKIP = unittest.skipUnless(
+    backend_importable(),
+    "apps/backend is not importable; run from the backend venv (cd apps/backend && uv run python ...)",
+)
+
 EVALUATOR_PATH = ROOT / "evaluation" / "evaluate_gate.py"
 
 
@@ -16,6 +35,7 @@ def load_evaluator():
     return module
 
 
+@BACKEND_SKIP
 class GateEvaluationTest(unittest.TestCase):
     def test_evaluator_writes_deterministic_paper_outputs(self):
         evaluator = load_evaluator()
