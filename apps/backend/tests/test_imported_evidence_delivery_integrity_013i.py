@@ -13,6 +13,8 @@ from typing import Iterator
 
 import pytest
 
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
+
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = BACKEND_ROOT / "migrations"
@@ -122,6 +124,7 @@ def _apply_postgresql_013i(engine: object, schema_name: str) -> None:
                     encoding="utf-8"
                 )
             )
+            cursor.execute(ORM_COLUMNS_AFTER_PARTIAL_CHAIN)
         raw_connection.commit()
     except Exception:
         raw_connection.rollback()

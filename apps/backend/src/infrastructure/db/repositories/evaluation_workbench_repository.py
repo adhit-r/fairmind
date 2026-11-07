@@ -5099,7 +5099,21 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                 verdict_version=0,
             )
         )
+        retry_limits = {
+            selection.suite.id: min(
+                int(selection.suite.budgets.to_dict().get("maxAttempts", 1)),
+                3,
+            )
+            for selection in command.graph.suites
+        }
         for execution in command.suites:
+            max_attempts = retry_limits.get(execution.suite_version_id)
+            if max_attempts is None or not 1 <= max_attempts <= 3:
+                raise self._error(
+                    "binding_integrity_error",
+                    _BINDING_INTEGRITY_MESSAGE,
+                    409,
+                )
             self.db.execute(
                 insert(GovernanceEvaluationRunSuiteExecution.__table__).values(
                     id=execution.execution_id,
@@ -5115,6 +5129,9 @@ class SqlAlchemyEvaluationWorkbenchRepository:
                     admission_status="pending",
                     review_status="pending",
                     freshness_status="current",
+                    available_at=command.created_at,
+                    max_attempts=max_attempts,
+                    attempt_count=0,
                     created_at=command.created_at,
                     updated_at=command.created_at,
                 )

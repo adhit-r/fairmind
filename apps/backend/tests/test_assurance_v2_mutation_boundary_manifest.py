@@ -14,7 +14,7 @@ import inspect
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, get_type_hints
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -58,6 +58,7 @@ from src.application.services.evaluation_plan_service import EvaluationPlanServi
 from src.application.services.evaluation_run_service import EvaluationRunService
 from src.application.ports.evidence_admission import EvidenceAdmissionRepository
 from src.application.ports.evaluation_worker import EvaluationWorkerPort
+from src.domain.assurance.evaluation_v2 import ExecutionEnvelopeV2
 from src.application.services.evaluator_catalog_service import EvaluatorCatalogService
 from src.application.services.governance_decision_service import GovernanceDecisionService
 from src.application.services.imported_evidence_service import ImportedEvidenceService
@@ -567,6 +568,13 @@ def test_worker_port_is_reserved_without_a_mounted_v2_execution_route() -> None:
         or "/evaluation-v2/worker" in route.path
         for route in _mounted_mutation_routes()
     )
+
+
+def test_worker_execute_contract_requires_the_exact_execution_envelope_v2() -> None:
+    """The isolated worker boundary cannot accept an untyped JSON envelope."""
+
+    annotations = get_type_hints(EvaluationWorkerPort.execute)
+    assert annotations["envelope"] is ExecutionEnvelopeV2
 
 
 def test_verified_evidence_has_no_legacy_atomic_admit_and_link_capability() -> None:

@@ -48,6 +48,7 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
 from src.infrastructure.db.repositories.trust_administration_repository import (
     SqlAlchemyTrustAdministrationUnitOfWork,
 )
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 pytestmark = pytest.mark.skipif(
@@ -156,6 +157,7 @@ def postgres_session_factory():
                         (schema_name,),
                     )
                 cursor.execute((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
+            cursor.execute(ORM_COLUMNS_AFTER_PARTIAL_CHAIN)
         migration_connection.commit()
     finally:
         migration_connection.close()

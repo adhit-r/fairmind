@@ -401,6 +401,72 @@ def test_created_run_persists_an_independent_nonce_witness(repository_fixture) -
     assert len(base64.urlsafe_b64decode(row_nonce + "=")) == 32
 
 
+@pytest.mark.parametrize(
+    ("manifest_max_attempts", "expected_stored_max_attempts"),
+    ((None, 1), (2, 2), (3, 3), (9, 3)),
+)
+def test_run_freezes_manifest_retry_limit_at_worker_cap(
+    repository_fixture,
+    manifest_max_attempts: int | None,
+    expected_stored_max_attempts: int,
+) -> None:
+    session, _ = repository_fixture
+    service = _service(session)
+    retry_label = "default" if manifest_max_attempts is None else str(manifest_max_attempts)
+    target = service.create_target_version(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key=f"retry-target-{retry_label}",
+        payload=_target_payload(f"retry-target-{retry_label}"),
+    ).body
+    suite_payload = _suite_payload(f"retry-suite-{retry_label}")
+    if manifest_max_attempts is not None:
+        suite_payload["budgets"]["maxAttempts"] = manifest_max_attempts
+    suite = service.create_suite_version(
+        org_id=ORG,
+        actor_id=USER,
+        idempotency_key=f"retry-suite-{retry_label}",
+        payload=suite_payload,
+    ).body
+    service.activate_suite_version(
+        org_id=ORG,
+        suite_version_id=suite["id"],
+        actor_id=USER,
+        idempotency_key=f"retry-activate-suite-{retry_label}",
+    )
+    plan = service.create_plan(
+        org_id=ORG,
+        system_id="system-a",
+        actor_id=USER,
+        idempotency_key=f"retry-plan-{retry_label}",
+        payload=_plan_payload(target["id"], [suite["id"]]),
+    ).body
+    service.activate_plan(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key=f"retry-activate-plan-{retry_label}",
+    )
+    run = service.create_run(
+        org_id=ORG,
+        system_id="system-a",
+        plan_id=plan["id"],
+        actor_id=USER,
+        idempotency_key=f"retry-run-{retry_label}",
+        payload={"trigger": "manual", "lifecyclePhase": "pre_deploy"},
+    ).body
+
+    executions = GovernanceEvaluationRunSuiteExecution.__table__
+    stored = session.scalar(
+        select(executions.c.max_attempts).where(
+            executions.c.run_id == run["id"]
+        )
+    )
+    assert stored == expected_stored_max_attempts
+
+
 def test_suite_execution_record_preserves_all_authoritative_evidence_projections(
     repository_fixture,
 ) -> None:
