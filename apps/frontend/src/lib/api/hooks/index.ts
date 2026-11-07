@@ -21,8 +21,6 @@ export { useAuditLogs } from './useAuditLogs'
 export { useMonitoring, useSystemHealth } from './useMonitoring'
 export { useAnalytics } from './useAnalytics'
 export { useCompliance } from './useCompliance'
-export { useModernBias } from './useModernBias'
-export { useMultimodalBias } from './useMultimodalBias'
 export { useEvaluationRuns } from './useEvaluationRuns'
 export type {
   CreateEvaluationPlanInput,

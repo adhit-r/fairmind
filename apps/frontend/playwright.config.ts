@@ -1,9 +1,14 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// The reviewed-external-linking run needs its own dev server, built with the flag on.
-const reviewedExternalLinkingEnabled =
-  process.env.NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED === 'true'
-const devPort = reviewedExternalLinkingEnabled ? 1112 : 1111
+// NEXT_PUBLIC_* flags are compiled into the client bundle, so a run with any flag on
+// needs its own dev server on its own port; it must never reuse the default server.
+// All dev servers share .next, so run the flagged suites one at a time.
+const flag = (name: string) => process.env[name] === 'true'
+const reviewedExternalLinkingEnabled = flag('NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED')
+const assuranceUiEnabled = flag('NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED')
+const assuranceRunUiEnabled = flag('NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED')
+const flaggedRun = reviewedExternalLinkingEnabled || assuranceUiEnabled || assuranceRunUiEnabled
+const devPort = reviewedExternalLinkingEnabled ? 1112 : assuranceRunUiEnabled ? 1114 : assuranceUiEnabled ? 1113 : 1111
 const baseURL = `http://localhost:${devPort}`
 
 export default defineConfig({
@@ -28,9 +33,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: reviewedExternalLinkingEnabled ? 'npx next dev -p 1112' : 'npm run dev',
+    command: flaggedRun ? `npx next dev -p ${devPort}` : 'npm run dev',
     url: baseURL,
-    reuseExistingServer: reviewedExternalLinkingEnabled ? false : !process.env.CI,
+    reuseExistingServer: flaggedRun ? false : !process.env.CI,
     timeout: 120 * 1000,
   },
 })

@@ -49,12 +49,19 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
           icon: <IconInfoCircle className="w-5 h-5 text-yellow-600" />,
         }
       case 'low':
-      default:
         return {
           bg: 'bg-green-100',
           text: 'text-green-900',
           border: 'border-green-400',
           icon: <IconCircleCheck className="w-5 h-5 text-green-600" />,
+        }
+      default:
+        // An unrated severity is not a pass: keep it neutral, never green.
+        return {
+          bg: 'bg-[var(--fm-bg)]',
+          text: 'text-[var(--fm-ink2)]',
+          border: 'border-[var(--fm-line)]',
+          icon: <IconInfoCircle className="w-5 h-5 text-[var(--fm-ink2)]" />,
         }
     }
   }

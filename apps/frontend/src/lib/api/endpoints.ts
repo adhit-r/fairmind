@@ -78,21 +78,6 @@ export const API_ENDPOINTS = {
     complianceFrameworks: '/api/v1/security/compliance/frameworks',
   },
 
-  // Modern Bias Detection
-  modernBiasDetection: {
-    comprehensiveEvaluation: '/api/v1/modern-bias/comprehensive-evaluation',
-    multimodalDetection: '/api/v1/modern-bias/multimodal-detection',
-    explainabilityAnalysis: '/api/v1/modern-bias/explainability-analysis',
-    biasTests: '/api/v1/modern-bias/bias-tests',
-    configureBiasTest: '/api/v1/modern-bias/bias-tests/configure',
-    biasCategories: '/api/v1/modern-bias/bias-categories',
-    evaluationDatasets: '/api/v1/modern-bias/evaluation-datasets',
-    batchEvaluation: '/api/v1/modern-bias/batch-evaluation',
-    detectionResults: '/api/v1/modern-bias/detection-results',
-    evaluationHistory: '/api/v1/modern-bias/evaluation-history',
-    health: '/api/v1/modern-bias/health',
-  },
-
   // Advanced Bias Detection
   advancedBiasDetection: {
     root: '/api/v1/advanced-bias-detection/',
@@ -244,19 +229,6 @@ export const API_ENDPOINTS = {
     alerts: '/api/v1/monitoring/alerts',
     logs: '/api/v1/monitoring/logs',
     health: '/api/v1/monitoring/health',
-  },
-
-  // Multimodal Bias Detection
-  multimodalBiasDetection: {
-    imageDetection: '/api/v1/multimodal-bias-detection/image-detection',
-    audioDetection: '/api/v1/multimodal-bias-detection/audio-detection',
-    videoDetection: '/api/v1/multimodal-bias-detection/video-detection',
-    crossModalDetection: '/api/v1/multimodal-bias-detection/cross-modal-detection',
-    comprehensiveAnalysis: '/api/v1/multimodal-bias-detection/comprehensive-analysis',
-    availableModalities: '/api/v1/multimodal-bias-detection/available-modalities',
-    biasDetectors: '/api/v1/multimodal-bias-detection/bias-detectors',
-    batchAnalysis: '/api/v1/multimodal-bias-detection/batch-analysis',
-    health: '/api/v1/multimodal-bias-detection/health',
   },
 
   // Modern Tools Integration

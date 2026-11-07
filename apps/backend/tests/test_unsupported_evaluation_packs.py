@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -65,3 +67,12 @@ def test_quarantine_preserves_assurance_v2_target_kind_vocabulary() -> None:
         "multimodal_system",
         "vision_model",
     }
+
+
+def test_main_never_includes_the_quarantined_routers() -> None:
+    # The modern-bias router imports torch, which CI does not install, so a re-added
+    # include would be skipped quietly there and the 404 checks above would still pass.
+    # Read main.py itself so that regression fails in every environment.
+    source = (Path(__file__).resolve().parents[1] / "api" / "main.py").read_text()
+    for module in ("api.routes.modern_bias_detection", "api.routes.multimodal_bias_detection"):
+        assert f'_include_router("{module}"' not in source

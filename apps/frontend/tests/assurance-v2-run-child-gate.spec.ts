@@ -194,7 +194,9 @@ test('disabled run child gate renders no preview data and makes no v2 request', 
 
   await expect(page.getByRole('heading', { name: 'Assurance run preview disabled' })).toBeVisible()
   await systemResponseCompleted
-  await expect(page.getByRole('region', { name: 'Selected AI system context' })).toContainText('Decisioning Agent')
+  // The lifecycle shell names the active system in its breadcrumb.
+  await expect(page.getByRole('link', { name: 'System file' })).toHaveAttribute('href', '/systems/system-1')
+  await expect(page.getByText('Decisioning Agent', { exact: true }).first()).toBeVisible()
   await page.waitForTimeout(250)
   expect(v2Requests).toEqual([])
 })

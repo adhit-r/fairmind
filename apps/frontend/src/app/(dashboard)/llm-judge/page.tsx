@@ -279,9 +279,11 @@ export default function LLMJudgePage() {
   )
 }
 
-// Averages only real scores; insufficient results (null) are excluded, never counted as a number.
+// Averages only real scores; insufficient results (null) are excluded and the
+// tile says how many were left out, so a partial average never reads as complete.
 function formatAverage(values: Array<number | null>): string {
   const scored = values.filter((v): v is number => typeof v === 'number')
   if (scored.length === 0) return 'Not scored'
-  return `${Math.round((scored.reduce((sum, v) => sum + v, 0) / scored.length) * 100)}%`
+  const average = `${Math.round((scored.reduce((sum, v) => sum + v, 0) / scored.length) * 100)}%`
+  return scored.length === values.length ? average : `${average} (${scored.length} of ${values.length} scored)`
 }

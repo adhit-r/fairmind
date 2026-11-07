@@ -170,9 +170,9 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
           <p className="mt-2 text-sm font-semibold text-[var(--fm-ink2)]">Set <code className="font-mono font-semibold">NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED=true</code> only in an allowlisted environment. The API must independently enable <code className="font-mono font-semibold">assurance_v2_enabled</code> before any v2 response can render.</p>
         </section>
       ) : !ASSURANCE_V2_RUN_UI_ENABLED ? (
-        <section className="border-4 border-[#0F1412] bg-[#F3F5F0] p-6">
-          <h2 className="text-xl font-black">Assurance run preview disabled</h2>
-          <p className="mt-2 text-sm font-semibold text-[#59615D]">Set <code className="font-mono font-black">NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED=true</code> only when this read-only surface is approved. The API must independently enable <code className="font-mono font-black">assurance_v2_runs_enabled</code> before any run response can render.</p>
+        <section className="border border-[var(--fm-line)] bg-[var(--fm-bg)] p-6">
+          <h2 className="text-xl font-semibold">Assurance run preview disabled</h2>
+          <p className="mt-2 text-sm font-semibold text-[var(--fm-ink2)]">Set <code className="font-mono font-semibold">NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED=true</code> only when this read-only surface is approved. The API must independently enable <code className="font-mono font-semibold">assurance_v2_runs_enabled</code> before any run response can render.</p>
         </section>
       ) : !selectedOrg && !initialLoading ? (
         <section className="border border-[var(--fm-line)] bg-white p-6">
