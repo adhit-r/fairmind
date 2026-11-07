@@ -82,7 +82,7 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         title: "Explainability Studio",
         href: "/explainability-studio",
         icon: IconMicroscope,
-        description: "Attribution & attention analysis",
+        description: "Evaluation pack unavailable",
       },
     ],
   },

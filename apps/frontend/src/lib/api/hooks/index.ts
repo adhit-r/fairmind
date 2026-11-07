@@ -20,8 +20,6 @@ export { useDatasets } from './useDatasets'
 export { useAuditLogs } from './useAuditLogs'
 export { useMonitoring, useSystemHealth } from './useMonitoring'
 export { useAnalytics } from './useAnalytics'
-export { useModernBias } from './useModernBias'
-export { useMultimodalBias } from './useMultimodalBias'
 export { useEvaluationRuns } from './useEvaluationRuns'
 export type {
   CreateEvaluationPlanInput,

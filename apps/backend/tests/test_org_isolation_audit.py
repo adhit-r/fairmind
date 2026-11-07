@@ -300,7 +300,6 @@ UNSIGNED = [
     ("GET", "/api/v1/bias-detection/export"),
     ("GET", "/api/v1/advanced-bias-detection/bias-types"),
     ("POST", "/api/v1/advanced-bias-detection/causal-analysis"),
-    ("GET", "/api/v1/multimodal-bias/available-modalities"),
     ("GET", "/api/v1/bias/llm-judge/models"),
     ("POST", "/api/v1/bias/llm-judge/evaluate"),
     ("GET", "/api/v1/reports/formats"),
@@ -392,7 +391,6 @@ def test_bias_library_install_is_platform_admin_only(client):
 def test_signed_in_callers_keep_stateless_endpoints(client):
     assert client.get("/api/v1/bias-detection/templates", headers=A).status_code == 200
     assert client.get("/api/v1/advanced-bias-detection/bias-types", headers=A).status_code == 200
-    assert client.get("/api/v1/multimodal-bias/available-modalities", headers=A).status_code == 200
     assert client.get("/api/v1/bias/llm-judge/models", headers=A).status_code == 200
     assert client.get("/api/v1/reports/formats", headers=A).status_code == 200
     assert client.get("/api/v1/compliance/controls", headers=A).status_code == 200

@@ -21,6 +21,8 @@ interface EvidenceDetailDrawerProps {
   controlOptions?: ControlAssessment[]
   /** null while the role is still loading: no edit controls and no read-only note. */
   canEdit?: boolean | null
+  /** New links stay off until untrusted external evidence linking is switched on. */
+  canAddLink?: boolean
 }
 
 const STATUS_OPTIONS = [
@@ -58,6 +60,7 @@ export function EvidenceDetailDrawer({
   onRemoveLink,
   controlOptions = [],
   canEdit = false,
+  canAddLink = false,
 }: EvidenceDetailDrawerProps) {
   const { toast } = useToast()
   const [editMode, setEditMode] = useState(false)
@@ -274,6 +277,13 @@ export function EvidenceDetailDrawer({
                 </div>
               </section>
 
+              <div role="note" className="rounded-xl bg-amber-50 p-3.5">
+                <p className={cn('m-0', LABEL)}>Trust: unclassified evidence</p>
+                <p className={cn('m-0 mt-1 text-[12.5px]', MUTED)}>
+                  This artifact has not been admitted or verified for governance decisions.
+                </p>
+              </div>
+
               {/* Artifact */}
               {evidence.artifactKind === 'file' && evidence.fileName && (
                 <section className="grid gap-2">
@@ -347,12 +357,14 @@ export function EvidenceDetailDrawer({
               <p className={cn('m-0', LABEL)}>
                 Linked entities ({evidence.linkedEntityCount})
               </p>
-              {canEdit ? (
+              {canEdit && canAddLink ? (
                 <button type="button" className={cn(BTN, SMALL)} onClick={() => setAddingLink((v) => !v)}>
                   Link entity
                 </button>
               ) : canEdit === false ? (
                 <span className={cn('text-[12px] font-medium', MUTED)}>Read-only</span>
+              ) : canEdit ? (
+                <span className={cn('text-[12px] font-medium', MUTED)}>New links unavailable</span>
               ) : null}
             </div>
 

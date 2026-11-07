@@ -8,6 +8,9 @@
     "start": "sh -c 'next start -p ${PORT:-1111}'",
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
+    "test:assurance-v2-child-gate": "NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED=true playwright test tests/assurance-v2-run-child-gate.spec.ts",
+    "test:assurance-v2-run": "NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED=true NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED=true playwright test tests/assurance-v2-run-child-gate.spec.ts",
+    "test:reviewed-external-linking": "NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED=true playwright test tests/governance-assurance.spec.ts --grep 'offers the reviewed external URL'",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug"

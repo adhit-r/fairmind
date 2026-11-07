@@ -88,14 +88,15 @@ class BiasEvaluationResponse(BaseModel):
     timestamp: str
     judge_model: str
     bias_category: str
-    bias_score: float  # 0.0 (no bias) to 1.0 (high bias)
-    confidence: float  # 0.0 to 1.0
+    bias_score: Optional[float]  # 0.0 (no bias) to 1.0 (high bias); null when insufficient
+    confidence: Optional[float]  # 0.0 to 1.0; null when insufficient
     reasoning: str
     detected_biases: List[str]
     severity: str  # "low", "medium", "high", "critical"
     recommendations: List[str]
     evidence: List[str]
     metadata: Dict[str, Any]
+    status: str = "scored"  # "scored" or "insufficient"
 
 class BatchEvaluationRequest(BaseModel):
     """Request for batch evaluation across multiple categories"""
@@ -209,7 +210,8 @@ async def evaluate_single_category(request: EvaluationInput):
             severity=result.severity,
             recommendations=result.recommendations,
             evidence=result.evidence,
-            metadata=result.metadata
+            metadata=result.metadata,
+            status=result.status,
         )
 
     except HTTPException:
@@ -282,7 +284,8 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
                 "severity": result.severity,
                 "recommendations": result.recommendations,
                 "evidence": result.evidence,
-                "metadata": result.metadata
+                "metadata": result.metadata,
+                "status": result.status,
             }
 
         return {
@@ -356,7 +359,8 @@ async def evaluate_with_multiple_judges(
                             "confidence": result.confidence,
                             "severity": result.severity,
                             "reasoning": result.reasoning,
-                            "detected_biases": result.detected_biases
+                            "detected_biases": result.detected_biases,
+                            "status": result.status,
                         }
                         for category, result in batch_results.items()
                     }

@@ -23,6 +23,7 @@ const governedSystem = {
 
 const basePlan = {
   id: 'plan-external',
+  contractVersion: '1.0.0',
   orgId: 'org-1',
   workspaceId: 'workspace-1',
   systemId: 'system-1',
@@ -42,6 +43,7 @@ const basePlan = {
 
 const awaitingRun = {
   id: 'run-awaiting',
+  contractVersion: '1.0.0',
   orgId: 'org-1',
   workspaceId: 'workspace-1',
   systemId: 'system-1',
@@ -91,6 +93,11 @@ type MockOptions = {
   listDelayMs?: number
   listError?: boolean
   createRunError?: boolean
+  preflightResponses?: Record<string, {
+    response: Record<string, unknown>
+    waitFor?: Promise<void>
+    onRequest?: () => void
+  }>
   secondaryScope?: {
     systemId: string
     plans: Array<Record<string, unknown>>
@@ -108,6 +115,8 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   let runs = structuredClone(options.runs ?? [])
   const evaluationRequestPaths: string[] = []
   const evaluationMutationPaths: string[] = []
+  const createdPlanInputs: Array<Record<string, unknown>> = []
+  let currentSessionRequestCount = 0
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -121,6 +130,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     const path = url.pathname.replace('/api/proxy', '')
 
     if (path === '/api/v1/auth/me') {
+      currentSessionRequestCount += 1
       return fulfillJson(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@acme.test' })
     }
     if (path === '/api/v1/organizations') {
@@ -179,8 +189,10 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     if (path === `${evaluationPrefix}/evaluation-plans`) {
       if (request.method() === 'POST') {
         const input = request.postDataJSON()
+        createdPlanInputs.push(input)
         const created = {
           id: `plan-${plans.length + 1}`,
+          contractVersion: '1.0.0',
           orgId: 'org-1',
           workspaceId: 'workspace-1',
           systemId: 'system-1',
@@ -221,17 +233,32 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
 
     const preflightMatch = path.match(/\/evaluation-plans\/([^/]+)\/preflight$/)
     if (preflightMatch && request.method() === 'GET') {
+      const preflightOverride = options.preflightResponses?.[preflightMatch[1]]
+      if (preflightOverride) {
+        preflightOverride.onRequest?.()
+        if (preflightOverride.waitFor) await preflightOverride.waitFor
+        return fulfillJson(route, preflightOverride.response)
+      }
       const plan = plans.find((candidate) => candidate.id === preflightMatch[1])
       const isWorker = plan?.deliveryMode === 'fairmind_worker'
+      const isAutomatic = plan?.enforcementMode === 'automatic'
       return fulfillJson(route, {
         planId: preflightMatch[1],
-        canPrepareRun: !isWorker,
+        canPrepareRun: !isWorker && !isAutomatic,
         fairmindExecutionAvailable: false,
-        code: isWorker ? 'executor_unavailable' : 'evidence_link_required',
-        message: isWorker
+        code: isAutomatic
+          ? 'automatic_enforcement_disabled'
+          : isWorker
+            ? 'executor_unavailable'
+            : 'evidence_link_required',
+        message: isAutomatic
+          ? 'Automatic enforcement is unavailable.'
+          : isWorker
           ? 'FairMind execution workers are unavailable in this release.'
           : 'Prepare the run, then link evidence from the configured provider.',
-        nextAction: isWorker
+        nextAction: isAutomatic
+          ? 'Use advisory or human approval.'
+          : isWorker
           ? 'Choose an external provider or imported report delivery mode.'
           : 'Link an exact Evidence Passport revision after external execution.',
       })
@@ -275,11 +302,13 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     getEvaluationRequestCount: () => evaluationRequestPaths.length,
     getEvaluationRequestPaths: () => [...evaluationRequestPaths],
     getEvaluationMutationPaths: () => [...evaluationMutationPaths],
+    getCreatedPlanInputs: () => structuredClone(createdPlanInputs),
+    getCurrentSessionRequestCount: () => currentSessionRequestCount,
   }
 }
 
 test('keeps Evaluation Runs inside the app shell with labelled identity and controls', async ({ page }) => {
-  await mockEvaluationWorkbench(page)
+  const mocks = await mockEvaluationWorkbench(page)
   await page.goto('/tests')
 
   await expect(page.getByRole('navigation', { name: 'Lifecycle' })).toBeVisible()
@@ -288,6 +317,7 @@ test('keeps Evaluation Runs inside the app shell with labelled identity and cont
   await expect(page.getByText('Decisioning Agent', { exact: true })).toBeVisible()
   await expect(page.getByText('reviewer', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+  expect(mocks.getCurrentSessionRequestCount()).toBe(1)
 
   const systemFile = page.getByRole('link', { name: 'System file' })
   await expect(systemFile).toHaveAttribute('href', '/systems/system-1')
@@ -366,6 +396,96 @@ test('masks old-system plans and actions before delayed new-system evaluation li
   await expect(page.getByLabel('Selected plan')).toContainText(secondPlan.name)
 })
 
+test('clears prior-system action state when the next system becomes active', async ({ page }) => {
+  const secondSystem = {
+    ...governedSystem,
+    id: 'system-2',
+    name: 'Claims Review Agent',
+    workspaceId: 'workspace-2',
+  }
+  const secondPlan = {
+    ...basePlan,
+    id: 'plan-system-2',
+    systemId: 'system-2',
+    workspaceId: 'workspace-2',
+    name: 'Claims release assurance',
+  }
+  await mockEvaluationWorkbench(page, {
+    systems: [governedSystem, secondSystem],
+    plans: [basePlan],
+    secondaryScope: {
+      systemId: 'system-2',
+      plans: [secondPlan],
+    },
+  })
+  await page.goto('/tests')
+  await page.getByRole('button', { name: 'Prepare evidence run' }).click()
+  await expect(page.getByText('Run prepared. Evidence is still required before governance review.')).toBeVisible()
+
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
+
+  await expect(page.getByLabel('Selected plan')).toContainText(secondPlan.name)
+  await expect(page.getByText('Run prepared. Evidence is still required before governance review.')).toHaveCount(0)
+})
+
+test('does not bind a delayed prior-plan preflight to the next selected plan', async ({ page }) => {
+  let releaseOldPreflight = () => {}
+  const oldPreflightGate = new Promise<void>((resolve) => {
+    releaseOldPreflight = resolve
+  })
+  let observeOldRequest = () => {}
+  const oldRequestObserved = new Promise<void>((resolve) => {
+    observeOldRequest = resolve
+  })
+  const oldPlan = {
+    ...basePlan,
+    id: 'plan-old',
+    name: 'Old automatic plan',
+    enforcementMode: 'automatic',
+  }
+  const nextPlan = {
+    ...basePlan,
+    id: 'plan-next',
+    name: 'Current human-review plan',
+  }
+  await mockEvaluationWorkbench(page, {
+    plans: [oldPlan, nextPlan],
+    preflightResponses: {
+      'plan-old': {
+        onRequest: observeOldRequest,
+        waitFor: oldPreflightGate,
+        response: {
+          planId: 'plan-old',
+          canPrepareRun: false,
+          fairmindExecutionAvailable: false,
+          code: 'automatic_enforcement_disabled',
+          message: 'Old automatic preflight must remain hidden.',
+          nextAction: 'Use human approval.',
+        },
+      },
+      'plan-next': {
+        response: {
+          planId: 'plan-next',
+          canPrepareRun: true,
+          fairmindExecutionAvailable: false,
+          code: 'evidence_link_required',
+          message: 'Current plan preflight is ready.',
+          nextAction: 'Link exact evidence after execution.',
+        },
+      },
+    },
+  })
+  await page.goto('/tests')
+  await oldRequestObserved
+
+  await page.getByLabel('Selected plan').selectOption(nextPlan.id)
+  await expect(page.getByText('Current plan preflight is ready.')).toBeVisible()
+  releaseOldPreflight()
+
+  await expect(page.getByText('Old automatic preflight must remain hidden.')).toHaveCount(0)
+  await expect(page.getByText('Current plan preflight is ready.')).toBeVisible()
+})
+
 test('requires an organization before rendering the scoped workbench', async ({ page }) => {
   const mocks = await mockEvaluationWorkbench(page, { organizations: [] })
   await page.goto('/tests')
@@ -400,7 +520,46 @@ test('creates a version-pinned plan from the compact empty-state form', async ({
   await expect(page.getByText('Draft', { exact: true })).toBeVisible()
 })
 
-test('blocks unavailable FairMind workers with an explicit next action', async ({ page }) => {
+test('never offers automatic enforcement or FairMind worker delivery in plan creation', async ({ page }) => {
+  const mocks = await mockEvaluationWorkbench(page)
+  await page.goto('/tests')
+
+  const form = page.getByRole('form', { name: 'Create evaluation plan' })
+  const enforcement = form.getByLabel('Enforcement mode')
+  const delivery = form.getByLabel('Delivery mode')
+  await expect(enforcement.locator('option[value="automatic"]')).toHaveCount(0)
+  await expect(delivery.locator('option[value="fairmind_worker"]')).toHaveCount(0)
+
+  await form.getByLabel('Plan name').fill('Human review release gate')
+  await form.getByLabel('Versioned suite references').fill('fairmind/agent-safety@2026.07')
+  await form.getByRole('button', { name: 'Create evaluation plan' }).click()
+
+  await expect(page.getByLabel('Selected plan')).toHaveValue('plan-1')
+  expect(mocks.getCreatedPlanInputs()).toEqual([
+    expect.objectContaining({
+      enforcementMode: 'human_approval',
+      deliveryMode: 'external_provider',
+    }),
+  ])
+})
+
+test('shows historical automatic plans as readable but blocked', async ({ page }) => {
+  const automaticPlan = {
+    ...basePlan,
+    id: 'plan-automatic',
+    enforcementMode: 'automatic',
+  }
+  await mockEvaluationWorkbench(page, { plans: [automaticPlan] })
+  await page.goto('/tests')
+
+  const preflight = page.getByRole('region', { name: 'Evaluation preflight' })
+  await expect(preflight.getByText('Automatic enforcement unavailable', { exact: true })).toBeVisible()
+  await expect(preflight.getByText('Run preparation: blocked', { exact: true })).toBeVisible()
+  await expect(preflight).toContainText('Use advisory or human approval.')
+  await expect(preflight.getByRole('button', { name: 'Prepare evidence run' })).toBeDisabled()
+})
+
+test('keeps historical FairMind worker plans readable with an explicit unavailable state', async ({ page }) => {
   const workerPlan = { ...basePlan, id: 'plan-worker', deliveryMode: 'fairmind_worker' }
   await mockEvaluationWorkbench(page, { plans: [workerPlan] })
   await page.goto('/tests')

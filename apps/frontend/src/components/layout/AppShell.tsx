@@ -2,13 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { usePendingDecisions } from '@/lib/api/hooks/usePendingDecisions'
 import { useWaitingRuns } from '@/lib/api/hooks/usePacks'
-import { useAuth } from '@/lib/api/hooks/useAuth'
-import type { User } from '@/lib/api/types'
+import { useSession } from '@/context/SessionContext'
 import { cn } from '@/lib/utils'
 
 export const STAGES: Array<{ key: AISystemSummary['stage']; label: string }> = [
@@ -131,12 +130,9 @@ function OrgBlock() {
 }
 
 function Me() {
-  const { getCurrentUser, logout } = useAuth()
+  // The shell reads the one verified session, so logout here also clears sibling tabs.
+  const { user, logout } = useSession()
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
-  useEffect(() => {
-    getCurrentUser().then(setUser).catch(() => setUser(null))
-  }, [getCurrentUser])
   if (!user) return null
   const name = user.username || user.email
   return (

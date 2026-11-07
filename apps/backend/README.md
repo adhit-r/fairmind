@@ -52,19 +52,8 @@ backend/
 - `GET /api/system/status` - Detailed system status
 - `GET /api/system/demo` - Demo information
 
-### **Modern LLM Bias Detection (12 endpoints)**
-- `POST /api/v1/modern-bias/detect` - Detect LLM bias by category
-- `POST /api/v1/modern-bias/evaluation-pipeline` - Run evaluation pipeline
-- `GET /api/v1/modern-bias/categories` - Available bias categories
-- `GET /api/v1/modern-bias/monitoring` - Real-time monitoring
-- `GET /api/v1/modern-bias/compliance` - Compliance reporting
-
-### **Multimodal Bias Detection (9 endpoints)**
-- `POST /api/v1/multimodal-bias/image-detection` - Image generation bias
-- `POST /api/v1/multimodal-bias/audio-detection` - Audio generation bias
-- `POST /api/v1/multimodal-bias/video-detection` - Video generation bias
-- `POST /api/v1/multimodal-bias/cross-modal-detection` - Cross-modal analysis
-- `POST /api/v1/multimodal-bias/comprehensive-analysis` - Full multimodal analysis
+### **Modern and multimodal bias detection (unmounted)**
+The `/api/v1/modern-bias/*` and `/api/v1/multimodal-bias/*` routers are not mounted: they ran uncalibrated evaluators outside the evidence contract. WEAT and SEAT now run as the catalogue evaluation engine EV-FAI-05 through `POST /packs/evaluations/{id}/runs`. Image, audio, video and cross-modal checks wait for the P3 modality packs.
 
 ### **Modern Tools Integration (12 endpoints)**
 - `POST /api/v1/modern-tools/integrate` - Integrate external tools

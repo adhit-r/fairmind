@@ -1,5 +1,7 @@
 # LLM Testing Guide for FairMind
 
+> **Status (November 7, 2026):** the `/api/v1/modern-bias-detection/*` routes in this guide are not mounted, so those requests return 404. WEAT and SEAT run as the catalogue engine EV-FAI-05; the LLM-as-judge routes under `/api/v1/bias/llm-judge` remain available.
+
 ## Available LLM Testing Endpoints
 
 FairMind provides comprehensive LLM (Large Language Model) testing capabilities through multiple endpoints:
