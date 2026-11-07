@@ -206,3 +206,34 @@ def test_release_gate_enforces_published_blocking_rules(assurance_client):
     gate = client.get(release_gate).json()
     assert gate["policy"] == {"blocking": [], "warnings": []}
     assert not any(r.startswith("Policy rule") for r in gate["reasons"])
+
+
+def test_policy_results_are_evidence_for_assigned_framework_controls(assurance_client):
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        system_id, _, version_id = _seed_catalog_and_system(session)
+    org = f"/api/v1/ai-governance/organizations/{ORG_A}"
+    assignment = client.post(
+        f"{org}/systems/{system_id}/framework-assignments", json={"frameworkVersionId": version_id}
+    ).json()["id"]
+    controls = lambda: {c["externalId"]: c for c in client.get(f"{org}/framework-assignments/{assignment}/controls").json()}  # noqa: E731
+    readiness = lambda: client.get(f"{org}/framework-assignments/{assignment}/readiness").json()  # noqa: E731
+    assert controls()["A001.1"]["evidenceTrace"] == [] and readiness()["missingEvidence"] == 2
+
+    policy = client.post(BASE, json={"name": "Ownership", "rules": [{**OWNER_RULE, "controls": ["aiuc-1:A001.1"]}]}).json()
+    for action in ("submit", "approve", "publish"):
+        assert client.post(f"{BASE}/{policy['id']}/actions", json={"action": action}).status_code == 200
+    failing = controls()["A001.1"]
+    assert [(e["kind"], e["state"]) for e in failing["evidenceTrace"]] == [("Policy rule", "failing")]
+    assert failing["acceptedEvidenceCount"] == 0 and failing["freshness"] == "missing"
+
+    with session_factory() as session:
+        session.execute(
+            GovernanceAISystem.__table__.update().where(GovernanceAISystem.__table__.c.id == system_id).values(owner="Risk office")
+        )
+        session.commit()
+    passing = controls()["A001.1"]
+    assert passing["evidenceTrace"][0]["label"] == "Every system has a named owner (Ownership v1)"
+    assert (passing["acceptedEvidenceCount"], passing["freshness"]) == (1, "current")
+    assert controls()["A001.2"]["evidenceTrace"] == [] and readiness()["missingEvidence"] == 1
