@@ -109,7 +109,7 @@ def _org_model(db: Session, org_id: str) -> llm.Connection:
     if not row or not row["enabled"]:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Connect your organization's AI model in Organization settings to draft policies with AI",
+            detail="Connect your organisation's AI model in Organisation settings to draft policies with AI",
         )
     return _stored_connection(row)
 

@@ -250,7 +250,7 @@ def test_ai_drafts_a_policy_with_only_valid_rules(assurance_client, monkeypatch)
         _seed_catalog_and_system(session)
     brief = {"brief": "We screen loan applications with a credit model."}
     refused = client.post(f"{BASE}/draft", json=brief)
-    assert refused.status_code == 409 and "Organization settings" in refused.json()["detail"]
+    assert refused.status_code == 409 and "Organisation settings" in refused.json()["detail"]
 
     sent = {}
 
