@@ -1379,6 +1379,17 @@ async def assess_risks(
     }
 
 
+@router.get("/compliance/frameworks")
+async def get_frameworks():
+    """Frameworks from the pack catalogue, each with its active requirement keys as controls."""
+    from api.routes.pack_catalogue import FRAMEWORK_KEYS, FRAMEWORKS
+
+    return [
+        {"id": fw.key, "name": fw.name, "description": fw.version or "", "controls": sorted(FRAMEWORK_KEYS[fw.key])}
+        for fw in FRAMEWORKS.values()
+    ]
+
+
 # ---------------------------------------------------------------------------
 # System-scoped evidence and approval endpoints
 # ---------------------------------------------------------------------------

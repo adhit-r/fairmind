@@ -853,3 +853,14 @@ def test_remediation_summary_counts_status_and_priority():
     assert summary["retestRequiredTasks"] == 1
     assert summary["linkedRiskRefs"] == 2
     assert summary["byPriority"] == {"low": 1, "medium": 1, "high": 1, "critical": 0}
+
+
+def test_compliance_frameworks_come_from_the_pack_catalogue(authenticated_org_database):
+    from api.routes.pack_catalogue import FRAMEWORK_KEYS, FRAMEWORKS
+
+    response = client.get("/api/v1/ai-governance/compliance/frameworks")
+    assert response.status_code == 200
+    body = {f["id"]: f for f in response.json()}
+    assert set(body) == set(FRAMEWORKS)
+    assert body["ISO42001"]["controls"] == sorted(FRAMEWORK_KEYS["ISO42001"])
+    assert body["NISTRMF"]["name"] == FRAMEWORKS["NISTRMF"].name
