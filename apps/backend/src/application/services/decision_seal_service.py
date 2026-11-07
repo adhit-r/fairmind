@@ -48,7 +48,16 @@ def chain_head(entries: List[Dict[str, Any]]) -> str:
 
 def seal_decision(db: Session, *, system_id: str, request_id: str, decision_id: str, decision: str, sealed_by: Optional[str], gate: Dict[str, Any]) -> Dict[str, Any]:
     entries = evidence_entries(db, system_id)
-    gate_summary = {"verdict": gate.get("verdict"), "confidence": gate.get("confidence"), "checks": [{"key": c.get("key"), "state": c.get("state"), "confidence": c.get("confidence")} for c in gate.get("checks", [])]}
+    gate_summary = {
+        "verdict": gate.get("verdict"), "confidence": gate.get("confidence"),
+        "checks": [{"key": c.get("key"), "state": c.get("state"), "confidence": c.get("confidence")} for c in gate.get("checks", [])],
+        "riskTier": gate.get("riskTier"),
+        # The tier the verdict was computed on; the stored tier when the gate carries no explanation.
+        "effectiveTier": (gate.get("explain") or {}).get("effectiveTier", gate.get("riskTier")),
+        "reasons": gate.get("reasons", []),
+        # The tier and frameworks decision in force: the newest applicability_decision row being sealed.
+        "applicabilityEvidenceId": next((e["id"] for e in reversed(entries) if e["type"] == "applicability_decision"), None),
+    }
     row = {
         "id": str(uuid.uuid4()), "system_id": system_id, "request_id": request_id, "decision_id": decision_id, "decision": decision,
         "chain_head": chain_head(entries), "evidence_count": len(entries), "entries_json": json.dumps(entries), "gate_json": json.dumps(gate_summary),
