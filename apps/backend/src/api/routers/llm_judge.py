@@ -17,6 +17,7 @@ from ..services.llm_as_judge_service import (
     BiasCategory,
     JudgeEvaluationResult
 )
+from src.infrastructure.llm import grok_cli
 
 logger = logging.getLogger(__name__)
 # Stateless: scores the text in the request. It spends the platform's judge-model
@@ -37,7 +38,28 @@ JUDGE_LABELS = {
     JudgeModel.CLAUDE_SONNET_5_5: "Claude Sonnet 5.5 (Anthropic)",
     JudgeModel.GEMINI_4_ARGON: "Gemini 4 Argon (Google)",
     JudgeModel.GEMINI_3_8_FLASH: "Gemini 3.8 Flash (Google)",
+    JudgeModel.GROK_4_7: "Grok 4.7 (Grok CLI, local)",
+    JudgeModel.GROK_4_6: "Grok 4.6 (Grok CLI, local)",
 }
+GROK_CLI_OFF = "The Grok CLI is not enabled on this server"
+
+
+def _judges() -> List[JudgeModel]:
+    """The judges this server can run: Grok judges only where the Grok CLI is enabled."""
+    return [m for m in JudgeModel if not m.value.startswith("grok-") or grok_cli.enabled()]
+
+
+def _judge(value: str) -> JudgeModel:
+    try:
+        judge = JudgeModel(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid judge model: {value}. Must be one of: {[m.value for m in _judges()]}"
+        )
+    if judge not in _judges():
+        raise HTTPException(status_code=400, detail=GROK_CLI_OFF)
+    return judge
 
 # ============================================================================
 # Pydantic Models (Request/Response Schemas)
@@ -117,7 +139,7 @@ async def get_available_models():
         - models: List of available judge models
         - categories: List of bias categories
     """
-    models = [{"value": m.value, "label": JUDGE_LABELS[m]} for m in JudgeModel]
+    models = [{"value": m.value, "label": JUDGE_LABELS[m]} for m in _judges()]
 
     categories = [
         "gender",
@@ -147,14 +169,7 @@ async def evaluate_single_category(request: EvaluationInput):
         HTTPException: If evaluation fails
     """
     try:
-        # Validate judge model
-        try:
-            judge_model = JudgeModel(request.judge_model)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid judge model: {request.judge_model}. Must be one of: {[m.value for m in JudgeModel]}"
-            )
+        judge_model = _judge(request.judge_model)
 
         # Get primary bias category (default to first provided or gender)
         category_str = request.bias_categories[0] if request.bias_categories else "gender"
@@ -221,14 +236,7 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
         HTTPException: If evaluation fails
     """
     try:
-        # Validate judge model
-        try:
-            judge_model = JudgeModel(request.judge_model)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid judge model: {request.judge_model}. Must be one of: {[m.value for m in JudgeModel]}"
-            )
+        judge_model = _judge(request.judge_model)
 
         # Validate bias categories
         valid_categories = []
@@ -309,6 +317,8 @@ async def evaluate_with_multiple_judges(
     Returns:
         Results from each judge model
     """
+    if any(j.startswith("grok-") for j in request.judge_models) and not grok_cli.enabled():
+        raise HTTPException(status_code=400, detail=GROK_CLI_OFF)
     try:
         results = {}
         validated_categories = []
@@ -375,6 +385,6 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "llm-judge",
-        "available_models": [m.value for m in JudgeModel],
+        "available_models": [m.value for m in _judges()],
         "available_categories": [c.value for c in BiasCategory]
     }

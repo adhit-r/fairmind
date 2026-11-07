@@ -7,8 +7,10 @@ from fastapi.testclient import TestClient
 
 from api.main import app
 from src.application.services import llm_as_judge_service as judge_module
+from config.settings import settings
 from src.application.services.llm_as_judge_service import JudgeModel, LLMAsJudgeService
 from tests.auth_helpers import auth_headers
+from tests.grok_helpers import fake_grok, recorded, stream
 
 
 client = TestClient(app, headers=auth_headers())
@@ -74,9 +76,46 @@ def test_llm_judge_multi_judge_json_body_endpoint():
     assert len(data["judges_used"]) >= 1
 
 
-def test_llm_judge_models_endpoint_lists_every_judge():
+API_JUDGES = [m for m in JudgeModel if not m.value.startswith("grok-")]
+
+
+def test_llm_judge_models_endpoint_lists_every_judge_and_grok_only_with_the_cli(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "grok_cli_enabled", False)
+    data = client.get("/api/v1/bias/llm-judge/models").json()
+    assert [m["value"] for m in data["models"]] == [m.value for m in API_JUDGES]
+    fake_grok(monkeypatch, tmp_path)
     data = client.get("/api/v1/bias/llm-judge/models").json()
     assert [m["value"] for m in data["models"]] == [m.value for m in JudgeModel]
+    assert {"value": "grok-4.7", "label": "Grok 4.7 (Grok CLI, local)"} in data["models"]
+
+
+@pytest.mark.parametrize(
+    "path, body",
+    [
+        ("/evaluate", {"judge_model": "grok-4.7"}),
+        ("/evaluate-batch", {"judge_model": "grok-4.6"}),
+        ("/evaluate-with-multiple-judges", {"judge_models": ["gpt-6.1-sol", "grok-4.7"]}),
+    ],
+)
+def test_a_grok_judge_is_refused_when_the_cli_is_not_enabled(path, body, monkeypatch):
+    monkeypatch.setattr(settings, "grok_cli_enabled", False)
+    response = client.post(f"/api/v1/bias/llm-judge{path}", json={"text": "Some text.", "bias_categories": ["gender"], **body})
+    assert (response.status_code, response.json()["detail"]) == (400, "The Grok CLI is not enabled on this server")
+
+
+def test_a_grok_judge_evaluation_runs_on_the_cli(monkeypatch, tmp_path):
+    verdict = '{"bias_score": 0.8, "confidence": 0.9, "detected_biases": ["role stereotype"], "reasoning": "He leads, she helps.", "evidence": [], "recommendations": [], "severity": "high"}'
+    calls = fake_grok(monkeypatch, tmp_path, out=stream(verdict))
+    response = client.post(
+        "/api/v1/bias/llm-judge/evaluate",
+        json={"text": "He is a decisive leader and she is a caring helper.", "judge_model": "grok-4.6", "bias_categories": ["gender"]},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert (data["judge_model"], data["bias_score"], data["severity"], data["detected_biases"]) == ("grok-4.6", 0.8, "high", ["role stereotype"])
+    (call,) = recorded(calls)
+    assert "--model=grok-4.6" in call["argv"] and "--deny=*" in call["argv"]
+    assert any(a.startswith("--single=") and "caring helper" in a for a in call["argv"])
 
 
 @pytest.mark.parametrize("retired", ["gpt-4-turbo", "claude-3-opus", "gemini-pro"])
@@ -129,7 +168,7 @@ class _Response:
         return {"candidates": [{"content": {"parts": [{"text": "draft", "thought": True}, {"text": "ok"}]}}]}
 
 
-@pytest.mark.parametrize("judge", list(JudgeModel))
+@pytest.mark.parametrize("judge", API_JUDGES)
 def test_each_judge_calls_its_provider_with_its_own_model_id(judge, monkeypatch):
     for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
         monkeypatch.setenv(key, "test-key-value")

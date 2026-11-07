@@ -16,6 +16,7 @@ from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
+from src.infrastructure.llm import grok_cli
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -1235,10 +1236,14 @@ def _body_connection(body: AIProviderBody, stored) -> tuple:
     provider = llm.BY_ID.get(body.provider)
     if not provider:
         raise HTTPException(status_code=422, detail="Unknown provider")
+    if provider.kind == "cli" and not grok_cli.enabled():
+        raise HTTPException(status_code=422, detail="The Grok CLI is not enabled on this server")
     fields = {k: (getattr(body, k) or "").strip() for k in provider.needs}
     key = (body.apiKey or "").strip() or None
     if key is None and stored and stored["provider"] == body.provider:
         key = llm.decrypt(stored["api_key_enc"])
+    if provider.key == "none":
+        key = None
     if provider.key == "required" and not key:
         raise HTTPException(status_code=422, detail="Enter the API key")
     try:

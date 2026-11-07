@@ -21,16 +21,20 @@ except ImportError:
     AIOHTTP_AVAILABLE = False
     aiohttp = None
 
+from src.infrastructure.llm import grok_cli
+
 logger = logging.getLogger(__name__)
 
 class JudgeModel(Enum):
-    """Available judge models; each value is the provider's API model id"""
+    """Available judge models; each value is the provider's API model id (grok- judges run on the local Grok CLI)"""
     GPT_6_ASTRA = "gpt-6-astra"
     GPT_6_1_SOL = "gpt-6.1-sol"
     CLAUDE_OPUS_5_5 = "claude-opus-5-5"
     CLAUDE_SONNET_5_5 = "claude-sonnet-5-5"
     GEMINI_4_ARGON = "gemini-4-argon"
     GEMINI_3_8_FLASH = "gemini-3.8-flash"
+    GROK_4_7 = "grok-4.7"
+    GROK_4_6 = "grok-4.6"
 
 class BiasCategory(Enum):
     """Bias categories for evaluation"""
@@ -222,8 +226,10 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
         """
         Call the judge LLM API
         
-        Supports OpenAI, Anthropic, and Google models
+        Supports OpenAI, Anthropic, and Google models, and Grok models through the local Grok CLI
         """
+        if judge_model.value.startswith("grok-"):
+            return await grok_cli.complete(prompt, judge_model.value)
         if not AIOHTTP_AVAILABLE:
             raise RuntimeError("aiohttp not available. Install with: pip install aiohttp")
 

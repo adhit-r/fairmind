@@ -781,6 +781,27 @@ def test_testing_a_provider_reports_the_result_and_records_it(tmp_database, monk
     assert client.get(f"{PACKS}/ai-provider").json()["config"]["testMessage"] == "Anthropic rejected the key"
 
 
+def test_the_grok_cli_is_saved_and_tested_without_a_key_only_where_it_is_enabled(tmp_database, monkeypatch, tmp_path):
+    from config.settings import settings
+    from tests.grok_helpers import fake_grok, recorded
+
+    _, client = _org(tmp_database)
+    monkeypatch.setattr(settings, "grok_cli_enabled", False)
+    assert "grok_cli" not in {p["id"] for p in client.get(f"{PACKS}/ai-providers").json()}
+    for path, call in ((f"{PACKS}/ai-provider", client.put), (f"{PACKS}/ai-provider/test", client.post)):
+        response = call(path, json={"provider": "grok_cli"})
+        assert (response.status_code, response.json()["detail"]) == (422, "The Grok CLI is not enabled on this server")
+
+    calls = fake_grok(monkeypatch, tmp_path)
+    assert "grok_cli" in {p["id"] for p in client.get(f"{PACKS}/ai-providers").json()}
+    config = client.put(f"{PACKS}/ai-provider", json={"provider": "grok_cli", "apiKey": "ignored-for-the-cli"}).json()["config"]
+    assert (config["provider"], config["model"], config["hasKey"], config["keyHint"]) == ("grok_cli", "grok-4.7", False, None)
+    result = client.post(f"{PACKS}/ai-provider/test", json={"provider": "grok_cli"}).json()
+    assert (result["ok"], result["message"], result["models"]) == (True, "grok-4.7 answered", ["grok-4.7", "grok-4.6", "grok-4.5"])
+    assert client.get(f"{PACKS}/ai-provider").json()["config"]["testedOk"] is True
+    assert [c["argv"][0] for c in recorded(calls)] == ["models", "--single=Answer {\"ok\": true}."]
+
+
 def test_with_a_provider_the_model_does_the_step_and_the_trace_is_on_the_ledger(tmp_database, monkeypatch):
     from api.routes import llm
 

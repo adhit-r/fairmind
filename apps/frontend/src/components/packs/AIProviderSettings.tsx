@@ -79,7 +79,7 @@ export function AIProviderSettings() {
       if (res.error) setFailure(res.error)
       else {
         setApiKey('')
-        setNotice('Saved. The key is encrypted and is never shown again.')
+        setNotice(option?.key === 'none' ? 'Saved.' : 'Saved. The key is encrypted and is never shown again.')
       }
     } else {
       const res = await deleteAIProvider()
@@ -157,20 +157,24 @@ export function AIProviderSettings() {
           </div>
         ))}
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="ai-key" className="text-[13px] font-semibold text-[var(--fm-ink)]">
-            API key{option?.key === 'optional' ? ' (optional)' : ''}
-          </label>
-          <input
-            id="ai-key"
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={keySaved ? `Saved key ${cfg?.keyHint ?? ''}. Leave blank to keep it.` : 'Paste the key'}
-            className={`${FIELD} font-mono`}
-          />
-        </div>
+        {option?.key === 'none' ? (
+          <p className={`m-0 text-xs ${MUTED}`}>Runs the grok CLI on this server; local development only.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="ai-key" className="text-[13px] font-semibold text-[var(--fm-ink)]">
+              API key{option?.key === 'optional' ? ' (optional)' : ''}
+            </label>
+            <input
+              id="ai-key"
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={keySaved ? `Saved key ${cfg?.keyHint ?? ''}. Leave blank to keep it.` : 'Paste the key'}
+              className={`${FIELD} font-mono`}
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="ai-model" className="text-[13px] font-semibold text-[var(--fm-ink)]">Model</label>
