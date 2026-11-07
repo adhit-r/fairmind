@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { CsvInspection } from '@/lib/api/hooks/useSystemFile'
-import { MIXED_ENCODING, confirmState, listText, needsFavourable, sourceLine, uncoveredGrounds } from './FairnessRunPanel'
+import type { CsvInspection, FairnessMetric, FairnessRunResult } from '@/lib/api/hooks/useSystemFile'
+import { MIXED_ENCODING, confirmState, listText, needsFavourable, resultHeadline, sourceLine, uncoveredGrounds } from './FairnessRunPanel'
 
 type Status = CsvInspection['columns'][number]['attribute']['status']
 const col = (name: string, sample: string[] = [], distinct = sample.length, status: Status = 'suggested', ground: string | null = null) => ({
@@ -133,4 +133,38 @@ test('lists read as prose', () => {
   assert.equal(listText(['gender']), 'gender')
   assert.equal(listText(['gender', 'age']), 'gender and age')
   assert.equal(listText(['gender', 'age', 'region']), 'gender, age and region')
+})
+
+const metric = (value: number, threshold: number, crosses: boolean, p_value = 0.5): FairnessMetric => ({
+  value, threshold, crosses_threshold: crosses, significant: false, p_value, alpha: 0.05 / 12, confidence_interval: [value, value], is_fair: true,
+})
+const run = (di: FairnessMetric): FairnessRunResult['result'] => ({
+  rows: 40, all_checks_pass: true, smallest_group: 20, evidence_confidence: 0.85,
+  thresholds: { disparate_impact_ratio: 0.8, gap: 0.05, alpha: 0.05 / 12, tests: 12 },
+  attributes: [{
+    attribute: 'gender', groups: { F: 20, M: 20 }, selection_rates: { F: 0.35, M: 0.5 }, disparate_impact_ratio: di.value,
+    disparate_impact: di, demographic_parity: metric(0.15, 0.05, true), equal_opportunity: metric(0.01, 0.05, false), equalized_odds: metric(0.01, 0.05, false), calibration: null,
+    checks: { disparate_impact: true, equal_opportunity: true, equalized_odds: true }, small_groups: [],
+  }],
+})
+
+test('a pass whose ratios all meet the threshold says all checks are within thresholds', () => {
+  assert.deepEqual(resultHeadline(run(metric(0.92, 0.8, false))), { pass: true, text: 'All checks within thresholds', caveats: [] })
+})
+
+test('a pass on significance alone names the value past its threshold and the level it was tested at', () => {
+  const h = resultHeadline(run(metric(0.7, 0.8, true, 0.31)))
+  assert.equal(h.pass, true)
+  assert.doesNotMatch(h.text, /within thresholds/)
+  assert.equal(h.text, 'All checks pass; one value is outside thresholds but not statistically significant')
+  // Demographic parity is measured but is not a check, so it gets no caveat.
+  assert.deepEqual(h.caveats, ['gender impact ratio 0.700 is below 0.80, but the difference is not statistically significant at the configured level of 0.0042 (p = 0.31)'])
+})
+
+test('a value just under the threshold never prints as the threshold itself', () => {
+  assert.match(resultHeadline(run(metric(0.7996, 0.8, true))).caveats[0], /^gender impact ratio 0\.7996 is below 0\.80/)
+})
+
+test('a failing run keeps its failing headline', () => {
+  assert.deepEqual(resultHeadline({ ...run(metric(0.5, 0.8, true)), all_checks_pass: false }), { pass: false, text: 'At least one check outside thresholds', caveats: [] })
 })
