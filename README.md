@@ -15,6 +15,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
+[![OECD.AI Catalogue](https://img.shields.io/badge/OECD.AI-Catalogue%20of%20Tools%20%26%20Metrics-1f4e79)](https://oecd.ai/en/catalogue/tools/adhit-rfairmind)
 [![Status](https://img.shields.io/badge/status-internal%20alpha-orange)](docs/STATUS.md)
 [![Backend](https://img.shields.io/badge/backend-FastAPI-green)](apps/backend)
 [![Frontend](https://img.shields.io/badge/frontend-Next.js-black)](apps/frontend)
@@ -31,6 +32,7 @@
 ## Table of contents
 
 - [What FairMind is](#what-fairmind-is)
+- [Listed in the OECD.AI Catalogue](#listed-in-the-oecdai-catalogue-of-tools-and-metrics)
 - [Who it is for](#who-it-is-for)
 - [How it works](#how-it-works)
 - [Key features](#key-features)
@@ -53,7 +55,7 @@
 
 ## What FairMind is
 
-FairMind is an open-source **AI governance, AI assurance and AI compliance platform** for machine learning models, LLM applications and agentic AI systems. A team registers an AI system, plugs in governance frameworks such as **ISO/IEC 42001, the EU AI Act, NIST AI RMF, AIUC-1, RBI FREE-AI, India's DPDP Act and the OECD AI Principles**, and then works through the controls that apply:
+FairMind is an open-source **AI governance, AI assurance and AI compliance platform** for agentic AI systems, LLM applications and machine learning models. A team registers an AI system, plugs in governance frameworks such as **ISO/IEC 42001, the EU AI Act, NIST AI RMF, AIUC-1, RBI FREE-AI, India's DPDP Act and the OECD AI Principles**, and then works through the controls that apply:
 
 1. **Discover** AI systems from MLflow, GitHub and the Hugging Face Hub.
 2. **Evaluate** them: fairness and bias tests, data drift, behaviour tests against the live system (prompt injection, jailbreaks, RAG faithfulness, PII leakage) and configuration audits of agent platforms.
@@ -65,6 +67,23 @@ FairMind is an open-source **AI governance, AI assurance and AI compliance platf
 The output is a version-pinned, tamper-evident evidence trail that an internal reviewer or an external auditor can follow from a framework clause to the measurement behind it.
 
 FairMind supports readiness and review. **It does not certify compliance, approve systems automatically or enforce policy on its own.** Every gate decision waits for a person.
+
+## Listed in the OECD.AI Catalogue of Tools and Metrics
+
+FairMind is listed in the [OECD.AI Catalogue of Tools & Metrics for Trustworthy AI](https://oecd.ai/en/catalogue/tools/adhit-rfairmind), the OECD's catalogue of tools that help AI actors build and use trustworthy AI.
+
+| Catalogue field | FairMind |
+|---|---|
+| Tool type | Toolkit/software |
+| Objectives | Fairness; Data governance and traceability |
+| Purposes | Governance and compliance; Risk management |
+| Lifecycle stages | Plan and design; Verify and validate; Deploy; Operate and monitor |
+| Risk management stages | Assess risks and impacts; Treat (mitigate) risks and impacts; Govern (monitor and review) |
+| Target users | Data scientists, developers, IT specialists, project managers, researchers, system operators |
+| Country of origin | India |
+| Usage rights | Open source (MIT), free of charge |
+
+The catalogue lists tools from their authors; the OECD does not vet or endorse them.
 
 ## Who it is for
 
@@ -437,4 +456,4 @@ FairMind is created and maintained by [Axonome](https://www.fairmind.xyz/about).
 
 ---
 
-<sub>Keywords: AI governance, AI assurance, AI compliance, responsible AI, AI audit, agentic AI governance, LLM evaluation, LLM red teaming, prompt injection testing, MCP security, AI fairness, bias detection, EU AI Act compliance, ISO 42001, NIST AI RMF, AIUC-1, DPDP Act, RBI FREE-AI, model risk management, AI release gate.</sub>
+<sub>Keywords: AI governance, AI assurance, AI compliance, responsible AI, AI audit, agentic AI governance, LLM evaluation, LLM red teaming, prompt injection testing, MCP security, AI fairness, bias detection, EU AI Act compliance, ISO 42001, NIST AI RMF, AIUC-1, DPDP Act, RBI FREE-AI, model risk management, AI release gate, OECD.AI Catalogue of Tools and Metrics, trustworthy AI.</sub>
