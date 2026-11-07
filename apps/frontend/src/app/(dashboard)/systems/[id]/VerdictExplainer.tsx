@@ -67,6 +67,14 @@ export function bestOption(path: GatePath | undefined): GatePathOption | null {
   return target ? path.options.find((o) => RANK[o.verdictAfter] >= RANK[target]) ?? null : null
 }
 
+const stepKey = (s: GatePathStep) => `${s.check}:${s.action}`
+
+/** The shortest path to Go when it differs from the next-verdict path shown above it, else null. */
+export function goPath(path: GatePath | undefined, best: GatePathOption | null) {
+  const go = path?.toGo
+  return go && best && go.steps.map(stepKey).join() !== best.steps.map(stepKey).join() ? go : null
+}
+
 /** True when the target is out of reach for lack of confidence, not because of a failing check. */
 export function confidenceShort(gate: ReleaseGate) {
   const target = gate.path?.target
@@ -136,6 +144,30 @@ function StepAction({ step, primary, onAttest, onOpen }: { step: GatePathStep; p
   return <Link href={href} className={cls}>{label}</Link>
 }
 
+type StepRowProps = { step: GatePathStep; n: number; primary: boolean; gate: ReleaseGate; tag?: string; onAttest?: (check: GateCheck['key']) => void; onOpen?: (href: string) => void }
+
+function StepRow({ step, n, primary, gate, tag, onAttest, onOpen }: StepRowProps) {
+  const cls = stepClass(step)
+  return (
+    <li className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2 rounded-[10px] bg-white p-3 sm:grid-cols-[20px_minmax(0,1fr)_auto]">
+      <span className="text-[13px] font-semibold tabular-nums">{n}</span>
+      <div className="min-w-0">
+        <div className="text-[13px] font-semibold">
+          {stepTitle(step, gate)}
+          {tag && <span className="font-normal text-[var(--fm-ink3)]"> · {tag}</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <Pill tone={cls.tone}>{cls.label}</Pill>
+          <span className="text-[12px] text-[var(--fm-ink2)]">{stepLine(step)}</span>
+        </div>
+      </div>
+      <div className="col-start-2 sm:col-start-auto">
+        <StepAction step={step} primary={primary} onAttest={onAttest} onOpen={onOpen} />
+      </div>
+    </li>
+  )
+}
+
 /**
  * The release gate explaining itself, entirely from what the gate returned: the tier it was computed on,
  * the confidence arithmetic, the tier's row of the decision matrix and the cheapest honest steps up.
@@ -158,6 +190,7 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
   const { explain, path } = gate
   const best = bestOption(path)
   const alt = best ? attestationNote(gate, best) : null
+  const go = goPath(path, best)
   const override = tierOverride(explain)
   const reasons = [...gate.reasons, ...(path?.notes ?? [])]
 
@@ -192,24 +225,9 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
             <>
               <div className="text-[13.5px] font-semibold">Fastest honest path to {VERDICT_LABEL[path.target]}</div>
               <ol className="grid gap-2">
-                {best.steps.map((step, i) => {
-                  const cls = stepClass(step)
-                  return (
-                    <li key={`${step.check}:${step.action}`} className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2 rounded-[10px] bg-white p-3 sm:grid-cols-[20px_minmax(0,1fr)_auto]">
-                      <span className="text-[13px] font-semibold tabular-nums">{i + 1}</span>
-                      <div className="min-w-0">
-                        <div className="text-[13px] font-semibold">{stepTitle(step, gate)}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                          <Pill tone={cls.tone}>{cls.label}</Pill>
-                          <span className="text-[12px] text-[var(--fm-ink2)]">{stepLine(step)}</span>
-                        </div>
-                      </div>
-                      <div className="col-start-2 sm:col-start-auto">
-                        <StepAction step={step} primary={i === 0} onAttest={onAttest} onOpen={onOpen} />
-                      </div>
-                    </li>
-                  )
-                })}
+                {best.steps.map((step, i) => (
+                  <StepRow key={stepKey(step)} step={step} n={i + 1} primary={i === 0} gate={gate} onAttest={onAttest} onOpen={onOpen} />
+                ))}
               </ol>
               <p className="text-[12.5px] text-[var(--fm-ink)]">
                 Confidence after: {two(best.confidenceAfter)}, verdict <span className={cn('font-semibold', VERDICT_TONE[best.verdictAfter])}>{VERDICT_LABEL[best.verdictAfter]}</span>.
@@ -220,6 +238,24 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
                 <p className="border-t border-[var(--fm-line)] pt-2.5 text-[12.5px] leading-normal text-[var(--fm-ink2)]">
                   <span className="font-semibold text-[var(--fm-ink)]">Attestations instead:</span> {alt}
                 </p>
+              )}
+              {go && (
+                <div className="grid gap-2.5 border-t border-[var(--fm-line)] pt-2.5">
+                  <div className="text-[13.5px] font-semibold">
+                    Shortest path to Go <span className="font-normal text-[var(--fm-ink3)]">· {go.steps.length} step{go.steps.length === 1 ? '' : 's'}</span>
+                  </div>
+                  <ol className="grid gap-2">
+                    {go.steps.map((step, i) => {
+                      const above = best.steps.findIndex((s) => stepKey(s) === stepKey(step))
+                      const tag = above < 0 ? undefined : best.steps.length === 1 ? 'the step above' : `step ${above + 1} above`
+                      return <StepRow key={stepKey(step)} step={step} n={i + 1} primary={false} gate={gate} tag={tag} onAttest={onAttest} onOpen={onOpen} />
+                    })}
+                  </ol>
+                  <p className="text-[12.5px] text-[var(--fm-ink)]">
+                    Confidence after: {two(go.confidenceAfter)}, verdict <span className={cn('font-semibold', VERDICT_TONE[go.verdictAfter])}>{VERDICT_LABEL[go.verdictAfter]}</span>.
+                    {!go.approvalReady && ' Approval would still be blocked by the list below.'}
+                  </p>
+                </div>
               )}
             </>
           ) : (
