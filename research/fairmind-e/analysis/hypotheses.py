@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Pre-registered hypothesis statistics for the FairMind-E paper (H1-H4).
+"""Pre-specified hypothesis statistics for the FairMind-E paper (H1-H4).
 
-This module computes, from CSV inputs, the four pre-registered hypotheses plus
+This module computes, from CSV inputs, the four pre-specified hypotheses plus
 the measurement-accuracy statistics that feed threshold recalibration:
 
 - H1: lower evidence confidence leads to more conservative recommendations.
   Spearman rank correlation between ``confidence_score`` and the
   recommendation ordinal. The ordinal is defined explicitly in
   ``RECOMMENDATION_ORDINAL`` (go=0, conditional_go=1, no_go=2), so the
-  pre-registered expectation is a NEGATIVE correlation.
+  pre-specified expectation is a NEGATIVE correlation.
 - H2: the module raises ENV control coverage versus baseline. Wilcoxon
   signed-rank on paired ``coverage_rate_pre`` vs ``coverage_rate_post``.
 - H3: the decision matrix improves inter-rater agreement. Mean pairwise
@@ -68,7 +68,7 @@ MODULE_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_PROFILES_PATH = MODULE_ROOT / "profiles" / "profiles.json"
 
 # --------------------------------------------------------------------------
-# Pre-registered constants
+# Pre-specified constants
 # --------------------------------------------------------------------------
 
 # H1 ordinal. Higher ordinal = more conservative recommendation. Because
@@ -91,8 +91,8 @@ PROVENANCE_CLASSES = (
 CARBON_INTENSITY_BASES = ("average", "marginal")
 ACCURACY_METRICS = ("energy_kwh", "location_kg_co2e", "market_kg_co2e")
 
-KAPPA_TARGET = 0.60          # H3 pre-registered agreement target (strict >).
-H4_TARGET_PCT_REDUCTION = 20.0  # H4 pre-registered reduction target (strict >).
+KAPPA_TARGET = 0.60          # H3 pre-specified agreement target (strict >).
+H4_TARGET_PCT_REDUCTION = 20.0  # H4 pre-specified reduction target (strict >).
 LOA_MULTIPLIER = 1.96        # Bland-Altman 95 percent limits of agreement.
 MIN_PAIR_OVERLAP = 2         # Minimum common profiles for a Cohen pair.
 DEFAULT_SEED = 20260730
@@ -1939,7 +1939,7 @@ def render_text(results: Mapping[str, Any]) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Compute the FairMind-E pre-registered hypothesis statistics "
+            "Compute the FairMind-E pre-specified hypothesis statistics "
             "(H1-H4) and measurement-accuracy statistics from CSV inputs."
         )
     )

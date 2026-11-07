@@ -37,7 +37,7 @@ certificates never improve confidence, tier, or recommendation. On a 14-case
 hand-labeled fixture set, the full mechanism reproduces all expected decisions,
 while ablated gates that see only carbon magnitude agree with at most half of
 them - a consistency check, not a field result, which is why we also present
-the design of two registered studies now instrumented and ready to run: a
+the design of two studies, instrumented and ready to run with pre-registration planned,: a
 measurement study in which identical workloads measured three ways (power
 tracker, cloud billing, analytic FLOP estimate) receive different confidence
 scores and can flip the gate at identical true impact, and a two-arm expert
@@ -142,7 +142,7 @@ fixtures and the engine, so this is a consistency and ablation illustration -
 evidence that the confidence dimension is load-bearing in the mechanism - and
 not an empirical validation. That is what the two studies are for.
 
-## 4. Registered validation studies (instrumented, pre-data)
+## 4. Validation studies (designed and instrumented, pre-data)
 
 **Measurement study (M5).** Four workloads (classical ML training, transformer
 fine-tune, RAG inference, batch embeddings) x 5 iterations, each physical run
@@ -161,7 +161,7 @@ cells (boundary cells doubled with differing mitigation states), each validated
 against the production engine; 15 raters (5 GRC, 5 ML engineering, 5 ESG) rate
 8 profiles each under a counterbalanced assignment (10 ratings per profile,
 at least 3 per role). Two arms: baseline (raw measurements only) versus module
-(full FairMind-E output). Pre-registered hypotheses: H1, displayed confidence
+(full FairMind-E output). Pre-specified hypotheses: H1, displayed confidence
 correlates negatively with recommendation ordinal (Spearman); H2, the module
 arm raises ENV control coverage against a per-profile gold checklist (Wilcoxon
 signed-rank on paired coverage rates); H3, the matrix improves inter-rater

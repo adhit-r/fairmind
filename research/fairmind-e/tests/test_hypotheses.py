@@ -96,7 +96,7 @@ class RankSpearmanTest(unittest.TestCase):
         self.assertAlmostEqual(entry["rho"], -3.0 / math.sqrt(10.0), places=12)
         self.assertTrue(entry["direction_consistent"])
 
-    def test_ordinal_mapping_is_pre_registered(self):
+    def test_ordinal_mapping_is_pre_specified(self):
         self.assertEqual(
             HYP.RECOMMENDATION_ORDINAL, {"go": 0, "conditional_go": 1, "no_go": 2}
         )

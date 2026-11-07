@@ -222,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         for r in records:
             rows_for_rank.append((confidence_of[method], r["abs_pct_error"]))
 
-    # The pre-registered question: higher confidence should mean lower error,
+    # The pre-specified question: higher confidence should mean lower error,
     # so the expected correlation is negative.
     if rows_for_rank:
         rho, n = spearman([c for c, _ in rows_for_rank], [e for _, e in rows_for_rank])
