@@ -22,7 +22,38 @@ const scopedRun = {
   overallVerdict: 'review',
   layerVerdictsSchemaVersion: '1.0.0',
   layerVerdicts: { suites: {}, modalities: {}, components: {}, riskDimensions: {} },
-  suiteExecutions: [],
+  suiteExecutions: [{
+    id: 'suite-execution-1',
+    suiteVersionId: 'suite-version-1',
+    ownerScope: 'organization',
+    ordinal: 1,
+    technicalStatus: 'succeeded',
+    evidenceResultStatus: 'passed_with_limitations',
+    admissionStatus: 'verified',
+    reviewStatus: 'accepted',
+    freshnessStatus: 'stale',
+    recordedFreshnessStatus: 'current',
+    freshnessContractVersion: '1.0.0',
+    freshnessEvaluatedAt: '2026-08-30T00:00:00Z',
+    freshnessEffectiveAt: '2026-08-29T00:00:00Z',
+    expiringAt: '2026-09-30T00:00:00Z',
+    freshnessReasonCodes: ['signing_key_revoked'],
+    decisionEvidenceEligible: false,
+    evidenceTrust: {
+      sourceType: 'external_provider',
+      issuerKey: 'issuer:assurance-lab',
+      signingKeyId: 'signing-key-1',
+      signerKeyId: 'signer-key-1',
+      signerAlgorithm: 'Ed25519',
+      effectiveExpiresAt: '2026-09-30T00:00:00Z',
+      reviewedBy: 'reviewer-1',
+      reviewedAt: '2026-08-30T00:00:00Z',
+      admissionReasons: ['signature verified'],
+    },
+    limitations: ['Protected-group coverage is incomplete.'],
+    failureCode: null,
+    failureMessage: null,
+  }],
   decisionEvidenceCurrentlyEligible: false,
   envelopeId: 'envelope-1',
   envelope: {
@@ -33,7 +64,11 @@ const scopedRun = {
     workspaceId: 'workspace-1',
     systemId: 'system-1',
     planId: 'plan-1',
-    suites: [],
+    suites: [{
+      suiteExecutionId: 'suite-execution-1',
+      suiteVersionId: 'suite-version-1',
+      ownerScope: 'organization',
+    }],
   },
   envelopeHash: 'd'.repeat(64),
   verdictVersion: 1,
@@ -144,8 +179,31 @@ test('enabled run child gate renders execution, evidence, and governance as sepa
   const panel = page.getByRole('region', { name: 'Evidence trust state' })
   await expect(panel.getByText('Execution status', { exact: true })).toBeVisible()
   await expect(panel.getByText('Leased', { exact: true })).toBeVisible()
-  await expect(panel.getByText('Evaluator evidence result', { exact: true })).toBeVisible()
-  await expect(panel.getByText('Passed with limitations', { exact: true })).toBeVisible()
-  await expect(panel.getByText('Governance verdict', { exact: true })).toBeVisible()
-  await expect(panel.getByText('Review', { exact: true })).toBeVisible()
+  const evidenceAxis = panel.getByText('Evaluator evidence result', { exact: true }).locator('..')
+  await expect(evidenceAxis).toBeVisible()
+  await expect(evidenceAxis.getByText('Passed with limitations', { exact: true })).toBeVisible()
+  const governanceAxis = panel.getByText('Governance verdict', { exact: true }).locator('..')
+  await expect(governanceAxis).toBeVisible()
+  await expect(governanceAxis.getByText('Review', { exact: true })).toBeVisible()
+
+  const metadata = panel.getByRole('table', { name: 'Suite evidence trust metadata' })
+  const suiteRow = metadata.getByRole('row').nth(1)
+  await expect(metadata.getByRole('columnheader', { name: 'Source', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(1).getByText('external_provider', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Evidence signer', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(3).getByText('signer-key-1 (Ed25519)', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Effective expiry', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(4)).toContainText('Sep 30, 2026')
+  await expect(metadata.getByRole('columnheader', { name: 'Admission reasons', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(6).getByText('signature verified', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Freshness / invalidation reasons', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(7).getByText('Signing key revoked', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Admission', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(13).getByText('Verified', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Freshness', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(14).getByText('Stale', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Review', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(15).getByText('Accepted', { exact: true })).toBeVisible()
+  await expect(metadata.getByRole('columnheader', { name: 'Limitations', exact: true })).toBeVisible()
+  await expect(suiteRow.getByRole('cell').nth(16).getByText('Protected-group coverage is incomplete.', { exact: true })).toBeVisible()
 })
