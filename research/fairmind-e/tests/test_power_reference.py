@@ -146,22 +146,44 @@ class CalibrationTest(unittest.TestCase):
             w.writerows(reference)
         return runs_path, ref_path
 
-    def _runs(self, cc_energy: float, mf_energy: float):
-        base = {
-            "workload_id": "w1", "run_id": "r1", "method_available": "true",
-            "measurement_method": "", "energy_kwh": "", "confidence_score": "",
-            "provenance_class": "",
-        }
-        return [
-            {**base, "measurement_method": "codecarbon", "energy_kwh": f"{cc_energy}",
-             "confidence_score": "0.72", "provenance_class": "tool_estimated"},
-            {**base, "measurement_method": "manual_flop", "energy_kwh": f"{mf_energy}",
-             "confidence_score": "0.30", "provenance_class": "manual"},
-        ]
+    N_RUNS = 5  # calibrate_confidence withholds its verdict below 5 runs per method
 
-    def _reference(self, value: float):
-        return [{"workload_id": "w1", "run_id": "r1", "reference_kwh_total": f"{value}",
-                 "reference_kwh_marginal": ""}]
+    def _runs(self, cc_energy: float, mf_energy: float, n: int = N_RUNS):
+        rows = []
+        for i in range(1, n + 1):
+            base = {
+                "workload_id": "w1", "run_id": f"r{i}", "method_available": "true",
+                "measurement_method": "", "energy_kwh": "", "confidence_score": "",
+                "provenance_class": "",
+            }
+            rows += [
+                {**base, "measurement_method": "codecarbon", "energy_kwh": f"{cc_energy}",
+                 "confidence_score": "0.72", "provenance_class": "tool_estimated"},
+                {**base, "measurement_method": "manual_flop", "energy_kwh": f"{mf_energy}",
+                 "confidence_score": "0.30", "provenance_class": "manual"},
+            ]
+        return rows
+
+    def _reference(self, value: float, n: int = N_RUNS):
+        return [{"workload_id": "w1", "run_id": f"r{i}", "reference_kwh_total": f"{value}",
+                 "reference_kwh_marginal": ""} for i in range(1, n + 1)]
+
+    def test_withholds_verdict_below_minimum_runs(self):
+        runs, ref = self._write(self._runs(1.05e-4, 5.0e-4, n=1), self._reference(1.0e-4, n=1))
+        out = self.dir / "out.json"
+        self.calib.main(["--runs", str(runs), "--reference", str(ref), "--out", str(out)])
+        import json
+        summary = json.loads(out.read_text())
+        self.assertIsNone(summary["verdict"]["ordering_holds"])
+        self.assertIn("insufficient samples", summary["verdict"]["reading"])
+
+    def test_zero_estimate_does_not_crash_log_ratio(self):
+        runs, ref = self._write(self._runs(0.0, 5.0e-4), self._reference(1.0e-4))
+        out = self.dir / "out.json"
+        self.calib.main(["--runs", str(runs), "--reference", str(ref), "--out", str(out)])
+        import json
+        summary = json.loads(out.read_text())
+        self.assertIsNone(summary["methods"]["codecarbon"]["mean_log_ratio"])
 
     def test_reports_ordering_holds_when_trusted_method_is_closer(self):
         runs, ref = self._write(self._runs(1.05e-4, 5.0e-4), self._reference(1.0e-4))

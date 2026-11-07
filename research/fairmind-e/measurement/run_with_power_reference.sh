@@ -29,35 +29,38 @@ echo
 echo "powermetrics needs root. Only the sampler is elevated; the workloads are not."
 sudo -v
 
-# The suite runs far longer than sudo's credential timeout, so without a
-# keep-alive the stop step blocks on a fresh password prompt and the sampler
-# keeps writing until someone notices.
-sudo -n true 2>/dev/null || true
-( while true; do sudo -n true 2>/dev/null || true; sleep 60; done ) &
-SUDO_KEEPALIVE_PID=$!
-
+# One sudo call starts powermetrics under a small root-side watcher. The watcher
+# stops the sampler when the user-owned stop file disappears or this script
+# exits, so stopping needs no second sudo (and no credential keep-alive loop).
+STOP_FILE="$(mktemp -t fairmind-power-stop)"
 SAMPLER_PID=""
 cleanup() {
-  if [[ -n "${SUDO_KEEPALIVE_PID:-}" ]]; then
-    kill "${SUDO_KEEPALIVE_PID}" 2>/dev/null || true
-    SUDO_KEEPALIVE_PID=""
-  fi
   if [[ -n "${SAMPLER_PID}" ]]; then
     echo
     echo "Stopping power sampler..."
-    sudo kill "${SAMPLER_PID}" 2>/dev/null || true
+    rm -f "${STOP_FILE}"
     wait "${SAMPLER_PID}" 2>/dev/null || true
+    SAMPLER_PID=""
   fi
+  rm -f "${STOP_FILE}"
 }
 trap cleanup EXIT INT TERM
 
 echo "Starting power sampler at 200 ms..."
-sudo powermetrics --samplers cpu_power,gpu_power -i 200 -o "${POWER_LOG}" &
+sudo /bin/sh -c '
+  powermetrics --samplers cpu_power,gpu_power -i 200 -o "$1" &
+  sampler=$!
+  while [ -e "$2" ] && kill -0 "$3" 2>/dev/null && kill -0 "$sampler" 2>/dev/null; do
+    sleep 1
+  done
+  kill "$sampler" 2>/dev/null
+  wait "$sampler" 2>/dev/null
+' fairmind-power "${POWER_LOG}" "${STOP_FILE}" "$$" &
 SAMPLER_PID=$!
 
 # Let the sampler settle so the first run is fully covered.
 sleep 3
-if ! kill -0 "${SAMPLER_PID}" 2>/dev/null; then
+if ! ps -p "${SAMPLER_PID}" >/dev/null 2>&1; then
   echo "Power sampler failed to start; aborting rather than producing a study with no reference." >&2
   exit 1
 fi
@@ -76,7 +79,6 @@ uv run python ../../research/fairmind-e/measurement/harness.py \
 # Keep sampling briefly past the last run so its window is fully covered.
 sleep 3
 cleanup
-SAMPLER_PID=""
 
 echo
 echo "Integrating the power log over each run window..."
@@ -87,7 +89,7 @@ fi
 uv run python ../../research/fairmind-e/measurement/power_reference.py \
     --log "${POWER_LOG}" \
     --runs "${RUNS_CSV}" \
-    "${BASELINE_ARGS[@]}" \
+    ${BASELINE_ARGS[@]+"${BASELINE_ARGS[@]}"} \
     --out "${REF_CSV}"
 
 echo

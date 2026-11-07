@@ -28,7 +28,7 @@ this document.
 
 Statistic: Spearman rank correlation between `confidence_score` and the
 recommendation ordinal, defined in `hypotheses.py` as go=0,
-conditional_go=1, no_go=2, so the pre-registered expectation is a NEGATIVE
+conditional_go=1, no_go=2, so the pre-specified expectation is a NEGATIVE
 rho.
 
 Two evidence levels exist and must not be conflated:

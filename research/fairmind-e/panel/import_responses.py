@@ -94,6 +94,7 @@ def import_responses(
     # profile -> arm -> list of coverage rates
     coverage: dict[str, dict[str, list[float]]] = {}
     failed_checks = 0
+    seen: set[tuple[str, str]] = set()
 
     for index, row in enumerate(raw_rows, start=2):  # header is line 1
         rater_id = (row.get("rater_id") or "").strip()
@@ -104,6 +105,13 @@ def import_responses(
                 f"line {index}: ({rater_id}, {profile_id}) is not in the assignment plan"
             )
             continue
+        if key in seen:
+            problems.append(
+                f"line {index}: duplicate response for ({rater_id}, {profile_id}); "
+                "first response kept"
+            )
+            continue
+        seen.add(key)
         assignment = arms[key]
         arm = assignment["arm"]
 
@@ -120,6 +128,14 @@ def import_responses(
             problems.append(f"line {index}: no gold checklist for {profile_id}")
             continue
 
+        # Manipulation check: a module item must have shown the confidence score.
+        shown = (row.get("confidence_shown") or "").strip().lower()
+        if arm == MODULE and not shown:
+            problems.append(
+                f"line {index}: confidence_shown is required on module-arm rows"
+            )
+            continue
+
         controls = parse_controls(row.get("controls_required"))
         unknown = [c for c in controls if c not in applicable]
         if unknown:
@@ -129,8 +145,6 @@ def import_responses(
             len(demanded) / len(applicable)
         )
 
-        # Manipulation check: a module item must have shown the confidence score.
-        shown = (row.get("confidence_shown") or "").strip().lower()
         if arm == MODULE and shown in ("no", "false", "0"):
             failed_checks += 1
             continue

@@ -47,6 +47,9 @@ from pathlib import Path
 REFERENCE_COLUMNS = ("reference_kwh_total", "reference_kwh_marginal")
 
 
+# Below this many usable runs per method the ordering verdict is withheld.
+MIN_N_PER_METHOD = 5
+
 def load_reference(
     path: Path, column: str, max_contamination: float | None
 ) -> tuple[dict[tuple[str, str], float], dict[str, object]]:
@@ -159,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
                 "reference": ref,
                 "abs_pct_error": abs(estimate - ref) / ref * 100.0,
                 "signed_pct_error": (estimate - ref) / ref * 100.0,
-                "log_ratio": math.log(estimate / ref),
+                # log ratio is undefined for a zero or negative estimate
+                "log_ratio": math.log(estimate / ref) if estimate > 0 else None,
             }
         )
 
@@ -209,7 +213,11 @@ def main(argv: list[str] | None = None) -> int:
             "mean_abs_pct_error": round(statistics.mean(errors), 2),
             "median_signed_pct_error": round(statistics.median(signed), 2),
             "direction": "over-estimates" if statistics.median(signed) > 0 else "under-estimates",
-            "mean_log_ratio": round(statistics.mean(r["log_ratio"] for r in records), 4),
+            "mean_log_ratio": (
+                round(statistics.mean(logs), 4)
+                if (logs := [r["log_ratio"] for r in records if r["log_ratio"] is not None])
+                else None
+            ),
         }
         for r in records:
             rows_for_rank.append((confidence_of[method], r["abs_pct_error"]))
@@ -229,7 +237,17 @@ def main(argv: list[str] | None = None) -> int:
         }
 
     methods = summary["methods"]
-    if len(methods) >= 2:
+    if len(methods) >= 2 and min(m["n"] for m in methods.values()) < MIN_N_PER_METHOD:
+        summary["verdict"] = {
+            "ordering_holds": None,
+            "n_per_method": {name: m["n"] for name, m in methods.items()},
+            "min_n_per_method": MIN_N_PER_METHOD,
+            "reading": (
+                f"insufficient samples: at least {MIN_N_PER_METHOD} usable runs per method "
+                "are required before the confidence ordering can be judged; no verdict."
+            ),
+        }
+    elif len(methods) >= 2:
         ordered = sorted(methods.items(), key=lambda kv: -kv[1]["assigned_confidence"])
         (hi_name, hi), (lo_name, lo) = ordered[0], ordered[-1]
         hi_err, lo_err = hi["median_abs_pct_error"], lo["median_abs_pct_error"]

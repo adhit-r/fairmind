@@ -153,7 +153,7 @@ Output contract: the smoke CSV columns plus `measurement_method`, `run_mode`, `m
 
 ## Hypothesis Analysis (H1-H4)
 
-The `analysis/` folder computes the pre-registered hypothesis statistics and the measurement-accuracy statistics from CSV inputs. It is stdlib-only and prefers scipy/sklearn when importable (the backend environment); every result records which implementation produced it, and bootstrap confidence intervals use a fixed seed so outputs are identical across environments.
+The `analysis/` folder computes the pre-specified hypothesis statistics and the measurement-accuracy statistics from CSV inputs. It is stdlib-only and prefers scipy/sklearn when importable (the backend environment); every result records which implementation produced it, and bootstrap confidence intervals use a fixed seed so outputs are identical across environments.
 
 Inputs (schemas are documented constants at the top of `analysis/hypotheses.py`; `#`-prefixed lines are comments):
 

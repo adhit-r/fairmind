@@ -236,6 +236,37 @@ class ImporterTest(unittest.TestCase):
         self.assertIn("assignment plan", summary["problems"][0])
         self.assertIn("recommendation", summary["problems"][1])
 
+    def test_blank_manipulation_check_on_module_item_is_reported(self):
+        summary = self._run(
+            [
+                {
+                    "rater_id": "R02",
+                    "profile_id": "P01",
+                    "recommendation": "go",
+                    "controls_required": "ENV-1",
+                    "decision_confidence_1_5": "3",
+                },
+            ]
+        )
+        self.assertEqual(summary["panel_rows"], 0)
+        self.assertEqual(summary["manipulation_check_failures"], 0)
+        self.assertTrue(any("confidence_shown" in p for p in summary["problems"]))
+
+    def test_duplicate_response_keeps_first_and_reports_rest(self):
+        row = {
+            "rater_id": "R01",
+            "profile_id": "P01",
+            "recommendation": "go",
+            "controls_required": "ENV-1",
+            "decision_confidence_1_5": "3",
+        }
+        summary = self._run([row, dict(row, recommendation="no_go")])
+        self.assertEqual(summary["panel_rows"], 1)
+        self.assertTrue(any("duplicate" in p for p in summary["problems"]))
+        with (self.tmp_path / "out" / "panel_responses.csv").open(encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(rows[0]["recommendation"], "go")
+
     def test_out_of_range_confidence_is_rejected(self):
         summary = self._run(
             [

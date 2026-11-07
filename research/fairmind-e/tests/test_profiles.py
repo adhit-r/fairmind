@@ -2,11 +2,30 @@ import csv
 import importlib.util
 import json
 import pathlib
+import sys
 import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+def backend_importable() -> bool:
+    """True when apps/backend's domain gate can be imported (backend venv)."""
+    backend_root = ROOT.parents[1] / "apps" / "backend"
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    try:
+        import src.domain.environmental  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+BACKEND_SKIP = unittest.skipUnless(
+    backend_importable(),
+    "apps/backend is not importable; run from the backend venv (cd apps/backend && uv run python ...)",
+)
+
 GENERATOR_PATH = ROOT / "profiles" / "generate_profiles.py"
 
 EXPECTED_CELL_COUNTS = {
@@ -58,6 +77,7 @@ class ProfileMatrixDesignTest(unittest.TestCase):
                 self.assertTrue(profile["expected"]["approval_blocking"], profile["id"])
 
 
+@BACKEND_SKIP
 class ProfileEngineAgreementTest(unittest.TestCase):
     def test_engine_agrees_with_every_expected_label(self):
         generator = load_generator()

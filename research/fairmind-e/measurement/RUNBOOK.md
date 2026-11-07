@@ -13,7 +13,7 @@ From the repository root, using the backend environment (Python 3.13):
 
 ```bash
 cd apps/backend
-uv sync --extra research     # installs codecarbon
+uv sync --extra dev --extra test --extra research   # keeps dev/test extras, adds codecarbon
 uv pip install torch         # required only for W2 (transformer_finetune)
 uv run --extra research python -c "import sklearn, numpy, torch, codecarbon; print('ok')"
 ```

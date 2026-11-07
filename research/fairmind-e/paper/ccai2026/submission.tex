@@ -199,7 +199,8 @@ experiment.
   \includegraphics[width=\linewidth]{figures/fig2_mitigations.pdf}
   \caption{Mitigation outcomes, separated by what was executed. Hatched bars
   are accounting scenarios: one measured run recomputed against a bundled
-  emission-factor table with no rerun, hence identical across workloads and
+  \emph{placeholder} emission-factor table with no rerun, so they are
+  illustrative arithmetic, not measurements, hence identical across workloads and
   collapsed to one bar each. Solid bars are the three physical reruns. Casting
   the fine-tune to \texttt{bfloat16} on a host with no optimised kernel took it
   from 62.7\,s to 2887.6\,s; its bar is truncated.}
@@ -207,18 +208,19 @@ experiment.
 \end{figure}
 
 \paragraph{Mitigations: three reruns and eight accounting scenarios.} We
-pre-registered a paired test that mitigations cut intensity by more than 20
+pre-specified a paired test that mitigations cut intensity by more than 20
 percent. We do not report it, because the pairs are not exchangeable
 replications (Figure~\ref{fig:mitigations}): only three are physical reruns,
 while the region and time shifts recompute one measured run against a bundled
-emission-factor table with no rerun at all, which is why they are identical
+placeholder emission-factor table with no rerun at all, which is why they are identical
 across workloads. Pooling accounting scenarios with physical reruns, and
 different interventions with each other, would give a fictitious degrees of
 freedom; we report the classes separately instead.
 
-Factor substitution alone implies 94.2 percent for a region shift and 33.9 for
-a time shift, identical by construction across workloads. Of the three physical
-reruns, batching cut intensity 22.8 percent and a reduced-precision cast on RAG
+The region- and time-shift scenarios are illustrative arithmetic on
+placeholder emission factors, identical by construction across workloads; they
+are not measurements and we report no reduction figure for them. Of the three
+physical reruns, batching cut intensity 22.8 percent and a reduced-precision cast on RAG
 17.5 percent. The third inverted: casting the fine-tune to \texttt{bfloat16}
 made it 46 times slower on a host with no optimised kernel, and the tracker
 estimated roughly 41 times the energy. The runtime regression is directly
@@ -230,14 +232,16 @@ was false in the harmful direction. A gate that accepts asserted mitigations
 would have logged a reduction that never happened, which is why ENV-6 requires
 the mitigation to be documented and re-measured rather than declared.
 
-\paragraph{Expert panel (registered, in progress).} Twelve engine-validated
-profiles covering all nine matrix cells are rated by 15 reviewers across
+\paragraph{Expert panel (designed, collection not started).} Twelve
+engine-validated profiles covering all nine matrix cells are to be rated by 15
+reviewers across
 governance, ML engineering, and sustainability roles under a two-arm
 counterbalanced design (baseline: raw measurements only; module: full
 \sysname{} output), testing whether displayed confidence correlates with
 conservatism, whether the module arm raises ENV control coverage, and whether
-the matrix improves inter-rater agreement. Instrument and analysis are
-implemented; we seek critique of the baseline arm before collection closes.
+the matrix improves inter-rater agreement. Instruments and analysis are
+implemented, recruitment has not begun, and pre-registration is planned before
+collection; we seek critique of the baseline arm before collection opens.
 
 \section{Pathway to climate impact}
 

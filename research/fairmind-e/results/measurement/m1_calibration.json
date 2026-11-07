@@ -138,12 +138,12 @@
     "note": "with two provenance classes this is a two-group comparison expressed as a rank correlation; it tests ordering, not a dose-response relationship"
   },
   "verdict": {
-    "higher_confidence_method": "codecarbon",
-    "lower_confidence_method": "manual_flop",
-    "median_abs_pct_error_higher": 145.06,
-    "median_abs_pct_error_lower": 458.51,
-    "ordering_holds": true,
-    "trustworthy_direction": "refutation",
-    "reading": "the method the policy trusts more (codecarbon, confidence 0.75) is closer to the independent reference than manual_flop (confidence 0.2): median absolute error 145.06% vs 458.51%. The assigned ordering is consistent with observed error on this host."
+    "ordering_holds": null,
+    "n_per_method": {
+      "codecarbon": 1,
+      "manual_flop": 1
+    },
+    "min_n_per_method": 5,
+    "reading": "insufficient samples: at least 5 usable runs per method are required before the confidence ordering can be judged; no verdict."
   }
 }

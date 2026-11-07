@@ -24,6 +24,7 @@ import math
 import pathlib
 import sys
 import tempfile
+import importlib.util
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -493,6 +494,9 @@ class GridIntensityTableTest(unittest.TestCase):
 
 
 
+@unittest.skipUnless(
+    importlib.util.find_spec("numpy"), "numpy not installed; run from the apps/backend venv"
+)
 class RunWindowTest(unittest.TestCase):
     """The power reference aligns on these timestamps, so they must be real."""
 
