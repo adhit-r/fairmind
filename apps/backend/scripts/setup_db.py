@@ -12,6 +12,8 @@ and need no rows.
 
 import argparse
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,7 +29,7 @@ AIUC_WORKBOOK = BACKEND / "reference_data" / "frameworks" / "aiuc-1-april-2026.x
 OECD_PRINCIPLES = BACKEND / "reference_data" / "frameworks" / "oecd-ai-principles-may-2024.json"
 
 # Clean-install order for PostgreSQL. Superseded files (007_org_rbac_schema.sql,
-# 003_*.py) and upgrade_paths/ are deliberately absent.
+# 003_*.py) are deliberately absent.
 CHAIN = (
     "001_initial_schema.sql",
     "002_india_compliance_schema.sql",
@@ -40,20 +42,26 @@ CHAIN = (
     "011_governance_assurance.sql",
     "012_agentic_packs.sql",
     "012_evaluation_runs.sql",
-    "013_evaluation_assurance_contract_v2.sql",
-    "013a_evaluation_binding_integrity.sql",
-    "013b_evaluation_assurance_trust_integrity.sql",
-    "013c_evidence_verification_receipt.sql",
-    "013d_evaluator_catalog.sql",
-    "013e_environmental_tenant_scope.sql",
-    "013f_trust_authority_integrity.sql",
-    "013g_operational_evidence_freshness.sql",
-    "013h_idempotency_retention_integrity.sql",
-    "013i_imported_evidence_delivery_integrity.sql",
-    "013j_owner_decision_override_integrity.sql",
-    "013k_verified_evidence_link_integrity.sql",
-    "013l_delegated_separation_override_grant_integrity.sql",
-    "013m_worker_execution_foundation.sql",
+)
+# 013 onwards go through the operator wrappers, which apply the same direct
+# payloads and record them in fairmind_operator_migration_ledger; Assurance V2
+# refuses to start without those ledger rows. They use psql meta-commands
+# (\ir, \if), so they run through psql.
+OPERATORS = (
+    "012_to_013_evaluation_v2.sql",
+    "013_to_013a_evaluation_binding_integrity.sql",
+    "013a_to_013b_evaluation_assurance_trust_integrity_v2.sql",
+    "013b_to_013c_evidence_verification_receipt.sql",
+    "013c_to_013d_evaluator_catalog.sql",
+    "013d_to_013e_environmental_tenant_scope.sql",
+    "013e_to_013f_trust_authority_integrity.sql",
+    "013f_to_013g_operational_evidence_freshness.sql",
+    "013g_to_013h_idempotency_retention_integrity.sql",
+    "013h_to_013i_imported_evidence_delivery_integrity.sql",
+    "013i_to_013j_owner_decision_override_integrity.sql",
+    "013j_to_013k_verified_evidence_link_integrity.sql",
+    "013k_to_013l_delegated_separation_override_grant_integrity.sql",
+    "013l_to_013m_worker_execution_foundation.sql",
 )
 # PostgreSQL 18's frozen assurance catalog is measured with this between 010 and 011.
 PG18_RECONCILIATION = "upgrade_paths/010_to_011_drift_reconciliation.sql"
@@ -98,6 +106,10 @@ def apply_chain(url: str, schema: str) -> None:
             # 013-series guards require the schema owner to own its tables; on
             # PostgreSQL 15+ a new database's public schema is pg_database_owner's.
             cur.execute(f'ALTER SCHEMA "{schema}" OWNER TO CURRENT_USER')
+            # The frozen assurance catalog allows the owner only (013j rejects
+            # PUBLIC CREATE, which PostgreSQL 14 grants on public). The app
+            # connects as the owner, so it loses nothing.
+            cur.execute(f'REVOKE ALL ON SCHEMA "{schema}" FROM PUBLIC')
             cur.execute("SELECT current_setting('server_version_num')::int >= 180000")
             chain = list(CHAIN)
             if cur.fetchone()[0]:
@@ -109,6 +121,23 @@ def apply_chain(url: str, schema: str) -> None:
                 print(f"migrations: applied {name}")
     finally:
         conn.close()
+    apply_operators(url, schema)
+
+
+def apply_operators(url: str, schema: str) -> None:
+    psql = shutil.which("psql")
+    if not psql:
+        sys.exit("psql is required for a clean install (install the PostgreSQL client)")
+    env = {**os.environ, "PGOPTIONS": f"-c search_path={schema},pg_catalog,pg_temp "
+                                      f"-c fairmind.migration_schema={schema}"}
+    for name in OPERATORS:
+        result = subprocess.run(
+            [psql, "-X", "-w", "-q", url, "-v", "ON_ERROR_STOP=1", "-f", str(MIGRATIONS / "upgrade_paths" / name)],
+            env=env, text=True, capture_output=True,
+        )
+        if result.returncode:
+            sys.exit(f"migrations: {name} failed\n{result.stderr}")
+        print(f"migrations: applied upgrade_paths/{name}")
 
 
 def apply_always(url: str) -> None:
@@ -181,6 +210,13 @@ def verify(engine) -> int:
                 "WHERE v.framework_key = :key AND v.status = 'active'"
             ), {"key": key}).scalar() if "governance_control_definitions" in existing else 0
     problems += [f"{key} controls not loaded" for key, n in counts.items() if not n]
+    from config.migration_integrity import MigrationIntegrityError, verify_postgresql_migration_ledger
+
+    with engine.connect() as conn:
+        try:
+            verify_postgresql_migration_ledger(conn, trusted_schema=conn.execute(text("SELECT current_schema()")).scalar())
+        except MigrationIntegrityError as error:
+            problems.append(f"migration ledger: {error}")
     for p in problems:
         print(f"FAIL {p}")
     print(f"verify: {len(existing)} tables, controls={counts}, problems={len(problems)}")
