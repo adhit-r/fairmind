@@ -34,7 +34,7 @@ keywords = [
     "llm-bias"
 ]
 dependencies = [
-    "fastapi>=0.135.0",
+    "fastapi>=0.137.2",
     "uvicorn[standard]>=0.42.0",
     "pydantic>=2.12.4",
     "pydantic[email]>=2.12.4",
