@@ -659,6 +659,13 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
     for response in responses:
         _assert_untrusted_linking_disabled(response)
 
+    renamed = client.patch(
+        f"/api/v1/ai-governance/evidence-item/{evidence_id}",
+        json={"title": "Renamed narrative"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["title"] == "Renamed narrative"
+
     session = authenticated_org_database["session_factory"]()
     try:
         assert session.execute(
@@ -689,12 +696,15 @@ def test_historical_untrusted_evidence_remains_readable_and_removable(
                 "(id, system_id, org_id, evidence_type, title, content_json, confidence, "
                 "status, metadata_json, captured_at, created_at) "
                 "VALUES (:id, :system_id, :org_id, 'external_report', 'Historical report', "
-                "'{}', 0.5, 'draft', :metadata_json, :now, :now)"
+                ":content_json, 0.5, 'draft', :metadata_json, :now, :now)"
             ),
             {
                 "id": evidence_id,
                 "system_id": system_id,
                 "org_id": authenticated_org_database["org_id"],
+                "content_json": (
+                    '{"url":"https://legacy.example.test/content-report"}'
+                ),
                 "metadata_json": (
                     '{"artifact_kind":"url","file_url":'
                     '"https://legacy.example.test/report"}'
@@ -719,11 +729,27 @@ def test_historical_untrusted_evidence_remains_readable_and_removable(
     assert fetched.json()["fileUrl"] == "https://legacy.example.test/report"
     assert fetched.json()["linkedEntities"][0]["id"] == link_id
 
+    for body in (
+        {"title": "Edited historical report"},
+        {"artifact_kind": "narrative"},
+        {"file_url": ""},
+    ):
+        _assert_untrusted_linking_disabled(
+            client.patch(f"/api/v1/ai-governance/evidence-item/{evidence_id}", json=body)
+        )
+
+    unchanged = client.get(f"/api/v1/ai-governance/evidence-item/{evidence_id}")
+    assert unchanged.status_code == 200
+    assert unchanged.json()["title"] == "Historical report"
+    assert unchanged.json()["artifactKind"] == "url"
+    assert unchanged.json()["fileUrl"] == "https://legacy.example.test/report"
+
     cleared = client.patch(
         f"/api/v1/ai-governance/evidence-item/{evidence_id}",
-        json={"file_url": ""},
+        json={"artifact_kind": "narrative", "file_url": ""},
     )
     assert cleared.status_code == 200
+    assert cleared.json()["artifactKind"] == "narrative"
     assert cleared.json()["fileUrl"] == ""
 
     removed = client.delete(
@@ -765,6 +791,14 @@ def test_reviewed_untrusted_linking_capability_can_be_explicitly_enabled(
         json={"entity_type": "policy", "entity_id": "policy-reviewed"},
     )
     assert linked.status_code == 200, linked.text
+
+    edited = client.patch(
+        f"/api/v1/ai-governance/evidence-item/{collected.json()['id']}",
+        json={"title": "Reviewed source, edited"},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["title"] == "Reviewed source, edited"
+    assert edited.json()["fileUrl"] == "https://reviewed.example.test/report"
 
 
 def test_ai_governance_risk_dashboard_and_assessment(authenticated_org_database, monkeypatch):

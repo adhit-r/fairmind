@@ -2345,9 +2345,17 @@ async def update_evidence_item(
 
     metadata = _load_json_value(row[1], {})
     content = _load_json_value(row[2], {})
-    if _has_nonblank_external_url(request.file_url) or (
-        request.artifact_kind == "url"
-        and _has_nonblank_external_url(content.get("url"))
+    # Fields the PATCH omits keep their stored values, so gate on the result.
+    if _requests_external_url_artifact(
+        artifact_kind=(
+            request.artifact_kind
+            if request.artifact_kind is not None
+            else metadata.get("artifact_kind")
+        ),
+        file_url=(
+            request.file_url if request.file_url is not None else metadata.get("file_url")
+        ),
+        content=content,
     ):
         _require_untrusted_external_evidence_linking_enabled()
     if request.tags is not None:
