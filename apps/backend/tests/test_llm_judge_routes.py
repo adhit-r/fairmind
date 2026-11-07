@@ -115,7 +115,7 @@ def test_a_grok_judge_evaluation_runs_on_the_cli(monkeypatch, tmp_path):
     assert (data["judge_model"], data["bias_score"], data["severity"], data["detected_biases"]) == ("grok-4.6", 0.8, "high", ["role stereotype"])
     (call,) = recorded(calls)
     assert "--model=grok-4.6" in call["argv"] and "--deny=*" in call["argv"]
-    assert any(a.startswith("--single=") and "caring helper" in a for a in call["argv"])
+    assert "caring helper" in call["prompt"] and not any("caring helper" in a for a in call["argv"])
 
 
 @pytest.mark.parametrize("retired", ["gpt-4-turbo", "claude-3-opus", "gemini-pro"])

@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     llm_model: str = "gemini-3.8-flash"
-    # Local development: LLM features may call the developer's signed-in grok CLI. Never in production.
+    # Local development: LLM features may call the developer's signed-in grok CLI. Ignored unless environment is development.
     grok_cli_enabled: bool = False
 
     # Encryption Configuration

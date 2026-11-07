@@ -34,14 +34,15 @@ export function AIProviderSettings() {
   const [failure, setFailure] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  // The form starts from what is saved, or from the first provider.
+  // The form starts from what is saved, or from the first provider when what is saved is not offered here.
   useEffect(() => {
-    if (cfg) {
+    const offered = (id: string) => !!providers.data?.some((p) => p.id === id)
+    if (cfg && (!providers.data || offered(cfg.provider))) {
       setProvider(cfg.provider)
       setModel(cfg.model)
       setFields({ baseUrl: cfg.baseUrl ?? '', endpoint: cfg.endpoint ?? '', region: cfg.region ?? '' })
       setEnabled(cfg.enabled)
-    } else if (providers.data?.length && !provider) {
+    } else if (providers.data?.length && !offered(provider)) {
       setProvider(providers.data[0].id)
       setModel(providers.data[0].default_model)
     }
@@ -49,6 +50,7 @@ export function AIProviderSettings() {
 
   const option = useMemo(() => providers.data?.find((p) => p.id === provider) ?? null, [providers.data, provider])
   const keySaved = !!cfg?.hasKey && cfg.provider === provider && cfg.keyReadable
+  const cli = option?.key === 'none' // this server's Grok CLI: used without saving, so there is nothing to save or remove
   const body = (): AIProviderBody => ({
     provider,
     model: model.trim(),
@@ -79,7 +81,7 @@ export function AIProviderSettings() {
       if (res.error) setFailure(res.error)
       else {
         setApiKey('')
-        setNotice(option?.key === 'none' ? 'Saved.' : 'Saved. The key is encrypted and is never shown again.')
+        setNotice('Saved. The key is encrypted and is never shown again.')
       }
     } else {
       const res = await deleteAIProvider()
@@ -125,7 +127,7 @@ export function AIProviderSettings() {
         className="flex flex-col gap-5"
         onSubmit={(e) => {
           e.preventDefault()
-          act('save')
+          if (!cli) act('save')
         }}
       >
         <div className="flex flex-col gap-1.5">
@@ -157,8 +159,10 @@ export function AIProviderSettings() {
           </div>
         ))}
 
-        {option?.key === 'none' ? (
-          <p className={`m-0 text-xs ${MUTED}`}>Runs the grok CLI on this server; local development only.</p>
+        {cli ? (
+          <p className={`m-0 text-xs ${MUTED}`}>
+            Runs the grok CLI on this server for every organisation, in local development only. Nothing is saved; switch GROK_CLI_ENABLED off to use a saved provider.
+          </p>
         ) : (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="ai-key" className="text-[13px] font-semibold text-[var(--fm-ink)]">
@@ -192,14 +196,20 @@ export function AIProviderSettings() {
             ))}
           </datalist>
           <span className={`text-xs ${MUTED}`}>
-            {option?.lists_models === false ? 'This provider does not list its models; type the model ID.' : 'Test the connection to pick from the models this key can use.'}
+            {option?.lists_models === false
+              ? 'This provider does not list its models; type the model ID.'
+              : cli
+                ? 'Test the connection to see the models the Grok CLI offers.'
+                : 'Test the connection to pick from the models this key can use.'}
           </span>
         </div>
 
-        <label className="flex items-center gap-2.5 text-sm text-[var(--fm-ink)]">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4" />
-          Let the agent use this provider
-        </label>
+        {!cli && (
+          <label className="flex items-center gap-2.5 text-sm text-[var(--fm-ink)]">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4" />
+            Let the agent use this provider
+          </label>
+        )}
 
         {test && (
           <div role="status" className={`rounded-xl px-4 py-3 text-[13px] ${test.ok ? 'bg-[#e3f5ec] text-[#00704e]' : 'bg-[#fde8e8] text-[#b42318]'}`}>
@@ -219,10 +229,12 @@ export function AIProviderSettings() {
           <button type="button" className={BTN} disabled={!canSubmit} onClick={() => act('test')}>
             {busy === 'test' ? 'Testing' : 'Test connection'}
           </button>
-          <button type="submit" className={BTN_P} disabled={!canSubmit || !model.trim()}>
-            {busy === 'save' ? 'Saving' : 'Save'}
-          </button>
-          {cfg && (
+          {!cli && (
+            <button type="submit" className={BTN_P} disabled={!canSubmit || !model.trim()}>
+              {busy === 'save' ? 'Saving' : 'Save'}
+            </button>
+          )}
+          {cfg && !cli && (
             <button type="button" className={BTN} disabled={!!busy} onClick={() => act('remove')}>
               {busy === 'remove' ? 'Removing' : 'Remove'}
             </button>
