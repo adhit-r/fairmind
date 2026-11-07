@@ -1,4 +1,4 @@
-"""Reserved P1 worker boundary; P0 deliberately declares no concrete worker."""
+"""P1 contract boundary for isolated evaluation workers."""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.application.ports.evaluation_workbench import FrozenJsonObject
+from src.domain.assurance.evaluation_v2 import ExecutionEnvelopeV2
 
 
 @dataclass(frozen=True, slots=True)
 class WorkerCapabilities:
-    """Static capability declaration for a future isolated FairMind worker."""
+    """Static capabilities exposed before exact-envelope execution."""
 
     worker_type: str
     supported_execution_depths: tuple[str, ...]
@@ -18,12 +19,12 @@ class WorkerCapabilities:
 
 
 class EvaluationWorkerPort(Protocol):
-    """Future execution boundary; no P0 adapter, route, queue, or lease exists."""
+    """Execution boundary; concrete sandbox adapters and routes remain unavailable."""
 
     @property
     def capabilities(self) -> WorkerCapabilities: ...
 
-    def execute(self, envelope: FrozenJsonObject) -> FrozenJsonObject: ...
+    def execute(self, envelope: ExecutionEnvelopeV2) -> FrozenJsonObject: ...
 
 
 __all__ = ["EvaluationWorkerPort", "WorkerCapabilities"]
