@@ -38,6 +38,10 @@ class ResendEmailService:
             logger.error(f"Email send failed: {e}")
             return False
 
+    async def send_policy_alert(self, to: str, subject: str, html: str) -> bool:
+        """A published policy rule started failing; the caller builds and escapes the message."""
+        return await self._send(to, subject, html)
+
     async def send_registration_request_to_admin(
         self, admin_email: str, requester_name: str, requester_email: str,
         org_name: str, requested_role: str, request_id: str, message: Optional[str] = None

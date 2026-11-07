@@ -125,7 +125,7 @@ export default function LLMJudgePage() {
                   What is LLM-as-Judge evaluation?
                 </summary>
                 <p className="text-sm text-gray-700 mt-2 ml-4">
-                  It uses advanced AI models (like GPT-4 or Claude) as &#34;judges&#34; to evaluate your text for
+                  It uses advanced AI models (like GPT-6.1 Sol or Claude Sonnet 5.5) as &#34;judges&#34; to evaluate your text for
                   various types of bias. The judge model applies reasoning and provides detailed analysis.
                 </p>
               </details>

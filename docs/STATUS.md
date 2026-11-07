@@ -1,8 +1,8 @@
 # Project status
 
-This page tracks what FairMind can and cannot claim today. It moved here from the README so the README can stay short.
+The product status (what works today, what is partly done, what is not built) is in the [README](../README.md#current-status). This page covers the claim boundary of the Assurance V2 signed-evidence control plane, which is built but off by default.
 
-## Current assurance boundary
+## Assurance V2 claim boundary
 
 | Capability | Current state | Claim allowed today |
 |---|---|---|
@@ -12,11 +12,11 @@ This page tracks what FairMind can and cannot claim today. It moved here from th
 | Issuer, public Ed25519 key, and trust-policy administration | Implemented behind independent default-off gates with PostgreSQL-authoritative mutations | Internal trust-root administration only |
 | Operational evidence freshness | Derived at database time from exact admission, receipt, evaluator, issuer, key, policy, review, expiry, and supersession bindings | Internal evidence-support status; not certification or compliance |
 | Legacy contract v1 plans and runs | Preserved as readable historical records; v2 activation blocks legacy creation, activation, run preparation, and evidence linking | Clone into an exactly bound v2 plan before new execution |
-| Environmental governance evidence | Canonical organization/system API and tenant-bound persistence verified locally on SQLite and PostgreSQL 14 | Scoped evidence workflow only; not validated emissions accounting or compliance proof |
+| Environmental governance evidence | Canonical organization/system API and tenant-bound persistence verified on PostgreSQL 14 | Scoped evidence workflow only; not validated emissions accounting or compliance proof |
 | Admission, reviewer, and governance-decision workflow | Internal routes and PostgreSQL gates are implemented but remain default-off and are not a public execution capability | Internal alpha only; do not claim general availability |
 | Sandboxed worker execution | Not yet shipped | Do not claim |
-| LLM, agent, code, vision, image, audio, video, and multimodal packs | Not yet independently validated | Planned/experimental only |
-| Pre-deployment, realtime, and post-deployment assurance | Not yet shipped | Do not claim |
+| LLM, agent, code, vision, image, audio, video, and multimodal evaluations | 56 catalogue evaluations have engines, including behaviour tests against the live system and agent-platform configuration audits; none is independently benchmarked | Runs in FairMind; do not claim independent validation |
+| Pre-deployment, realtime, and post-deployment assurance | Release gate (pre-deployment) and pushed monitoring snapshots (post-deployment) are shipped; realtime assurance is not | Gate and monitoring only; do not claim realtime assurance |
 | Compliance, certification, automatic approval, or automatic enforcement | Not provided by this branch | Do not claim |
 
 See the [2027 assurance roadmap](superpowers/plans/2026-07-19-fairmind-2027-ai-assurance-todo.md) for the release gates that must pass before individual execution capabilities are exposed.
@@ -57,8 +57,8 @@ packs, lifecycle workflows, and rollout gates remain open.
   and one append-only per-organization audit chain across all 21 enabled
   Assurance V2 mutation routes
 - Tenant-bound environmental evidence routes, response admission, and migration 013e,
-  verified on SQLite and a disposable local PostgreSQL 14 instance
-- Focused unit, route, SQLite migration-parity, PostgreSQL 14 lifecycle, and
+  verified on a disposable local PostgreSQL 14 instance
+- Focused unit, route, PostgreSQL 14 lifecycle, and
   concurrent trust-authority verification for the current internal-alpha slices
 
 **Next release gates**

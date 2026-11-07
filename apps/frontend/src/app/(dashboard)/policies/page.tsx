@@ -3,15 +3,17 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { BTN, BTN_P, Empty, ErrorNote, Heading, Loading, MUTED, Pill } from '@/components/packs/parts'
+import { BTN, BTN_P, Empty, ErrorNote, Heading, Loading, MUTED, Pill, when } from '@/components/packs/parts'
 import { OutcomePill, PolicyStatusPill } from '@/components/policies/PolicyPills'
 import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import {
   usePolicyActions,
   usePolicyResource,
+  type AIDraftedPolicy,
   type Evaluation,
   type FrameworkCoverage,
   type Policy,
+  type PolicyAlert,
 } from '@/lib/api/hooks/usePolicies'
 
 const INPUT = 'h-10 rounded-full border border-[#15171a24] bg-white px-4 text-[13px] outline-none focus:border-[var(--fm-ink,#15171a)]'
@@ -34,6 +36,103 @@ function NewPolicy({ onCreate }: { onCreate: (name: string) => Promise<void> }) 
       <input id="new-policy" className={`${INPUT} w-64`} placeholder="Name a new policy" value={name} onChange={(e) => setName(e.target.value)} />
       <button type="submit" className={BTN_P} disabled={busy || !name.trim()}>{busy ? 'Creating' : 'Draft policy'}</button>
     </form>
+  )
+}
+
+function AIDraft({ onDraft }: { onDraft: (brief: string) => Promise<AIDraftedPolicy | null> }) {
+  const [brief, setBrief] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<AIDraftedPolicy | null>(null)
+  const ready = brief.trim().length >= 10
+  return (
+    <section aria-labelledby="ai-draft" className="pk-card flex flex-col gap-3 p-5">
+      <div>
+        <h2 id="ai-draft" className="m-0 text-lg font-semibold">Draft with AI</h2>
+        <span className={`text-[13px] ${MUTED}`}>
+          Describe the policy you need. Your organisation&apos;s model writes the policy text and the rules the platform can check, mapped to framework controls. It is saved as a draft for people to review and approve. The model is set in{' '}
+          <Link href="/org-admin/settings" className="font-semibold underline">Organisation settings</Link>.
+        </span>
+      </div>
+      <form
+        className="flex flex-col gap-2.5"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (!ready) return
+          setBusy(true)
+          setResult(null)
+          const drafted = await onDraft(brief.trim())
+          setBusy(false)
+          if (drafted) {
+            setResult(drafted)
+            setBrief('')
+          }
+        }}
+      >
+        <label className="sr-only" htmlFor="ai-brief">Policy brief</label>
+        <textarea
+          id="ai-brief"
+          rows={3}
+          maxLength={4000}
+          className="w-full resize-y rounded-[10px] border border-[var(--fm-line)] bg-white px-3.5 py-2.5 text-[13px] outline-none focus:border-[var(--fm-ink)]"
+          placeholder="For example: high-risk credit models need a named owner, no open critical risks and an approved release before they go live"
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+        />
+        <div>
+          <button type="submit" className={BTN_P} disabled={busy || !ready}>{busy ? 'Drafting' : 'Draft with AI'}</button>
+        </div>
+      </form>
+      {result && (
+        <div role="status" className="flex flex-col gap-1.5 rounded-[10px] bg-[var(--fm-bg)] px-3.5 py-3 text-[13px]">
+          <span>
+            Drafted <Link href={`/policies/${result.id}`} className="font-semibold underline">{result.name}</Link> with {result.draft.model}:{' '}
+            {result.rules.length} {result.rules.length === 1 ? 'rule' : 'rules'} mapped to {result.controlRefs.length} {result.controlRefs.length === 1 ? 'control' : 'controls'}. Review it, then submit it for approval.
+          </span>
+          {result.draft.dropped.length > 0 && (
+            <div className={MUTED}>
+              Left out {result.draft.dropped.length} {result.draft.dropped.length === 1 ? 'rule' : 'rules'} the platform cannot check:
+              <ul className="m-0 mt-1 list-disc pl-5">
+                {result.draft.dropped.map((d) => <li key={d}>{d}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Alerts({ alerts, onAcknowledge }: { alerts: PolicyAlert[]; onAcknowledge: (id: string) => Promise<void> }) {
+  if (!alerts.length) return null
+  return (
+    <section aria-labelledby="alerts" className="flex flex-col gap-3.5">
+      <div>
+        <h2 id="alerts" className="m-0 text-lg font-semibold">Open alerts</h2>
+        <span className={`text-[13px] ${MUTED}`}>
+          Published rules that started failing on a system. The policy owner is emailed once when an alert opens, and it closes by itself when the rule passes again.
+        </span>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {alerts.map((a) => (
+          <li key={a.id} className="pk-card flex flex-wrap items-start gap-3 p-4">
+            <OutcomePill outcome="fail" enforcement={a.enforcement} />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold">{a.systemName}: {a.ruleTitle}</div>
+              <div className={`text-[12px] ${MUTED}`}>{a.detail}</div>
+              <div className={`mt-1 text-[12px] ${MUTED}`}>
+                Failing since {when(a.openedAt)} · <Link href={`/policies/${a.policyId}`} className="font-semibold hover:underline">{a.policyName}</Link>
+                {a.notifiedAt ? ' · Owner emailed' : ''}
+              </div>
+            </div>
+            {a.acknowledgedAt ? (
+              <span className={`text-[12px] ${MUTED}`}>Acknowledged {when(a.acknowledgedAt)}</span>
+            ) : (
+              <button type="button" className={BTN} onClick={() => onAcknowledge(a.id)}>Acknowledge</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -203,6 +302,7 @@ export default function PoliciesPage() {
   const policies = usePolicyResource<Policy[]>(orgId, '')
   const evaluations = usePolicyResource<Evaluation[]>(orgId, '/evaluations')
   const coverage = usePolicyResource<FrameworkCoverage[]>(orgId, '/coverage')
+  const alerts = usePolicyResource<PolicyAlert[]>(orgId, '/alerts')
   const actions = usePolicyActions(orgId)
   const [failure, setFailure] = useState<string | null>(null)
 
@@ -237,6 +337,17 @@ export default function PoliciesPage() {
       </Heading>
       {failure && <ErrorNote message={failure} />}
 
+      <AIDraft
+        onDraft={async (brief) => {
+          let drafted: AIDraftedPolicy | null = null
+          await guarded(async () => {
+            drafted = await actions.draftWithAI(brief)
+            await policies.reload()
+          })
+          return drafted
+        }}
+      />
+
       {toAcknowledge.length > 0 && (
         <section aria-label="Awaiting your acknowledgement" className="flex flex-col gap-2 rounded-xl bg-[#ffeee4] px-4 py-3 text-[13px] text-[#a8430b]">
           <b>{toAcknowledge.length === 1 ? 'A published policy needs' : `${toAcknowledge.length} published policies need`} your acknowledgement</b>
@@ -248,6 +359,14 @@ export default function PoliciesPage() {
         </section>
       )}
 
+      <Alerts
+        alerts={alerts.data ?? []}
+        onAcknowledge={(id) => guarded(async () => {
+          await actions.acknowledgeAlert(id)
+          await alerts.reload()
+        })}
+      />
+
       <PolicyTable policies={list} evaluations={evaluations.data ?? []} />
 
       {evaluations.error && <ErrorNote message={`Enforcement results could not be loaded. ${evaluations.error}`} onRetry={evaluations.reload} />}
@@ -256,7 +375,7 @@ export default function PoliciesPage() {
         policies={list}
         onRun={() => guarded(async () => {
           await actions.enforce()
-          await Promise.all([evaluations.reload(), policies.reload()])
+          await Promise.all([evaluations.reload(), policies.reload(), alerts.reload()])
         })}
       />
 

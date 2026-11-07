@@ -8,13 +8,21 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from api.routes import llm
 from api.routes.governance_assurance import _require_mutation, organization_membership
 from database.connection import get_db
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
     OrgMembership,
 )
-from src.application.services.policy_service import FACTS, OPS, PolicyService, PolicyStateError
+from src.application.services.policy_service import (
+    DRAFT_SCHEMA,
+    DRAFT_SYSTEM,
+    FACTS,
+    OPS,
+    PolicyService,
+    PolicyStateError,
+)
 
 router = APIRouter(prefix="/organizations/{org_id}/policies", tags=["policies"])
 
@@ -37,6 +45,12 @@ class PolicyUpdate(BaseModel):
     body: str | None = Field(default=None, max_length=200_000)
     owner: str | None = Field(default=None, max_length=200)
     rules: list[dict[str, Any]] | None = Field(default=None, max_length=200)
+
+
+class PolicyDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    brief: str = Field(min_length=10, max_length=4000)
 
 
 class PolicyAction(BaseModel):
@@ -87,6 +101,52 @@ def create_policy(
         raise _invalid(error) from error
 
 
+def _org_model(db: Session, org_id: str) -> llm.Connection:
+    """The organization's own model (bring your own key), as set up in organization settings."""
+    from api.routes.packs import _ai_row, _stored_connection
+
+    row = _ai_row(db, org_id)
+    if not row or not row["enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Connect your organisation's AI model in Organisation settings to draft policies with AI",
+        )
+    return _stored_connection(row)
+
+
+@router.post("/draft", status_code=status.HTTP_201_CREATED)
+async def draft_policy(
+    request: PolicyDraftRequest, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
+) -> dict:
+    """The organization's model drafts a policy from a brief; it is saved as a draft for people to review."""
+    service = _mutator(membership, db)
+    conn = _org_model(db, membership.org_id)
+    context = service.draft_context(membership.org_id, request.brief.strip())
+    db.rollback()  # hold no transaction open while the model works
+    try:
+        data, meta = await llm.complete(conn, DRAFT_SYSTEM, context, DRAFT_SCHEMA)
+    except llm.LLMError as error:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error)) from error
+    policy, dropped = service.create_from_draft(membership.org_id, membership.user_id, data)
+    return {**policy, "draft": {"provider": conn.provider.id, "model": meta["model"], "dropped": dropped}}
+
+
+@router.get("/alerts")
+def list_alerts(
+    include_resolved: bool = False,
+    membership: OrgMembership = Depends(organization_membership),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    return PolicyService(db).alerts(membership.org_id, include_resolved)
+
+
+@router.post("/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(
+    alert_id: str, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
+) -> dict:
+    return _found(_mutator(membership, db).acknowledge_alert(membership.org_id, alert_id, membership.user_id), "Alert")
+
+
 @router.get("/coverage")
 def framework_coverage(membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)) -> list[dict]:
     return PolicyService(db).coverage(membership.org_id)
@@ -96,9 +156,10 @@ def framework_coverage(membership: OrgMembership = Depends(organization_membersh
 def enforce(
     request: EnforceRequest, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
 ) -> dict:
-    return _found(
-        _mutator(membership, db).enforce(membership.org_id, request.policy_id, request.system_id), "System"
-    )
+    service = _mutator(membership, db)
+    run = _found(service.enforce(membership.org_id, request.policy_id, request.system_id), "System")
+    service.sync_alerts(membership.org_id)  # alerts show at once; the next sweep emails them
+    return run
 
 
 @router.get("/evaluations")
