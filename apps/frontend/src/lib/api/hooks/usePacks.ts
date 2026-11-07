@@ -137,6 +137,7 @@ export interface JourneySummary {
   coveredAll: number
   coveredInstalled: number
   contributingPacks: string[]
+  type: string | null
   binding: string | null
   /** Workflows of installed packs that map to this framework, with their latest run status. */
   workflows: Array<{ id: string; name: string; stage: string; status: RunStatus | null }>
@@ -158,6 +159,7 @@ export interface Journey {
   name: string
   pillar: string
   version: string | null
+  type: string | null
   binding: string | null
   status: string | null
   active: number

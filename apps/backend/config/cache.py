@@ -3,7 +3,6 @@ Redis caching configuration for production performance.
 """
 
 import json
-import pickle
 from typing import Any, Optional, Union, Dict, List
 import logging
 from datetime import timedelta
@@ -75,20 +74,19 @@ class CacheManager:
         return f"{self.key_prefix}{key}"
     
     def _serialize_value(self, value: Any) -> bytes:
-        """Serialize value for storage."""
-        if isinstance(value, (str, int, float, bool)):
-            return json.dumps(value).encode('utf-8')
-        else:
-            return pickle.dumps(value)
-    
+        """Serialize value for storage. JSON only — never pickle: cache bytes
+        are untrusted on read, and pickle.loads on them is remote code execution
+        if Redis is ever writable by anyone but this app."""
+        return json.dumps(value, default=str).encode('utf-8')
+
     def _deserialize_value(self, value: bytes) -> Any:
-        """Deserialize value from storage."""
+        """Deserialize value from storage. Legacy pickle-encoded entries (or any
+        non-JSON bytes) fail to decode and are treated as a cache miss rather than
+        unpickled."""
         try:
-            # Try JSON first (for simple types)
             return json.loads(value.decode('utf-8'))
         except (json.JSONDecodeError, UnicodeDecodeError):
-            # Fall back to pickle for complex objects
-            return pickle.loads(value)
+            return None
     
     async def get(self, key: str) -> Optional[Any]:
         """Get value from cache."""

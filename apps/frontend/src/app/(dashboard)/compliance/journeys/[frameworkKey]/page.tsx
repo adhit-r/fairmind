@@ -64,7 +64,7 @@ export default function JourneyPage() {
   }
 
   const j = journey.data
-  const meta = [j.version && `Version ${j.version}`, j.binding, j.status].filter((x): x is string => Boolean(x))
+  const meta = [j.type, j.version && `Version ${j.version}`, j.binding, j.status].filter((x): x is string => Boolean(x))
   const missing = j.steps.filter((s) => !s.installed)
   const shown = view.groups
     .map((g) => ({ ...g, requirements: filter ? g.requirements.filter((r) => r.status === filter) : g.requirements }))

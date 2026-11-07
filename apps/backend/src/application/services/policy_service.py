@@ -614,7 +614,7 @@ class PolicyService:
         totals = {"applicable": 0, "accepted": 0, "missingEvidence": 0, "staleEvidence": 0, "blockingFindings": 0}
         assurance = GovernanceAssuranceService(self.db)
         for assignment in assignments:
-            counts = assurance.readiness(org_id, assignment["id"]) or {}
+            counts = assurance.readiness(org_id, assignment["id"], include_policy=False) or {}
             for key in totals:
                 totals[key] += counts.get(key, 0)
         try:
@@ -697,12 +697,12 @@ class PolicyService:
                     )
         return systems, policies, results
 
-    def current_results(self, org_id: str, policy_id: str | None = None) -> list[dict]:
-        """Each published rule's outcome on each system as the data stands now."""
+    def current_results(self, org_id: str, policy_id: str | None = None, system_id: str | None = None) -> list[dict]:
+        """Each published rule's outcome on each system (or one system) as the data stands now."""
         # ponytail: re-evaluates every system per read; cache by data version if orgs reach hundreds of systems.
-        _, _, results = self._evaluate(org_id, policy_id)
+        evaluated = self._evaluate(org_id, policy_id, system_id)
         now = _now()
-        return [{**r, "evaluatedAt": now} for r in results]
+        return [{**r, "evaluatedAt": now} for r in evaluated[2]] if evaluated else []
 
     def release_check(self, org_id: str, system_id: str) -> dict | None:
         """Published rules that fail for a system once its release is approved: blocking and warnings."""
