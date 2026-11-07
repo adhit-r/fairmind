@@ -351,7 +351,13 @@ async def list_fairness_runs(
                 "rows": content.get("rows"),
                 "allChecksPass": content.get("all_checks_pass"),
                 "attributes": [
-                    {"attribute": a.get("attribute"), "disparateImpactRatio": a.get("disparate_impact_ratio"), "checks": a.get("checks")}
+                    {
+                        "attribute": a.get("attribute"),
+                        "disparateImpactRatio": a.get("disparate_impact_ratio"),
+                        "checks": a.get("checks"),
+                        # Checks that pass with the value past its threshold: the difference was not significant.
+                        "passedOnSignificance": [k for k, ok in (a.get("checks") or {}).items() if ok and (a.get(k) or {}).get("crosses_threshold")],
+                    }
                     for a in content.get("attributes", [])
                 ],
                 "confidence": row[3],

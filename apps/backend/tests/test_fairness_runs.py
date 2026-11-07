@@ -291,6 +291,38 @@ def test_route_stores_measured_evidence_and_moves_the_gate():
     assert client.get(f"/api/v1/ai-governance/systems/{sid}/fairness-runs").json()[0]["evidenceId"] == body["evidenceId"]
 
 
+
+def _small_gap_csv() -> bytes:
+    """40 rows: M selected 10 of 20, F 7 of 20, an impact ratio of 0.70 that 40 rows cannot tell from noise."""
+    frame = pd.DataFrame({"gender": ["M"] * 20 + ["F"] * 20, "prediction": [1] * 10 + [0] * 10 + [1] * 7 + [0] * 13})
+    frame["label"] = frame["prediction"]
+    buf = io.StringIO()
+    frame.to_csv(buf, index=False)
+    return buf.getvalue().encode()
+
+
+def test_a_ratio_below_the_threshold_passes_only_on_significance_and_the_summary_says_so():
+    out = run_fairness(_small_gap_csv(), outcome="label", prediction="prediction", attributes=["gender"])
+    di = out["attributes"][0]["disparate_impact"]
+    assert out["all_checks_pass"] is True and di["value"] < 0.80
+    assert di["crosses_threshold"] and not di["significant"] and di["p_value"] >= di["alpha"]
+
+    client = TestClient(app, client=(f"fair-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    workspace = client.post("/api/v1/ai-governance/workspaces", json={"name": "Noise ws", "owner": "owner"}).json()
+    sid = client.post(
+        "/api/v1/ai-governance/systems",
+        json={"workspace_id": workspace["id"], "name": "Small sample", "owner": "owner", "risk_tier": "high", "lifecycle_stage": "assess"},
+    ).json()["id"]
+    run = client.post(f"/api/v1/ai-governance/systems/{sid}/fairness-runs", files={"file": ("p.csv", _small_gap_csv(), "text/csv")}, data={"outcome": "label", "prediction": "prediction", "attributes": "gender"})
+    assert run.status_code == 200, run.text
+    listed = client.get(f"/api/v1/ai-governance/systems/{sid}/fairness-runs").json()[0]
+    assert listed["allChecksPass"] is True and "disparate_impact" in listed["attributes"][0]["passedOnSignificance"]
+
+    # An impact ratio at or above 0.80 is not listed as passing on significance.
+    client.post(f"/api/v1/ai-governance/systems/{sid}/fairness-runs", files={"file": ("f.csv", _csv(n=400, seed=11), "text/csv")}, data={"outcome": "label", "prediction": "prediction", "attributes": "gender"})
+    newest = client.get(f"/api/v1/ai-governance/systems/{sid}/fairness-runs").json()[0]
+    assert newest["attributes"][0]["disparateImpactRatio"] >= 0.80 and "disparate_impact" not in newest["attributes"][0]["passedOnSignificance"]
+
 def test_monitoring_run_and_attestations_move_the_gate():
     from src.application.services.fairness_run_service import psi, run_monitoring
 

@@ -1,5 +1,8 @@
-"""Engines that read model outputs: accuracy, calibration, slices, counterfactuals, monitoring, privacy attacks, verbatim reproduction."""
+"""Engines that read model outputs: accuracy, calibration, slices, counterfactuals, monitoring, privacy attacks, verbatim reproduction,
+embedding association."""
 
+import itertools
+import json
 import math
 import re
 from typing import Any, Dict, List, Optional
@@ -395,6 +398,92 @@ def verbatim_reproduction(files: Dict[str, bytes], params: Dict[str, Any]) -> Di
     return result(_verdict(over == 0), summary, metrics, detail)
 
 
+# EV-FAI-05 -------------------------------------------------------------------------------------------------
+# WEAT (Caliskan et al., 2017) on word embeddings; SEAT (May et al., 2019) is the same test on sentence embeddings.
+
+MIN_TERMS = 4  # per set; with fewer the effect size is dominated by single terms (two targets always give +/-1.41)
+ROLES = ("X", "Y", "A", "B")
+
+
+def _unit_vectors(frame: pd.DataFrame, vector_col: str, skip: List[str]) -> np.ndarray:
+    """One row per term: a JSON array in vector_col, or else every other numeric column is a dimension."""
+    if vector_col in frame.columns:
+        try:
+            rows = [np.asarray(json.loads(v) if isinstance(v, str) else v, dtype=float) for v in frame[vector_col]]
+        except (TypeError, ValueError):
+            raise EngineError(f"{vector_col} must hold a JSON array of numbers in every row")
+        if rows[0].ndim != 1 or len({r.shape for r in rows}) != 1:
+            raise EngineError("Every embedding must be a flat array with the same number of dimensions")
+        m = np.vstack(rows)
+    else:
+        dims = [c for c in frame.columns if c not in skip and pd.api.types.is_numeric_dtype(frame[c])]
+        if not dims:
+            raise EngineError(f"The embeddings have no {vector_col} column and no numeric dimension columns")
+        m = frame[dims].to_numpy(float)
+    if m.shape[1] < 2 or not np.isfinite(m).all():
+        raise EngineError("Every embedding needs at least two dimensions, each a finite number")
+    norms = np.linalg.norm(m, axis=1)
+    if (norms == 0).any():
+        raise EngineError("An embedding is all zeros, so it has no direction to compare")
+    return m / norms[:, None]
+
+
+def _weat(sets: Dict[str, np.ndarray], permutations: int) -> Dict[str, Any]:
+    """Effect size and two-sided permutation p-value over equal-size re-partitions of the targets."""
+    targets = np.vstack([sets["X"], sets["Y"]])
+    s = (targets @ sets["A"].T).mean(1) - (targets @ sets["B"].T).mean(1)  # association of each target with A over B
+    nx, n = len(sets["X"]), len(s)
+    sd = float(s.std(ddof=1))
+    if sd == 0:
+        return {"note": "Every target is equally associated with A and B, so the effect size is undefined"}
+    observed = abs(2 * s[:nx].sum() - s.sum())  # |sum over X - sum over Y|
+    exact = math.comb(n, nx) <= permutations
+    if exact:
+        parts = np.array(list(itertools.combinations(range(n), nx)))
+        p = float((np.abs(2 * s[parts].sum(1) - s.sum()) >= observed - 1e-12).mean())
+    else:
+        rng = np.random.default_rng(0)  # fixed, so a re-run of the same file gives the same p-value
+        hits = sum(abs(2 * s[rng.permutation(n)[:nx]].sum() - s.sum()) >= observed - 1e-12 for _ in range(permutations))
+        p = (hits + 1) / (permutations + 1)
+    return {"effectSize": _r((s[:nx].mean() - s[nx:].mean()) / sd), "pValue": _r(p), "exact": exact}
+
+
+def embedding_association(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
+    set_col, test_col = _name(params, "set_column", "set"), _name(params, "test_column", "test")
+    vector_col = _name(params, "vector_column", "embedding")
+    baseline = _optional(params, "baseline")
+    max_increase = number(params, "max_increase", 0.0)
+    permutations = int(min(max(number(params, "permutations", 10000), 100), 100000))
+    frame = read_csv(files["embeddings"], "The embeddings")
+    columns(frame, [set_col], "The embeddings")
+    frame = frame[frame[set_col].notna()].reset_index(drop=True)
+    roles = frame[set_col].astype(str).str.strip().str.upper()
+    if frame.empty or not roles.isin(ROLES).all():
+        raise EngineError(f"{set_col} must be X or Y (the two target sets) or A or B (the two attribute sets) in every row")
+    vectors = _unit_vectors(frame, vector_col, [set_col, test_col])
+    tests = frame[test_col].fillna("").astype(str).str.strip() if test_col in frame.columns else pd.Series([""] * len(frame))
+
+    detail: List[Dict[str, Any]] = []
+    for name, idx in tests.groupby(tests, sort=True).indices.items():
+        sets = {r: vectors[idx][(roles.iloc[idx] == r).to_numpy()] for r in ROLES}
+        row: Dict[str, Any] = {"test": name or "all rows", **{f"size{r}": len(sets[r]) for r in ROLES}}
+        short = [r for r in ROLES if len(sets[r]) < MIN_TERMS]
+        row.update({"note": f"Set {', '.join(short)} has fewer than {MIN_TERMS} terms"} if short else _weat(sets, permutations))
+        detail.append(row)
+
+    scored = [r for r in detail if "effectSize" in r]
+    worst = max((abs(r["effectSize"]) for r in scored), default=None)
+    metrics = {"tests": len(detail), "testsScored": len(scored), "worstAbsEffectSize": worst, "baseline": baseline, "maxIncrease": max_increase}
+    if not scored:
+        return result("insufficient", f"No test has at least {MIN_TERMS} terms in each of X, Y, A and B with any spread in association, "
+                      "so there is no effect size to judge.", metrics, detail)
+    if baseline is None:
+        return result("insufficient", f"The largest effect size is {worst:.4f}, but no baseline was given to judge it against.", metrics, detail)
+    limit = abs(baseline) + max_increase
+    summary = f"The largest effect size across {len(scored)} test(s) is {worst:.4f} against a baseline of {abs(baseline):g}"
+    return result(_verdict(worst <= limit + 1e-9), summary + (f" plus an allowed increase of {max_increase:g}." if max_increase else "."), metrics, detail)
+
+
 ENGINES: List[Engine] = [
     Engine(
         id="EV-TST-01",
@@ -537,5 +626,22 @@ ENGINES: List[Engine] = [
             Param("limit_words", "Word limit", "An output fails when it copies this many consecutive words or more.", "number", 50),
         ),
         run=verbatim_reproduction,
+    ),
+    Engine(
+        id="EV-FAI-05",
+        method="WEAT, or SEAT for sentence embeddings: the effect size of how much more the X targets than the Y targets associate with "
+               "attribute set A over B by cosine similarity, with a permutation p-value. Passes when the largest absolute effect size is "
+               "no higher than the baseline.",
+        slots=(Slot("embeddings", "Embeddings", "CSV with one term or sentence per row: a set column (X, Y, A or B), an optional test "
+                    "column for several tests in one file, and the vector as a JSON array in an embedding column or as numeric columns."),),
+        params=(
+            Param("set_column", "Set column", "Column holding X or Y (targets) or A or B (attributes).", default="set"),
+            Param("test_column", "Test column", "Optional column naming the test each row belongs to.", default="test"),
+            Param("vector_column", "Embedding column", "Column holding the vector as a JSON array; without it every numeric column is a dimension.", default="embedding"),
+            Param("baseline", "Baseline effect size", "The largest absolute effect size of the previous release or the agreed limit. Required for a verdict.", "number"),
+            Param("max_increase", "Allowed increase", "How far the largest effect size may rise above the baseline.", "number", 0.0),
+            Param("permutations", "Permutations", "Re-partitions sampled for the p-value; tests with fewer possible partitions are enumerated exactly.", "number", 10000),
+        ),
+        run=embedding_association,
     ),
 ]
