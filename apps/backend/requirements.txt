@@ -24,7 +24,9 @@ anthropic==2.4.0
     # via fairmind-backend (pyproject.toml)
 anyio==4.14.2
     # via
+    #   anthropic
     #   httpx
+    #   httpx2
     #   starlette
     #   watchfiles
 apscheduler==3.11.2
@@ -109,6 +111,7 @@ gunicorn==26.0.0
 h11==0.16.0
     # via
     #   httpcore
+    #   httpcore2
     #   uvicorn
 h5py==3.14.0
     # via
@@ -129,6 +132,7 @@ idna==3.18
     #   anyio
     #   email-validator
     #   httpx
+    #   httpx2
     #   jsonschema
     #   requests
     #   yarl
@@ -202,9 +206,7 @@ numpy==2.4.6
 openpyxl==3.1.5
     # via fairmind-backend (pyproject.toml)
 opentelemetry-api==1.45.2
-    # via
-    #   anthropic
-    #   fastapi
+    # via anthropic
 opt-einsum==3.4.0
     # via tensorflow
 optree==0.19.1
@@ -234,6 +236,10 @@ protobuf==7.35.0
     # via tensorflow
 psutil==7.2.2
     # via fairmind-backend (pyproject.toml)
+psycopg==3.3.8
+    # via fairmind-backend (pyproject.toml)
+psycopg-binary==3.3.8
+    # via psycopg
 psycopg2-binary==2.9.12
     # via fairmind-backend (pyproject.toml)
 pycparser==3.0
@@ -241,6 +247,7 @@ pycparser==3.0
 pydantic==2.13.4
     # via
     #   fairmind-backend (pyproject.toml)
+    #   anthropic
     #   fastapi
     #   pydantic-settings
 pydantic-core==2.46.4
@@ -321,7 +328,7 @@ six==1.17.0
     #   tensorflow
 sniffio==1.3.1
     # via anthropic
-sqlalchemy==2.0.50
+sqlalchemy==2.1.8
     # via
     #   fairmind-backend (pyproject.toml)
     #   alembic
@@ -341,11 +348,14 @@ truststore==0.10.5
 typing-extensions==4.15.0
     # via
     #   alembic
+    #   anthropic
     #   fastapi
     #   grpcio
+    #   opentelemetry-api
     #   optree
     #   pydantic
     #   pydantic-core
+    #   pydantic-settings
     #   python-docx
     #   sqlalchemy
     #   tensorflow

@@ -386,7 +386,7 @@ def _assert_audit_event_is_database_append_only(
             with pytest.raises(DBAPIError) as caught:
                 mutation_session.execute(text(statement), {"event_id": event_id})
                 mutation_session.commit()
-            assert getattr(caught.value.orig, "pgcode", None) == "55000"
+            assert getattr(caught.value.orig, "sqlstate", None) == "55000"
             assert "append-only" in str(caught.value.orig)
             mutation_session.rollback()
 
