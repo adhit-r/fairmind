@@ -75,3 +75,34 @@ test('collected or updated evidence for another system or record is rejected', a
     patch()
   }
 })
+
+test('an evidence link for another entity is rejected', async () => {
+  const post = stub(apiClient, 'post', async () => ({
+    success: true,
+    data: { id: 'link-1', entityType: 'control', entityId: 'control-other' },
+  }))
+  try {
+    const { result } = runHook(() => useEvidence('system-1'))
+    await assert.rejects(result.addLink('evidence-system-1', 'control', 'control-1'), /requested entityId/)
+  } finally {
+    post()
+  }
+})
+
+test('a summary reload for another system after a link surfaces as an error', async () => {
+  const post = stub(apiClient, 'post', async () => ({
+    success: true,
+    data: { id: 'link-1', entityType: 'control', entityId: 'control-1' },
+  }))
+  const get = respondWith([], 'system-2')
+  try {
+    const { result, states } = runHook(() => useEvidence('system-1'))
+    await result.addLink('evidence-system-1', 'control', 'control-1')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    assert.ok(states[ERROR] instanceof GovernanceScopeMismatchError)
+    assert.equal(states[SUMMARY].totalEvidence, 0)
+  } finally {
+    post()
+    get()
+  }
+})

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
-import { requireResponseScope } from './useGovernanceAssurance'
+import { GovernanceScopeMismatchError, requireResponseScope } from './useGovernanceAssurance'
 
 export interface Evidence {
   id: string
@@ -197,15 +197,19 @@ export function useEvidence(systemId?: string) {
     if (!systemId) return
     const version = requestVersion.current
     let next = toSummary(null, systemId)
+    let mismatch: GovernanceScopeMismatchError | null = null
     try {
       const response = await apiClient.get<EvidenceSummary>(API_ENDPOINTS.aiGovernance.evidenceSummary(systemId))
       if (response.success && response.data) {
         next = toSummary(requireResponseScope('evidence summary', response.data, { systemId }), systemId)
       }
-    } catch {
-      // keep the unavailable summary
+    } catch (reason) {
+      // A network failure keeps the unavailable summary; a summary for another system is an error.
+      if (reason instanceof GovernanceScopeMismatchError) mismatch = reason
     }
-    if (version === requestVersion.current) setSummary(next)
+    if (version !== requestVersion.current) return
+    setSummary(next)
+    if (mismatch) setError(mismatch)
   }, [systemId])
 
   const collectEvidence = useCallback(async (params: CollectEvidenceInput): Promise<Evidence> => {

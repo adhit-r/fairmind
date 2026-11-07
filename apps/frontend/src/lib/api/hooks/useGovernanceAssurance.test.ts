@@ -353,8 +353,10 @@ test('evidence mappings for another control or mapping record set the error stat
     const { result, states } = runHook(() => useEvidenceMappingReview('org-1'))
     await assert.rejects(result.createMapping('evidence-1', 'assessment-1'), /requested controlAssessmentId/)
     assert.ok(states[1] instanceof GovernanceScopeMismatchError)
+    states[1] = null
     const review: EvidenceMappingReviewInput = { state: 'accepted', reviewVersion: 1 }
     await assert.rejects(result.reviewMapping('mapping-1', review), /requested id/)
+    assert.ok(states[1] instanceof GovernanceScopeMismatchError)
   } finally {
     post()
   }
