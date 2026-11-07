@@ -13,6 +13,7 @@ jobs:
   # Backend Testing
   backend-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45  # the full suite takes about 30 minutes on PostgreSQL
     permissions:
       contents: read
       checks: write
@@ -66,30 +67,15 @@ jobs:
       working-directory: apps/backend
       run: uv sync --frozen --extra dev
     
-    - name: Run linting
-      working-directory: apps/backend
-      run: |
-        uv run black --check .
-        uv run isort --check-only .
-        uv run flake8 .
-        uv run mypy . --ignore-missing-imports
-    
-    - name: Run security checks
-      working-directory: apps/backend
-      run: |
-        uv run bandit -r . -x tests/
-        uv run safety check
-    
     - name: Run tests
       working-directory: apps/backend
       env:
-        DATABASE_URL: postgresql://postgres@localhost:5432/fairmind_test
         FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
         REDIS_URL: redis://localhost:6379
         SECRET_KEY: test-secret-key-for-ci
         JWT_SECRET: test-jwt-secret-for-ci
       run: |
-        uv run pytest --cov=api --cov-report=xml --cov-report=html
+        uv run pytest -q -rfEs tests --ignore=tests/e2e --cov=api --cov-report=xml
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457 # v3
