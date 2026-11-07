@@ -100,6 +100,54 @@ export interface ReleaseGate {
   open: number
   /** Published policy rules that fail for this system once released. */
   policy?: { blocking: PolicyRuleFailure[]; warnings: PolicyRuleFailure[] }
+  /** How the verdict was reached: the tier it was computed on and that tier's row of the decision matrix. */
+  explain?: GateExplain
+  /** The cheapest steps FairMind can record that move the verdict up, worked out by the gate itself. */
+  path?: GatePath
+}
+
+export type Verdict = ReleaseGate['verdict']
+
+export interface GateExplain {
+  tier: string
+  effectiveTier: SystemRecord['riskTier']
+  impact: 'low' | 'medium' | 'high'
+  tierNote: string | null
+  tierSource: {
+    suggestedTier: SystemRecord['riskTier']
+    ruleIds: string[]
+    confirmedBy: string
+    confirmedAt: string
+    tierBelowSuggestion: boolean
+    overrideAcceptedBy: string | null
+  } | null
+  perCheck: number
+  row: Array<{ band: ReleaseGate['band']; from: number; to: number | null; verdict: Verdict }>
+}
+
+export interface GatePathStep {
+  check: GateCheck['key']
+  action: 'fairness_run' | 'environmental_assessment' | 'monitoring_snapshot' | 'attest' | 'evidence_upload'
+  evidenceClass: 'measured' | 'tool_estimated' | 'manual'
+  counts: number
+  gain: number
+  note: string | null
+}
+
+export interface GatePathOption {
+  kind: 'measured_first' | 'attestations'
+  steps: GatePathStep[]
+  confidenceAfter: number
+  verdictAfter: Verdict
+  approvalReady: boolean
+}
+
+export interface GatePath {
+  target: 'go' | 'conditional_go' | null
+  options: GatePathOption[]
+  ceiling: { confidence: number; verdict: Verdict }
+  notes: string[]
+  approvalBlockers: Array<{ key: string; text: string; met: boolean }>
 }
 
 export interface PolicyRuleFailure {
@@ -249,6 +297,8 @@ export interface ClauseMap {
   verdict: string | null
   confidence: number | null
   frameworks: ClauseMapFramework[]
+  /** True when the map is limited to the frameworks confirmed for this system. */
+  scoped?: boolean
 }
 
 export type AttestableCheck = 'data_governance' | 'human_oversight' | 'monitoring' | 'environmental'

@@ -28,7 +28,11 @@ export function ClauseMapPanel({ map }: { map: ClauseMap }) {
     <div className="grid min-w-0 gap-3 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:col-span-2 xl:col-span-3">
       <div>
         <div className="text-[13.5px] font-semibold">What the gate says per framework</div>
-        <div className="text-[12px] text-[var(--fm-ink2)]">Each gate check maps to the clauses it satisfies, supports or aligns with. A clause is as good as its best-evidenced check.</div>
+        <div className="text-[12px] text-[var(--fm-ink2)]">
+          {map.scoped ? `For the frameworks this system answers to: ${map.frameworks.map((f) => f.name).join(', ')}. ` : ''}
+          Each gate check maps to the clauses it satisfies, supports or aligns with. A clause is as good as its best-evidenced check.
+          {map.scoped === false && ' Showing every framework: none chosen yet.'}
+        </div>
       </div>
       <div className="grid gap-1.5">
         {frameworks.map((fw) => {

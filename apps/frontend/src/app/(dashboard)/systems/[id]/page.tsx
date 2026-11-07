@@ -16,6 +16,7 @@ import { WatchPanel } from './WatchPanel'
 import { AttestForm } from './AttestForm'
 import { ConditionsForm } from './ConditionsForm'
 import { ClauseMapPanel } from './ClauseMapPanel'
+import { VERDICT_LABEL, VERDICT_TONE, VerdictExplainer, tierOverride } from './VerdictExplainer'
 import { TargetPanel } from './TargetPanel'
 import { cn } from '@/lib/utils'
 
@@ -31,8 +32,6 @@ const JOURNEY: Array<{ key: JourneyKey; label: string; purpose: string }> = [
   { key: 'operate', label: 'Operate', purpose: 'The system runs, is watched, and its audit record stays current.' },
 ]
 
-const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Conditional go', no_go: 'No go' }
-const VERDICT_TONE: Record<string, string> = { go: 'text-[#1f7a4d]', conditional_go: 'text-[#a14d00]', no_go: 'text-[#b4232c]' }
 const ATTESTABLE = new Set(['data_governance', 'human_oversight', 'monitoring', 'environmental'])
 const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key)
 
@@ -180,6 +179,7 @@ export default function SystemFilePage() {
   const latestReport = reports[0]
   const latestMonitoring = monitoringRuns[0]
   const seal = seals[0]
+  const override = tierOverride(gate?.explain)
   const envStatus = typeof env.data?.recommendation === 'string' ? env.data.recommendation : env.data?.recommendation?.status
   const applicability = s?.applicability ?? null
   const awaitingSecond = !!applicability?.tierBelowSuggestion && !applicability.overrideAcceptedBy
@@ -340,6 +340,7 @@ export default function SystemFilePage() {
         ) : (
           <Action onClick={() => open('/audit-reports')} primary={false}>Release report</Action>
         )}
+        {override && <p className={cn('max-w-[220px] text-[11.5px] leading-snug', override.pending ? 'text-[#a14d00]' : 'text-[var(--fm-ink3)]')}>{override.text}</p>}
       </>}>
         <Fact label="Request" value={!req ? 'Not requested' : req.status === 'pending' ? `Pending since ${when(req.createdAt)}` : `${req.status[0].toUpperCase()}${req.status.slice(1)}${req.updatedAt ? ` on ${when(req.updatedAt)}` : ''}`} />
         <Fact label="Decisions recorded" value={approval ? `${approval.decisions.length}` : ''} />
@@ -409,11 +410,11 @@ export default function SystemFilePage() {
                 </ul>
               </>
             )}
-            {gate.reasons.length > 0 && <p className="mt-2 text-[12.5px] text-[var(--fm-ink2)]">{gate.reasons.join('. ')}.</p>}
+            <VerdictExplainer gate={gate} onAttest={(check) => isAttestable(check) && setAttesting(check)} onOpen={open} />
           </div>
         )}
         {req?.status === 'pending' && gate?.verdict === 'no_go' && (
-          <p className="text-[12.5px] text-[#b4232c] sm:col-span-2 xl:col-span-3">Approval is blocked: {gate.reasons[0] ?? 'the release gate says no go'}.</p>
+          <p className="text-[12.5px] text-[#b4232c] sm:col-span-2 xl:col-span-3">Approval is blocked: {gate.reasons[0]?.replace(/\.$/, '') ?? 'the release gate says no go'}.</p>
         )}
         {req?.status === 'pending' && gate?.verdict === 'conditional_go' && conditioning && (
           <div className="sm:col-span-2 xl:col-span-3">
