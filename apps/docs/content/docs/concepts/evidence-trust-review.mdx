@@ -1,0 +1,71 @@
+---
+title: Evidence trust and review
+description: How Assurance V2 admits signed Evidence Passports, links them, reviews them, and tracks freshness.
+---
+
+Assurance V2 is a separate, default-off evidence path alongside the [Evidence Workbench](/docs/workflows/evidence-review). Where Workbench records are mutable, Assurance V2 binds signed evidence to an exact run and keeps the record chain in PostgreSQL.
+
+<Callout type="warn" title="Default off">
+Submission, import, linking, review, and decisions each have their own gate, and every gate defaults to `false`. A `404` from these routes is the expected default state. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
+</Callout>
+
+## Record chain
+
+```text
+target version + suite version (catalog)
+  -> plan (lifecycle phases, enforcement mode)
+  -> run with execution envelope and content hash
+  -> suite execution
+  -> evidence admission (signed Passport or unverified import)
+  -> link to the exact suite execution
+  -> independent review
+  -> governance decision
+```
+
+## Admission
+
+An Evidence Passport V2 is a signed JSON document with a closed schema. The server treats what it says about itself as a claim, not as authority. It resolves authority from its own persisted records: the evaluator registration, issuer, signing key, trust policy, and the run's execution envelope.
+
+Admission checks the Passport against the exact organization, system, run, suite execution, and envelope binding, and checks signature, replay, chronology, and scope. A verified admission returns identifiers, hashes, and state. It is not proof that the evaluated model is correct, safe, or compliant.
+
+Submission and linking are separate steps. A new verified admission starts with `linkStatus: pending`, so an admitted Passport cannot affect a run until someone links it.
+
+## Unverified imports
+
+A separate gate, `ASSURANCE_V2_EVIDENCE_IMPORT_ENABLED`, accepts reports that are not Evidence Passports. They are stored with `admissionStatus: unverified`, never receive a verification receipt or signer identity, and can never count as decision evidence. Treat them as material for human review only.
+
+## Link and review
+
+Linking attaches one admitted Passport revision to one suite execution. A reviewer can then accept or reject it, but only while the evidence is pending, unexpired, and its trust policy and signing key are still valid.
+
+Review is four-eyes and cannot be overridden: the reviewer cannot be the run requester, the submitter, or the linker. Reviews are frozen once a governance decision exists. See [Permissions and separation](/docs/reference/permissions-and-separation).
+
+## Freshness and decision eligibility
+
+PostgreSQL derives freshness from persisted facts at query time: receipt state, evaluator registration, issuer, signing key, trust policy, review, expiry, and supersession. The freshness status is one of `current`, `expiring`, `stale`, or `superseded`, with reason codes such as `effective_expiry_reached`, `signing_key_revoked`, or `evaluator_registration_revoked`.
+
+Relevant response fields:
+
+- `freshnessStatus`, `recordedFreshnessStatus`, and `freshnessReasonCodes`
+- `effectiveExpiresAt`, `freshnessEvaluatedAt`, and `freshnessEffectiveAt`
+- `decisionEvidenceEligible` on each admission
+- `decisionEvidenceCurrentlyEligible` on the run
+
+A governance decision needs every suite to have verified, accepted evidence whose freshness is `current` and which the database marks decision-eligible. `expiring` evidence can still be reviewed but cannot support a decision.
+
+Freshness is not a score. It says whether one evidence record is still eligible under the configured trust bindings at the time it is checked.
+
+## Statuses
+
+| Field | Values |
+| --- | --- |
+| `admissionStatus` | `pending`, `verified`, `unverified`, `expired`, `superseded`, `rejected`, `trust_error` |
+| `reviewStatus` | `pending`, `accepted`, `rejected` |
+| `freshnessStatus` | `current`, `expiring`, `stale`, `superseded` |
+| Governance verdict | `approved`, `conditional`, `review`, `blocked`, `insufficient` |
+
+Only `verified` admissions can become decision evidence. Accepted evidence can still become stale later.
+
+## Evidence basis
+
+Routes and response models are in `apps/backend/src/api/routers/evaluation_workbench.py` and `imported_evidence.py`. Admission, link, and review rules are in `apps/backend/src/application/services/verified_evidence_admission_service.py`, `verified_evidence_link_service.py`, `verified_evidence_review_service.py`, and `imported_evidence_service.py`. Freshness rules are in `apps/backend/src/application/evidence_freshness.py` and migration `013g`.

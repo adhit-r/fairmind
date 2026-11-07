@@ -1,4 +1,9 @@
 {
   "title": "Core concepts",
-  "pages": ["evidence-model", "capability-truth", "system-context"]
+  "pages": [
+    "evidence-model",
+    "evidence-trust-review",
+    "capability-truth",
+    "system-context"
+  ]
 }

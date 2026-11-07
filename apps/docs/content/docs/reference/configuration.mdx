@@ -35,6 +35,48 @@ Same-origin Next.js proxy:
 BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 ```
 
+## Assurance V2 gates
+
+Every Assurance V2 route is unmounted unless `ASSURANCE_V2_ENABLED=true` and its own gate is also `true`. All default to `false`. Turn on only the gates a deployment needs, as an approved change.
+
+| Gate | Mounts |
+| --- | --- |
+| `ASSURANCE_V2_ENABLED` | No routes on its own; required by every gate below. It also changes startup and legacy behavior, described below |
+| `ASSURANCE_V2_TARGET_VERSIONS_ENABLED` | Target-version routes |
+| `ASSURANCE_V2_SUITE_VERSIONS_ENABLED` | Suite-version routes |
+| `ASSURANCE_V2_PLANS_ENABLED` | Plan create, activate, and preflight |
+| `ASSURANCE_V2_RUNS_ENABLED` | Run create and read |
+| `ASSURANCE_V2_EVIDENCE_SUBMIT_ENABLED` | Signed Evidence Passport V2 submission |
+| `ASSURANCE_V2_EVIDENCE_LINK_ENABLED` | Linking a verified admission |
+| `ASSURANCE_V2_EVIDENCE_IMPORT_ENABLED` | Unverified report import |
+| `ASSURANCE_V2_EVIDENCE_REVIEW_ENABLED` | Four-eyes evidence review |
+| `ASSURANCE_V2_GOVERNANCE_DECISION_ENABLED` | Governance decisions |
+| `ASSURANCE_V2_SEPARATION_OVERRIDE_ENABLED` | Owner override and delegated grants; also needs the decision gate |
+| `ASSURANCE_V2_EVALUATOR_CATALOG_ENABLED` | Evaluator registration administration |
+| `ASSURANCE_V2_TRUST_ADMINISTRATION_ENABLED` | Issuer, signing-key, and trust-policy administration |
+
+### What the master switch does on its own
+
+Turning on `ASSURANCE_V2_ENABLED` has two effects even when every child gate is off:
+
+- **Startup integrity checks.** The backend binds a trusted `search_path` for the schema named in `ASSURANCE_MIGRATION_SCHEMA`, then refuses to start unless the bundled migration checksums, the migration ledger, and the installed catalog fingerprint all match the frozen values in `apps/backend/config/migration_integrity.py`.
+- **Legacy evaluation writes stop.** The older evaluation service rejects plan create, plan activate, run create, and Passport linking with `409 contract_upgrade_required`, and its preflight reports that a run cannot be prepared.
+
+### Startup requirements
+
+With the master switch on, startup fails closed unless:
+
+- the database is PostgreSQL. Any other database fails at startup with `unsupported database dialect for assurance v2`, so Assurance V2 as a whole, including reviews, imports, freshness, and decisions, is PostgreSQL-only;
+- `ASSURANCE_MIGRATION_SCHEMA` names an existing schema;
+- migrations `013` to `013m` are applied and the migration ledger matches;
+- the installed catalog matches the frozen fingerprint for the PostgreSQL major version (14 or 18) in `FROZEN_POSTGRESQL_ASSURANCE_CATALOGS`.
+
+<Callout type="warn" title="Known limitation: PostgreSQL 18 and Neon">
+The frozen PostgreSQL 18 fingerprint is still the `013j` measurement, and it includes the Neon project role graph. On Neon or PostgreSQL 18 with `013k` to `013m` applied, startup with the master switch on fails closed until the fingerprint is re-measured there. Adding or removing a Neon project role also changes the fingerprint. See `apps/backend/migrations/upgrade_paths/README.md`.
+</Callout>
+
+See [Permissions and separation](/docs/reference/permissions-and-separation) for who can use each route.
+
 ## Production mode
 
 Production mode depends on `NODE_ENV=production`. Setting only `ENVIRONMENT=production` is not equivalent. Production validation rejects short secrets and known development placeholder values.

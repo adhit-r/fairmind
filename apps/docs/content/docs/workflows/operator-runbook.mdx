@@ -1,0 +1,49 @@
+---
+title: Assurance V2 operator runbook
+description: Walk one evaluation run through plan, evidence, review, and decision in an approved environment.
+---
+
+Use this procedure only in an approved internal environment. It checks that the Assurance V2 record chain works end to end. It does not validate a model, show production readiness, or authorize a release.
+
+All paths below are under `/api/v1/ai-governance/organizations/{org_id}`. Every mutation takes an `Idempotency-Key` header; use a new key for each step.
+
+## Prerequisites
+
+- An approved deployment change turns on `ASSURANCE_V2_ENABLED` and only the child gates this run needs. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
+- The database is PostgreSQL with migrations `013` to `013m` applied, `ASSURANCE_MIGRATION_SCHEMA` is set, and the backend starts cleanly with the master switch on. Startup fails closed if the migration ledger or catalog fingerprint does not match; on Neon or PostgreSQL 18 this currently happens until the fingerprint is re-measured. See [Startup requirements](/docs/reference/configuration#startup-requirements).
+- The organization, workspace, system, memberships, and [permissions](/docs/reference/permissions-and-separation) exist for the test scope.
+- A trust policy, issuer, and signing key are active, and the evaluator registration is approved.
+- A reviewer and a decider exist who are each distinct from the run requester, the submitter, and the linker.
+- An approved evaluator has prepared a signed, schema-valid Evidence Passport V2 for the exact execution envelope.
+
+## Procedure
+
+1. Record the target version and suite version IDs and their manifest digests.
+2. Create the plan with `POST /systems/{system_id}/evaluation-v2/plans`. Use `advisory` or `human_approval` as the enforcement mode; `automatic` is rejected with `automatic_enforcement_disabled`. Record the returned content hash.
+3. Activate the plan with `POST .../plans/{plan_id}/activate`, then run `GET .../plans/{plan_id}/preflight?lifecyclePhase=...` for the intended lifecycle phase. Stop if preflight reports any blocker.
+4. Create the run with `POST .../plans/{plan_id}/runs`. Record the returned `envelopeId` and `envelopeHash`.
+5. Submit the signed Passport with `POST /workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/suite-executions/{suite_execution_id}/evidence`. Check that the returned scope and envelope hash match the run, and that `linkStatus` is `pending`.
+6. Link the exact admitted Passport revision with `POST .../evidence-admissions/{admission_id}/passport-revisions/{passport_revision_id}/link`.
+7. Have the independent reviewer accept or reject it with `POST .../passport-revisions/{passport_revision_id}/review`.
+8. Fetch the run again with `GET /systems/{system_id}/evaluation-v2/runs/{run_id}`. Check the technical, evidence-result, admission, review, freshness, and decision-eligibility fields one by one.
+9. If `decisionEvidenceCurrentlyEligible` is true, the independent decider may record a decision with `POST /workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/decisions`. Note the workspace segment: run reads in step 8 omit it, but evidence and decision routes need it. Keep the decision's evidence-set hash and freshness data with the change record.
+
+## Stop conditions
+
+Stop and investigate if any of these appear:
+
+- a route returns `404`: either its gate is off or the path is wrong, so check the path segments first;
+- a permission or the exact organization, workspace, or system scope is denied;
+- the Passport is `unverified`, `expired`, `superseded`, `rejected`, or `trust_error`;
+- the evidence is pending review, rejected, stale, or not decision-eligible when you try to decide;
+- preflight reports `worker_unavailable`, which means the plan or a suite asks for a FairMind worker, and none ships;
+- preflight reports any other blocker, such as `plan_inactive`, `target_not_active`, or `trust_policy_not_active`;
+- the returned scope, envelope hash, or identifiers do not match the record you intended.
+
+## Evidence to keep
+
+Keep the change reference, the gate configuration, every ID, hash, and idempotency key, timestamps, reviewer and decider identity, the decision rationale, and the response bodies. Handle Passport payloads and any model artifacts under your own retention, access, and redaction rules.
+
+## Evidence basis
+
+Routes are defined in `apps/backend/src/api/routers/evaluation_workbench.py` and mounted in `apps/backend/api/main.py`. Preflight blockers are defined in `apps/backend/src/domain/assurance/evaluation_v2.py`.
