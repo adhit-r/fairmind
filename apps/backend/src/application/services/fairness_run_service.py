@@ -8,6 +8,7 @@ which until now was never reachable from any route.
 from __future__ import annotations
 
 import io
+import itertools
 import json
 import math
 from datetime import datetime, timezone
@@ -22,8 +23,8 @@ from fairness_library.metrics import (
     _compute_eo_diff,
     _compute_eopp_diff,
 )
-from src.domain.environmental.confidence import band_from_score, cap_confidence_for_provenance
-from src.domain.environmental.decision_matrix import get_recommendation
+from src.domain.environmental.confidence import ESTIMATED_THRESHOLD, MEASURED_THRESHOLD, band_from_score, cap_confidence_for_provenance
+from src.domain.environmental.decision_matrix import DECISION_MATRIX, get_recommendation
 
 MAX_ROWS = 100_000  # ponytail: synchronous run; move to a job past this
 MIN_GROUP_SIZE = 30
@@ -567,4 +568,209 @@ def release_gate(
         "attested": sum(1 for c in checks if c["state"] == "attested"),
         "open": len(open_checks),
         "approvalStatus": approval_status,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Gate explanation: the tier the verdict used, its matrix row, and the honest path to the next verdict
+# ---------------------------------------------------------------------------
+
+TIERS = ("low", "medium", "high", "critical")
+VERDICTS = ("no_go", "conditional_go", "go")
+VERDICT_LABELS = {"no_go": "No go", "conditional_go": "Conditional go", "go": "Go"}
+BANDS = (("measured", MEASURED_THRESHOLD, None), ("estimated", ESTIMATED_THRESHOLD, MEASURED_THRESHOLD), ("unknown", 0.0, ESTIMATED_THRESHOLD))
+
+
+def effective_tier(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> str:
+    """The tier the verdict is computed on: the suggested tier while a lower confirmed one awaits a second
+    person, else the stored tier, with anything outside the four FairMind tiers read as high (as the gate does).
+    Never looser than the stored tier: system metadata is client-writable at create, so a stale or forged
+    applicability record can only tighten the gate."""
+    app = applicability or {}
+    tier = str(risk_tier or "").strip().lower()
+    tier = tier if tier in TIERS else "high"
+    suggested = app.get("suggestedTier")
+    if app.get("tierBelowSuggestion") and not app.get("overrideAcceptedBy") and suggested in TIERS and TIERS.index(suggested) > TIERS.index(tier):
+        return suggested
+    return tier
+
+
+def tier_reasons(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> List[str]:
+    """Gate reasons about the tier itself. They explain; they never change the verdict."""
+    if not applicability:
+        return [f"Risk tier {risk_tier} was not confirmed by a person"]
+    if not applicability.get("tierBelowSuggestion"):
+        return []
+    suggested, accepted = applicability.get("suggestedTier"), applicability.get("overrideAcceptedBy")
+    tail = f"{accepted} accepted the change" if accepted else f"the gate uses {suggested} until another person accepts the change"
+    return [f"Risk tier {risk_tier} is below the suggested {suggested}; {tail}"]
+
+
+def gate_explain(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The tier, impact and decision-matrix row behind the verdict. Row bands run from ``from`` up to, not including, ``to``."""
+    stored = str(risk_tier or "").strip().lower()
+    tier = effective_tier(risk_tier, applicability)
+    impact = TIER_TO_IMPACT[tier]
+    app = applicability or {}
+    notes: List[str] = []
+    if app.get("tierBelowSuggestion"):
+        lowered = f"Tier lowered to {stored} by {app.get('confirmedBy')}: {str(app.get('reason') or '').strip().rstrip('.')}."
+        accepted = app.get("overrideAcceptedBy")
+        notes.append(f"{lowered} {accepted} accepted the change." if accepted else f"{lowered} The gate keeps using the suggested {app.get('suggestedTier')} until another person accepts the change.")
+    elif stored not in TIERS:
+        notes.append(f"Stored tier '{risk_tier}' is not a FairMind tier, so the gate reads it as high.")
+    if tier == "critical":
+        notes.append("Critical is read as high by the gate.")
+    source = None
+    if applicability:
+        source = {
+            "suggestedTier": app.get("suggestedTier"), "ruleIds": [r.get("id") for r in app.get("tierRules") or []],
+            "confirmedBy": app.get("confirmedBy"), "confirmedAt": app.get("confirmedAt"),
+            "tierBelowSuggestion": bool(app.get("tierBelowSuggestion")), "overrideAcceptedBy": app.get("overrideAcceptedBy"),
+        }
+    return {
+        "tier": risk_tier, "effectiveTier": tier, "impact": impact, "tierNote": " ".join(notes) or None, "tierSource": source,
+        "perCheck": round(1 / len(GATE_CHECKS), 2),
+        "row": [{"band": band, "from": low, "to": high, "verdict": DECISION_MATRIX[(impact, band)]} for band, low, high in BANDS],
+    }
+
+
+# What FairMind can record today for each check, and the confidence its route gives. Environmental is never
+# attested here: an environmental attestation shadows any later assessment in release_gate.
+CHECK_ACTIONS = {
+    "fairness": ("fairness_run",),
+    "data_governance": ("evidence_upload", "attest"),
+    "human_oversight": ("evidence_upload", "attest"),
+    "monitoring": ("monitoring_snapshot", "attest"),
+    "environmental": ("environmental_assessment",),
+}
+ACTION_CLASS = {"fairness_run": "measured", "monitoring_snapshot": "measured", "environmental_assessment": "tool_estimated", "attest": "manual", "evidence_upload": "manual"}
+UPLOAD_CONFIDENCE = cap_confidence_for_provenance(1.0, "manual")  # the cap release_gate puts on an uploaded document
+ACTION_NOTES = {
+    "environmental_assessment": "also required before anyone can approve",
+    "monitoring_snapshot": "needs shadow or live decisions",
+    "evidence_upload": f"an uploaded document; counts {UPLOAD_CONFIDENCE:.2f} at most",
+}
+_CLASS_ORDER = {"measured": 0, "tool_estimated": 1, "manual": 2}
+_CHECK_ORDER = {key: i for i, (key, _, _) in enumerate(GATE_CHECKS)}
+
+
+def _synthetic(check: str, action: str, now: datetime) -> Optional[Dict[str, Any]]:
+    """The record an action would add, stamped now so release_gate reads it as the newest. An assessment adds none: the gate counts it through ``environmental_assessed``."""
+    if action == "environmental_assessment":
+        return None
+    confidence, provenance = {"fairness_run": (0.85, "measured"), "monitoring_snapshot": (0.85, "measured"), "attest": (ATTESTATION_CONFIDENCE, "manual"), "evidence_upload": (1.0, "manual")}[action]
+    evidence_type = "fairness_test" if check == "fairness" else check
+    return {"id": None, "evidenceType": evidence_type, "confidence": confidence, "metadata": {"provenance_class": provenance}, "timestamp": now.isoformat(), "content": {}}
+
+
+def path_forward(
+    risk_tier: str,
+    evidence: List[Dict[str, Any]],
+    *,
+    environmental_assessed: bool = False,
+    monitoring_cadence_hours: Optional[int] = None,
+    lifecycle_stage: Optional[str] = None,
+    approval_blockers: Iterable[Dict[str, Any]] = (),
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """The fewest, strongest steps to the next verdict, each priced by re-running the real release_gate.
+
+    Read on evidence alone, as the reviewer deciding a request reads it. At most one action per check, and an
+    action is kept only when it alone raises its check: a proven check gets none, an attested one gets no
+    attestation. ``approval_blockers`` are the approval route's other checks as {key, text, met}; an
+    environmental assessment step meets ``environmental_assessment``.
+    """
+    now = now or datetime.now(timezone.utc)
+
+    def run(steps: tuple) -> Dict[str, Any]:
+        extra = [r for r in (_synthetic(check, action, now) for check, action in steps) if r]
+        assessed = environmental_assessed or any(action == "environmental_assessment" for _, action in steps)
+        return release_gate(risk_tier, evidence + extra, environmental_assessed=assessed, monitoring_cadence_hours=monitoring_cadence_hours, now=now)
+
+    base = run(())
+    current = {c["key"]: c for c in base["checks"]}
+    impact = TIER_TO_IMPACT.get(str(risk_tier).lower(), "high")
+    best = max(VERDICTS.index(DECISION_MATRIX[(impact, band)]) for band, _, _ in BANDS)
+    rank = VERDICTS.index(base["verdict"])
+    target = VERDICTS[rank + 1] if rank < best else None
+    monitored = lifecycle_stage == "operate" or any(
+        str(r.get("evidenceType") or r.get("type") or "").lower() == "monitoring" and _provenance(r) in PROVEN_CLASSES for r in evidence
+    )
+
+    counts: Dict[tuple, float] = {}
+    choices = []
+    for key, _, _ in GATE_CHECKS:
+        check = current[key]
+        if check["state"] == "proven":
+            continue
+        for action in CHECK_ACTIONS[key]:
+            if (action == "attest" and check["state"] != "open") or (action == "monitoring_snapshot" and not monitored):
+                continue
+            after = next(c["confidence"] for c in run(((key, action),))["checks"] if c["key"] == key)
+            if after > check["confidence"]:
+                counts[(key, action)] = after
+        actions = [step for step in counts if step[0] == key]
+        if actions:
+            choices.append([None, *actions])
+
+    # ponytail: brute force over subsets (at most 2*3*3*3*2 = 108), greedy if actions grow past ~12
+    results = [(steps, run(steps)) for combo in itertools.product(*choices) for steps in [tuple(s for s in combo if s)] if steps]
+    top = max(results, key=lambda r: (VERDICTS.index(r[1]["verdict"]), r[1]["confidence"]), default=((), base))[1]
+    blockers = [{"key": "verdict", "text": "The release gate verdict is conditional go or better", "met": base["verdict"] != "no_go"}, *approval_blockers]
+
+    def ready(steps: tuple, gate: Dict[str, Any]) -> bool:
+        assessed = any(action == "environmental_assessment" for _, action in steps)
+        return all(
+            gate["verdict"] != "no_go" if b["key"] == "verdict" else b["met"] or (assessed and b["key"] == "environmental_assessment")
+            for b in blockers
+        )
+
+    def option(kind: str, steps: tuple, gate: Dict[str, Any]) -> Dict[str, Any]:
+        ordered = sorted(steps, key=lambda s: (_CLASS_ORDER[ACTION_CLASS[s[1]]], _CHECK_ORDER[s[0]]))
+        return {
+            "kind": kind,
+            "steps": [
+                {"check": key, "action": action, "evidenceClass": ACTION_CLASS[action], "counts": counts[(key, action)],
+                 "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(GATE_CHECKS), 2), "note": ACTION_NOTES.get(action)}
+                for key, action in ordered
+            ],
+            "confidenceAfter": gate["confidence"], "verdictAfter": gate["verdict"], "approvalReady": ready(steps, gate),
+        }
+
+    # Every candidate reaches the target, the next verdict up, so rank by fewest manual steps, then fewest steps,
+    # then the route a reviewer could approve (an environmental assessment beats a monitoring snapshot at a tie).
+    reaching = [r for r in results if target and VERDICTS.index(r[1]["verdict"]) >= VERDICTS.index(target)]
+    rank_key = lambda r: (sum(ACTION_CLASS[a] == "manual" for _, a in r[0]), len(r[0]), not ready(*r), -r[1]["confidence"], sorted(_CHECK_ORDER[k] for k, _ in r[0]))  # noqa: E731
+    options = []
+    if reaching:
+        first = min(reaching, key=rank_key)
+        options.append(option("measured_first", *first))
+        attested = [r for r in reaching if all(a == "attest" for _, a in r[0])]
+        alt = min(attested, key=rank_key) if attested else None
+        if alt and alt[0] != first[0]:
+            options.append(option("attestations", *alt))
+
+    notes: List[str] = []
+    if best < VERDICTS.index("go"):
+        notes.append("Medium, high and critical systems never get a plain go; the best is conditional go, approved with written conditions.")
+    if impact == "low" and base["confidence"] == 0.0:
+        notes.append("With nothing on file confidence is 0, which is always no go.")
+    if target and not reaching:
+        need = min(low for band, low, _ in BANDS if VERDICTS.index(DECISION_MATRIX[(impact, band)]) >= VERDICTS.index(target))
+        if target == "go" and any((c.get("detail") or {}).get("all_checks_pass") is False for c in top["checks"]):
+            notes.append("Go is not reachable while a measured check fails; it needs a passing re-run.")
+        elif top["confidence"] < need:
+            # Each manual-only check with the most it can count: an upload (0.40) or, for monitoring, an attestation (0.30).
+            manual = [
+                f"{label.lower()} ({max((v for (k, _), v in counts.items() if k == key), default=current[key]['confidence']):.2f} at most)"
+                for key, label, _ in GATE_CHECKS
+                if current[key]["state"] != "proven" and not any(k == key and ACTION_CLASS[a] != "manual" for k, a in counts)
+            ]
+            named = " and ".join([", ".join(manual[:-1]), manual[-1]] if len(manual) > 1 else manual).capitalize()
+            why = f" {named} {'has' if len(manual) == 1 else 'have'} no measured route today." if manual else ""
+            notes.append(f"{VERDICT_LABELS[target]} needs confidence {need:.2f}; the most FairMind can record today reaches {top['confidence']:.2f}.{why}")
+    return {
+        "target": target, "options": options, "ceiling": {"confidence": top["confidence"], "verdict": top["verdict"]},
+        "notes": notes, "approvalBlockers": blockers,
     }
