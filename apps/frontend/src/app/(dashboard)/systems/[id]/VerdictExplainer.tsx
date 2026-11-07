@@ -56,9 +56,19 @@ export function stepClass(step: GatePathStep) {
   return { ...CLASS_PILL[step.evidenceClass], detail: `counts up to ${two(step.counts)}` }
 }
 
-/** The option that reaches the next verdict up, or null when nothing FairMind records today gets there. */
+const RANK: Record<Verdict, number> = { no_go: 0, conditional_go: 1, go: 2 }
+
+/** The option that reaches the next verdict up (or past it), or null when nothing FairMind records today gets there. */
 export function bestOption(path: GatePath | undefined): GatePathOption | null {
-  return path?.target ? path.options.find((o) => o.verdictAfter === path.target) ?? null : null
+  const target = path?.target
+  return target ? path.options.find((o) => RANK[o.verdictAfter] >= RANK[target]) ?? null : null
+}
+
+/** True when the target is out of reach for lack of confidence, not because of a failing check. */
+export function confidenceShort(gate: ReleaseGate) {
+  const target = gate.path?.target
+  const need = target ? gate.explain?.row.filter((c) => RANK[c.verdict] >= RANK[target]).map((c) => c.from) ?? [] : []
+  return need.length > 0 && gate.path!.ceiling.confidence < Math.min(...need)
 }
 
 /** One line for the run result: how far the next verdict is. */
@@ -69,7 +79,7 @@ export function pathSummary(gate: ReleaseGate) {
   if (!best) return `${VERDICT_LABEL[path.target]} is not reachable with what FairMind records today. Best possible now: ${two(path.ceiling.confidence)}, ${VERDICT_LABEL[path.ceiling.verdict]}.`
   if (best.steps.length === 0) return null
   const first = lowerFirst(stepTitle(best.steps[0], gate))
-  const target = VERDICT_LABEL[path.target]
+  const target = VERDICT_LABEL[best.verdictAfter]
   return best.steps.length === 1 ? `One step reaches ${target}: ${first}.` : `${best.steps.length} steps reach ${target}, starting with: ${first}.`
 }
 
@@ -217,10 +227,12 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
               <p className="text-[12.5px] leading-normal text-[var(--fm-ink)]">
                 Not reachable with what FairMind records today. Best possible now: {two(path.ceiling.confidence)}, {VERDICT_LABEL[path.ceiling.verdict]}.
               </p>
-              <p className="flex flex-wrap items-center gap-2 text-[12.5px] text-[var(--fm-ink2)]">
-                <Pill>Coming soon</Pill>
-                Measured data-governance and oversight checks
-              </p>
+              {confidenceShort(gate) && (
+                <p className="flex flex-wrap items-center gap-2 text-[12.5px] text-[var(--fm-ink2)]">
+                  <Pill>Coming soon</Pill>
+                  Measured data-governance and oversight checks
+                </p>
+              )}
             </>
           )}
         </div>

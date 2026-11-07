@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { GatePathStep, ReleaseGate } from '@/lib/api/hooks/useSystemFile'
-import { arithmetic, attestationNote, bandRange, bestOption, pathSummary, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
+import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, pathSummary, stepClass, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
 
 const step = (check: GatePathStep['check'], action: GatePathStep['action'], evidenceClass: GatePathStep['evidenceClass'], counts: number, gain: number): GatePathStep => ({ check, action, evidenceClass, counts, gain, note: null })
 
@@ -78,10 +78,40 @@ test('the medium example: one assessment reaches conditional go, attestations ar
 test('a high tier whose ceiling stays below 0.70 says the target is not reachable', () => {
   const high: ReleaseGate = {
     ...medium,
+    explain: {
+      ...medium.explain!,
+      tier: 'high',
+      effectiveTier: 'high',
+      impact: 'high',
+      row: [
+        { band: 'measured', from: 0.7, to: null, verdict: 'conditional_go' },
+        { band: 'estimated', from: 0.35, to: 0.7, verdict: 'no_go' },
+        { band: 'unknown', from: 0, to: 0.35, verdict: 'no_go' },
+      ],
+    },
     path: { ...medium.path!, options: [{ ...medium.path!.options[1], verdictAfter: 'no_go', confidenceAfter: 0.37 }], ceiling: { confidence: 0.65, verdict: 'no_go' } },
   }
   assert.equal(bestOption(high.path), null)
   assert.equal(pathSummary(high), 'Conditional go is not reachable with what FairMind records today. Best possible now: 0.65, No go.')
+  assert.equal(confidenceShort(high), true)
+})
+
+test('an option that passes the target still counts as reaching it', () => {
+  const past: ReleaseGate = { ...medium, path: { ...medium.path!, options: [{ ...medium.path!.options[0], verdictAfter: 'go', confidenceAfter: 0.72 }] } }
+  assert.equal(bestOption(past.path)?.kind, 'measured_first')
+  assert.equal(pathSummary(past), 'One step reaches Go: run an environmental assessment.')
+})
+
+test('a target out of reach because of a failing check does not blame missing measured checks', () => {
+  const failing: ReleaseGate = { ...medium, path: { ...medium.path!, target: 'conditional_go', options: [], ceiling: { confidence: 0.4, verdict: 'no_go' } } }
+  assert.equal(confidenceShort(failing), false)
+})
+
+test('every step says what kind of evidence it is; an attestation is a named statement capped at 0.30', () => {
+  const [assess] = medium.path!.options[0].steps
+  const [attest] = medium.path!.options[1].steps
+  assert.deepEqual(stepClass(assess), { label: 'Tool estimate', tone: 'info', detail: 'counts up to 0.85' })
+  assert.deepEqual(stepClass(attest), { label: 'Attestation', tone: 'warn', detail: "a named person's statement, counts 0.30 at most" })
 })
 
 test('no path summary when the tier is already at its best verdict', () => {
