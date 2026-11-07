@@ -73,6 +73,7 @@ const evaluationPreflightSchema = z.strictObject({
     'automatic_enforcement_disabled',
     'executor_unavailable',
     'evidence_link_required',
+    'legacy_evidence_linking_disabled',
   ]),
   message: z.string(),
   nextAction: z.string(),

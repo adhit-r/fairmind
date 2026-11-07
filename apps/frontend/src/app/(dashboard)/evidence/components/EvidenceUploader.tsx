@@ -13,6 +13,8 @@ interface EvidenceUploaderProps {
   systemId: string
   onCollect: (params: CollectEvidenceInput) => Promise<void>
   onClose: () => void
+  /** External URLs are untrusted evidence, offered only when that linking is switched on. */
+  externalUrlsEnabled?: boolean
 }
 
 const KINDS: Array<{ kind: ArtifactKind; label: string }> = [
@@ -30,7 +32,8 @@ const FIELD =
 const LABEL_CLS = 'block text-[12px] font-medium text-[var(--fm-ink2)]'
 const SUGGEST = 'rounded-full bg-[var(--fm-bg)] px-2.5 py-1 text-[12px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]'
 
-export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploaderProps) {
+export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEnabled = false }: EvidenceUploaderProps) {
+  const kinds = externalUrlsEnabled ? KINDS : KINDS.filter((option) => option.kind !== 'url')
   const uid = useId()
   const [kind, setKind] = useState<ArtifactKind>('narrative')
   const [title, setTitle] = useState('')
@@ -105,8 +108,8 @@ export function EvidenceUploader({ systemId, onCollect, onClose }: EvidenceUploa
   return (
     <form onSubmit={handleSubmit} className="grid gap-5">
       {/* Artifact kind selector */}
-      <div role="group" aria-label="Artifact kind" className="grid grid-cols-2 gap-1 rounded-[22px] bg-[#ebebe8] p-1 sm:grid-cols-4 sm:rounded-full">
-        {KINDS.map(({ kind: k, label }) => (
+      <div role="group" aria-label="Artifact kind" className={cn('grid grid-cols-2 gap-1 rounded-[22px] bg-[#ebebe8] p-1 sm:rounded-full', externalUrlsEnabled ? 'sm:grid-cols-4' : 'sm:grid-cols-3')}>
+        {kinds.map(({ kind: k, label }) => (
           <button
             key={k}
             type="button"

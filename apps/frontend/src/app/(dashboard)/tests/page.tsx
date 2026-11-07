@@ -9,7 +9,6 @@ import { useOrg } from '@/context/OrgContext'
 import {
   allowedLegacyDeliveryModes,
   allowedLegacyEnforcementModes,
-  legacyEvaluationFeatureGates,
 } from '@/lib/assurance/legacyEvaluationFeatureGates'
 import {
   EvaluationApiRequestError,
@@ -105,7 +104,9 @@ function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPrefli
       ? 'Automatic enforcement unavailable'
       : preflight.code === 'executor_unavailable'
         ? 'Executor unavailable'
-        : 'Evidence link required',
+        : preflight.code === 'legacy_evidence_linking_disabled'
+          ? 'Legacy linking unavailable'
+          : 'Evidence link required',
     message: preflight.message,
     nextAction: preflight.nextAction,
   }

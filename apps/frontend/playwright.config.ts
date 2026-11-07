@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// The reviewed-external-linking run needs its own dev server, built with the flag on.
+const reviewedExternalLinkingEnabled =
+  process.env.NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED === 'true'
+const devPort = reviewedExternalLinkingEnabled ? 1112 : 1111
+const baseURL = `http://localhost:${devPort}`
+
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts$/,
@@ -9,7 +15,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:1111',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -22,10 +28,9 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:1111',
-    reuseExistingServer: !process.env.CI,
+    command: reviewedExternalLinkingEnabled ? 'npx next dev -p 1112' : 'npm run dev',
+    url: baseURL,
+    reuseExistingServer: reviewedExternalLinkingEnabled ? false : !process.env.CI,
     timeout: 120 * 1000,
   },
 })
-

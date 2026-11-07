@@ -12,6 +12,7 @@ import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useOrg } from '@/context/OrgContext'
 import { cn } from '@/lib/utils'
 import { useEvidence, type Evidence } from '@/lib/api/hooks/useEvidence'
+import { resolveEvidenceHubFeatureGates } from '@/lib/assurance/evidenceHubFeatureGates'
 import {
   useEvidenceMappingReview,
   useEvidenceRuns,
@@ -27,6 +28,10 @@ import { EvaluationRunList } from './components/EvaluationRunList'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
 
 const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
+const EVIDENCE_HUB_FEATURE_GATES = resolveEvidenceHubFeatureGates({
+  untrustedExternalEvidenceLinking:
+    process.env.NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED,
+})
 
 const VIEWS = [
   ['gaps', 'Evidence gaps'],
@@ -73,6 +78,7 @@ function EvidenceRow({ evidence, onClick }: { evidence: Evidence; onClick: () =>
       </span>
       <span className="flex flex-wrap items-center gap-2 sm:justify-end">
         {evidence.stale && <Pill tone="warn">Stale</Pill>}
+        <Pill tone="warn">Trust unclassified</Pill>
         <Pill>{links > 0 ? `${links} link${links === 1 ? '' : 's'}` : 'Not linked'}</Pill>
         <span className={cn('text-[12.5px] tabular-nums', MUTED)}>{Math.round(evidence.confidence * 100)}% confidence</span>
       </span>
@@ -236,7 +242,7 @@ export default function EvidencePage() {
       ) : undefined}
     >
       {canReview
-        ? `Upload a file, link an external artifact, write a narrative or record an attestation for ${selectedSystem.name}. Gaps and coverage appear once the first artifact is saved.`
+        ? `Upload a file, write a narrative or record an attestation for ${selectedSystem.name}. Gaps and coverage appear once the first artifact is saved.`
         : readOnly
           ? `Nothing has been collected for ${selectedSystem.name}. Your role cannot add artifacts; ask a governance editor to add the first one.`
           : `Nothing has been collected for ${selectedSystem.name}. ${orgLoading ? 'Checking whether you can add artifacts.' : 'Your access to add artifacts could not be confirmed.'}`}
@@ -493,6 +499,7 @@ export default function EvidencePage() {
             systemId={selectedSystem.id}
             onCollect={handleCollect}
             onClose={() => setUploaderOpen(false)}
+            externalUrlsEnabled={EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}
           />
         </DialogContent>
       </Dialog>
@@ -527,6 +534,7 @@ export default function EvidencePage() {
         }}
         controlOptions={assessmentState.controls}
         canEdit={roleKnown ? canReview : null}
+        canAddLink={canReview && EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}
       />
     </div>
   )

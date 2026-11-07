@@ -6,19 +6,14 @@ type LegacyEvaluationFeatureGateEnvironment = {
   legacyEvidenceLinking?: string
 }
 
-const explicitlyEnabled = (value: string | undefined) => value === 'true'
-
 export function resolveLegacyEvaluationFeatureGates(
   environment: LegacyEvaluationFeatureGateEnvironment,
 ): LegacyEvaluationFeatureGates {
+  void environment
   return {
-    legacyEvidenceLinking: explicitlyEnabled(environment.legacyEvidenceLinking),
+    legacyEvidenceLinking: false,
   }
 }
-
-export const legacyEvaluationFeatureGates = resolveLegacyEvaluationFeatureGates({
-  legacyEvidenceLinking: process.env.NEXT_PUBLIC_FAIRMIND_ASSURANCE_LEGACY_EVIDENCE_LINKING_ENABLED,
-})
 
 export function allowedLegacyEnforcementModes() {
   return ['advisory', 'human_approval'] as const
