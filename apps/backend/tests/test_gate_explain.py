@@ -38,11 +38,12 @@ def test_high_tier_ceiling_stays_below_measured_with_the_real_caps():
     live = path_forward("high", [PASSING_RUN], lifecycle_stage="operate", now=NOW)
     assert live["target"] == "conditional_go" and live["options"] == []
     assert live["ceiling"] == {"confidence": 0.69, "verdict": "no_go"}  # 0.95 + 0.85 + 0.85 + 0.40 + 0.40
-    assert any(n.startswith("Conditional go needs confidence 0.70; the most FairMind can record today reaches 0.69. Data governance and human oversight have no measured route") for n in live["notes"])
+    assert "Conditional go needs confidence 0.70; the most FairMind can record today reaches 0.69. Data governance (0.40 at most) and human oversight (0.40 at most) have no measured route today." in live["notes"]
     # Before release there are no shadow or live decisions, so no monitoring snapshot is offered.
     early = path_forward("high", [PASSING_RUN], now=NOW)
     assert early["ceiling"] == {"confidence": 0.58, "verdict": "no_go"}
-    assert any("Data governance, human oversight and monitoring in place have no measured route today, so each counts 0.40 at most." in n for n in early["notes"])
+    # Monitoring can only be attested before release, so it counts 0.30, not the 0.40 an upload gets.
+    assert any(n.endswith("Data governance (0.40 at most), human oversight (0.40 at most) and monitoring in place (0.30 at most) have no measured route today.") for n in early["notes"])
 
 
 def test_proven_and_attested_checks_get_no_weaker_steps():
@@ -59,6 +60,14 @@ def test_proven_and_attested_checks_get_no_weaker_steps():
     assert path_forward("medium", [PASSING_RUN], environmental_assessed=True, now=NOW)["target"] is None
 
 
+def test_an_existing_monitoring_run_allows_a_snapshot_and_ties_go_to_the_approvable_route():
+    stale = {"id": "mon", "evidenceType": "monitoring", "confidence": 0.90, "metadata": {"provenance_class": "measured"}, "timestamp": "2026-10-01T00:00:00+00:00", "content": {"all_checks_pass": True}}
+    path = path_forward("medium", [PASSING_RUN, stale], monitoring_cadence_hours=168, approval_blockers=NO_ASSESSMENT, now=NOW)
+    # A snapshot and an assessment each reach 0.36; only the assessment also clears the approval blocker.
+    assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["approvalReady"] is True
+    assert path["ceiling"]["confidence"] == 0.69 and path["ceiling"]["verdict"] == "conditional_go"
+
+
 def test_go_is_not_promised_past_a_failing_measured_check():
     failing = {**PASSING_RUN, "content": {"all_checks_pass": False, "attributes": []}}
     path = path_forward("low", [failing], environmental_assessed=True, now=NOW)
@@ -71,6 +80,8 @@ def test_effective_tier_explain_and_reasons():
     assert effective_tier("medium", lowered) == "high"
     assert effective_tier("medium", {**lowered, "overrideAcceptedBy": "b@x.in"}) == "medium"
     assert effective_tier("medium", None) == "medium" and effective_tier("minimal", None) == "high"
+    # A record that claims a lowered tier but suggests a looser one never relaxes the stored tier.
+    assert effective_tier("high", {**lowered, "suggestedTier": "low"}) == "high"
 
     explain = gate_explain("medium", lowered)
     assert (explain["tier"], explain["effectiveTier"], explain["impact"], explain["perCheck"]) == ("medium", "high", "high", 0.2)

@@ -583,12 +583,16 @@ BANDS = (("measured", MEASURED_THRESHOLD, None), ("estimated", ESTIMATED_THRESHO
 
 def effective_tier(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> str:
     """The tier the verdict is computed on: the suggested tier while a lower confirmed one awaits a second
-    person, else the stored tier, with anything outside the four FairMind tiers read as high (as the gate does)."""
+    person, else the stored tier, with anything outside the four FairMind tiers read as high (as the gate does).
+    Never looser than the stored tier: system metadata is client-writable at create, so a stale or forged
+    applicability record can only tighten the gate."""
     app = applicability or {}
-    if app.get("tierBelowSuggestion") and not app.get("overrideAcceptedBy") and app.get("suggestedTier") in TIERS:
-        return app["suggestedTier"]
     tier = str(risk_tier or "").strip().lower()
-    return tier if tier in TIERS else "high"
+    tier = tier if tier in TIERS else "high"
+    suggested = app.get("suggestedTier")
+    if app.get("tierBelowSuggestion") and not app.get("overrideAcceptedBy") and suggested in TIERS and TIERS.index(suggested) > TIERS.index(tier):
+        return suggested
+    return tier
 
 
 def tier_reasons(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> List[str]:
@@ -715,13 +719,15 @@ def path_forward(
     top = max(results, key=lambda r: (VERDICTS.index(r[1]["verdict"]), r[1]["confidence"]), default=((), base))[1]
     blockers = [{"key": "verdict", "text": "The release gate verdict is conditional go or better", "met": base["verdict"] != "no_go"}, *approval_blockers]
 
-    def option(kind: str, steps: tuple, gate: Dict[str, Any]) -> Dict[str, Any]:
-        ordered = sorted(steps, key=lambda s: (_CLASS_ORDER[ACTION_CLASS[s[1]]], _CHECK_ORDER[s[0]]))
+    def ready(steps: tuple, gate: Dict[str, Any]) -> bool:
         assessed = any(action == "environmental_assessment" for _, action in steps)
-        ready = all(
+        return all(
             gate["verdict"] != "no_go" if b["key"] == "verdict" else b["met"] or (assessed and b["key"] == "environmental_assessment")
             for b in blockers
         )
+
+    def option(kind: str, steps: tuple, gate: Dict[str, Any]) -> Dict[str, Any]:
+        ordered = sorted(steps, key=lambda s: (_CLASS_ORDER[ACTION_CLASS[s[1]]], _CHECK_ORDER[s[0]]))
         return {
             "kind": kind,
             "steps": [
@@ -729,12 +735,13 @@ def path_forward(
                  "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(GATE_CHECKS), 2), "note": ACTION_NOTES.get(action)}
                 for key, action in ordered
             ],
-            "confidenceAfter": gate["confidence"], "verdictAfter": gate["verdict"], "approvalReady": ready,
+            "confidenceAfter": gate["confidence"], "verdictAfter": gate["verdict"], "approvalReady": ready(steps, gate),
         }
 
-    # Every candidate reaches the target, the next verdict up, so rank by fewest manual steps, then fewest steps.
+    # Every candidate reaches the target, the next verdict up, so rank by fewest manual steps, then fewest steps,
+    # then the route a reviewer could approve (an environmental assessment beats a monitoring snapshot at a tie).
     reaching = [r for r in results if target and VERDICTS.index(r[1]["verdict"]) >= VERDICTS.index(target)]
-    rank_key = lambda r: (sum(ACTION_CLASS[a] == "manual" for _, a in r[0]), len(r[0]), -r[1]["confidence"], sorted(_CHECK_ORDER[k] for k, _ in r[0]))  # noqa: E731
+    rank_key = lambda r: (sum(ACTION_CLASS[a] == "manual" for _, a in r[0]), len(r[0]), not ready(*r), -r[1]["confidence"], sorted(_CHECK_ORDER[k] for k, _ in r[0]))  # noqa: E731
     options = []
     if reaching:
         first = min(reaching, key=rank_key)
@@ -754,9 +761,14 @@ def path_forward(
         if target == "go" and any((c.get("detail") or {}).get("all_checks_pass") is False for c in top["checks"]):
             notes.append("Go is not reachable while a measured check fails; it needs a passing re-run.")
         elif top["confidence"] < need:
-            manual = [label.lower() for key, label, _ in GATE_CHECKS if current[key]["state"] != "proven" and not any(k == key and ACTION_CLASS[a] != "manual" for k, a in counts)]
+            # Each manual-only check with the most it can count: an upload (0.40) or, for monitoring, an attestation (0.30).
+            manual = [
+                f"{label.lower()} ({max((v for (k, _), v in counts.items() if k == key), default=current[key]['confidence']):.2f} at most)"
+                for key, label, _ in GATE_CHECKS
+                if current[key]["state"] != "proven" and not any(k == key and ACTION_CLASS[a] != "manual" for k, a in counts)
+            ]
             named = " and ".join([", ".join(manual[:-1]), manual[-1]] if len(manual) > 1 else manual).capitalize()
-            why = f" {named} {'has' if len(manual) == 1 else 'have'} no measured route today, so each counts {UPLOAD_CONFIDENCE:.2f} at most." if manual else ""
+            why = f" {named} {'has' if len(manual) == 1 else 'have'} no measured route today." if manual else ""
             notes.append(f"{VERDICT_LABELS[target]} needs confidence {need:.2f}; the most FairMind can record today reaches {top['confidence']:.2f}.{why}")
     return {
         "target": target, "options": options, "ceiling": {"confidence": top["confidence"], "verdict": top["verdict"]},

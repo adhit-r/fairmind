@@ -43,15 +43,18 @@ from pydantic import BaseModel, Field
 
 from src.application.services.clause_map_service import clause_map
 from src.application.services.decision_seal_service import list_seals
-from src.application.services.fairness_run_service import effective_tier, gate_explain, path_forward, tier_reasons
 from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
     FairnessRunError,
+    effective_tier,
+    gate_explain,
     inspect_csv,
+    path_forward,
     release_gate,
     run_fairness,
     run_monitoring,
+    tier_reasons,
 )
 
 router = APIRouter(tags=["fairness"], dependencies=[Depends(_enforce_org_scope)])
