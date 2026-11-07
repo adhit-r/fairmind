@@ -81,15 +81,17 @@ def _system_row(db: Session, system_id: str) -> Any:
     return row
 
 
-def _environmental_assessed(db: Session, system_id: str) -> bool:
+def _environmental_assessed(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
+    """The newest assessment's provenance and confidence, which the gate counts like any other record; None when there is none."""
     try:
         row = db.execute(
-            text("SELECT 1 FROM governance_environmental_assessments WHERE system_id = :id LIMIT 1"), {"id": system_id}
+            text("SELECT provenance_class, confidence_score FROM governance_environmental_assessments WHERE system_id = :id ORDER BY created_at DESC LIMIT 1"),
+            {"id": system_id},
         ).fetchone()
-        return row is not None
     except Exception:
         db.rollback()
-        return False
+        return None
+    return {"provenance_class": row[0] or "unknown", "confidence": float(row[1] or 0.0)} if row else None
 
 
 DEFAULT_CADENCE_HOURS = 168

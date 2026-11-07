@@ -221,10 +221,44 @@ def test_gate_states_and_verdict():
     gate = release_gate("low", measured + attested)
     by_key = {c["key"]: c for c in gate["checks"]}
     assert by_key["fairness"]["state"] == "proven"
-    assert by_key["human_oversight"]["state"] == "attested" and by_key["human_oversight"]["confidence"] <= 0.4
+    assert by_key["human_oversight"]["state"] == "attested" and by_key["human_oversight"]["confidence"] == 0.3
     assert by_key["monitoring"]["state"] == "open"
     failing = release_gate("low", [{**measured[0], "content": {"all_checks_pass": False, "attributes": []}}] + attested * 4)
     assert failing["verdict"] != "go"
+
+
+def test_statements_alone_never_leave_the_unknown_band():
+    """Any record that is not measured or tool-estimated counts at most 0.30, like an attestation, below the 0.35 estimated band."""
+    filed = [("fairness_test", "manual"), ("dataset", "manual"), ("policy", None), ("monitoring", "vendor_reported"), ("environmental", "manual")]
+    statements = [{"id": f"s{i}", "evidenceType": t, "confidence": 1.0, "metadata": {"provenance_class": p} if p else {}} for i, (t, p) in enumerate(filed)]
+    for tier, verdict in (("low", "conditional_go"), ("medium", "no_go"), ("high", "no_go")):
+        gate = release_gate(tier, statements)
+        assert (gate["confidence"], gate["band"], gate["verdict"]) == (0.3, "unknown", verdict)
+        assert all(c["state"] == "attested" and c["confidence"] == 0.3 for c in gate["checks"])
+    # An environmental assessment counts by its own provenance: a hand-entered one is a statement too.
+    manual = release_gate("medium", statements[:4], environmental_assessed={"provenance_class": "manual", "confidence": 0.25})
+    env = next(c for c in manual["checks"] if c["key"] == "environmental")
+    assert (env["state"], env["confidence"], manual["band"], manual["verdict"]) == ("attested", 0.25, "unknown", "no_go")
+    tool = release_gate("medium", statements[:4], environmental_assessed={"provenance_class": "tool_estimated", "confidence": 0.8})
+    assert next(c for c in tool["checks"] if c["key"] == "environmental")["state"] == "proven"
+
+
+def test_collected_evidence_cannot_declare_itself_measured():
+    client = TestClient(app, client=(f"fair-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    workspace = client.post("/api/v1/ai-governance/workspaces", json={"name": "Provenance ws", "owner": "owner"}).json()
+    sid = client.post(
+        "/api/v1/ai-governance/systems",
+        json={"workspace_id": workspace["id"], "name": "Claims triage", "owner": "owner", "risk_tier": "medium", "lifecycle_stage": "assess"},
+    ).json()["id"]
+    for route in ("collect", "upload"):
+        r = client.post(
+            f"/api/v1/ai-governance/evidence/{route}",
+            json={"system_id": sid, "type": "dataset", "content": {"summary": "Lineage notes"}, "confidence": 1.0, "metadata": {"provenance_class": "measured", "provenance": "measured", "file_name": "lineage.pdf"}},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["metadata"] == {"file_name": "lineage.pdf"}
+    data = next(c for c in client.get(f"/api/v1/ai-governance/systems/{sid}/gate").json()["checks"] if c["key"] == "data_governance")
+    assert (data["state"], data["confidence"]) == ("attested", 0.3)
 
 
 def test_route_stores_measured_evidence_and_moves_the_gate():
@@ -286,7 +320,7 @@ def test_monitoring_run_and_attestations_move_the_gate():
     att = client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "human_oversight", "statement": "A credit officer reviews every declined application before a decision is sent.", "reference": "SOP-14"})
     assert att.status_code == 200, att.text
     by_key = {c["key"]: c for c in att.json()["gate"]["checks"]}
-    assert by_key["human_oversight"]["state"] == "attested" and by_key["human_oversight"]["confidence"] <= 0.4
+    assert by_key["human_oversight"]["state"] == "attested" and by_key["human_oversight"]["confidence"] == 0.3
     assert client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "fairness", "statement": "x" * 20}).status_code == 422
 
 

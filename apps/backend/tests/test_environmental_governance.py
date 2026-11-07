@@ -184,6 +184,13 @@ def test_evidence_ingest_creates_no_go_risk_remediation_and_blocks_approval(
     assert saved["recommendation"] == "no_go"
     assert saved["riskId"]
     assert saved["remediationTaskId"]
+    # The assessment's provenance is undisclosed, so the release gate counts it 0. One attestation gives the gate
+    # a nonzero confidence: low tier reads conditional go, and the environmental rule is what blocks.
+    attest = client.post(
+        f"/api/v1/ai-governance/systems/{system_id}/attestations",
+        json={"check": "data_governance", "statement": "Training data lineage is recorded in the data catalogue.", "reference": "DC-7"},
+    )
+    assert attest.status_code == 200, attest.text
 
     approval_req = client.post(
         f"/api/v1/ai-governance/approval/system/{system_id}/request",

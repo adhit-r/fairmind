@@ -37,13 +37,13 @@ def test_medium_first_verdict_path():
 def test_high_tier_ceiling_stays_below_measured_with_the_real_caps():
     live = path_forward("high", [PASSING_RUN], lifecycle_stage="operate", now=NOW)
     assert live["target"] == "conditional_go" and live["options"] == []
-    assert live["ceiling"] == {"confidence": 0.69, "verdict": "no_go"}  # 0.95 + 0.85 + 0.85 + 0.40 + 0.40
-    assert "Conditional go needs confidence 0.70; the most FairMind can record today reaches 0.69. Data governance (0.40 at most) and human oversight (0.40 at most) have no measured route today." in live["notes"]
+    assert live["ceiling"] == {"confidence": 0.65, "verdict": "no_go"}  # 0.95 + 0.85 + 0.85 + 0.30 + 0.30
+    assert "Conditional go needs confidence 0.70; the most FairMind can record today reaches 0.65. Data governance (0.30 at most) and human oversight (0.30 at most) have no measured route today." in live["notes"]
     # Before release there are no shadow or live decisions, so no monitoring snapshot is offered.
     early = path_forward("high", [PASSING_RUN], now=NOW)
-    assert early["ceiling"] == {"confidence": 0.58, "verdict": "no_go"}
-    # Monitoring can only be attested before release, so it counts 0.30, not the 0.40 an upload gets.
-    assert any(n.endswith("Data governance (0.40 at most), human oversight (0.40 at most) and monitoring in place (0.30 at most) have no measured route today.") for n in early["notes"])
+    assert early["ceiling"] == {"confidence": 0.54, "verdict": "no_go"}  # 0.95 + 0.85 + 0.30 * 3
+    # Monitoring can only be attested before release; an upload counts no more than an attestation.
+    assert any(n.endswith("Data governance (0.30 at most), human oversight (0.30 at most) and monitoring in place (0.30 at most) have no measured route today.") for n in early["notes"])
 
 
 def test_proven_and_attested_checks_get_no_weaker_steps():
@@ -65,7 +65,14 @@ def test_an_existing_monitoring_run_allows_a_snapshot_and_ties_go_to_the_approva
     path = path_forward("medium", [PASSING_RUN, stale], monitoring_cadence_hours=168, approval_blockers=NO_ASSESSMENT, now=NOW)
     # A snapshot and an assessment each reach 0.36; only the assessment also clears the approval blocker.
     assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["approvalReady"] is True
-    assert path["ceiling"]["confidence"] == 0.69 and path["ceiling"]["verdict"] == "conditional_go"
+    assert path["ceiling"]["confidence"] == 0.65 and path["ceiling"]["verdict"] == "conditional_go"  # 0.95 + 0.85 + 0.85 + 0.30 + 0.30
+
+
+def test_a_manual_assessment_on_file_still_leaves_a_tool_assessment_step():
+    manual = {"provenance_class": "manual", "confidence": 0.25}
+    path = path_forward("medium", [PASSING_RUN], environmental_assessed=manual, approval_blockers=NO_ASSESSMENT, now=NOW)
+    assert path["target"] == "conditional_go"  # 0.95 + 0.25 = 0.24, unknown
+    assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["confidenceAfter"] == 0.36
 
 
 def test_go_is_not_promised_past_a_failing_measured_check():

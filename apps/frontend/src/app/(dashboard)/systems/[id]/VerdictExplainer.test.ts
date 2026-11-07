@@ -115,8 +115,8 @@ test('every step says what kind of evidence it is; an attestation is a named sta
 })
 
 test('an upload step says its cap once; the server note only says what the evidence is', () => {
-  const upload = { ...step('data_governance', 'evidence_upload', 'manual', 0.4, 0.08), note: 'an uploaded document' }
-  assert.equal(stepLine(upload), 'counts up to 0.40 · +0.08 confidence · an uploaded document')
+  const upload = { ...step('data_governance', 'evidence_upload', 'manual', 0.3, 0.06), note: 'an uploaded document' }
+  assert.equal(stepLine(upload), 'counts up to 0.30 · +0.06 confidence · an uploaded document')
   assert.equal(stepLine(step('environmental', 'environmental_assessment', 'tool_estimated', 0.85, 0.17)), 'counts up to 0.85 · +0.17 confidence')
 })
 
