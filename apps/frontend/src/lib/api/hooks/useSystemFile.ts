@@ -30,6 +30,8 @@ export interface SystemRecord {
   updatedAt: string
   readiness: number
   lifecycleSummary: LifecycleSummary
+  /** The confirmed tier and frameworks; null until a person confirms them. */
+  applicability?: import('./useApplicability').ApplicabilityRecord | null
 }
 
 export interface EvidenceSummary {
