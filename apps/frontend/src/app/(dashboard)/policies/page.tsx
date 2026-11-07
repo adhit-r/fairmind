@@ -9,6 +9,7 @@ import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import {
   usePolicyActions,
   usePolicyResource,
+  type AIDraftedPolicy,
   type Evaluation,
   type FrameworkCoverage,
   type Policy,
@@ -34,6 +35,69 @@ function NewPolicy({ onCreate }: { onCreate: (name: string) => Promise<void> }) 
       <input id="new-policy" className={`${INPUT} w-64`} placeholder="Name a new policy" value={name} onChange={(e) => setName(e.target.value)} />
       <button type="submit" className={BTN_P} disabled={busy || !name.trim()}>{busy ? 'Creating' : 'Draft policy'}</button>
     </form>
+  )
+}
+
+function AIDraft({ onDraft }: { onDraft: (brief: string) => Promise<AIDraftedPolicy | null> }) {
+  const [brief, setBrief] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<AIDraftedPolicy | null>(null)
+  const ready = brief.trim().length >= 10
+  return (
+    <section aria-labelledby="ai-draft" className="pk-card flex flex-col gap-3 p-5">
+      <div>
+        <h2 id="ai-draft" className="m-0 text-lg font-semibold">Draft with AI</h2>
+        <span className={`text-[13px] ${MUTED}`}>
+          Describe the policy you need. Your organisation&apos;s model writes the policy text and the rules the platform can check, mapped to framework controls. It is saved as a draft for people to review and approve. The model is set in{' '}
+          <Link href="/org-admin/settings" className="font-semibold underline">Organisation settings</Link>.
+        </span>
+      </div>
+      <form
+        className="flex flex-col gap-2.5"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (!ready) return
+          setBusy(true)
+          setResult(null)
+          const drafted = await onDraft(brief.trim())
+          setBusy(false)
+          if (drafted) {
+            setResult(drafted)
+            setBrief('')
+          }
+        }}
+      >
+        <label className="sr-only" htmlFor="ai-brief">Policy brief</label>
+        <textarea
+          id="ai-brief"
+          rows={3}
+          maxLength={4000}
+          className="w-full resize-y rounded-[10px] border border-[var(--fm-line)] bg-white px-3.5 py-2.5 text-[13px] outline-none focus:border-[var(--fm-ink)]"
+          placeholder="For example: high-risk credit models need a named owner, no open critical risks and an approved release before they go live"
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+        />
+        <div>
+          <button type="submit" className={BTN_P} disabled={busy || !ready}>{busy ? 'Drafting' : 'Draft with AI'}</button>
+        </div>
+      </form>
+      {result && (
+        <div role="status" className="flex flex-col gap-1.5 rounded-[10px] bg-[var(--fm-bg)] px-3.5 py-3 text-[13px]">
+          <span>
+            Drafted <Link href={`/policies/${result.id}`} className="font-semibold underline">{result.name}</Link> with {result.draft.model}:{' '}
+            {result.rules.length} {result.rules.length === 1 ? 'rule' : 'rules'} mapped to {result.controlRefs.length} {result.controlRefs.length === 1 ? 'control' : 'controls'}. Review it, then submit it for approval.
+          </span>
+          {result.draft.dropped.length > 0 && (
+            <div className={MUTED}>
+              Left out {result.draft.dropped.length} {result.draft.dropped.length === 1 ? 'rule' : 'rules'} the platform cannot check:
+              <ul className="m-0 mt-1 list-disc pl-5">
+                {result.draft.dropped.map((d) => <li key={d}>{d}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -236,6 +300,17 @@ export default function PoliciesPage() {
         />
       </Heading>
       {failure && <ErrorNote message={failure} />}
+
+      <AIDraft
+        onDraft={async (brief) => {
+          let drafted: AIDraftedPolicy | null = null
+          await guarded(async () => {
+            drafted = await actions.draftWithAI(brief)
+            await policies.reload()
+          })
+          return drafted
+        }}
+      />
 
       {toAcknowledge.length > 0 && (
         <section aria-label="Awaiting your acknowledgement" className="flex flex-col gap-2 rounded-xl bg-[#ffeee4] px-4 py-3 text-[13px] text-[#a8430b]">

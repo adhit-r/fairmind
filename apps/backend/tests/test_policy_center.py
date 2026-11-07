@@ -237,3 +237,45 @@ def test_policy_results_are_evidence_for_assigned_framework_controls(assurance_c
     assert passing["evidenceTrace"][0]["label"] == "Every system has a named owner (Ownership v1)"
     assert (passing["acceptedEvidenceCount"], passing["freshness"]) == (1, "current")
     assert controls()["A001.2"]["evidenceTrace"] == [] and readiness()["missingEvidence"] == 1
+
+
+def test_ai_drafts_a_policy_with_only_valid_rules(assurance_client, monkeypatch):
+    from types import SimpleNamespace
+
+    from api.routes import policy_center
+
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        _seed_catalog_and_system(session)
+    brief = {"brief": "We screen loan applications with a credit model."}
+    refused = client.post(f"{BASE}/draft", json=brief)
+    assert refused.status_code == 409 and "Organization settings" in refused.json()["detail"]
+
+    sent = {}
+
+    async def complete(conn, system, user, schema):
+        sent.update(system=system, user=user, schema=schema)
+        rule = {"severity": "high", "enforcement": "block", "when": [], "controls": ["aiuc-1:A001.1", "aiuc-1:Z9"]}
+        return {
+            "name": "Credit model policy",
+            "summary": "Rules for the credit model.",
+            "body": "## Purpose\nGovern the credit model.",
+            "rules": [
+                {**rule, "id": "owner", "title": "Each system has an owner", "check": [{"fact": "system.owner", "op": "exists", "value": None}]},
+                {**rule, "id": "made-up", "title": "Uses a fact that does not exist", "check": [{"fact": "system.vibes", "op": "eq", "value": 1}]},
+                {**rule, "id": "owner", "title": "Duplicate id", "check": [{"fact": "risks.open", "op": "eq", "value": 0}]},
+            ],
+        }, {"model": "test-model", "latencyMs": 1, "usage": {}}
+
+    monkeypatch.setattr(policy_center, "_org_model", lambda db, org: SimpleNamespace(provider=SimpleNamespace(id="anthropic")))
+    monkeypatch.setattr(policy_center.llm, "complete", complete)
+    drafted = client.post(f"{BASE}/draft", json=brief)
+    assert drafted.status_code == 201, drafted.text
+    policy = drafted.json()
+    assert (policy["name"], policy["status"]) == ("Credit model policy", "draft")
+    assert [r["id"] for r in policy["rules"]] == ["owner"]
+    assert policy["rules"][0]["check"] == {"fact": "system.owner", "op": "exists"}
+    assert policy["controlRefs"] == ["aiuc-1:A001.1"]
+    assert policy["draft"]["model"] == "test-model" and len(policy["draft"]["dropped"]) == 2
+    assert "credit model" in sent["user"] and "aiuc-1:A001.1" in sent["user"] and "System A" in sent["user"]
