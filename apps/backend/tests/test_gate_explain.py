@@ -36,7 +36,7 @@ def test_medium_first_verdict_path():
 
 def test_high_tier_ceiling_stays_below_measured_with_the_real_caps():
     live = path_forward("high", [PASSING_RUN], lifecycle_stage="operate", now=NOW)
-    assert live["target"] == "conditional_go" and live["options"] == []
+    assert live["target"] == "conditional_go" and live["options"] == [] and live["toGo"] is None  # high never gets a plain go
     assert live["ceiling"] == {"confidence": 0.69, "verdict": "no_go"}  # 0.95 + 0.85 + 0.85 + 0.40 + 0.40
     assert "Conditional go needs confidence 0.70; the most FairMind can record today reaches 0.69. Data governance (0.40 at most) and human oversight (0.40 at most) have no measured route today." in live["notes"]
     # Before release there are no shadow or live decisions, so no monitoring snapshot is offered.
@@ -56,6 +56,7 @@ def test_proven_and_attested_checks_get_no_weaker_steps():
     assert ("monitoring", "monitoring_snapshot") not in steps
     assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["verdictAfter"] == "go"
     assert sorted(_steps(path["options"][1])) == [("data_governance", "attest"), ("monitoring", "attest")]
+    assert path["toGo"] == path["options"][0]  # the next verdict up is go, so the go path is the same route
     # Nothing left to raise: a proven environmental check gets no step and the target is already met.
     assert path_forward("medium", [PASSING_RUN], environmental_assessed=True, now=NOW)["target"] is None
 
@@ -66,6 +67,25 @@ def test_an_existing_monitoring_run_allows_a_snapshot_and_ties_go_to_the_approva
     # A snapshot and an assessment each reach 0.36; only the assessment also clears the approval blocker.
     assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["approvalReady"] is True
     assert path["ceiling"]["confidence"] == 0.69 and path["ceiling"]["verdict"] == "conditional_go"
+
+
+def test_a_low_tier_at_no_go_also_gets_the_shortest_path_to_go():
+    path = path_forward("low", [], approval_blockers=NO_ASSESSMENT, now=NOW)
+    assert path["target"] == "conditional_go"
+    assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["verdictAfter"] == "conditional_go"
+    # A run and an assessment reach 0.34, one short of 0.35. The third step is the strongest manual one: an upload
+    # (0.40) over an attestation (0.30), and data governance over human oversight only by name.
+    go = path["toGo"]
+    assert _steps(go) == [("fairness", "fairness_run"), ("environmental", "environmental_assessment"), ("data_governance", "evidence_upload")]
+    assert (go["kind"], go["confidenceAfter"], go["verdictAfter"], go["approvalReady"]) == ("measured_first", 0.42, "go", True)
+
+
+def test_equal_paths_prefer_measured_evidence_over_a_tool_estimate():
+    attested = {"id": "mon", "evidenceType": "monitoring", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T00:00:00+00:00"}
+    path = path_forward("medium", [PASSING_RUN, attested], lifecycle_stage="operate", now=NOW)
+    # One step each and nothing else blocks approval: the measured snapshot (0.36) beats the assessment (0.42).
+    assert _steps(path["options"][0]) == [("monitoring", "monitoring_snapshot")]
+    assert path["options"][0]["confidenceAfter"] == 0.36 and path["toGo"] is None
 
 
 def test_go_is_not_promised_past_a_failing_measured_check():
@@ -165,5 +185,5 @@ def test_a_failing_warning_rule_keeps_the_path_from_promising_go(monkeypatch):
     warned = gate()
     assert warned["verdict"] == "conditional_go" and warned["path"]["target"] == "go"
     assert warned["path"]["options"] and all(o["verdictAfter"] == "conditional_go" for o in warned["path"]["options"])
-    assert warned["path"]["ceiling"]["verdict"] == "conditional_go"
+    assert warned["path"]["ceiling"]["verdict"] == "conditional_go" and clean["path"]["toGo"] and warned["path"]["toGo"] is None
     assert "A failing warning-level policy rule keeps the verdict at conditional go until the rule passes; evidence steps do not change that." in warned["path"]["notes"]
