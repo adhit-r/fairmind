@@ -175,7 +175,8 @@ export interface CsvInspection {
     dtype: string
     distinct: number
     sample: string[]
-    attribute: { status: 'suggested' | 'possible' | 'too_many_values' | null; basis: string | null }
+    /** ground: the one ground this column covers when ticked, by the server's name and value checks. */
+    attribute: { status: 'suggested' | 'possible' | 'too_many_values' | null; basis: string | null; ground: string | null }
   }>
   suggested: { outcome: string | null; prediction: string | null; score: string | null; attributes: string[] }
   /** SHA-256 of the uploaded bytes; a confirmed run sends it back so the server can refuse a changed file. */
@@ -227,6 +228,8 @@ export interface FairnessRunResult {
       small_groups: string[]
     }>
   }
+  /** What the server recorded as confirmed; notTested is the grounds no confirmed attribute covers. */
+  confirmation: { confirmed: boolean; by: string | null; at: string | null; attributes: string[]; notTested: string[] } | null
   gate: ReleaseGate
 }
 
@@ -321,9 +324,12 @@ export interface ClauseMap {
   frameworks: ClauseMapFramework[]
   /** True when the map is limited to the frameworks confirmed for this system. */
   scoped?: boolean
+  /** The confirmed frameworks, including any with no clause mapped to a gate check. */
+  confirmed?: Array<{ key: string; name: string }>
 }
 
-export type AttestableCheck = 'data_governance' | 'human_oversight' | 'monitoring' | 'environmental'
+/** Environmental is not attested from the UI: an attestation would shadow any later assessment. */
+export type AttestableCheck = 'data_governance' | 'human_oversight' | 'monitoring'
 
 export interface SystemFile {
   system: SystemRecord | null

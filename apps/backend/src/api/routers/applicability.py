@@ -67,6 +67,10 @@ class ApplicabilityConfirmRequest(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=2000)
 
 
+class ApplicabilityAcceptRequest(BaseModel):
+    evidenceId: str = Field(min_length=1, max_length=64)  # the record the person reviewed
+
+
 def _locked_system(db: Session, system_id: str) -> tuple:
     """risk_tier and metadata, row-locked until the commit so the metadata merge cannot lose a concurrent write."""
     row = db.execute(
@@ -139,6 +143,7 @@ async def confirm_applicability(
 @router.post("/systems/{system_id}/applicability/accept-override")
 async def accept_applicability_override(
     system_id: str,
+    body: ApplicabilityAcceptRequest,
     http: Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -157,6 +162,9 @@ async def accept_applicability_override(
     approval = _fetch_latest_system_approval(db, system_id)
     if approval and approval["status"] == "pending":
         raise HTTPException(status_code=409, detail="An approval request is pending; decide it before accepting the lower tier")
+    # An acceptance holds only for the tier and reason the person read; a newer confirmation needs a fresh look.
+    if body.evidenceId != record.get("evidenceId"):
+        raise HTTPException(status_code=409, detail="The tier changed since you looked; review it again")
     record = {**record, "overrideAcceptedBy": actor, "overrideAcceptedAt": _utc_now_iso()}
     _save(
         db, http, actor, system_id, tier=stored_tier, metadata=metadata, record=record,

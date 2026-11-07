@@ -56,6 +56,9 @@ export function stepClass(step: GatePathStep) {
   return { ...CLASS_PILL[step.evidenceClass], detail: `counts up to ${two(step.counts)}` }
 }
 
+/** The line under a step's title; the cap is said once, in the detail, and the server's note adds what the evidence is. */
+export const stepLine = (step: GatePathStep) => `${stepClass(step).detail} · +${two(step.gain)} confidence${step.note ? ` · ${step.note}` : ''}`
+
 const RANK: Record<Verdict, number> = { no_go: 0, conditional_go: 1, go: 2 }
 
 /** The option that reaches the next verdict up (or past it), or null when nothing FairMind records today gets there. */
@@ -94,13 +97,13 @@ export function attestationNote(gate: ReleaseGate, best: GatePathOption) {
   return `Attesting ${checks} ${reach} ${two(alt.confidenceAfter)}, ${VERDICT_LABEL[alt.verdictAfter]}. Each is a named person's statement and counts ${most} at most.${blocked}`
 }
 
-/** "Tier High, suggested by rule T1, confirmed by {actor} on {date}." */
+/** "Tier High, suggested by rule T1, confirmed by {actor} on {date}"; a tier set by hand says whether it is below or above the suggestion. */
 export function tierLine(explain: GateExplain) {
   const src = explain.tierSource
   const tier = cap(explain.tier)
   if (!src) return `Tier ${tier}, not confirmed by a person.`
   const rules = src.ruleIds.length ? ` by rule${src.ruleIds.length === 1 ? '' : 's'} ${listJoin(src.ruleIds)}` : ''
-  const basis = src.suggestedTier === explain.tier ? `suggested${rules}` : `below the ${cap(src.suggestedTier)} suggested${rules}`
+  const basis = src.suggestedTier === explain.tier ? `suggested${rules}` : `${src.tierBelowSuggestion ? 'below' : 'above'} the ${cap(src.suggestedTier)} suggested${rules}`
   return `Tier ${tier}, ${basis}, confirmed by ${src.confirmedBy} on ${day(src.confirmedAt)}.`
 }
 
@@ -198,9 +201,7 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
                         <div className="text-[13px] font-semibold">{stepTitle(step, gate)}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
                           <Pill tone={cls.tone}>{cls.label}</Pill>
-                          <span className="text-[12px] text-[var(--fm-ink2)]">
-                            {cls.detail} · +{two(step.gain)} confidence{step.note ? ` · ${step.note}` : ''}
-                          </span>
+                          <span className="text-[12px] text-[var(--fm-ink2)]">{stepLine(step)}</span>
                         </div>
                       </div>
                       <div className="col-start-2 sm:col-start-auto">

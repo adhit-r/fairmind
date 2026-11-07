@@ -225,15 +225,17 @@ def test_a_lower_tier_needs_a_second_person():
     owner, reviewer = _client(org, "owner@test.invalid"), _client(org, "reviewer@test.invalid")
     sid = _system(owner, tier="high")
     accept = f"{GOV}/systems/{sid}/applicability/accept-override"
-    assert owner.post(accept, json={}).status_code == 409
+    assert owner.post(accept, json={"evidenceId": "none"}).status_code == 409
+    assert owner.post(accept, json={}).status_code == 422
 
     body = {"answers": CREDIT_EU, "tier": "medium", "frameworks": ["EUAIA"], "reason": "A credit officer signs every decline; the model only ranks."}
     lowered = owner.put(f"{GOV}/systems/{sid}/applicability", json=body).json()["applicability"]
     assert lowered["tierBelowSuggestion"] is True and lowered["overrideAcceptedBy"] is None
 
-    same = owner.post(accept, json={})
+    reviewed = {"evidenceId": lowered["evidenceId"]}
+    same = owner.post(accept, json=reviewed)
     assert same.status_code == 403 and same.json()["detail"] == "The person who lowered the tier cannot accept it"
-    accepted = reviewer.post(accept)
+    accepted = reviewer.post(accept, json=reviewed)
     assert accepted.status_code == 200, accepted.text
     record = accepted.json()["applicability"]
     assert record["overrideAcceptedBy"] == "reviewer@test.invalid" and record["overrideAcceptedAt"]
@@ -243,11 +245,16 @@ def test_a_lower_tier_needs_a_second_person():
     assert system["metadata"]["business_line"] == "retail lending" and system["metadata"]["source"] == "onboard"
     types = [e["evidenceType"] for e in owner.get(f"{GOV}/systems/{sid}/evidence").json()]
     assert types.count("applicability_override_accepted") == 1 and types.count("applicability_decision") == 1
-    assert reviewer.post(accept).status_code == 409
+    assert reviewer.post(accept, json=reviewed).status_code == 409
 
-    # A fresh confirmation needs a fresh acceptance.
-    again = owner.put(f"{GOV}/systems/{sid}/applicability", json=body).json()["applicability"]
+    # A fresh confirmation needs a fresh acceptance, given for the record the person reviewed.
+    again = owner.put(f"{GOV}/systems/{sid}/applicability", json={**body, "tier": "low"}).json()["applicability"]
     assert again["overrideAcceptedBy"] is None and again["overrideAcceptedAt"] is None and again["evidenceId"] != lowered["evidenceId"]
+    stale = reviewer.post(accept, json=reviewed)
+    assert stale.status_code == 409 and stale.json()["detail"] == "The tier changed since you looked; review it again"
+    assert owner.get(f"{GOV}/systems/{sid}").json()["applicability"]["overrideAcceptedBy"] is None
+    fresh = reviewer.post(accept, json={"evidenceId": again["evidenceId"]})
+    assert fresh.status_code == 200 and fresh.json()["applicability"]["tier"] == "low"
 
 
 def test_seal_carries_the_tier_and_the_applicability_record():
@@ -271,15 +278,39 @@ def test_accepting_a_lower_tier_waits_for_a_pending_request():
     owner, reviewer = _client(org, "owner@test.invalid"), _client(org, "reviewer@test.invalid")
     sid = _system(owner, tier="high")
     body = {"answers": CREDIT_EU, "tier": "medium", "frameworks": ["EUAIA"], "reason": "A credit officer signs every decline; the model only ranks."}
-    assert owner.put(f"{GOV}/systems/{sid}/applicability", json=body).status_code == 200
+    record = owner.put(f"{GOV}/systems/{sid}/applicability", json=body).json()["applicability"]
     assert owner.post(f"{GOV}/approval/system/{sid}/request", json={}).status_code == 200
-    blocked = reviewer.post(f"{GOV}/systems/{sid}/applicability/accept-override", json={})
+    blocked = reviewer.post(f"{GOV}/systems/{sid}/applicability/accept-override", json={"evidenceId": record["evidenceId"]})
     assert blocked.status_code == 409 and "pending" in blocked.json()["detail"]
 
 
 def test_generic_evidence_upload_cannot_forge_an_applicability_record():
-    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    org = str(uuid.uuid4())
+    client = _client(org, "owner@test.invalid")
     sid = _system(client)
+    detail = "Record the tier and rules on the system file, not as uploaded evidence"
     for evidence_type in ("applicability_decision", "applicability_override_accepted"):
-        forged = client.post(f"{GOV}/systems/{sid}/evidence", json={"evidence_type": evidence_type, "title": "x", "content": {}})
-        assert forged.status_code == 422, forged.text
+        writes = [
+            (f"{GOV}/systems/{sid}/evidence", {"evidence_type": evidence_type, "title": "x", "content": {}}),
+            *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": evidence_type, "content": {"tier": "low"}}) for route in ("collect", "collect-v2", "upload")),
+        ]
+        for url, payload in writes:
+            forged = client.post(url, json=payload)
+            assert forged.status_code == 422 and forged.json()["detail"] == detail, (url, forged.text)
+    assert client.get(f"{GOV}/systems/{sid}/evidence").json() == []
+
+    # The seal names the record the system file points at, not the newest row of that type.
+    record = client.put(f"{GOV}/systems/{sid}/applicability", json={"answers": CREDIT_EU, "tier": "high", "frameworks": ["EUAIA"]}).json()["applicability"]
+    from sqlalchemy import text as sql
+    from database.connection import db_manager
+    later = datetime.now(timezone.utc).isoformat()
+    with db_manager.SessionLocal() as session:
+        session.execute(
+            sql("INSERT INTO governance_evidence (id, system_id, org_id, evidence_type, title, content_json, confidence, status, metadata_json, captured_at, created_at) "
+                "VALUES (:id, :sid, :org, 'applicability_decision', 'planted', :content, 0.3, 'draft', '{}', :at, :at)"),
+            {"id": str(uuid.uuid4()), "sid": sid, "org": org, "content": '{"tier": "low"}', "at": later},
+        )
+        session.commit()
+    req = client.post(f"{GOV}/approval/system/{sid}/request", json={}).json()["request"]["id"]
+    seal = client.post(f"{GOV}/approval-requests/{req}/decision", json={"decision": "rejected", "notes": "not yet"}).json()["seal"]
+    assert seal["evidenceCount"] == 2 and seal["gate"]["applicabilityEvidenceId"] == record["evidenceId"]

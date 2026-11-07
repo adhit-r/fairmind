@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
 
-import { EMPTY_ANSWERS, draftOf, shortFrameworkName, tierBasis, type ApplicabilityRecord, type ApplicabilitySuggestion } from './useApplicability'
+import { apiClient } from '../api-client'
+import { EMPTY_ANSWERS, acceptOverride, draftOf, shortFrameworkName, tierBasis, type ApplicabilityRecord, type ApplicabilitySuggestion } from './useApplicability'
 
 const answered = { ...EMPTY_ANSWERS, use: 'credit', decidesAboutPeople: true, markets: ['IN' as const] }
 
@@ -58,7 +59,38 @@ test('not ready while a suggestion is loading or after it failed', () => {
   const failed = draftOf({ ...keep, answers: answered, tier: 'high' }, suggestion, { loading: false, failed: true })
   assert.equal(failed.ready, false)
   assert.equal(failed.failed, true)
-  assert.notEqual(failed.body, null)
+})
+
+test('after a failed suggest nothing is sent, so no tier or framework comes from a stale or missing suggestion', () => {
+  const failed = { loading: false, failed: true }
+  // The last good suggestion is still in hand; the person changed an answer and that request failed.
+  const stale = draftOf({ answers: answered, tier: 'medium', removed: [], added: ['EUAIA'], reason: 'reviewed by the credit committee' }, suggestion, failed)
+  assert.equal(stale.body, null)
+  assert.equal(stale.needsReason, false)
+  // No suggestion ever loaded, answers prefilled from the record: still nothing to send.
+  assert.equal(draftOf({ ...keep, answers: answered, tier: 'high' }, null, failed).body, null)
+})
+
+test('accepting a lower tier names the record the person is looking at', async () => {
+  const post = mock.method(apiClient, 'post', async () => ({ success: true, data: { applicability: {}, gate: {} } }))
+  try {
+    await acceptOverride('sys-1', 'ev-42')
+    const [url, body] = post.mock.calls[0].arguments as unknown as [string, unknown]
+    assert.match(url, /\/systems\/sys-1\/applicability\/accept-override$/)
+    assert.deepEqual(body, { evidenceId: 'ev-42' })
+  } finally {
+    post.mock.restore()
+  }
+})
+
+test('a 409 from accepting a lower tier surfaces the server message', async () => {
+  const message = 'The tier changed since you looked; review it again'
+  const post = mock.method(apiClient, 'post', async () => ({ success: false, error: message }))
+  try {
+    await assert.rejects(acceptOverride('sys-1', 'ev-old'), { message })
+  } finally {
+    post.mock.restore()
+  }
 })
 
 test('tier basis names the fired rules, or the reason when set by hand', () => {

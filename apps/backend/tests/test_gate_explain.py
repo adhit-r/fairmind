@@ -117,7 +117,8 @@ def test_a_lowered_tier_gates_on_the_suggestion_until_another_person_accepts_it(
     fresh = gate()
     assert "Risk tier low was not confirmed by a person" in fresh["reasons"] and fresh["explain"]["tierSource"] is None
     assert fresh["path"]["target"] == "conditional_go" and fresh["path"]["approvalBlockers"][1] == {"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": False}
-    assert client.get(f"/api/v1/ai-governance/systems/{sid}/clause-map").json()["scoped"] is False
+    unscoped = client.get(f"/api/v1/ai-governance/systems/{sid}/clause-map").json()
+    assert unscoped["scoped"] is False and unscoped["confirmed"] == []
 
     assert client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "human_oversight", "statement": "A reviewer reads every flagged case before it is actioned."}).status_code == 200
     lowered = {"suggestedTier": "medium", "tier": "low", "tierBelowSuggestion": True, "overrideAcceptedBy": None, "confirmedBy": "owner", "confirmedAt": "2026-11-07T00:00:00Z", "reason": "Only ranks internal tickets.", "tierRules": [{"id": "T3"}], "frameworks": [{"key": "RBIFREEAI", "name": "RBI FREE-AI"}]}
@@ -127,6 +128,7 @@ def test_a_lowered_tier_gates_on_the_suggestion_until_another_person_accepts_it(
     assert "Risk tier low is below the suggested medium; the gate uses medium until another person accepts the change" in held["reasons"]
     scoped = client.get(f"/api/v1/ai-governance/systems/{sid}/clause-map").json()
     assert scoped["scoped"] is True and [f["key"] for f in scoped["frameworks"]] == ["RBIFREEAI"]
+    assert scoped["confirmed"] == [{"key": "RBIFREEAI", "name": "RBI FREE-AI"}]
 
     req = client.post(f"/api/v1/ai-governance/approval/system/{sid}/request", json={}).json()["request"]
     url = f"/api/v1/ai-governance/approval-requests/{req['id']}/decision"
@@ -139,3 +141,29 @@ def test_a_lowered_tier_gates_on_the_suggestion_until_another_person_accepts_it(
     # The approval route now passes the gate on the low tier and stops at the next check: no environmental assessment.
     past_gate = client.post(url, json={"decision": "approved", "notes": "Re-test fairness in 30 days"})
     assert past_gate.status_code == 409 and "environmentalGate" in past_gate.json()["detail"]
+
+    # A confirmed framework with no crosswalk to the gate checks is still named, with no clauses.
+    _set_applicability(sid, {**lowered, "frameworks": [{"key": "ATLAS", "name": "MITRE ATLAS"}]})
+    unmapped = client.get(f"/api/v1/ai-governance/systems/{sid}/clause-map").json()
+    assert unmapped["scoped"] is True and unmapped["frameworks"] == [] and unmapped["confirmed"] == [{"key": "ATLAS", "name": "MITRE ATLAS"}]
+
+
+def test_a_failing_warning_rule_keeps_the_path_from_promising_go(monkeypatch):
+    from src.application.services.fairness_run_service import ACTION_NOTES
+    from src.application.services.policy_service import PolicyService
+
+    assert ACTION_NOTES["evidence_upload"] == "an uploaded document"  # the step's counts already shows the cap
+    client = TestClient(app, client=(f"warn-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Warn ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Triage", "owner": "owner", "risk_tier": "low", "lifecycle_stage": "govern"}).json()["id"]
+    assert client.post(f"/api/v1/ai-governance/systems/{sid}/attestations", json={"check": "human_oversight", "statement": "A reviewer reads every flagged case before it is actioned."}).status_code == 200
+    gate = lambda: client.get(f"/api/v1/ai-governance/systems/{sid}/gate").json()  # noqa: E731
+    clean = gate()
+    assert clean["verdict"] == "conditional_go" and clean["path"]["target"] == "go" and clean["path"]["options"][0]["verdictAfter"] == "go"
+
+    monkeypatch.setattr(PolicyService, "release_check", lambda self, org_id, system_id: {"blocking": [], "warnings": [{"ruleTitle": "Bias review", "policyName": "Lending policy"}]})
+    warned = gate()
+    assert warned["verdict"] == "conditional_go" and warned["path"]["target"] == "go"
+    assert warned["path"]["options"] and all(o["verdictAfter"] == "conditional_go" for o in warned["path"]["options"])
+    assert warned["path"]["ceiling"]["verdict"] == "conditional_go"
+    assert "A failing warning-level policy rule keeps the verdict at conditional go until the rule passes; evidence steps do not change that." in warned["path"]["notes"]

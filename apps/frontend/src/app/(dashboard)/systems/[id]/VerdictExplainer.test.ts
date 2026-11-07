@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { GatePathStep, ReleaseGate } from '@/lib/api/hooks/useSystemFile'
-import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, pathSummary, stepClass, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
+import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
 
 const step = (check: GatePathStep['check'], action: GatePathStep['action'], evidenceClass: GatePathStep['evidenceClass'], counts: number, gain: number): GatePathStep => ({ check, action, evidenceClass, counts, gain, note: null })
 
@@ -114,6 +114,12 @@ test('every step says what kind of evidence it is; an attestation is a named sta
   assert.deepEqual(stepClass(attest), { label: 'Attestation', tone: 'warn', detail: "a named person's statement, counts 0.30 at most" })
 })
 
+test('an upload step says its cap once; the server note only says what the evidence is', () => {
+  const upload = { ...step('data_governance', 'evidence_upload', 'manual', 0.4, 0.08), note: 'an uploaded document' }
+  assert.equal(stepLine(upload), 'counts up to 0.40 · +0.08 confidence · an uploaded document')
+  assert.equal(stepLine(step('environmental', 'environmental_assessment', 'tool_estimated', 0.85, 0.17)), 'counts up to 0.85 · +0.17 confidence')
+})
+
 test('no path summary when the tier is already at its best verdict', () => {
   assert.equal(pathSummary({ ...medium, path: { ...medium.path!, target: null } }), null)
 })
@@ -130,4 +136,10 @@ test('a lowered tier waits for a second person, then says who accepted it', () =
   assert.deepEqual(tierOverride(lowered), { pending: true, text: 'Tier set below the suggested High. The gate uses High until another person accepts the lower tier.' })
   assert.equal(tierOverride({ ...lowered, tierSource: { ...src, overrideAcceptedBy: 'reviewer-2' } })?.pending, false)
   assert.equal(tierOverride(medium.explain), null)
+})
+
+test('a tier raised above the suggestion says above, never below', () => {
+  const raised = { ...medium.explain!, tier: 'high', tierSource: { ...medium.explain!.tierSource!, suggestedTier: 'medium' as const, tierBelowSuggestion: false } }
+  assert.equal(tierLine(raised), 'Tier High, above the Medium suggested by rule T3, confirmed by reviewer-1 on 7 Nov 2026.')
+  assert.equal(tierOverride(raised), null)
 })

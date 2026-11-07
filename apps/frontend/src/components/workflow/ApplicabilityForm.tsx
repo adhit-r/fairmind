@@ -17,7 +17,7 @@ import {
   type Market,
   type Tier,
 } from '@/lib/api/hooks/useApplicability'
-import { LABEL, MUTED, Pill, cap } from '@/components/packs/parts'
+import { BTN, BTN_P, LABEL, MUTED, Pill, cap } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 const field =
@@ -54,7 +54,9 @@ function Question({ legend, children }: { legend: string; children: ReactNode })
 /**
  * "What you're shipping": answers that FairMind's fixed rules turn into a suggested tier and frameworks,
  * which the person confirms or changes with a reason. Used on /onboard (embedded, reported through
- * onChange) and inline on the system file (with its own Confirm button).
+ * onChange) and inline on the system file (with its own Confirm button). While the latest suggestion failed,
+ * nothing can be confirmed here; /onboard registers the system and leaves the tier for the system file.
+ * `autoFocus` moves focus to the first question once it can be answered.
  */
 export function ApplicabilityForm({
   record = null,
@@ -63,6 +65,7 @@ export function ApplicabilityForm({
   onSubmit,
   onCancel,
   onChange,
+  autoFocus = false,
 }: {
   record?: ApplicabilityRecord | null
   /** The stored tier, used when suggestions cannot be loaded. */
@@ -71,6 +74,7 @@ export function ApplicabilityForm({
   onSubmit?: (body: ApplicabilityConfirmBody) => Promise<void>
   onCancel?: () => void
   onChange?: (draft: ApplicabilityDraft) => void
+  autoFocus?: boolean
 }) {
   const ids = useId()
   const journeys = useJourneys()
@@ -85,7 +89,11 @@ export function ApplicabilityForm({
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Bumped by "Try again" to ask for the same answers' suggestion once more.
+  const [attempt, setAttempt] = useState(0)
   const seq = useRef(0)
+  const firstField = useRef<HTMLSelectElement>(null)
+  const focusPending = useRef(autoFocus)
 
   // Answers are discrete clicks, so no debounce; the counter drops responses to earlier answers.
   useEffect(() => {
@@ -99,10 +107,19 @@ export function ApplicabilityForm({
       })
       .catch((e: unknown) => n === seq.current && setFailed(e instanceof Error ? e.message : 'Request failed'))
       .finally(() => n === seq.current && setLoading(false))
-  }, [answers])
+  }, [answers, attempt])
 
+  // The use select is disabled until suggestions arrive, so focus waits for them.
+  useEffect(() => {
+    if (!focusPending.current || !suggestion) return
+    focusPending.current = false
+    firstField.current?.focus()
+  }, [suggestion])
+
+  // The tier the rules suggest now; null while suggestions are unavailable or the first two questions are open.
+  const suggestedTier = failed ? null : suggestion?.tier ?? null
   const fallback = isTier(record?.tier) ? record.tier : isTier(currentTier) ? currentTier : 'medium'
-  const tier = tierChoice ?? suggestion?.tier ?? fallback
+  const tier = tierChoice ?? suggestedTier ?? fallback
   const full = useMemo(() => ({ ...answers, intendedPurpose: purpose.trim() ? purpose : null }), [answers, purpose])
   const draft = useMemo(
     () => draftOf({ answers: full, tier, removed, added, reason }, suggestion, { loading, failed: failed !== null }),
@@ -126,9 +143,7 @@ export function ApplicabilityForm({
   }
   const nameOf = (key: string) => journeys.data?.find((j) => j.key === key)?.name ?? record?.frameworks.find((f) => f.key === key)?.name ?? key
 
-  // The tier the rules suggest now; null while suggestions are unavailable or the first two questions are open.
-  const suggestedTier = failed ? null : suggestion?.tier ?? null
-  const canConfirm = !busy && (draft.ready || (draft.failed && draft.body !== null))
+  const canConfirm = !busy && draft.ready
 
   async function submit() {
     if (!onSubmit || !draft.body) return
@@ -145,6 +160,7 @@ export function ApplicabilityForm({
       <div>
         <label className={label} htmlFor={`${ids}-use`}>What does it decide or do?</label>
         <select
+          ref={firstField}
           id={`${ids}-use`}
           value={answers.use ?? ''}
           onChange={(e) => set({ use: e.target.value || null })}
@@ -203,9 +219,15 @@ export function ApplicabilityForm({
       </div>
 
       {failed ? (
-        <p role="alert" className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">
-          Could not load suggestions: {failed}.{onSubmit ? '' : ' You can still register; confirm the tier and rules on the system file.'}
-        </p>
+        <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">
+          <span className="min-w-0 flex-1">
+            Could not load suggestions: {failed}.
+            {onSubmit ? ' The tier and rules can be confirmed once they load.' : ' You can still register; confirm the tier and rules on the system file.'}
+          </span>
+          <button type="button" onClick={() => setAttempt((a) => a + 1)} disabled={loading} className={BTN}>
+            {loading ? 'Trying' : 'Try again'}
+          </button>
+        </div>
       ) : (
         <div className="grid gap-3.5 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
           <div className="flex items-center gap-2">
@@ -302,6 +324,7 @@ export function ApplicabilityForm({
               const t = e.target.value as Tier
               setTierChoice(t === suggestedTier ? null : t)
             }}
+            disabled={!!failed && !!onSubmit}
             className={cn(field, 'mt-1')}
           >
             {TIERS.map((t) => (
@@ -316,7 +339,7 @@ export function ApplicabilityForm({
         )}
       </div>
 
-      {(draft.needsReason || (draft.failed && draft.body)) && (
+      {draft.needsReason && (
         <div>
           <label className={label} htmlFor={`${ids}-reason`}>Why you are changing the suggestion</label>
           <textarea
@@ -324,8 +347,8 @@ export function ApplicabilityForm({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
-            required={draft.needsReason}
-            minLength={draft.needsReason ? MIN_REASON : undefined}
+            required
+            minLength={MIN_REASON}
             className="mt-1 w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 py-2.5 text-[14px] outline-none focus:border-[var(--fm-ink)]"
           />
           <p className="mt-1 text-[12px] text-[var(--fm-ink3)]">Recorded with your name and sealed with the release decision. {MIN_REASON} characters or more.</p>
@@ -334,16 +357,11 @@ export function ApplicabilityForm({
 
       {onSubmit && (
         <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={!canConfirm}
-            onClick={() => void submit()}
-            className="h-8 rounded-full bg-[var(--fm-ink)] px-3.5 text-[12.5px] font-semibold text-white disabled:opacity-60"
-          >
+          <button type="button" disabled={!canConfirm} onClick={() => void submit()} className={BTN_P}>
             {busy ? 'Saving' : submitLabel}
           </button>
           {onCancel && (
-            <button type="button" onClick={onCancel} className="h-8 rounded-full border border-[var(--fm-line)] px-3 text-[12.5px] text-[var(--fm-ink2)]">Cancel</button>
+            <button type="button" onClick={onCancel} className={BTN}>Cancel</button>
           )}
         </div>
       )}

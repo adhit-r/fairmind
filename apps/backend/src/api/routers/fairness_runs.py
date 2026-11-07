@@ -95,6 +95,7 @@ def _environmental_assessed(db: Session, system_id: str) -> bool:
 DEFAULT_CADENCE_HOURS = 168
 DEFAULT_DRIFT_WINDOW = 3
 WATCH_SOURCE = "fairmind.watch"
+RUN_SOURCE = "fairmind.fairness_library"  # the source this router stamps on a fairness run
 
 
 def _monitoring_policy(db: Session, system_id: str) -> Dict[str, Any]:
@@ -174,6 +175,15 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     )
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
+    if gate["policy"]["warnings"]:
+        # The path reads evidence alone; a warning caps the real verdict at conditional go, so no step promises go.
+        if gate["path"]["target"] == "go":
+            gate["path"]["notes"].append("A failing warning-level policy rule keeps the verdict at conditional go until the rule passes; evidence steps do not change that.")
+        for option in gate["path"]["options"]:
+            if option["verdictAfter"] == "go":
+                option["verdictAfter"] = "conditional_go"
+        if gate["path"]["ceiling"]["verdict"] == "go":
+            gate["path"]["ceiling"]["verdict"] = "conditional_go"
     return gate
 
 
@@ -212,8 +222,8 @@ async def inspect_fairness_csv(
 def _last_run_metadata(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
     """Metadata of the system's latest fairness run, whose attributes the next inspect reuses."""
     row = db.execute(
-        text("SELECT metadata_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'fairness_test' AND source = 'fairmind.fairness_library' ORDER BY created_at DESC LIMIT 1"),
-        {"id": system_id},
+        text("SELECT metadata_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'fairness_test' AND source = :source ORDER BY created_at DESC LIMIT 1"),
+        {"id": system_id, "source": RUN_SOURCE},
     ).fetchone()
     return json.loads(row[0] or "{}") if row else None
 
@@ -291,7 +301,7 @@ async def create_fairness_run(
             "org_id": _caller_org(http),
             "evidence_type": "fairness_test",
             "title": title,
-            "source": "fairmind.fairness_library",
+            "source": RUN_SOURCE,
             "content_json": json.dumps(result),
             "confidence": result["evidence_confidence"],
             "status": "collected",
@@ -323,7 +333,7 @@ async def list_fairness_runs(
     _require_system_access(db, system_id, current_user)
     rows = db.execute(
         text(
-            "SELECT id, title, content_json, confidence, metadata_json, created_at FROM governance_evidence "
+            "SELECT id, title, content_json, confidence, metadata_json, created_at, source FROM governance_evidence "
             "WHERE system_id = :id AND evidence_type = 'fairness_test' ORDER BY created_at DESC LIMIT 20"
         ),
         {"id": system_id},
@@ -342,7 +352,8 @@ async def list_fairness_runs(
                     for a in content.get("attributes", [])
                 ],
                 "confidence": row[3],
-                "confirmation": _confirmation_summary(json.loads(row[4] or "{}").get("attribute_confirmation")),
+                # Only this router writes a confirmation; generic evidence routes store client metadata verbatim.
+                "confirmation": _confirmation_summary(json.loads(row[4] or "{}").get("attribute_confirmation")) if row[6] == RUN_SOURCE else None,
                 "createdAt": row[5],
             }
         )
@@ -363,10 +374,13 @@ async def get_clause_map(
     _require_system_access(db, system_id, current_user)
     system = _system_row(db, system_id)
     applicability, _ = _system_applicability(db, system_id)
-    keys = [f["key"] for f in (applicability or {}).get("frameworks") or [] if isinstance(f, dict) and f.get("key")]
+    confirmed = [{"key": f["key"], "name": f.get("name") or f["key"]} for f in (applicability or {}).get("frameworks") or [] if isinstance(f, dict) and f.get("key")]
+    keys = [f["key"] for f in confirmed]
     payload = clause_map(_gate_payload(db, system_id, system.risk_tier), frameworks=keys or None)
     payload["systemId"] = system_id
     payload["scoped"] = bool(keys)
+    # Every confirmed framework, including those with no crosswalk to the gate checks (absent from ``frameworks``).
+    payload["confirmed"] = confirmed
     return payload
 
 

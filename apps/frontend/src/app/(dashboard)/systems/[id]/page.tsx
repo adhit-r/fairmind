@@ -32,7 +32,8 @@ const JOURNEY: Array<{ key: JourneyKey; label: string; purpose: string }> = [
   { key: 'operate', label: 'Operate', purpose: 'The system runs, is watched, and its audit record stays current.' },
 ]
 
-const ATTESTABLE = new Set(['data_governance', 'human_oversight', 'monitoring', 'environmental'])
+// Environmental is left out: an attestation would shadow any later assessment, which the path recommends instead.
+const ATTESTABLE = new Set<string>(['data_governance', 'human_oversight', 'monitoring'])
 const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key)
 
 const CHECK_NAMES: Record<string, string> = { disparate_impact: 'impact ratio', equal_opportunity: 'equal opportunity', equalized_odds: 'equalized odds', calibration: 'calibration' }
@@ -76,13 +77,13 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function Action({ children, onClick, href, primary = true, disabled }: { children: ReactNode; onClick?: () => void; href?: string; primary?: boolean; disabled?: boolean }) {
+function Action({ children, onClick, href, primary = true, disabled, expanded }: { children: ReactNode; onClick?: () => void; href?: string; primary?: boolean; disabled?: boolean; expanded?: boolean }) {
   const cls = cn(
     'inline-flex h-9 items-center rounded-full px-4 text-[12.5px] font-semibold disabled:opacity-60',
     primary ? 'bg-[var(--fm-ink)] text-white' : 'border border-[var(--fm-line)] bg-white font-medium text-[var(--fm-ink2)] hover:border-[var(--fm-ink)] hover:text-[var(--fm-ink)]',
   )
   if (href && !onClick) return <Link href={href} className={cls}>{children}</Link>
-  return <button type="button" onClick={onClick} disabled={disabled} className={cls}>{children}</button>
+  return <button type="button" onClick={onClick} disabled={disabled} aria-expanded={expanded} className={cls}>{children}</button>
 }
 
 function Stage({ step, status, children, actions }: { step: (typeof JOURNEY)[number]; status: StageStatus; children: ReactNode; actions: ReactNode }) {
@@ -211,6 +212,8 @@ export default function SystemFilePage() {
                         <span className="mt-0.5 inline-block"><Pill tone="you">Not confirmed</Pill></span>
                       ) : applicability.tierBelowSuggestion ? (
                         <span className="text-[#a14d00]">Below the suggested {cap(applicability.suggestedTier)}</span>
+                      ) : applicability.tier !== applicability.suggestedTier ? (
+                        `Above the suggested ${cap(applicability.suggestedTier)}, confirmed by ${applicability.confirmedBy} on ${when(applicability.confirmedAt)}`
                       ) : (
                         `Suggested ${cap(applicability.suggestedTier)}, confirmed by ${applicability.confirmedBy} on ${when(applicability.confirmedAt)}`
                       )}
@@ -247,19 +250,26 @@ export default function SystemFilePage() {
 
       <Stage step={JOURNEY[0]} status={statusOf('onboard')} actions={applicability ? <>
         <Action href="#first-verdict">Run the first fairness test</Action>
-        <Action onClick={() => setConfirmingTier(!confirmingTier)} primary={false}>Change tier or rules</Action>
+        <Action onClick={() => setConfirmingTier(!confirmingTier)} expanded={confirmingTier} primary={false}>Change tier or rules</Action>
       </> : <>
-        <Action onClick={() => setConfirmingTier(!confirmingTier)}>Confirm tier and rules</Action>
+        <Action onClick={() => setConfirmingTier(!confirmingTier)} expanded={confirmingTier}>Confirm tier and rules</Action>
         <Action href="/integrations" primary={false}>Connect sources</Action>
       </>}>
         <Fact label="Registered" value={when(s?.createdAt) || ''} />
         <Fact label="Rules it answers to" value={<span className="whitespace-normal">{applicability?.frameworks.length ? applicability.frameworks.map((f) => shortFrameworkName(f.name)).join(', ') : 'Not chosen'}</span>} />
         <Fact label="Tier basis" value={<span className="whitespace-normal">{tierBasis(applicability)}</span>} />
-        <Fact label="Record" value={s?.owner && line ? 'Owner and business line set' : 'Owner or business line missing'} />
-        {awaitingSecond && (
+        <Fact
+          label="Record"
+          value={
+            <span className="whitespace-normal">
+              {applicability ? `Applicability decision saved as evidence, rules version ${applicability.rulesVersion}` : s?.owner && line ? 'Owner and business line set' : 'Owner or business line missing'}
+            </span>
+          }
+        />
+        {awaitingSecond && applicability && (
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2 xl:col-span-3">
             <span className="text-[12.5px] text-[#a14d00]">Lowered tier awaits a second person</span>
-            <Action onClick={() => act('accept', async () => { await acceptOverride(id); await refresh() })} disabled={busy !== null} primary={false}>
+            <Action onClick={() => act('accept', async () => { await acceptOverride(id, applicability.evidenceId); await refresh() })} disabled={busy !== null} primary={false}>
               {busy === 'accept' ? 'Accepting' : 'Accept the lower tier'}
             </Action>
           </div>
@@ -267,6 +277,7 @@ export default function SystemFilePage() {
         {confirmingTier && s && (
           <div className="rounded-[12px] border border-[var(--fm-line)] p-4 sm:col-span-2 xl:col-span-3">
             <ApplicabilityForm
+              autoFocus
               record={applicability}
               currentTier={s.riskTier}
               submitLabel="Confirm"
@@ -387,6 +398,7 @@ export default function SystemFilePage() {
             </ul>
             {attesting && (
               <AttestForm
+                key={attesting}
                 check={attesting}
                 onCancel={() => setAttesting(null)}
                 onSubmit={async (statement, reference) => {

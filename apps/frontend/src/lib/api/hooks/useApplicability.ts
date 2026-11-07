@@ -90,7 +90,7 @@ export interface ApplicabilityResult {
 
 /** What the form would send, and whether it may be sent yet. */
 export interface ApplicabilityDraft {
-  /** Null until use and decidesAboutPeople are answered. */
+  /** Null until use and decidesAboutPeople are answered, and while the latest suggestion failed to load. */
   body: ApplicabilityConfirmBody | null
   tier: Tier
   frameworks: string[]
@@ -103,7 +103,10 @@ export interface ApplicabilityDraft {
 
 export const MIN_REASON = 12
 
-/** Builds the confirmation from the person's choices; the server recomputes the suggestion and has the last word. */
+/**
+ * Builds the confirmation from the person's choices; the server recomputes the suggestion and has the last word.
+ * While the latest suggestion failed there is no body: frameworks from an older suggestion, or none, are never sent.
+ */
 export function draftOf(
   choice: { answers: ApplicabilityAnswers; tier: Tier; removed: string[]; added: string[]; reason: string },
   suggestion: ApplicabilitySuggestion | null,
@@ -111,12 +114,12 @@ export function draftOf(
 ): ApplicabilityDraft {
   const suggested = (suggestion?.frameworks ?? []).filter((f) => f.available).map((f) => f.key)
   const frameworks = [...new Set([...suggested.filter((k) => !choice.removed.includes(k)), ...choice.added])]
-  const needsReason = !!suggestion?.tier && (choice.tier !== suggestion.tier || suggested.some((k) => choice.removed.includes(k)))
+  const needsReason = !state.failed && !!suggestion?.tier && (choice.tier !== suggestion.tier || suggested.some((k) => choice.removed.includes(k)))
   const reason = choice.reason.trim()
-  // Only send a reason the person can see: the textarea shows when one is needed or suggestions failed.
-  const sent = needsReason || state.failed ? reason : ''
+  // Only send a reason the person can see: the textarea shows only when one is needed.
+  const sent = needsReason ? reason : ''
   const answered = !!choice.answers.use && choice.answers.decidesAboutPeople !== null
-  const body = answered ? { answers: choice.answers, tier: choice.tier, frameworks, ...(sent ? { reason: sent } : {}) } : null
+  const body = answered && !state.failed ? { answers: choice.answers, tier: choice.tier, frameworks, ...(sent ? { reason: sent } : {}) } : null
   const ready = !!body && !state.loading && !state.failed && !!suggestion?.tier && (!needsReason || reason.length >= MIN_REASON)
   return { body, tier: choice.tier, frameworks, needsReason, ready, failed: state.failed }
 }
@@ -147,8 +150,9 @@ export async function confirmApplicability(systemId: string, body: Applicability
   return res.data
 }
 
-export async function acceptOverride(systemId: string) {
-  const res = await apiClient.post<ApplicabilityResult>(GOV.systemApplicabilityAcceptOverride(systemId), {}, { enableRetry: false })
+/** evidenceId is the record on screen; the server refuses with 409 if the tier changed since. */
+export async function acceptOverride(systemId: string, evidenceId: string) {
+  const res = await apiClient.post<ApplicabilityResult>(GOV.systemApplicabilityAcceptOverride(systemId), { evidenceId }, { enableRetry: false })
   if (!res.success || !res.data) throw new Error(res.error || 'Could not accept the lower tier')
   return res.data
 }

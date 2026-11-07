@@ -112,6 +112,13 @@ def test_inspect_reuses_the_last_runs_attributes():
     confirmed = inspect_csv(data, {"attribute_confirmation": {"confirmed": True, "attributes": ["region"], "confirmedBy": "risk.officer", "confirmedAt": "2026-11-01T00:00:00+00:00"}})
     assert confirmed["suggested"]["attributes"] == ["region"] and confirmed["confirmedBy"] == "risk.officer" and confirmed["previousRunUnconfirmed"] is False
     assert "gender" in confirmed["uncoveredGrounds"]
+    # A last-run column a person could not tick in this file (one value, or more than 50) keeps its own assessment.
+    frame = pd.read_csv(io.BytesIO(data)).assign(region="north", branch_code=[f"B{i % 60}" for i in range(600)])
+    narrowed = inspect_csv(frame.to_csv(index=False).encode(), {"attribute_confirmation": {"confirmed": True, "attributes": ["gender", "region", "branch_code"]}})
+    attr = {c["name"]: c["attribute"] for c in narrowed["columns"]}
+    assert narrowed["suggested"]["attributes"] == ["gender"] and narrowed["attributeSource"] == "confirmed"
+    assert attr["region"]["status"] is None and "same value" in attr["region"]["basis"]
+    assert attr["branch_code"] == {"status": None, "basis": None, "ground": None}
 
 
 def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it():
@@ -170,6 +177,15 @@ def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it()
     assert client.get(f"{base}/fairness-runs").json()[0]["confirmation"] is None
     oldest = client.post(f"{base}/fairness-runs/inspect", files={"file": ("q.csv", data, "text/csv")}).json()
     assert oldest["suggested"]["attributes"] == ["gender"] and oldest["attributeSource"] == "confirmed" and oldest["previousRunUnconfirmed"] is True
+
+    # A confirmation planted through the generic evidence route is neither listed nor reused.
+    planted = {"confirmed": True, "confirmedBy": "compliance-lead@test.invalid", "confirmedAt": "2026-11-01T00:00:00+00:00", "attributes": ["region"], "uncoveredGrounds": []}
+    collected = client.post("/api/v1/ai-governance/evidence/collect", json={"system_id": sid, "type": "fairness_test", "content": {"rows": 600}, "metadata": {"attribute_confirmation": planted}})
+    assert collected.status_code == 200, collected.text
+    listed = client.get(f"{base}/fairness-runs").json()
+    assert listed[0]["evidenceId"] == collected.json()["id"] and listed[0]["confirmation"] is None
+    after = client.post(f"{base}/fairness-runs/inspect", files={"file": ("q.csv", data, "text/csv")}).json()
+    assert after["suggested"]["attributes"] == ["gender"] and after["confirmedBy"] is None and after["previousRunUnconfirmed"] is True
 
 
 def test_run_measures_every_metric_with_intervals():

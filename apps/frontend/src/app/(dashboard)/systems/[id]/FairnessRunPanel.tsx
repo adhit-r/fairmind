@@ -13,23 +13,11 @@ const MIN_REASON = 12
 
 type Column = CsvInspection['columns'][number]
 
-/**
- * Grounds FairMind looks for and the column-name hint for each, copied from the backend (fairness_run_service
- * GROUNDS and ATTRIBUTE_HINTS) so the uncovered grounds shown here are the ones the server will ask a reason for.
- */
+/** Grounds FairMind looks for, in the backend's order (fairness_run_service GROUNDS). */
 const GROUNDS = ['gender', 'age', 'caste or social category', 'religion', 'disability', 'language', 'marital status', 'region']
-const HINTS: Record<string, string | null> = {
-  gender: 'gender', sex: 'gender',
-  age: 'age', age_band: 'age', age_group: 'age', dob: 'age', date_of_birth: 'age', birth_date: 'age', birthdate: 'age',
-  caste: 'caste or social category', social_category: 'caste or social category',
-  religion: 'religion', disability: 'disability', language: 'language', marital: 'marital status',
-  region: 'region', state: 'region', district: 'region', urban_rural: 'region', city_tier: 'region',
-  race: null, ethnicity: null, nationality: null,
-}
-const GENDER_VALUES = new Set(['m', 'f', 'male', 'female', 'x', 'other', 'transgender', 'nonbinary', 'non-binary'])
-const RESERVATION_VALUES = new Set(['gen', 'general', 'obc', 'sc', 'st', 'ews'])
 // Case matters: the backend reads Yes/No but not YES/NO as binary (TRUE/FALSE arrive as booleans, sampled "True"/"False").
 const BINARY_VALUES = new Set(['0', '1', '0.0', '1.0', 'true', 'false', 'True', 'False', 'yes', 'no', 'Yes', 'No'])
+export const MIXED_ENCODING = 'The outcome and prediction columns use different values. Code both the same way (for example both 0/1) before upload.'
 
 function pct(v: number) {
   return `${Math.round(v * 100)}%`
@@ -41,40 +29,13 @@ function on(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
 }
 
-/** Lower-case words of a column name, split as the backend splits them: "applicantAgeBand" gives applicant, age, band; "DOBDate" gives dob, date. */
-export function words(name: string): string[] {
-  return (name.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+/g) ?? []).map((t) => t.toLowerCase())
-}
-
-/**
- * The one ground a column covers, by the backend's rules: values that look like reservation categories or gender
- * win, then the longest hint found as whole adjacent words of the name. A column the inspection gave no status
- * (it was mapped as outcome, prediction or score, or is no candidate) covers nothing.
- */
-export function groundOf(c: Pick<Column, 'name' | 'distinct' | 'sample' | 'attribute'>): string | null {
-  if (c.attribute.status === null) return null
-  // ponytail: only the sampled values reach the browser, so value checks need every distinct value sampled; the server checks the whole column
-  const values = c.distinct >= 2 && c.sample.length >= c.distinct ? c.sample.map((v) => v.trim().toLowerCase()) : []
-  if (values.length && values.every((v) => RESERVATION_VALUES.has(v))) return 'caste or social category'
-  if (values.length && values.every((v) => GENDER_VALUES.has(v))) return 'gender'
-  if (c.name.trim().toLowerCase() === 'tier') return 'region'
-  const ws = words(c.name)
-  let best: [number, string] | null = null
-  for (const hint of Object.keys(HINTS)) {
-    const run = words(hint)
-    const found = ws.some((_, i) => run.every((t, j) => ws[i + j] === t))
-    if (found && (!best || run.length > best[0] || (run.length === best[0] && hint > best[1]))) best = [run.length, hint]
-  }
-  return best ? HINTS[best[1]] : null
-}
-
-/** Grounds none of the ticked columns covers. For display; the server recomputes it when the run is confirmed. */
+/** Grounds none of the ticked columns covers, from each column's server-assessed ground, as the server works it out. */
 export function uncoveredGrounds(columns: Column[], ticked: string[]): string[] {
-  const covered = new Set(columns.filter((c) => ticked.includes(c.name)).map(groundOf))
+  const covered = new Set(columns.filter((c) => ticked.includes(c.name)).map((c) => c.attribute.ground))
   return GROUNDS.filter((g) => !covered.has(g))
 }
 
-/** True when the outcome is not 0/1, true/false or yes/no, so the run must be told which value is favourable. */
+/** True when a column is not 0/1, true/false or yes/no, so the run must be told which value is favourable. */
 export function needsFavourable(sample: string[]): boolean {
   return sample.some((v) => !BINARY_VALUES.has(v))
 }
@@ -88,18 +49,33 @@ export function confirmState(inspection: CsvInspection, mapping: FairnessMapping
   const attributes = mapping.attributes.filter((a) => !mapped.has(a))
   const removed = inspection.suggested.attributes.filter((a) => !attributes.includes(a))
   const uncovered = uncoveredGrounds(inspection.columns, attributes)
-  const outcomeSample = inspection.columns.find((c) => c.name === mapping.outcome)?.sample ?? []
-  const favourable = Boolean(mapping.outcome) && needsFavourable(outcomeSample)
+  const sampleOf = (name?: string) => inspection.columns.find((c) => c.name === name)?.sample ?? []
+  const outcomeSample = sampleOf(mapping.outcome)
+  const predictionSample = mapping.prediction ? sampleOf(mapping.prediction) : null
+  // The server reads the one favourable value on both columns, so both must be coded alike.
+  // ponytail: compares the sampled values (5 at most); a text column with more values than that is blocked too
+  const outcomeText = needsFavourable(outcomeSample)
+  const predictionText = predictionSample !== null && needsFavourable(predictionSample)
+  const sameValues = predictionSample !== null && [...outcomeSample].sort().join('\n') === [...predictionSample].sort().join('\n')
+  const mixed = Boolean(mapping.outcome) && predictionSample !== null && (outcomeText !== predictionText || (outcomeText && !sameValues))
+  const favourable = Boolean(mapping.outcome) && outcomeText && !mixed
+  // Every ticked or suggested column keeps its row so it can be seen and unticked; other columns over 50 values
+  // stay hidden unless their name looks protected, then they show disabled with the bin hint.
+  const rank = (c: Column) => (inspection.suggested.attributes.includes(c.name) ? 0 : c.attribute.status === 'possible' ? 1 : c.attribute.status === 'too_many_values' ? 3 : 2)
+  const rows = inspection.columns
+    .filter((c) => !mapped.has(c.name) && (c.distinct <= 50 || c.attribute.status === 'too_many_values' || attributes.includes(c.name) || inspection.suggested.attributes.includes(c.name)))
+    .sort((a, b) => rank(a) - rank(b))
   const ready = Boolean(
     inspection.fileSha256 &&
       mapping.outcome &&
       (mapping.prediction || mapping.score) &&
       attributes.length > 0 &&
+      !mixed &&
       (!favourable || mapping.favorableLabel) &&
       (removed.length === 0 || removalReason.trim().length >= MIN_REASON) &&
       (uncovered.length === 0 || uncoveredReason.trim().length >= MIN_REASON),
   )
-  return { mapped, attributes, removed, uncovered, outcomeSample, favourable, ready }
+  return { attributes, removed, uncovered, outcomeSample, favourable, mixed, rows, ready }
 }
 
 /** "gender", "gender and age", "gender, age and region". */
@@ -142,14 +118,9 @@ export function FairnessRunPanel({
   const columns = inspection?.columns.map((c) => c.name) ?? []
   const suggested = inspection?.suggested.attributes ?? []
   const state = inspection ? confirmState(inspection, mapping, removalReason, uncoveredReason) : null
-  const { mapped, attributes, removed, uncovered, outcomeSample, favourable } = state ?? {
-    mapped: new Set<string | undefined>(), attributes: [], removed: [], uncovered: [], outcomeSample: [], favourable: false,
+  const { attributes, removed, uncovered, outcomeSample, favourable, mixed, rows } = state ?? {
+    attributes: [], removed: [], uncovered: [], outcomeSample: [], favourable: false, mixed: false, rows: [],
   }
-  const rank = (c: Column) => (suggested.includes(c.name) ? 0 : c.attribute.status === 'possible' ? 1 : c.attribute.status === 'too_many_values' ? 3 : 2)
-  // Columns over 50 values stay hidden unless their name looks protected, then they show disabled with the bin hint.
-  const rows = (inspection?.columns ?? [])
-    .filter((c) => !mapped.has(c.name) && (c.distinct <= 50 || c.attribute.status === 'too_many_values'))
-    .sort((a, b) => rank(a) - rank(b))
 
   async function pick(f: File | null) {
     setResult(null)
@@ -187,8 +158,10 @@ export function FairnessRunPanel({
       uncoveredReason: uncovered.length ? uncoveredReason.trim() : undefined,
     }
     try {
-      const out = await run(file, { ...mapping, attributes }, confirmation)
-      setNotTested(uncovered.length ? { grounds: uncovered, reason: confirmation.uncoveredReason } : null)
+      const out = await run(file, { ...mapping, attributes, favorableLabel: favourable ? mapping.favorableLabel : undefined }, confirmation)
+      // The server's record of what went untested, not this page's estimate.
+      const grounds = out.confirmation?.notTested ?? []
+      setNotTested(grounds.length ? { grounds, reason: confirmation.uncoveredReason } : null)
       setResult(out)
       onDone?.(out)
     } catch (e) {
@@ -253,7 +226,7 @@ export function FairnessRunPanel({
             </div>
             {favourable && (
               <div>
-                <label className={label} htmlFor="fr-favourable">Favourable value of {mapping.outcome}</label>
+                <label className={label} htmlFor="fr-favourable">{mapping.prediction ? 'Favourable value (used for the outcome and the prediction)' : `Favourable value of ${mapping.outcome}`}</label>
                 <select id="fr-favourable" value={mapping.favorableLabel ?? ''} onChange={(e) => setMapping((m) => ({ ...m, favorableLabel: e.target.value || undefined }))} className={field}>
                   <option value="">Choose the value that counts as favourable</option>
                   {outcomeSample.map((v) => <option key={v} value={v}>{v}</option>)}
@@ -261,6 +234,7 @@ export function FairnessRunPanel({
               </div>
             )}
           </div>
+          {mixed && <p role="alert" className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[12.5px] text-[#b4232c]">{MIXED_ENCODING}</p>}
 
           <div className="grid gap-2">
             <div className="text-[12.5px] font-semibold">Protected attributes</div>

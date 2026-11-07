@@ -183,7 +183,8 @@ def inspect_csv(data: bytes, previous: Optional[Dict[str, Any]] = None) -> Dict[
 
     confirmation = (previous or {}).get("attribute_confirmation") or {}
     earlier = confirmation.get("attributes") or ((previous or {}).get("mapping") or {}).get("attributes") or []
-    reused = [a for a in earlier if a in assessed and a not in mapped and assessed[a]["status"] != "too_many_values"]
+    # Only a column a person could tick here (2 to 50 groups); any other keeps its own assessment.
+    reused = [a for a in earlier if a in assessed and a not in mapped and 2 <= frame[a].dropna().nunique() <= MAX_ATTRIBUTE_VALUES]
     if reused:
         person = bool(confirmation.get("confirmed"))
         for c in columns:
@@ -796,11 +797,10 @@ CHECK_ACTIONS = {
     "environmental": ("environmental_assessment",),
 }
 ACTION_CLASS = {"fairness_run": "measured", "monitoring_snapshot": "measured", "environmental_assessment": "tool_estimated", "attest": "manual", "evidence_upload": "manual"}
-UPLOAD_CONFIDENCE = cap_confidence_for_provenance(1.0, "manual")  # the cap release_gate puts on an uploaded document
 ACTION_NOTES = {
     "environmental_assessment": "also required before anyone can approve",
     "monitoring_snapshot": "needs shadow or live decisions",
-    "evidence_upload": f"an uploaded document; counts {UPLOAD_CONFIDENCE:.2f} at most",
+    "evidence_upload": "an uploaded document",  # the step's counts already carries the manual cap
 }
 _CLASS_ORDER = {"measured": 0, "tool_estimated": 1, "manual": 2}
 _CHECK_ORDER = {key: i for i, (key, _, _) in enumerate(GATE_CHECKS)}

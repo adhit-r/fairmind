@@ -46,6 +46,19 @@ def chain_head(entries: List[Dict[str, Any]]) -> str:
     return head
 
 
+def _applicability_evidence_id(db: Session, system_id: str, entries: List[Dict[str, Any]]) -> Optional[str]:
+    """The decision in force is the one the system record names, never the newest row of its type;
+    it is sealed only when it is one of this system's applicability_decision rows."""
+    raw = db.execute(text("SELECT metadata_json FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+    try:
+        metadata = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        return None
+    record = metadata.get("applicability") if isinstance(metadata, dict) else None
+    evidence_id = record.get("evidenceId") if isinstance(record, dict) else None
+    return evidence_id if any(e["id"] == evidence_id and e["type"] == "applicability_decision" for e in entries) else None
+
+
 def seal_decision(db: Session, *, system_id: str, request_id: str, decision_id: str, decision: str, sealed_by: Optional[str], gate: Dict[str, Any]) -> Dict[str, Any]:
     entries = evidence_entries(db, system_id)
     gate_summary = {
@@ -55,8 +68,8 @@ def seal_decision(db: Session, *, system_id: str, request_id: str, decision_id: 
         # The tier the verdict was computed on; the stored tier when the gate carries no explanation.
         "effectiveTier": (gate.get("explain") or {}).get("effectiveTier", gate.get("riskTier")),
         "reasons": gate.get("reasons", []),
-        # The tier and frameworks decision in force: the newest applicability_decision row being sealed.
-        "applicabilityEvidenceId": next((e["id"] for e in reversed(entries) if e["type"] == "applicability_decision"), None),
+        # The tier and frameworks decision in force, as metadata.applicability names it.
+        "applicabilityEvidenceId": _applicability_evidence_id(db, system_id, entries),
     }
     row = {
         "id": str(uuid.uuid4()), "system_id": system_id, "request_id": request_id, "decision_id": decision_id, "decision": decision,

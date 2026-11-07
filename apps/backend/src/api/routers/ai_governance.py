@@ -1093,6 +1093,12 @@ def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]
 RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted"}
 
 
+def _reject_record_only_type(evidence_type: str) -> None:
+    """Only the applicability routes write these types; every generic evidence write refuses them."""
+    if evidence_type in RECORD_ONLY_EVIDENCE_TYPES:
+        raise HTTPException(status_code=422, detail="Record the tier and rules on the system file, not as uploaded evidence")
+
+
 def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
     records = [r for r in records if r.get("type") not in RECORD_ONLY_EVIDENCE_TYPES]
     if not records:
@@ -1592,8 +1598,7 @@ async def create_system_evidence(
     membership = _require_evidence_system_access(
         db, system_id, current_user, mutate=True
     )
-    if request.evidence_type in RECORD_ONLY_EVIDENCE_TYPES:
-        raise HTTPException(status_code=422, detail="Record the tier and rules on the system file, not as uploaded evidence")
+    _reject_record_only_type(request.evidence_type)
     if request.control_id:
         _require_untrusted_external_evidence_linking_enabled()
         _validate_control_link_scope(
@@ -2552,6 +2557,7 @@ async def collect_evidence_v2(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    _reject_record_only_type(request.type)
     if _requests_external_url_artifact(
         artifact_kind=request.artifact_kind,
         file_url=request.file_url,
@@ -2604,6 +2610,7 @@ async def collect_evidence(
     membership = _require_evidence_system_access(
         db, request.system_id, current_user, mutate=True
     )
+    _reject_record_only_type(request.type)
     if _requests_external_url_artifact(
         artifact_kind=request.metadata.get("artifact_kind"),
         file_url=request.metadata.get("file_url"),
