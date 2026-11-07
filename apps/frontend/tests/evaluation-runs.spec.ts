@@ -109,6 +109,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
   const evaluationRequestPaths: string[] = []
   const evaluationMutationPaths: string[] = []
   const createdPlanInputs: Array<Record<string, unknown>> = []
+  let currentSessionRequestCount = 0
 
   await page.addInitScript(() => {
     window.localStorage.setItem('access_token', 'playwright-token')
@@ -122,6 +123,7 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     const path = url.pathname.replace('/api/proxy', '')
 
     if (path === '/api/v1/auth/me') {
+      currentSessionRequestCount += 1
       return fulfillJson(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@acme.test' })
     }
     if (path === '/api/v1/organizations') {
@@ -287,11 +289,12 @@ async function mockEvaluationWorkbench(page: Page, options: MockOptions = {}) {
     getEvaluationRequestPaths: () => [...evaluationRequestPaths],
     getEvaluationMutationPaths: () => [...evaluationMutationPaths],
     getCreatedPlanInputs: () => structuredClone(createdPlanInputs),
+    getCurrentSessionRequestCount: () => currentSessionRequestCount,
   }
 }
 
 test('keeps Evaluation Runs inside the app shell with labelled identity and controls', async ({ page }) => {
-  await mockEvaluationWorkbench(page)
+  const mocks = await mockEvaluationWorkbench(page)
   await page.goto('/tests')
 
   await expect(page.getByRole('navigation', { name: 'Lifecycle' })).toBeVisible()
@@ -300,6 +303,7 @@ test('keeps Evaluation Runs inside the app shell with labelled identity and cont
   await expect(page.getByText('Decisioning Agent', { exact: true })).toBeVisible()
   await expect(page.getByText('reviewer', { exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+  expect(mocks.getCurrentSessionRequestCount()).toBe(1)
 
   const systemFile = page.getByRole('link', { name: 'System file' })
   await expect(systemFile).toHaveAttribute('href', '/systems/system-1')
