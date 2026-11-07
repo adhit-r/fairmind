@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import type { EvaluationRunV2 } from '../src/lib/api/hooks/useEvaluationWorkbenchV2'
 
 async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({
@@ -8,7 +9,7 @@ async function fulfillJson(route: Route, body: unknown) {
   })
 }
 
-const scopedRun = {
+const scopedRun: EvaluationRunV2 = {
   id: 'run-1',
   organizationId: 'org-1',
   workspaceId: 'workspace-1',
@@ -17,11 +18,16 @@ const scopedRun = {
   contractVersion: '2.0.0',
   trigger: 'manual',
   lifecyclePhase: 'pre_deploy',
-  technicalStatus: 'leased',
+  technicalStatus: 'succeeded',
   evidenceOutcome: 'passed_with_limitations',
   overallVerdict: 'review',
   layerVerdictsSchemaVersion: '1.0.0',
-  layerVerdicts: { suites: {}, modalities: {}, components: {}, riskDimensions: {} },
+  layerVerdicts: {
+    suites: { 'suite-execution-1': 'review' },
+    modalities: {},
+    components: {},
+    riskDimensions: {},
+  },
   suiteExecutions: [{
     id: 'suite-execution-1',
     suiteVersionId: 'suite-version-1',
@@ -71,19 +77,46 @@ const scopedRun = {
     }],
   },
   envelopeHash: 'd'.repeat(64),
-  verdictVersion: 1,
+  verdictVersion: 0,
   requestedBy: 'user-1',
-  startedAt: null,
-  completedAt: null,
+  startedAt: '2026-08-30T00:01:00Z',
+  completedAt: '2026-08-30T00:02:00Z',
   failureCode: null,
   failureMessage: null,
   createdAt: '2026-08-30T00:00:00Z',
-  updatedAt: '2026-08-30T00:00:00Z',
+  updatedAt: '2026-08-30T00:02:00Z',
+}
+
+const longSuiteExecutionId = `suite-execution-${'a'.repeat(160)}`
+const decidedLayeredRun: EvaluationRunV2 = {
+  ...scopedRun,
+  layerVerdicts: {
+    suites: { [longSuiteExecutionId]: 'conditional' },
+    modalities: { vision: 'blocked' },
+    components: { model: 'approved' },
+    riskDimensions: { security: 'review' },
+  },
+  suiteExecutions: [{
+    ...scopedRun.suiteExecutions[0],
+    id: longSuiteExecutionId,
+    freshnessStatus: 'current',
+    freshnessReasonCodes: [],
+    decisionEvidenceEligible: true,
+  }],
+  decisionEvidenceCurrentlyEligible: true,
+  envelope: {
+    ...scopedRun.envelope,
+    suites: [{
+      ...scopedRun.envelope.suites[0],
+      suiteExecutionId: longSuiteExecutionId,
+    }],
+  },
+  verdictVersion: 1,
 }
 
 async function mockDashboardContext(
   page: Page,
-  options: { run?: typeof scopedRun; v2Requests?: string[] } = {},
+  options: { run?: EvaluationRunV2; v2Requests?: string[] } = {},
 ) {
   let resolveSystemResponse: (() => void) | undefined
   const systemResponseCompleted = new Promise<void>((resolve) => {
@@ -178,13 +211,15 @@ test('enabled run child gate renders execution, evidence, and governance as sepa
 
   const panel = page.getByRole('region', { name: 'Evidence trust state' })
   await expect(panel.getByText('Execution status', { exact: true })).toBeVisible()
-  await expect(panel.getByText('Leased', { exact: true })).toBeVisible()
+  await expect(panel.getByText('Succeeded', { exact: true })).toBeVisible()
   const evidenceAxis = panel.getByText('Evaluator evidence result', { exact: true }).locator('..')
   await expect(evidenceAxis).toBeVisible()
   await expect(evidenceAxis.getByText('Passed with limitations', { exact: true })).toBeVisible()
   const governanceAxis = panel.getByText('Governance verdict', { exact: true }).locator('..')
   await expect(governanceAxis).toBeVisible()
   await expect(governanceAxis.getByText('Review', { exact: true })).toBeVisible()
+
+  await expect(panel).toContainText('The governance verdict above is the current run-level value; no reviewer decision version is recorded.')
 
   const metadata = panel.getByRole('table', { name: 'Suite evidence trust metadata' })
   const suiteRow = metadata.getByRole('row').nth(1)
@@ -206,4 +241,30 @@ test('enabled run child gate renders execution, evidence, and governance as sepa
   await expect(suiteRow.getByRole('cell').nth(15).getByText('Accepted', { exact: true })).toBeVisible()
   await expect(metadata.getByRole('columnheader', { name: 'Limitations', exact: true })).toBeVisible()
   await expect(suiteRow.getByRole('cell').nth(16).getByText('Protected-group coverage is incomplete.', { exact: true })).toBeVisible()
+})
+
+test('enabled run child gate preserves every layered verdict and one overall reviewer verdict', async ({ page }) => {
+  test.skip(
+    process.env.NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED !== 'true'
+      || process.env.NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED !== 'true',
+    'requires the dev server with both assurance run preview gates enabled',
+  )
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockDashboardContext(page, { run: decidedLayeredRun })
+  await page.goto('/assurance/evaluations/run-1')
+
+  const panel = page.getByRole('region', { name: 'Evidence trust state' })
+  const layeredVerdicts = panel.getByRole('region', { name: 'Layered governance verdicts' })
+  await expect(layeredVerdicts.getByRole('region', { name: 'Suite verdicts' }).getByText(longSuiteExecutionId, { exact: true })).toBeVisible()
+  await expect(layeredVerdicts.getByRole('region', { name: 'Suite verdicts' })).toContainText('Conditional')
+  await expect(layeredVerdicts.getByRole('region', { name: 'Modality verdicts' })).toContainText('Vision')
+  await expect(layeredVerdicts.getByRole('region', { name: 'Modality verdicts' })).toContainText('Blocked')
+  await expect(layeredVerdicts.getByRole('region', { name: 'Component verdicts' })).toContainText('Model')
+  await expect(layeredVerdicts.getByRole('region', { name: 'Component verdicts' })).toContainText('Approved')
+  await expect(layeredVerdicts.getByRole('region', { name: 'Risk dimension verdicts' })).toContainText('Security')
+  await expect(layeredVerdicts.getByRole('region', { name: 'Risk dimension verdicts' })).toContainText('Review')
+  await expect(layeredVerdicts).toContainText('The governance verdict above is the single overall reviewer verdict.')
+  await expect(panel.getByText('Governance verdict', { exact: true })).toHaveCount(1)
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
 })
