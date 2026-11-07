@@ -761,6 +761,7 @@ def _serialize_workspace_row(row: Any) -> Dict[str, Any]:
 
 
 def _serialize_ai_system_row(row: Any) -> Dict[str, Any]:
+    metadata = _load_json_value(row[6], {})
     return {
         "id": row[0],
         "workspaceId": row[1],
@@ -768,7 +769,9 @@ def _serialize_ai_system_row(row: Any) -> Dict[str, Any]:
         "owner": row[3],
         "riskTier": row[4],
         "lifecycleStage": row[5],
-        "metadata": _load_json_value(row[6], {}),
+        "metadata": metadata,
+        # The confirmed tier and frameworks (routers/applicability.py); None until a person confirms them.
+        "applicability": metadata.get("applicability"),
         "createdAt": row[7],
         "updatedAt": row[8],
     }
@@ -1085,7 +1088,13 @@ def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]
     ]
 
 
+# Decision records stored as evidence so seals hash them; they are not evidence of a control,
+# so they neither move the lifecycle stage nor count toward readiness.
+RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted"}
+
+
 def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
+    records = [r for r in records if r.get("type") not in RECORD_ONLY_EVIDENCE_TYPES]
     if not records:
         return {
             "systemId": system_id,
