@@ -36,7 +36,7 @@ keywords = [
 dependencies = [
     # 0.137 includes routers lazily: scope["route"].path drops the router prefix,
     # which breaks audit route templates and app.routes introspection.
-    "fastapi>=0.135.0,<0.137",
+    "fastapi>=0.135.0,<0.163",
     "uvicorn[standard]>=0.42.0",
     "pydantic>=2.12.4",
     "pydantic[email]>=2.12.4",
