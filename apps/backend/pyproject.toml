@@ -111,6 +111,10 @@ test = [
     "pytest-playwright>=0.4.0",
     "playwright>=1.40.0",
 ]
+# FairMind-E measurement harness (research/fairmind-e/measurement); optional at runtime.
+research = [
+    "codecarbon>=3.2.9",
+]
 
 [project.urls]
 Homepage = "https://fairmind.xyz"

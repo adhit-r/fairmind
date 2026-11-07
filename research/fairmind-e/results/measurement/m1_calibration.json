@@ -1,0 +1,149 @@
+{
+  "reference": {
+    "file": "../../research/fairmind-e/results/measurement/m1_power_reference.csv",
+    "column": "reference_kwh_total",
+    "caveat": "powermetrics reports per-subsystem SoC power from Apple's own model; the vendor documents these values as estimated. This is an independent, higher-directness reference, not ground truth, and it excludes display, storage, networking, and PSU losses."
+  },
+  "n_runs_skipped": 38,
+  "contamination": {
+    "threshold": 0.35,
+    "n_excluded": 19,
+    "excluded": [
+      {
+        "workload_id": "classical_ml_training",
+        "run_id": "real-i01",
+        "contamination_ratio": 1.0
+      },
+      {
+        "workload_id": "classical_ml_training",
+        "run_id": "real-i02",
+        "contamination_ratio": 0.7283
+      },
+      {
+        "workload_id": "classical_ml_training",
+        "run_id": "real-i03",
+        "contamination_ratio": 1.0
+      },
+      {
+        "workload_id": "classical_ml_training",
+        "run_id": "real-i04",
+        "contamination_ratio": 0.9862
+      },
+      {
+        "workload_id": "classical_ml_training",
+        "run_id": "real-i05",
+        "contamination_ratio": 0.9803
+      },
+      {
+        "workload_id": "transformer_finetune",
+        "run_id": "real-i01",
+        "contamination_ratio": 0.7471
+      },
+      {
+        "workload_id": "transformer_finetune",
+        "run_id": "real-i02",
+        "contamination_ratio": 0.7278
+      },
+      {
+        "workload_id": "transformer_finetune",
+        "run_id": "real-i03",
+        "contamination_ratio": 0.3719
+      },
+      {
+        "workload_id": "transformer_finetune",
+        "run_id": "real-i05",
+        "contamination_ratio": 0.3572
+      },
+      {
+        "workload_id": "rag_inference",
+        "run_id": "real-i01",
+        "contamination_ratio": 0.6983
+      },
+      {
+        "workload_id": "rag_inference",
+        "run_id": "real-i02",
+        "contamination_ratio": 0.7302
+      },
+      {
+        "workload_id": "rag_inference",
+        "run_id": "real-i03",
+        "contamination_ratio": 0.5583
+      },
+      {
+        "workload_id": "rag_inference",
+        "run_id": "real-i04",
+        "contamination_ratio": 0.3846
+      },
+      {
+        "workload_id": "rag_inference",
+        "run_id": "real-i05",
+        "contamination_ratio": 0.645
+      },
+      {
+        "workload_id": "batch_embeddings",
+        "run_id": "real-i01",
+        "contamination_ratio": 0.3813
+      },
+      {
+        "workload_id": "batch_embeddings",
+        "run_id": "real-i02",
+        "contamination_ratio": 0.4044
+      },
+      {
+        "workload_id": "batch_embeddings",
+        "run_id": "real-i03",
+        "contamination_ratio": 0.5732
+      },
+      {
+        "workload_id": "batch_embeddings",
+        "run_id": "real-i04",
+        "contamination_ratio": 0.4778
+      },
+      {
+        "workload_id": "batch_embeddings",
+        "run_id": "real-i05",
+        "contamination_ratio": 0.6382
+      }
+    ],
+    "median_contamination": 0.6416,
+    "max_contamination": 1.0
+  },
+  "methods": {
+    "codecarbon": {
+      "provenance_class": "tool_estimated",
+      "assigned_confidence": 0.75,
+      "n": 1,
+      "median_abs_pct_error": 145.06,
+      "mean_abs_pct_error": 145.06,
+      "median_signed_pct_error": 145.06,
+      "direction": "over-estimates",
+      "mean_log_ratio": 0.8963
+    },
+    "manual_flop": {
+      "provenance_class": "manual",
+      "assigned_confidence": 0.2,
+      "n": 1,
+      "median_abs_pct_error": 458.51,
+      "mean_abs_pct_error": 458.51,
+      "median_signed_pct_error": 458.51,
+      "direction": "over-estimates",
+      "mean_log_ratio": 1.7201
+    }
+  },
+  "validity_warning": "background load is a median 64% of observed draw. Both the reference and a whole-machine load tracker include that background, while an analytic estimate does not, so this comparison is biased toward the tracker for reasons unrelated to measurement quality. A confirmation of the confidence ordering under these conditions is not trustworthy; a refutation is, since the bias runs the other way. Prefer the marginal reference column and re-run on a quiet host before publishing a positive result.",
+  "confidence_vs_error": {
+    "spearman_rho": null,
+    "n": 2,
+    "expected_sign": "negative (higher confidence should mean lower error)",
+    "note": "with two provenance classes this is a two-group comparison expressed as a rank correlation; it tests ordering, not a dose-response relationship"
+  },
+  "verdict": {
+    "higher_confidence_method": "codecarbon",
+    "lower_confidence_method": "manual_flop",
+    "median_abs_pct_error_higher": 145.06,
+    "median_abs_pct_error_lower": 458.51,
+    "ordering_holds": true,
+    "trustworthy_direction": "refutation",
+    "reading": "the method the policy trusts more (codecarbon, confidence 0.75) is closer to the independent reference than manual_flop (confidence 0.2): median absolute error 145.06% vs 458.51%. The assigned ordering is consistent with observed error on this host."
+  }
+}

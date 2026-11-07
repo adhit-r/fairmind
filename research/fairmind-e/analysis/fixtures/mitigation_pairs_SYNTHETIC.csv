@@ -1,0 +1,8 @@
+# SYNTHETIC fixture for research/fairmind-e analysis tests. Hand-constructed intensities; not measurement output.
+workload_id,mitigation,intensity_pre,intensity_post,unit
+w1_finetune,region_shift,100.0,70.0,g_co2e_per_functional_unit
+w2_rag_inference,batch_scheduling,200.0,150.0,g_co2e_per_functional_unit
+w3_embeddings,quantization,120.0,96.0,g_co2e_per_functional_unit
+w4_classical,right_sizing,80.0,52.0,g_co2e_per_functional_unit
+w5_scenario,caching,150.0,120.0,g_co2e_per_functional_unit
+w6_serving,distillation,90.0,63.0,g_co2e_per_functional_unit
