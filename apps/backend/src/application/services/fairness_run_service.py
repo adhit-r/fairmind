@@ -899,9 +899,14 @@ def path_forward(
         }
 
     # Every candidate reaches the target, the next verdict up, so rank by fewest manual steps, then fewest steps,
-    # then the route a reviewer could approve (an environmental assessment beats a monitoring snapshot at a tie).
+    # then the route a reviewer could approve (an environmental assessment beats a monitoring snapshot at a tie),
+    # then the strongest evidence (measured, tool estimate, upload, attestation), then confidence, then check name.
     reaching = [r for r in results if target and VERDICTS.index(r[1]["verdict"]) >= VERDICTS.index(target)]
-    rank_key = lambda r: (sum(ACTION_CLASS[a] == "manual" for _, a in r[0]), len(r[0]), not ready(*r), -r[1]["confidence"], sorted(_CHECK_ORDER[k] for k, _ in r[0]))  # noqa: E731
+    rank_key = lambda r: (  # noqa: E731
+        sum(ACTION_CLASS[a] == "manual" for _, a in r[0]), len(r[0]), not ready(*r),
+        sorted((_CLASS_ORDER[ACTION_CLASS[a]], a == "attest") for _, a in r[0]), -r[1]["confidence"], sorted(k for k, _ in r[0]),
+    )
+    to_go = min((r for r in reaching if r[1]["verdict"] == "go"), key=rank_key, default=None)
     options = []
     if reaching:
         first = min(reaching, key=rank_key)
@@ -931,6 +936,7 @@ def path_forward(
             why = f" {named} {'has' if len(manual) == 1 else 'have'} no measured route today." if manual else ""
             notes.append(f"{VERDICT_LABELS[target]} needs confidence {need:.2f}; the most FairMind can record today reaches {top['confidence']:.2f}.{why}")
     return {
-        "target": target, "options": options, "ceiling": {"confidence": top["confidence"], "verdict": top["verdict"]},
+        "target": target, "options": options, "toGo": option("measured_first", *to_go) if to_go else None,
+        "ceiling": {"confidence": top["confidence"], "verdict": top["verdict"]},
         "notes": notes, "approvalBlockers": blockers,
     }

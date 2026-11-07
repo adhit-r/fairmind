@@ -179,8 +179,9 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
     if gate["policy"]["warnings"]:
         # The path reads evidence alone; a warning caps the real verdict at conditional go, so no step promises go.
-        if gate["path"]["target"] == "go":
+        if gate["path"]["target"] == "go" or gate["path"]["toGo"]:
             gate["path"]["notes"].append("A failing warning-level policy rule keeps the verdict at conditional go until the rule passes; evidence steps do not change that.")
+        gate["path"]["toGo"] = None
         for option in gate["path"]["options"]:
             if option["verdictAfter"] == "go":
                 option["verdictAfter"] = "conditional_go"

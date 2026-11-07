@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { GatePathStep, ReleaseGate } from '@/lib/api/hooks/useSystemFile'
-import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
+import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, goPath, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
 
 const step = (check: GatePathStep['check'], action: GatePathStep['action'], evidenceClass: GatePathStep['evidenceClass'], counts: number, gain: number): GatePathStep => ({ check, action, evidenceClass, counts, gain, note: null })
 
@@ -118,6 +118,16 @@ test('an upload step says its cap once; the server note only says what the evide
   const upload = { ...step('data_governance', 'evidence_upload', 'manual', 0.3, 0.06), note: 'an uploaded document' }
   assert.equal(stepLine(upload), 'counts up to 0.30 · +0.06 confidence · an uploaded document')
   assert.equal(stepLine(step('environmental', 'environmental_assessment', 'tool_estimated', 0.85, 0.17)), 'counts up to 0.85 · +0.17 confidence')
+})
+
+test('the go path shows only when it differs from the next-verdict path', () => {
+  const best = bestOption(medium.path)!
+  const run = step('fairness', 'fairness_run', 'measured', 0.85, 0.17)
+  const toGo = { ...best, steps: [run, ...best.steps], confidenceAfter: 0.42, verdictAfter: 'go' as const }
+  assert.equal(goPath({ ...medium.path!, toGo }, best), toGo)
+  assert.equal(goPath({ ...medium.path!, toGo: best }, best), null)
+  assert.equal(goPath({ ...medium.path!, toGo: null }, best), null)
+  assert.equal(goPath({ ...medium.path!, toGo }, null), null)
 })
 
 test('no path summary when the tier is already at its best verdict', () => {

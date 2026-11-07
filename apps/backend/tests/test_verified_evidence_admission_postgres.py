@@ -52,6 +52,7 @@ from src.infrastructure.db.repositories.evaluation_workbench_repository import (
 )
 from src.infrastructure.security import Ed25519EvidenceVerifier
 from tests.evaluation_result_contract_cases import TERMINAL_RESULT_AXIS_CASES
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 
 POSTGRES_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL")
 pytestmark = pytest.mark.skipif(
@@ -202,6 +203,7 @@ def postgres_session_factory():
                         (schema_name,),
                     )
                 cursor.execute((MIGRATIONS / migration_name).read_text(encoding="utf-8"))
+            cursor.execute(ORM_COLUMNS_AFTER_PARTIAL_CHAIN)
         migration_connection.commit()
     finally:
         migration_connection.close()
@@ -346,7 +348,7 @@ def _insert_identity_and_scope(
     trust_policy_id: str,
     maximum_evidence_age_seconds: int = 86400,
 ) -> None:
-    now = _iso(datetime.now(timezone.utc))
+    now = _iso(session.scalar(text("SELECT clock_timestamp()")))
     session.execute(
         text(
             "INSERT INTO users "

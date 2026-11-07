@@ -96,6 +96,8 @@ _FROZEN_013K_CHECKSUM = "f81a4b888d5b86a9e9675561b319c19e0470d61d2cb486442b8e4e6
 FROZEN_013K_OPERATOR_CHECKSUM = "8bdbf13e15452949b7a4e002fe152f0a90c7cb8c1c343a126271f6a6b8d9d322"
 _FROZEN_013L_CHECKSUM = "2dd029773f4dbe7b79cbc8db69ebe2bcdf444d82d8c9316a7f23b900ceabc4f9"
 FROZEN_013L_OPERATOR_CHECKSUM = "b8942f7baf21bc21cfabea04f33ab020c1aa55f531be3effee571e1eb2a7eda1"
+_FROZEN_013M_CHECKSUM = "ddd4818d6e8390a7be2c69540e13951098f9853d7794985005645a6bc9695312"
+FROZEN_013M_OPERATOR_CHECKSUM = "1f7b0f7e56a27b8469638b3ccb5292cbe6d29d6e402d2f16f53dffb334e0dcfd"
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -163,6 +165,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         _FROZEN_013L_CHECKSUM,
         _MIGRATIONS / "013l_delegated_separation_override_grant_integrity.sql",
     ),
+    FrozenMigration(
+        "013l-to-013m-worker-execution-foundation-v1",
+        _FROZEN_013M_CHECKSUM,
+        _MIGRATIONS / "013m_worker_execution_foundation.sql",
+    ),
 )
 
 POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
@@ -198,6 +205,11 @@ POSTGRESQL_ASSURANCE_RELATIONS = frozenset(
         "governance_evaluation_audit_events",
         "governance_evaluation_audit_chain_heads",
         "governance_separation_override_grants",
+        "governance_evaluation_worker_identities",
+        "governance_evaluation_suite_attempts",
+        "governance_evaluation_artifacts",
+        "governance_evaluation_attempt_artifacts",
+        "governance_evaluation_cancellations",
     }
 )
 
@@ -247,6 +259,10 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "fairmind_separation_override_relationships_013l",
         "fairmind_delegated_separation_override_authorized_013l",
         "guard_governance_separation_override_grant_013l",
+        "guard_governance_evaluation_suite_queue_metadata_013m",
+        "guard_governance_evaluation_worker_identity_013m",
+        "guard_governance_evaluation_suite_attempt_013m",
+        "guard_governance_evaluation_artifact_013m",
         "fairmind_validate_separation_override_grant_audit_013l",
         "fairmind_validate_delegated_decision_audit_013l",
         "fairmind_initial_layer_verdicts_v1_for_run",
@@ -365,6 +381,17 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "000_013i_unverified_import_delivery_guard",
         "000_013i_unverified_import_projection_guard",
         "governance_evaluation_decisions_owner_override_audit_013j",
+        "000_013m_governance_evaluation_suite_queue_metadata_guard",
+        "governance_evaluation_worker_identities_guard_update_013m",
+        "governance_evaluation_worker_identities_no_delete_013m",
+        "governance_evaluation_suite_attempts_guard_update_013m",
+        "governance_evaluation_suite_attempts_no_delete_013m",
+        "governance_evaluation_artifacts_guard_update_013m",
+        "governance_evaluation_artifacts_no_delete_013m",
+        "governance_evaluation_attempt_artifacts_no_update_013m",
+        "governance_evaluation_attempt_artifacts_no_delete_013m",
+        "governance_evaluation_cancellations_no_update_013m",
+        "governance_evaluation_cancellations_no_delete_013m",
     }
 )
 
@@ -374,7 +401,7 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
     required_triggers=POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
 )
 
-# Measured from two independent full operator-chain installations through 013l on
+# Measured from two independent full operator-chain installations through 013m on
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
@@ -390,14 +417,14 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
 #
 # The PostgreSQL 18 digest below is still the 013j measurement. It includes the
 # Neon role graph, so it cannot be reproduced on a local PostgreSQL 18. After
-# 013k and 013l are applied to Neon, re-measure it there before setting
+# 013k, 013l and 013m are applied to Neon, re-measure it there before setting
 # assurance_v2_enabled; until then startup with assurance on fails closed.
 FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
     {
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a"),
+            digest=("748072e8793e9c44ffa755c7aa05e85d6d22e0ccf98e51a5ceea593f3a6f5a85"),
         ),
         18: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,

@@ -20,6 +20,25 @@ from sqlalchemy.engine import make_url
 SERVER_URL = os.getenv("FAIRMIND_TEST_POSTGRES_URL", "")
 _PREFIX = f"fairmind_test_{os.getpid()}"
 _TEMPLATE = f"{_PREFIX}_template"
+
+# The ORM maps columns added by 013l and 013m. A fixture whose migration chain
+# stops before them adds just these columns, so ORM writes work on its schema.
+ORM_COLUMNS_AFTER_PARTIAL_CHAIN = (
+    "ALTER TABLE governance_evaluation_decisions "
+    "ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT; "
+    "ALTER TABLE governance_evaluation_run_suite_executions "
+    "ADD COLUMN IF NOT EXISTS available_at TEXT, "
+    "ADD COLUMN IF NOT EXISTS max_attempts INTEGER, "
+    "ADD COLUMN IF NOT EXISTS attempt_count INTEGER"
+)
+# A fixture that extends such a schema with the real 013l or 013m drops the
+# stand-ins first, because those migrations add the columns themselves.
+DROP_ORM_COLUMNS_AFTER_PARTIAL_CHAIN = (
+    "ALTER TABLE governance_evaluation_decisions "
+    "DROP COLUMN separation_override_grant_id; "
+    "ALTER TABLE governance_evaluation_run_suite_executions "
+    "DROP COLUMN available_at, DROP COLUMN max_attempts, DROP COLUMN attempt_count"
+)
 _created: list[str] = []  # session databases
 _per_test: list[tuple[str, object]] = []  # (database, engine) from fresh_engine()
 _template_ready = False

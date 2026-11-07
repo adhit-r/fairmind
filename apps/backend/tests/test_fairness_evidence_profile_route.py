@@ -1,6 +1,7 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fastapi.routing import iter_route_contexts
 
 from api.main import app
 from api.models.ai_bom import AIBOMComponent, AIBOMDocument
@@ -63,7 +64,7 @@ def test_fairness_evidence_profile_endpoint_is_not_registered_by_default() -> No
         route.path
         == "/api/v1/ai-bom/documents/{bom_id}/fairness-evidence-profile"
         and "GET" in (getattr(route, "methods", None) or set())
-        for route in app.routes
+        for route in iter_route_contexts(app.routes)
     )
 
 

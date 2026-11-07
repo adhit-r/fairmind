@@ -37,6 +37,7 @@ from tests.test_verified_evidence_admission_postgres import (
     _signed_passport,
     postgres_session_factory,
 )
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 
 
 MIGRATION_013G = (
@@ -62,8 +63,7 @@ def operational_freshness_session_factory(postgres_session_factory):
             {"schema": schema},
         )
         session.execute(text(MIGRATION_013G.read_text(encoding="utf-8")))
-        # The decision ORM maps 013l's grant column; this pre-013l schema only needs the column.
-        session.execute(text("ALTER TABLE governance_evaluation_decisions ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT"))
+        session.execute(text(ORM_COLUMNS_AFTER_PARTIAL_CHAIN))
         session.commit()
     finally:
         session.close()
