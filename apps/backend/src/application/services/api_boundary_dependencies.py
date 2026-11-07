@@ -16,6 +16,7 @@ from src.domain.compliance.services.compliance_audit_engine import ComplianceAud
 from src.domain.compliance.services.compliance_automation_service import compliance_automation_service
 from src.infrastructure.db.database.models import ComplianceSchedule, ComplianceViolation
 from src.infrastructure.email.resend_service import email_service
+from src.infrastructure.llm import grok_cli
 
 __all__ = [
     "ComplianceAuditEngine",
@@ -23,5 +24,6 @@ __all__ = [
     "ComplianceViolation",
     "compliance_automation_service",
     "email_service",
+    "grok_cli",
     "settings_service",
 ]

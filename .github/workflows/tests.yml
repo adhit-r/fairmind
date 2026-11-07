@@ -53,10 +53,24 @@ jobs:
           cache: npm
           cache-dependency-path: apps/frontend/package-lock.json
       - run: npm ci --no-audit --no-fund
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
       - name: Type-check
         run: npx tsc --noEmit -p .
       - name: Unit tests
         run: npx --yes tsx@4.23.15 --test 'src/**/*.test.ts'
+
+  boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install ripgrep
+        run: command -v rg || (sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep)
+      - name: Backend layer boundaries
+        run: tooling/check_backend_layer_boundaries.sh
+      - name: Archive import isolation
+        run: tooling/check_no_archive_imports.sh
 
   packages:
     name: ${{ matrix.package }}
