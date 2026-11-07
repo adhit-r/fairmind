@@ -24,9 +24,10 @@ See the [2027 assurance roadmap](superpowers/plans/2026-07-19-fairmind-2027-ai-a
 ## Current phase: 2027 assurance foundation
 
 The current branch is an internal trust-foundation alpha. The trustworthy
-control-plane checklist is 16/19 complete (84.2%), and the full roadmap is
-25/92 complete (27.2%). The P1 worker layer, real evaluation engines, modality
-packs, lifecycle workflows, and rollout gates remain open.
+control-plane checklist is 19/19 complete, the P0 frontend checklist is 5/10,
+and the full roadmap is 37/92 complete (40.2%), re-scored against main on
+2026-11-08. The P1 worker layer, real evaluation engines, modality packs,
+lifecycle workflows, and rollout gates remain open.
 
 **Implemented and verified for the current slice**
 
