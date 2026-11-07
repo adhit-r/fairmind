@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
+import { GovernanceScopeMismatchError, requireResponseScope } from './useGovernanceAssurance'
 
 export interface Evidence {
   id: string
@@ -141,8 +142,12 @@ export function useEvidence(systemId?: string) {
       }
 
       if (recordsResponse.success && recordsResponse.data) {
-        setData(sortEvidence(recordsResponse.data))
-        setSummary(toSummary(summaryResponse.success && summaryResponse.data ? summaryResponse.data : null, targetSystemId))
+        const records = recordsResponse.data.map((record) => requireResponseScope('evidence', record, { systemId: targetSystemId }))
+        const returnedSummary = summaryResponse.success && summaryResponse.data
+          ? requireResponseScope('evidence summary', summaryResponse.data, { systemId: targetSystemId })
+          : null
+        setData(sortEvidence(records))
+        setSummary(toSummary(returnedSummary, targetSystemId))
       } else {
         throw new Error(recordsResponse.error || 'Failed to fetch evidence')
       }
@@ -192,13 +197,19 @@ export function useEvidence(systemId?: string) {
     if (!systemId) return
     const version = requestVersion.current
     let next = toSummary(null, systemId)
+    let mismatch: GovernanceScopeMismatchError | null = null
     try {
       const response = await apiClient.get<EvidenceSummary>(API_ENDPOINTS.aiGovernance.evidenceSummary(systemId))
-      if (response.success && response.data) next = toSummary(response.data, systemId)
-    } catch {
-      // keep the unavailable summary
+      if (response.success && response.data) {
+        next = toSummary(requireResponseScope('evidence summary', response.data, { systemId }), systemId)
+      }
+    } catch (reason) {
+      // A network failure keeps the unavailable summary; a summary for another system is an error.
+      if (reason instanceof GovernanceScopeMismatchError) mismatch = reason
     }
-    if (version === requestVersion.current) setSummary(next)
+    if (version !== requestVersion.current) return
+    setSummary(next)
+    if (mismatch) setError(mismatch)
   }, [systemId])
 
   const collectEvidence = useCallback(async (params: CollectEvidenceInput): Promise<Evidence> => {
@@ -222,7 +233,7 @@ export function useEvidence(systemId?: string) {
         }
       )
       if (response.success && response.data) {
-        const item = response.data
+        const item = requireResponseScope('evidence', response.data, { systemId: params.systemId })
         setData((current) => sortEvidence([item, ...current.filter((e) => e.id !== item.id)]))
         void refreshEvidence()
         return item
@@ -251,7 +262,7 @@ export function useEvidence(systemId?: string) {
       }
     )
     if (response.success && response.data) {
-      const updated = response.data
+      const updated = requireResponseScope('evidence', response.data, { id: evidenceId })
       setData((current) =>
         sortEvidence(current.map((e) => (e.id === evidenceId ? updated : e)))
       )
@@ -266,7 +277,7 @@ export function useEvidence(systemId?: string) {
       { entity_type: entityType, entity_id: entityId }
     )
     if (response.success && response.data) {
-      const link = response.data
+      const link = requireResponseScope('evidence link', response.data, { entityType, entityId })
       setData((current) =>
         current.map((e) => {
           if (e.id !== evidenceId) return e
