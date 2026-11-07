@@ -199,6 +199,43 @@ def test_ai_governance_workspace_and_system_registry():
     assert fetched_system["lifecycleSummary"]["stage"] == fetched_system["lifecycleStage"]
 
 
+def test_replaying_a_create_with_its_client_id_returns_the_row_it_made(authenticated_org_database):
+    workspace_body = {"id": str(uuid.uuid4()), "name": f"Replay {uuid.uuid4().hex[:6]}", "owner": "owner@acme.ai"}
+    workspaces = [client.post("/api/v1/ai-governance/workspaces", json=workspace_body) for _ in range(2)]
+    assert [r.status_code for r in workspaces] == [200, 200]
+    assert {r.json()["id"] for r in workspaces} == {workspace_body["id"]}
+    listed = client.get("/api/v1/ai-governance/workspaces").json()
+    assert [w["id"] for w in listed if w["name"] == workspace_body["name"]] == [workspace_body["id"]]
+
+    system_body = {
+        "id": str(uuid.uuid4()),
+        "workspace_id": workspace_body["id"],
+        "name": "Replay system",
+        "owner": "risk-ml@acme.ai",
+        "risk_tier": "high",
+        "lifecycle_stage": "onboard",
+    }
+    systems = [client.post("/api/v1/ai-governance/systems", json=system_body) for _ in range(2)]
+    assert [r.status_code for r in systems] == [200, 200]
+    assert {r.json()["id"] for r in systems} == {system_body["id"]}
+    in_workspace = client.get(f"/api/v1/ai-governance/systems?workspace_id={workspace_body['id']}").json()
+    assert [s["id"] for s in in_workspace] == [system_body["id"]]
+
+    session = authenticated_org_database["session_factory"]()
+    foreign_id = str(uuid.uuid4())
+    session.execute(
+        text(
+            "INSERT INTO governance_workspaces (id, org_id, name, created_at, updated_at) "
+            "VALUES (:id, :org_id, 'Another org', :now, :now)"
+        ),
+        {"id": foreign_id, "org_id": str(uuid.uuid4()), "now": datetime.now(timezone.utc).isoformat()},
+    )
+    session.commit()
+    session.close()
+    taken = client.post("/api/v1/ai-governance/workspaces", json={"id": foreign_id, "name": "Mine"})
+    assert taken.status_code == 409
+
+
 def test_ai_governance_new_system_without_evidence_reads_zero_readiness_everywhere(
     authenticated_org_database,
 ):

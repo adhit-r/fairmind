@@ -137,7 +137,11 @@ const classifyError = (error: any, response?: Response): ApiError => {
   }
 }
 
+// A timed-out or 5xx create may already have committed, so only these replay safely.
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'])
+
 interface RequestOptions extends RequestInit {
+  /** Retry timeouts, network and 5xx errors. Defaults to on for idempotent methods only; POST and PATCH must opt in. */
   enableRetry?: boolean
   refreshOnUnauthorized?: boolean
   maxRetries?: number
@@ -375,7 +379,7 @@ export class ApiClient {
     }
 
     const {
-      enableRetry = true,
+      enableRetry = IDEMPOTENT_METHODS.has((options.method ?? 'GET').toUpperCase()),
       refreshOnUnauthorized = true,
       maxRetries = 3,
       retryDelay = 1000,

@@ -554,11 +554,13 @@ class RiskAssessmentRequest(BaseModel):
 
 
 class WorkspaceCreateRequest(BaseModel):
+    id: Optional[uuid.UUID] = None  # client-chosen, so a replayed create returns the row it made
     name: str = Field(min_length=1)
     owner: Optional[str] = None
 
 
 class AISystemCreateRequest(BaseModel):
+    id: Optional[uuid.UUID] = None  # client-chosen, so a replayed create returns the row it made
     workspace_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     owner: Optional[str] = None
@@ -1188,11 +1190,30 @@ async def governance_status(db: Session = Depends(get_db)):
     }
 
 
+def _already_created(db: Session, table: str, row_id: str, org_id: str) -> bool:
+    """True when a create with this client id already ran for the caller's org; 409 if another org holds the id.
+
+    ponytail: two concurrent replays can both see False; the primary key then rejects the second insert.
+    """
+    row = db.execute(text(f"SELECT org_id FROM {table} WHERE id = :id"), {"id": row_id}).fetchone()
+    if row is None:
+        return False
+    if row[0] != org_id:
+        raise HTTPException(status_code=409, detail="This id is already in use")
+    return True
+
+
 @router.post("/workspaces")
 async def create_workspace(request: WorkspaceCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
-    workspace_id = str(uuid.uuid4())
+    workspace_id = str(request.id or uuid.uuid4())
+    if request.id and _already_created(db, "governance_workspaces", workspace_id, org_id):
+        row = db.execute(
+            text("SELECT id, name, owner, created_at, updated_at FROM governance_workspaces WHERE id = :id"),
+            {"id": workspace_id},
+        ).fetchone()
+        return _serialize_workspace_row(row)
     now = _utc_now_iso()
     db.execute(
         text(
@@ -1234,6 +1255,21 @@ async def list_workspaces(http: Request, db: Session = Depends(get_db)):
 @router.post("/systems")
 async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
+    org_id = _caller_org(http)
+    system_id = str(request.id or uuid.uuid4())
+    if not (request.id and _already_created(db, "governance_ai_systems", system_id, org_id)):
+        _insert_ai_system(db, request, system_id, org_id)
+    row = db.execute(
+        text(
+            "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
+            "FROM governance_ai_systems WHERE id = :id"
+        ),
+        {"id": system_id},
+    ).fetchone()
+    return _build_ai_system_payload(db, row)
+
+
+def _insert_ai_system(db: Session, request: AISystemCreateRequest, system_id: str, org_id: str) -> None:
     workspace = db.execute(
         text("SELECT id FROM governance_workspaces WHERE id = :id"),
         {"id": request.workspace_id},
@@ -1241,7 +1277,6 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
 
-    system_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
         text(
@@ -1250,7 +1285,7 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
         ),
         {
             "id": system_id,
-            "org_id": _caller_org(http),
+            "org_id": org_id,
             "workspace_id": request.workspace_id,
             "name": request.name,
             "owner": request.owner,
@@ -1263,14 +1298,6 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
         },
     )
     db.commit()
-    row = db.execute(
-        text(
-            "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
-            "FROM governance_ai_systems WHERE id = :id"
-        ),
-        {"id": system_id},
-    ).fetchone()
-    return _build_ai_system_payload(db, row)
 
 
 @router.get("/systems")

@@ -139,7 +139,8 @@ export function tierBasis(record: ApplicabilityRecord | null): string {
 const GOV = API_ENDPOINTS.aiGovernance
 
 export async function suggestApplicability(answers: Partial<ApplicabilityAnswers>) {
-  const res = await apiClient.post<ApplicabilitySuggestion>(GOV.applicabilitySuggest, answers)
+  // Stateless lookup, so safe to retry like a GET.
+  const res = await apiClient.post<ApplicabilitySuggestion>(GOV.applicabilitySuggest, answers, { enableRetry: true })
   if (!res.success || !res.data) throw new Error(res.error || 'the server sent no suggestion')
   return res.data
 }
