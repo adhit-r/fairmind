@@ -344,6 +344,33 @@ class GovernanceAssuranceService:
         ).scalars()
         return [self._assignment(item) for item in ids]
 
+    def _policy_evidence(self, org_id: str, assignment_id: str) -> dict[str, list[dict]]:
+        """Live outcomes of published policy rules on the assignment's system, by control external id."""
+        from src.application.services.policy_service import PolicyService
+
+        assignments, versions = GovernanceFrameworkAssignment.__table__, GovernanceFrameworkVersion.__table__
+        row = self.db.execute(
+            select(assignments.c.system_id, versions.c.framework_key)
+            .join(versions, versions.c.id == assignments.c.framework_version_id)
+            .where(assignments.c.id == assignment_id)
+        ).one()
+        prefix = f"{row.framework_key}:"
+        by_control: dict[str, list[dict]] = {}
+        for r in PolicyService(self.db).current_results(org_id, system_id=row.system_id):
+            for ref in r["controls"]:
+                if ref.startswith(prefix):
+                    by_control.setdefault(ref[len(prefix):], []).append(
+                        {
+                            "id": f"policy:{r['policyId']}:{r['ruleId']}",
+                            "label": f"{r['ruleTitle']} ({r['policyName']} v{r['policyVersion']})",
+                            "kind": "Policy rule",
+                            "source": r["policyName"],
+                            "state": "passing" if r["outcome"] == "pass" else "failing",
+                            "capturedAt": r["evaluatedAt"],
+                        }
+                    )
+        return by_control
+
     def assignment_controls(self, org_id: str, assignment_id: str) -> list[dict] | None:
         assignments, assessments, controls, mappings, runs, evidence = (
             GovernanceFrameworkAssignment.__table__,
@@ -411,8 +438,12 @@ class GovernanceAssuranceService:
                     dict(evidence_row)
                 )
 
+        policy_evidence = self._policy_evidence(org_id, assignment_id)
         result = []
         for row in rows:
+            policy_items = policy_evidence.get(row["external_id"], [])
+            # A published rule counts as evidence while every rule mapped to the control passes.
+            policy_ok = bool(policy_items) and all(item["state"] == "passing" for item in policy_items)
             linked_evidence = evidence_by_assessment.get(row["id"], [])
             linked_evidence.sort(
                 key=lambda item: str(
@@ -435,7 +466,7 @@ class GovernanceAssuranceService:
                 return item["artifact_captured_at"] or item["run_captured_at"] or item["run_created_at"]
 
             latest_accepted_at = captured_at(latest_accepted)
-            freshness = "missing" if not accepted else (
+            freshness = "current" if policy_ok else "missing" if not accepted else (
                 "stale" if _is_stale(latest_accepted_at or "", row["frequency"]) else "current"
             )
             rationale = next(
@@ -455,7 +486,7 @@ class GovernanceAssuranceService:
                     "applicability": row["applicability"],
                     "status": row["status"],
                     "owner": row["owner"],
-                    "acceptedEvidenceCount": len(accepted),
+                    "acceptedEvidenceCount": len(accepted) + (len(policy_items) if policy_ok else 0),
                     "latestEvaluation": (
                         latest["artifact_title"] or latest["source_identifier"]
                     ) if latest else None,
@@ -465,7 +496,7 @@ class GovernanceAssuranceService:
                     # Findings are not linked to control assessments in the current schema.
                     "openFindings": None,
                     "mappingRationale": rationale,
-                    "evidenceTrace": [
+                    "evidenceTrace": policy_items + [
                         {
                             "id": item["id"],
                             "label": item["artifact_title"] or item["source_identifier"],
@@ -673,7 +704,9 @@ class GovernanceAssuranceService:
             "reviewHistory": json.loads(row["review_history_json"] or "[]"),
         }
 
-    def readiness(self, org_id: str, assignment_id: str) -> dict | None:
+    def readiness(self, org_id: str, assignment_id: str, include_policy: bool = True) -> dict | None:
+        """Control counts for an assignment. Policy rules read it with include_policy=False, since
+        counting their own outcomes as evidence would make a rule depend on itself."""
         assignments, assessments = GovernanceFrameworkAssignment.__table__, GovernanceControlAssessment.__table__
         if not self.db.execute(
             select(assignments.c.id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
@@ -690,6 +723,7 @@ class GovernanceAssuranceService:
                 assessments.c.applicability,
                 assessments.c.status,
                 controls.c.frequency,
+                controls.c.external_id,
             )
             .join(controls, controls.c.id == assessments.c.control_definition_id)
             .where(
@@ -707,6 +741,7 @@ class GovernanceAssuranceService:
             )
         ).mappings():
             evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["captured_at"] or row["created_at"])
+        policy_evidence = self._policy_evidence(org_id, assignment_id) if include_policy else {}
         counts = {
             "applicable": 0,
             "accepted": 0,
@@ -736,6 +771,9 @@ class GovernanceAssuranceService:
                 counts["notStarted"] += 1
             elif status == "rejected":
                 counts["blockingFindings"] += 1
+            policy_items = policy_evidence.get(row["external_id"], [])
+            if policy_items and all(item["state"] == "passing" for item in policy_items):
+                continue
             evidence_times = evidence_by_assessment.get(row["id"], [])
             if not evidence_times:
                 counts["missingEvidence"] += 1
