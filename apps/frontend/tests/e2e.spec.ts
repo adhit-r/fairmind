@@ -82,12 +82,6 @@ test.describe('FairMind E2E Tests', () => {
       await expect(page.getByRole('heading', { name: /bias detection/i })).toBeVisible({ timeout: 10000 })
     })
 
-    test('should navigate to multimodal bias page', async ({ page }) => {
-      await page.goto('/multimodal-bias')
-      await page.waitForLoadState('networkidle')
-      
-      await expect(page.getByRole('heading', { name: /multimodal bias/i })).toBeVisible({ timeout: 10000 })
-    })
   })
 
   test.describe('Navigation', () => {
@@ -167,4 +161,3 @@ test.describe('FairMind E2E Tests', () => {
     })
   })
 })
-

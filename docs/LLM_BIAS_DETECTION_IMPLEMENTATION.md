@@ -1,11 +1,13 @@
 # LLM Bias Detection Implementation Guide
 
+> **Current release status (August 29, 2026): Historical implementation reference.** The canonical FairMind API does not mount the modern-bias evaluator router, and the related dashboard routes render inert availability states. The modules and examples below are not a supported or independently validated execution capability; they remain reference material for future P2/P3 calibration, isolation, evidence-contract, and security work.
+
 ## Overview
-FairMind's headline feature for 2026: Comprehensive LLM bias detection with WEAT, SEAT, StereoSet, CrowS-Pairs, Minimal Pairs, and BBQ tests. Includes explainability analysis, compliance assessment, and actionable recommendations.
+This document records the legacy proposed LLM bias-detection implementation. It does not establish that its methods, results, compliance assessments, or recommendations are available or trustworthy in the current release.
 
 ## Architecture
 
-### Backend (Ready ✅)
+### Backend modules (unmounted)
 - **Service**: `src/application/services/modern_llm_bias_service.py`
 - **Routes**: `api/routes/modern_bias_detection.py` (prefix: `/api/v1/modern-bias`)
 

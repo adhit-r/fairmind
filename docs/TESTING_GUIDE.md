@@ -1,8 +1,10 @@
 # LLM-as-Judge Testing & Verification Guide
 
-**Status**: Phase 1-2 Implementation Complete
-**Date**: February 17, 2026
-**Objective**: Verify backend API + frontend components work end-to-end
+**Status**: Historical guide; canonical LLM-as-Judge routes are quarantined
+**Date**: August 29, 2026
+**Objective**: Preserve legacy test reference without implying a runnable current capability
+
+> The canonical application no longer mounts `/api/v1/bias/llm-judge`. The dashboard route is an inert availability state, and the requests below are expected to fail closed. Current verification lives in `apps/backend/tests/test_llm_judge_routes.py` and `apps/frontend/tests/unsupported-evaluation-packs.spec.ts`. Do not use this guide as release evidence.
 
 ---
 
