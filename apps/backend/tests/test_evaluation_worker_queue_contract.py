@@ -59,3 +59,39 @@ def test_sqlite_is_rejected_as_worker_queue_authority() -> None:
             LeaseCredential("attempt-a", "A" * 43),
         )
     assert heartbeat.value.code == "postgres_required"
+
+
+def test_sqlite_is_rejected_for_every_job_state_mutation() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    queue = PostgresEvaluationWorkerQueue(
+        sessionmaker(bind=create_engine("sqlite://")),
+        evidence_admitter=lambda *_args, **_kwargs: None,
+    )
+    principal = WorkerQueuePrincipal("org-a", "service:worker-a")
+    credential = LeaseCredential("attempt-a", "A" * 43)
+    for call in (
+        lambda: queue.start(principal, credential),
+        lambda: queue.fail(principal, credential, "worker_execution_failed"),
+        lambda: queue.complete(principal, credential, b"{}"),
+        lambda: queue.recover_expired("org-a"),
+    ):
+        with pytest.raises(WorkerQueueError) as caught:
+            call()
+        assert caught.value.code == "postgres_required"
+
+
+def test_unknown_failure_code_and_unconfigured_completion_fail_closed() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    queue = PostgresEvaluationWorkerQueue(sessionmaker(bind=create_engine("sqlite://")))
+    principal = WorkerQueuePrincipal("org-a", "service:worker-a")
+    credential = LeaseCredential("attempt-a", "A" * 43)
+    with pytest.raises(WorkerQueueError) as invalid:
+        queue.fail(principal, credential, "anything the worker wants")
+    assert invalid.value.code == "failure_code_invalid"
+    with pytest.raises(WorkerQueueError) as unavailable:
+        queue.complete(principal, credential, b"{}")
+    assert unavailable.value.code == "completion_unavailable"
