@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useOrg } from '@/context/OrgContext'
+import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
 
 const GOV = '/api/v1/ai-governance'
@@ -367,57 +369,85 @@ function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
   return res.success && res.data !== undefined ? res.data : fallback
 }
 
-/** Everything the system file shows, fetched once per system id from the governance API. */
+export interface SystemFileView {
+  file: SystemFile
+  loading: boolean
+  error: string | null
+}
+/** System file state keyed by organisation and system. */
+export type SystemFileState = EvaluationScopeState<SystemFileView>
+
+const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
+const PENDING: SystemFileView = { file: EMPTY_FILE, loading: true, error: null }
+
+export const systemFileScopeKey = (organizationId: string | null | undefined, systemId: string | undefined) =>
+  evaluationScopeKey({ organizationId, systemId })
+
+/** What a scope shows: its own state, or an empty loading file while the state still belongs to the previous scope. */
+export const viewSystemFile = (state: SystemFileState, scopeKey: string) => readEvaluationScopeState(state, scopeKey, PENDING)
+
+/** Move the state to a new scope, dropping the previous scope's file. */
+export const enterSystemFileScope = (state: SystemFileState, scopeKey: string): SystemFileState =>
+  state.scopeKey === scopeKey ? state : { scopeKey, value: PENDING }
+
+type Get = <T>(path: string) => Promise<ApiResponse<T>>
+
+/** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope. */
+export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void) {
+  const write = (next: (v: SystemFileView) => SystemFileView) => update((s) => writeEvaluationScopeState(s, scopeKey, next(s.value)))
+  write((v) => ({ ...v, loading: true }))
+  const sys = await get<SystemRecord>(`${GOV}/systems/${systemId}`)
+  if (!sys.success || !sys.data) {
+    write((v) => ({ file: { ...v.file, system: null }, loading: false, error: sys.error || 'System not found' }))
+    return
+  }
+  const q = `system_id=${encodeURIComponent(systemId)}`
+  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
+    get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
+    get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
+    get<RemediationStatus>(`${GOV}/remediation?${q}`),
+    get<RiskStatus>(`${GOV}/dashboard/risk?${q}`),
+    get<AuditReport[]>(`${GOV}/reports?${q}`),
+    get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
+    get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
+    get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
+    get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
+    get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
+    get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
+  ])
+  const file: SystemFile = {
+    system: sys.data,
+    evidence: unwrap(evidence, null),
+    approval: unwrap(approval, null),
+    remediation: unwrap(remediation, null),
+    risks: unwrap(risks, null),
+    reports: unwrap(reports, []),
+    gate: unwrap(gate, null),
+    fairnessRuns: unwrap(fairnessRuns, []),
+    monitoringRuns: unwrap(monitoringRuns, []),
+    monitoringPolicy: unwrap(monitoringPolicy, null),
+    seals: unwrap(seals, []),
+    clauseMap: unwrap(clauseMap, null),
+  }
+  write(() => ({ file, loading: false, error: null }))
+}
+
+/** Everything the system file shows, fetched once per organisation and system from the governance API. */
 export function useSystemFile(systemId: string | undefined) {
-  const [file, setFile] = useState<SystemFile>({ system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { selectedOrg } = useOrg()
+  const scopeKey = systemFileScopeKey(selectedOrg?.id, systemId)
+  const [state, setState] = useState<SystemFileState>(() => ({ scopeKey, value: PENDING }))
+  const { file, loading, error } = viewSystemFile(state, scopeKey)
 
   const refresh = useCallback(async () => {
     if (!systemId) return
-    setLoading(true)
-    const sys = await apiClient.get<SystemRecord>(`${GOV}/systems/${systemId}`)
-    if (!sys.success || !sys.data) {
-      setError(sys.error || 'System not found')
-      setFile((f) => ({ ...f, system: null }))
-      setLoading(false)
-      return
-    }
-    const q = `system_id=${encodeURIComponent(systemId)}`
-    const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
-      apiClient.get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
-      apiClient.get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
-      apiClient.get<RemediationStatus>(`${GOV}/remediation?${q}`),
-      apiClient.get<RiskStatus>(`${GOV}/dashboard/risk?${q}`),
-      apiClient.get<AuditReport[]>(`${GOV}/reports?${q}`),
-      apiClient.get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
-      apiClient.get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
-      apiClient.get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
-      apiClient.get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
-      apiClient.get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
-      apiClient.get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
-    ])
-    setFile({
-      system: sys.data,
-      evidence: unwrap(evidence, null),
-      approval: unwrap(approval, null),
-      remediation: unwrap(remediation, null),
-      risks: unwrap(risks, null),
-      reports: unwrap(reports, []),
-      gate: unwrap(gate, null),
-      fairnessRuns: unwrap(fairnessRuns, []),
-      monitoringRuns: unwrap(monitoringRuns, []),
-      monitoringPolicy: unwrap(monitoringPolicy, null),
-      seals: unwrap(seals, []),
-      clauseMap: unwrap(clauseMap, null),
-    })
-    setError(null)
-    setLoading(false)
-  }, [systemId])
+    await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState)
+  }, [scopeKey, systemId])
 
   useEffect(() => {
+    setState((s) => enterSystemFileScope(s, scopeKey))
     void refresh()
-  }, [refresh])
+  }, [refresh, scopeKey])
 
   const requestDecision = async () => {
     if (!systemId) return
