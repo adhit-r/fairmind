@@ -66,7 +66,7 @@
       "refersTo": "input",
       "description": "A labelled field for filters and review metadata.",
       "html": "<label class=\"ds-field\"><span>Control owner</span><input /></label>",
-      "css": ".ds-field { display: grid; gap: 6px; color: var(--fm-ink2); font: 500 12.5px/1.2 Inter, sans-serif; } .ds-field input { height: 40px; padding: 0 12px; border: 1px solid var(--fm-line); border-radius: 10px; background: #fff; color: var(--fm-ink); font: 400 13px/1.5 Inter, sans-serif; } .ds-field input:focus-visible { outline: none; border-color: var(--fm-ink); }"
+      "css": ".ds-field { display: grid; gap: 6px; color: var(--fm-ink2); font: 500 12.5px/1.2 Inter, sans-serif; } .ds-field input { height: 40px; padding: 0 12px; border: 1px solid var(--fm-line); border-radius: 10px; background: #fff; color: var(--fm-ink); font: 400 13px/1.5 Inter, sans-serif; } .ds-field input:focus-visible { outline: none; border-color: var(--fm-ink); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fm-ink); }"
     },
     {
       "name": "Status Pill",

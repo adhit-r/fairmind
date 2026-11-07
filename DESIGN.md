@@ -48,6 +48,12 @@ typography:
     fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "0"
+  control-secondary:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "0.8125rem"
+    fontWeight: 500
+    lineHeight: 1.2
+    letterSpacing: "0"
   label:
     fontFamily: "Inter, sans-serif"
     fontSize: "0.65625rem"
@@ -78,7 +84,7 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.fm-ink2}"
     border: "1px solid {colors.fm-line}"
-    typography: "{typography.control}"
+    typography: "{typography.control-secondary}"
     rounded: "{rounded.pill}"
     padding: "0 16px"
     height: "40px"
@@ -138,7 +144,7 @@ All neutrals are referenced through `var(--fm-*)`; hex values for ink, lines, an
 
 ### Brand accent
 
-- **Brand** `--fm-brand` (`#ff6b35`): the FairMind mark, the active lifecycle station on the spine, and small highlights. It is never a button fill and never a page wash.
+- **Brand** `--fm-brand` (`#ff6b35`): the FairMind mark, the active lifecycle station on the spine, and small highlights. It is never a button fill, never a status-chip fill, and never a page wash. Verdicts that need a person (such as `review`) use the attention status pair, not the brand accent.
 
 ### Status
 
@@ -174,10 +180,11 @@ One shadow, `--fm-shadow` (`0 1px 2px rgba(20,20,30,.04), 0 18px 44px -20px rgba
 
 - **Shape:** `rounded-full`, 40px high (`h-10`) by default, 36px small, 44px large.
 - **Primary:** `--fm-ink` fill, white 13px semibold text, hover to black. No shadow, no transform.
-- **Secondary:** white with a `--fm-line` hairline and `--fm-ink2` text; hover darkens the border and text to ink.
+- **Secondary:** white with a `--fm-line` hairline and `--fm-ink2` text at medium weight (500); hover darkens the border and text to ink. `Button` `neutral` / `outline` is the canonical secondary.
 - **Quiet:** `--fm-bg` fill with ink text.
 - **Destructive:** `#b4232c` fill with explicit destructive copy. Never rely on an icon alone.
 - **Focus:** 2px `--fm-ink` ring with 2px offset. Disabled controls drop to 60% opacity and keep their label.
+- **Known divergence:** the `BTN` class string still uses semibold `--fm-ink` text and 50% disabled opacity. Prefer `Button`; migrate `BTN` to the values above.
 
 ### Pills
 
@@ -209,7 +216,7 @@ A control trace row presents framework ID, shared control, assessment state, own
 
 ### Brand mark
 
-The mark is a 22px `--fm-brand` square with 6px corners next to the "FairMind" wordmark (15px, bold, tight tracking). It links to `/dashboard`. The brand orange appears here and on spine highlights only.
+The mark is a 22px `--fm-brand` square with 8px corners (`rounded-md`, `--radius` minus 2px) next to the "FairMind" wordmark (15px, bold, tight tracking). It links to `/dashboard`. The brand orange appears here, on spine highlights, and on the small highlights listed under Colors; never as a fill for status or verdict chips.
 
 ### Organisation and person identity
 
@@ -240,7 +247,7 @@ Evaluation runs and suite executions always expose three independent axes (`apps
 - **Evaluator evidence result** (`EVIDENCE_RESULTS`): `pending`, `passed`, `passed_with_limitations`, `failed`, `informational`, `error`, `unavailable`, `insufficient_data`, or `unknown`. It describes what the evaluator found, including a failed model result from a successfully completed evaluator. `EVIDENCE_RESULTS_BY_TECHNICAL_STATUS` constrains the pairing: a non-terminal status carries only `pending`. A Passport reporting `passed_with_limitations` must name at least one limitation.
 - **Governance verdict** (`GOVERNANCE_VERDICTS`): `approved`, `conditional`, `review`, `blocked`, or `insufficient`. It describes the current human-governed decision supported by admitted evidence. A new run starts at `insufficient` with every suite layer `insufficient`; a run with `verdict_version` 0 may carry only `review` or `insufficient`.
 
-`succeeded` never implies `passed`, and neither implies `approved`. `awaiting_evidence`, `unavailable`, `insufficient_data`, and `insufficient` remain neutral, explicit states rather than success or failure. `review` is marked with the brand accent to signal required human attention, not a passed result. Layer verdicts (`suites`, `modalities`, `components`, `riskDimensions`) stay separate labelled sections; an absent axis reads "Not assessed."
+`succeeded` never implies `passed`, and neither implies `approved`. `awaiting_evidence`, `unavailable`, `insufficient_data`, and `insufficient` remain neutral, explicit states rather than success or failure. `review` uses the attention Pill tone (`#a8430b` on `#ffeee4`, tone `you` in `packs/parts.tsx`) to signal required human attention, not a passed result. The orange `bg-[#FF6B35]` Review chip in `components/evaluations/EvidenceTrustPanel.tsx` (bordered, uppercase) is legacy styling to migrate to that tone. Layer verdicts (`suites`, `modalities`, `components`, `riskDimensions`) stay separate labelled sections; an absent axis reads "Not assessed."
 
 ### Evidence Admission And Trust Panel
 
@@ -286,13 +293,14 @@ Decision-grade evidence is one chain of hashes from the target under test to the
 | Change | Where it fails | Result |
 | --- | --- | --- |
 | Any Passport content byte after hashing | `normalize_evidence_passport_v2` (`content_hash_mismatch`) | `evidence_passport_invalid` |
-| Signature, issuer, key, or algorithm mismatch | `EvidenceAuthenticityService` | `evidence_authenticity_failed` |
+| Signature issuer differs from the evaluator issuer | `normalize_evidence_passport_v2` (`signature_issuer_mismatch`), during `parse_evidence_passport_v2` | `evidence_passport_invalid` |
+| Signature value, algorithm, or key id does not verify against the resolved trusted key | `EvidenceAuthenticityService` | `evidence_authenticity_failed` |
 | Different target version or `subjectDigest`, suite version, configuration, plan hash, envelope hash, nonce, or trust policy hash in `executionBinding` | exact binding equality in `EvidenceAuthenticityService` | `evidence_authenticity_failed` |
 | Stored envelope no longer rebuilds to itself | `expected_execution_binding_v2` | `evidence_admission_authority_invalid` |
 | A new target version, suite configuration, or trust policy | immutable bindings (013a) | needs a new plan and run; old evidence cannot bind to it |
 | Plan, target, trust policy, or suite not `active` | resolver | `evidence_admission_authority_inactive` |
-| Issuer inactive, wrong source type, or restricted | resolver | `evidence_issuer_untrusted` or `evidence_issuer_restricted` |
-| Signing key revoked or outside its validity window | resolver | `evidence_signing_key_untrusted` |
+| Issuer unknown, inactive, wrong source type, or restricted | resolver | `evidence_issuer_untrusted` or `evidence_issuer_restricted` |
+| Signing key unknown, untrusted, revoked, or outside its validity window | resolver | `evidence_signing_key_untrusted` |
 | Authority changes during verification | `_verify_stable_authority` | `evidence_admission_authority_changed` |
 | Out-of-order timestamps | admission chronology | `evidence_chronology_invalid` |
 | Effective expiry reached | admission or link | `evidence_expired` or `verified_evidence_link_ineligible` |
