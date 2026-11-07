@@ -1311,7 +1311,7 @@ requires-dist = [
     { name = "factory-boy", marker = "extra == 'test'", specifier = ">=3.3.0" },
     { name = "faker", marker = "extra == 'dev'", specifier = ">=19.0.0" },
     { name = "faker", marker = "extra == 'test'", specifier = ">=19.0.0" },
-    { name = "fastapi", specifier = ">=0.135.0" },
+    { name = "fastapi", specifier = ">=0.135.0,<0.137" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "gunicorn", specifier = ">=25.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },

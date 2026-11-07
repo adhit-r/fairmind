@@ -1143,6 +1143,8 @@ def test_link_revalidates_live_authority_after_verified_submission(
                 scenario,
                 submission=submission,
                 idempotency_key=f"link-after-{resource}-{uuid.uuid4()}",
+                # A bare UUID: a prefixed random id trips the public-safe
+                # entropy check about 9% of the time and fails as invalid.
                 actor_id=str(uuid.uuid4()),
             )
         assert caught.value.code == "verified_evidence_link_ineligible"
