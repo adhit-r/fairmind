@@ -17,7 +17,7 @@ from ..services.llm_as_judge_service import (
     BiasCategory,
     JudgeEvaluationResult
 )
-from src.infrastructure.llm import grok_cli
+from src.application.services.llm_runtime import grok_cli
 
 logger = logging.getLogger(__name__)
 # Stateless: scores the text in the request. It spends the platform's judge-model
