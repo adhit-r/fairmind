@@ -7,6 +7,7 @@ import {
   MIN_REASON,
   TIERS,
   draftOf,
+  shortFrameworkName,
   suggestApplicability,
   type ApplicabilityAnswers,
   type ApplicabilityConfirmBody,
@@ -234,12 +235,12 @@ export function ApplicabilityForm({
                   return (
                     <li key={f.key} className="flex flex-wrap items-baseline gap-2">
                       {f.available ? (
-                        <button type="button" aria-pressed={kept} onClick={() => toggleRemoved(f.key)} className={chip(kept)}>
-                          {f.name} · {kept ? 'suggested' : 'removed'}
+                        <button type="button" aria-pressed={kept} onClick={() => toggleRemoved(f.key)} className={chip(kept)} title={f.name}>
+                          {shortFrameworkName(f.name)} · {kept ? 'suggested' : 'removed'}
                         </button>
                       ) : (
                         <>
-                          <span className="rounded-full border border-dashed border-[rgba(21,23,26,.2)] bg-white px-3 py-1 text-[12.5px] text-[var(--fm-ink3)]">{f.name}</span>
+                          <span className="rounded-full border border-dashed border-[rgba(21,23,26,.2)] bg-white px-3 py-1 text-[12.5px] text-[var(--fm-ink3)]" title={f.name}>{shortFrameworkName(f.name)}</span>
                           <Pill>Coming soon</Pill>
                         </>
                       )}

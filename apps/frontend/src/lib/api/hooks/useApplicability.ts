@@ -121,6 +121,11 @@ export function draftOf(
   return { body, tier: choice.tier, frameworks, needsReason, ready, failed: state.failed }
 }
 
+/** Catalogue names run long ("RBI FREE-AI: Framework for ..."); chips and facts show the part before the colon or bracket. */
+export function shortFrameworkName(name: string): string {
+  return name.split(/:| \(/)[0].trim() || name
+}
+
 /** "Rule T3: ..." from the rules that fired, or "Set by hand: {reason}" when the tier was changed. */
 export function tierBasis(record: ApplicabilityRecord | null): string {
   if (!record) return 'Not confirmed'

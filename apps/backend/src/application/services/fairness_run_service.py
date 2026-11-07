@@ -121,6 +121,9 @@ def _attribute_hint(name: str) -> Optional[str]:
     return max(found)[1] if found else None
 
 
+BINARY_VALUES = {"0", "1", "0.0", "1.0", "true", "false", "yes", "no"}
+
+
 def _attribute_column(name: str, series: pd.Series) -> Dict[str, Any]:
     """Whether one column looks like a protected attribute, why, and which ground it covers."""
     distinct = int(series.dropna().nunique())
@@ -139,7 +142,8 @@ def _attribute_column(name: str, series: pd.Series) -> Dict[str, Any]:
         return {"status": "suggested", "basis": f"{basis}, and the values look like gender" if basis else "The values look like gender", "ground": "gender"}
     if basis:
         return {"status": "suggested", "basis": basis, "ground": ground}
-    if 2 <= distinct <= 12:
+    # A 0/1 column is an outcome or a flag, not a stand-in for a protected group.
+    if 2 <= distinct <= 12 and not values <= BINARY_VALUES:
         return {"status": "possible", "basis": POSSIBLE_BASIS, "ground": None}
     return {"status": None, "basis": None, "ground": None}
 

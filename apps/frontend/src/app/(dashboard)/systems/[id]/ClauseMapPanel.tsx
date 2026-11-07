@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import type { ClauseMap } from '@/lib/api/hooks/useSystemFile'
 import { cn } from '@/lib/utils'
 
@@ -29,7 +30,7 @@ export function ClauseMapPanel({ map }: { map: ClauseMap }) {
       <div>
         <div className="text-[13.5px] font-semibold">What the gate says per framework</div>
         <div className="text-[12px] text-[var(--fm-ink2)]">
-          {map.scoped ? `For the frameworks this system answers to: ${map.frameworks.map((f) => f.name).join(', ')}. ` : ''}
+          {map.scoped ? `For the frameworks this system answers to: ${map.frameworks.map((f) => shortFrameworkName(f.name)).join(', ')}. ` : ''}
           Each gate check maps to the clauses it satisfies, supports or aligns with. A clause is as good as its best-evidenced check.
           {map.scoped === false && ' Showing every framework: none chosen yet.'}
         </div>

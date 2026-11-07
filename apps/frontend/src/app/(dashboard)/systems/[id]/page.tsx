@@ -7,7 +7,7 @@ import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
 import { Pill, cap } from '@/components/packs/parts'
-import { tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
+import { shortFrameworkName, tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
@@ -193,7 +193,7 @@ export default function SystemFilePage() {
         <Link href="/dashboard" className="hover:text-[var(--fm-ink)]">Today</Link> · {line || 'Unassigned'} · System file
       </div>
 
-      <header className="fm-card grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <header className="fm-card grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
         <div className="min-w-0">
           <h1 className="truncate text-[30px] font-semibold leading-[1.1] tracking-[-.03em] lg:text-[34px]">{loading && !s ? 'Loading' : s?.name}</h1>
           <div className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -253,7 +253,7 @@ export default function SystemFilePage() {
         <Action href="/integrations" primary={false}>Connect sources</Action>
       </>}>
         <Fact label="Registered" value={when(s?.createdAt) || ''} />
-        <Fact label="Rules it answers to" value={<span className="whitespace-normal">{applicability?.frameworks.length ? applicability.frameworks.map((f) => f.name).join(', ') : 'Not chosen'}</span>} />
+        <Fact label="Rules it answers to" value={<span className="whitespace-normal">{applicability?.frameworks.length ? applicability.frameworks.map((f) => shortFrameworkName(f.name)).join(', ') : 'Not chosen'}</span>} />
         <Fact label="Tier basis" value={<span className="whitespace-normal">{tierBasis(applicability)}</span>} />
         <Fact label="Record" value={s?.owner && line ? 'Owner and business line set' : 'Owner or business line missing'} />
         {awaitingSecond && (

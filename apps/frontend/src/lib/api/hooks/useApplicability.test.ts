@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { EMPTY_ANSWERS, draftOf, tierBasis, type ApplicabilityRecord, type ApplicabilitySuggestion } from './useApplicability'
+import { EMPTY_ANSWERS, draftOf, shortFrameworkName, tierBasis, type ApplicabilityRecord, type ApplicabilitySuggestion } from './useApplicability'
 
 const answered = { ...EMPTY_ANSWERS, use: 'credit', decidesAboutPeople: true, markets: ['IN' as const] }
 
@@ -66,4 +66,10 @@ test('tier basis names the fired rules, or the reason when set by hand', () => {
   assert.equal(tierBasis(null), 'Not confirmed')
   assert.equal(tierBasis(record), 'Rule T3: Decides about people.')
   assert.equal(tierBasis({ ...record, tier: 'medium', reason: 'Analyst reviews every case' }), 'Set by hand: Analyst reviews every case')
+})
+
+test('framework names are shortened to the part before a colon or bracket', () => {
+  assert.equal(shortFrameworkName('RBI FREE-AI: Framework for Responsible and Ethical Enablement of AI in the Financial Sector'), 'RBI FREE-AI')
+  assert.equal(shortFrameworkName('EU AI Act (Reg. 2024/1689) as amended by Digital Omnibus (Reg. 2026/1744)'), 'EU AI Act')
+  assert.equal(shortFrameworkName('India AI Governance Guidelines'), 'India AI Governance Guidelines')
 })

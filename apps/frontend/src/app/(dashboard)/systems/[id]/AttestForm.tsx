@@ -31,6 +31,11 @@ export function AttestForm({ check, onSubmit, onCancel }: { check: AttestableChe
   return (
     <div className="mt-2 grid gap-2 rounded-[10px] border border-[var(--fm-line)] bg-white p-3">
       <p className="text-[12px] text-[var(--fm-ink2)]">{CHECK_PROMPT[check]} This is recorded as attested, in the manual confidence band; measured evidence can replace it later.</p>
+      {check === 'environmental' && (
+        <p className="rounded-[10px] bg-[#fff4d6] px-3 py-2 text-[12px] text-[#8a5a00]">
+          An environmental attestation takes the place of an assessment for this check, and approval still needs an assessment on file. Run the assessment instead if you can.
+        </p>
+      )}
       <textarea
         value={statement}
         onChange={(e) => setStatement(e.target.value)}
