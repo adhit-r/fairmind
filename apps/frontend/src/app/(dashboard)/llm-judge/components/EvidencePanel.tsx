@@ -98,7 +98,7 @@ export function EvidencePanel({ result }: EvidencePanelProps) {
                   size="sm"
                   variant="neutral"
                   onClick={() => copyToClipboard(result.evidence[index], index)}
-                  className="w-full border-2 border-gray-400"
+                  className="w-full border border-gray-400"
                 >
                   {copiedIndex === index ? (
                     <>
@@ -121,7 +121,7 @@ export function EvidencePanel({ result }: EvidencePanelProps) {
       {/* Summary */}
       <div className="bg-blue-50 border-t border-[var(--fm-line)] p-4">
         <p className="text-xs text-blue-900">
-          <strong>💡 How to use:</strong> Click on each detected bias to see the supporting evidence from your
+          <strong>How to use:</strong> Click on each detected bias to see the supporting evidence from your
           text. Use this information to revise your content and remove these biases.
         </p>
       </div>
