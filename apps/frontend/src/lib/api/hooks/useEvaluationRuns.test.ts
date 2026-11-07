@@ -221,6 +221,38 @@ describe('evaluation runs controller', () => {
     })
   })
 
+  test('rejects a plan list containing a record from another organization', async () => {
+    const { client } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan({ orgId: 'org-2' })] }
+        : { success: true, data: [run()] },
+      async () => { throw new Error('No POST expected') },
+    )
+    const controller = createEvaluationRunsController(client)
+
+    await controller.setScope('org-1', 'system-1')
+
+    assert.deepEqual(controller.getSnapshot().plans, [])
+    assert.equal(controller.getSnapshot().plansLoaded, false)
+    assert.match(controller.getSnapshot().error?.message || '', /scope/i)
+  })
+
+  test('rejects a run list containing a record from another system', async () => {
+    const { client } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan()] }
+        : { success: true, data: [run({ systemId: 'system-2' })] },
+      async () => { throw new Error('No POST expected') },
+    )
+    const controller = createEvaluationRunsController(client)
+
+    await controller.setScope('org-1', 'system-1')
+
+    assert.deepEqual(controller.getSnapshot().plans, [plan()])
+    assert.deepEqual(controller.getSnapshot().runs, [])
+    assert.match(controller.getSnapshot().error?.message || '', /scope/i)
+  })
+
   test('invalidates stale list responses when either scope identifier changes', async () => {
     const oldPlans = deferred<ApiResponse<unknown>>()
     const oldRuns = deferred<ApiResponse<unknown>>()
@@ -319,7 +351,7 @@ describe('evaluation runs controller', () => {
     phase = 'overlap'
 
     const fullRefresh = controller.refresh()
-    const activation = controller.activatePlan('plan-1')
+    const activation = controller.activatePlan('plan-committed')
     await targetedRequested.promise
     targetedPlans.resolve({ success: true, data: [committedPlan] })
 
@@ -388,6 +420,28 @@ describe('evaluation runs controller', () => {
     assert.deepEqual(controller.getSnapshot().runs.map(({ id }) => id), ['run-1'])
   })
 
+  test('keeps known-good runs when a post-commit refresh returns another scope', async () => {
+    let runReads = 0
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.endsWith('/evaluation-runs')) {
+          runReads += 1
+          return runReads === 1
+            ? { success: true, data: [run()] }
+            : { success: true, data: [run({ id: 'run-foreign', systemId: 'system-2' })] }
+        }
+        return { success: true, data: [plan()] }
+      },
+      async () => ({ success: true, data: run({ id: 'run-created' }) }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    assert.equal((await controller.createRun('plan-1')).id, 'run-created')
+    assert.deepEqual(controller.getSnapshot().runs, [run()])
+    assert.match(controller.getSnapshot().error?.message || '', /scope/i)
+  })
+
   test('returns a committed plan while exposing a failed follow-up list refresh without optimistic data', async () => {
     const committedPlan = plan({ id: 'plan-committed', status: 'draft' })
     let planReads = 0
@@ -411,6 +465,29 @@ describe('evaluation runs controller', () => {
     assert.equal(controller.getSnapshot().loading, false)
     assert.equal(controller.getSnapshot().error?.message, 'Plan refresh unavailable.')
     assert.deepEqual(controller.getSnapshot().plans.map(({ id }) => id), ['plan-1'])
+  })
+
+  test('keeps known-good plans when a post-commit refresh returns another scope', async () => {
+    let planReads = 0
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.endsWith('/evaluation-plans')) {
+          planReads += 1
+          return planReads === 1
+            ? { success: true, data: [plan()] }
+            : { success: true, data: [plan({ id: 'plan-foreign', orgId: 'org-2' })] }
+        }
+        return { success: true, data: [run()] }
+      },
+      async () => ({ success: true, data: plan({ id: 'plan-created', status: 'draft' }) }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    assert.equal((await controller.createPlan(createPlanInput)).id, 'plan-created')
+    assert.deepEqual(controller.getSnapshot().plans, [plan()])
+    assert.equal(controller.getSnapshot().plansLoaded, false)
+    assert.match(controller.getSnapshot().error?.message || '', /scope/i)
   })
 
   test('does not swallow stale scope changes when a post-commit refresh rejects', async () => {
@@ -446,6 +523,215 @@ describe('evaluation runs controller', () => {
 
     await assert.rejects(creation, StaleEvaluationResultError)
     assert.deepEqual(controller.getSnapshot().plans.map(({ orgId }) => orgId), ['org-2'])
+  })
+
+  test('rejects a preflight response for a different plan', async () => {
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.endsWith('/preflight')) {
+          return { success: true, data: preflight({ planId: 'plan-other' }) }
+        }
+        return endpoint.endsWith('/evaluation-plans')
+          ? { success: true, data: [plan()] }
+          : { success: true, data: [run()] }
+      },
+      async () => { throw new Error('No POST expected') },
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    await assert.rejects(
+      controller.loadPreflight('plan-requested'),
+      (reason) => reason instanceof EvaluationApiRequestError && /plan/i.test(reason.message),
+    )
+  })
+
+  test('rejects a created run bound to a different plan before refreshing', async () => {
+    const { client, calls } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan()] }
+        : { success: true, data: [run()] },
+      async () => ({ success: true, data: run({ planId: 'plan-other' }) }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    await assert.rejects(
+      controller.createRun('plan-requested'),
+      (reason) => reason instanceof EvaluationApiRequestError && /plan/i.test(reason.message),
+    )
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.method, 'POST')
+  })
+
+  test('rejects a created plan from another organization before refreshing', async () => {
+    const { client, calls } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan()] }
+        : { success: true, data: [run()] },
+      async () => ({ success: true, data: plan({ orgId: 'org-other' }) }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    await assert.rejects(
+      controller.createPlan(createPlanInput),
+      (reason) => reason instanceof EvaluationApiRequestError && /scope/i.test(reason.message),
+    )
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.method, 'POST')
+  })
+
+  test('rejects an activation response for a different plan before refreshing', async () => {
+    const { client, calls } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan()] }
+        : { success: true, data: [run()] },
+      async () => ({ success: true, data: plan({ id: 'plan-other' }) }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    await assert.rejects(
+      controller.activatePlan('plan-requested'),
+      (reason) => reason instanceof EvaluationApiRequestError && /plan/i.test(reason.message),
+    )
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.method, 'POST')
+  })
+
+  test('rejects a passport-link response for a different run before refreshing', async () => {
+    const { client, calls } = successfulClient()
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    await assert.rejects(
+      controller.linkPassportRevision('run-requested', {
+        evidenceRunId: 'evidence-run-1',
+        passportRevisionId: 'revision-1',
+      }),
+      (reason) => reason instanceof EvaluationApiRequestError && /run/i.test(reason.message),
+    )
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.method, 'POST')
+  })
+
+  test('rejects a passport-link response that does not confirm the exact revision', async () => {
+    const { client, calls } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan()] }
+        : { success: true, data: [run()] },
+      async () => ({
+        success: true,
+        data: run({
+          technicalStatus: 'succeeded',
+          linkedEvidenceRunId: 'evidence-run-1',
+          linkedPassportRevisionId: 'revision-other',
+        }),
+      }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    await assert.rejects(
+      controller.linkPassportRevision('run-1', {
+        evidenceRunId: 'evidence-run-1',
+        passportRevisionId: 'revision-requested',
+      }),
+      (reason) => reason instanceof EvaluationApiRequestError && /revision/i.test(reason.message),
+    )
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.method, 'POST')
+  })
+
+  test('rejects a passport-link response that does not confirm the exact evidence run', async () => {
+    const { client, calls } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [plan()] }
+        : { success: true, data: [run()] },
+      async () => ({
+        success: true,
+        data: run({
+          technicalStatus: 'succeeded',
+          linkedEvidenceRunId: 'evidence-run-other',
+          linkedPassportRevisionId: 'revision-1',
+        }),
+      }),
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+    calls.length = 0
+
+    await assert.rejects(
+      controller.linkPassportRevision('run-1', {
+        evidenceRunId: 'evidence-run-requested',
+        passportRevisionId: 'revision-1',
+      }),
+      (reason) => reason instanceof EvaluationApiRequestError && /evidence run/i.test(reason.message),
+    )
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0]?.method, 'POST')
+  })
+
+  test('rejects foreign-scope records from every direct response path', async () => {
+    type Scenario = {
+      name: string
+      response: EvaluationPlan | EvaluationRun
+      execute: (controller: ReturnType<typeof createEvaluationRunsController>) => Promise<unknown>
+    }
+    const linkInput = { evidenceRunId: 'evidence-run-1', passportRevisionId: 'revision-1' }
+    const scenarios: Scenario[] = [
+      {
+        name: 'activate plan',
+        response: plan({ orgId: 'org-other' }),
+        execute: (controller) => controller.activatePlan('plan-1'),
+      },
+      {
+        name: 'create run',
+        response: run({ systemId: 'system-other' }),
+        execute: (controller) => controller.createRun('plan-1'),
+      },
+      {
+        name: 'get run',
+        response: run({ orgId: 'org-other' }),
+        execute: (controller) => controller.getRun('run-1'),
+      },
+      {
+        name: 'link passport revision',
+        response: run({
+          systemId: 'system-other',
+          linkedEvidenceRunId: linkInput.evidenceRunId,
+          linkedPassportRevisionId: linkInput.passportRevisionId,
+        }),
+        execute: (controller) => controller.linkPassportRevision('run-1', linkInput),
+      },
+    ]
+
+    for (const scenario of scenarios) {
+      const { client, calls } = fakeClient(
+        async (endpoint) => {
+          if (endpoint.endsWith('/evaluation-plans')) return { success: true, data: [plan()] }
+          if (endpoint.endsWith('/evaluation-runs')) return { success: true, data: [run()] }
+          return { success: true, data: scenario.response }
+        },
+        async () => ({ success: true, data: scenario.response }),
+      )
+      const controller = createEvaluationRunsController(client)
+      await controller.setScope('org-1', 'system-1')
+      calls.length = 0
+
+      await assert.rejects(
+        scenario.execute(controller),
+        (reason) => reason instanceof EvaluationApiRequestError && /scope/i.test(reason.message),
+        scenario.name,
+      )
+      assert.equal(calls.length, 1, scenario.name)
+    }
   })
 
   test('uses exact mutation endpoints and refreshes only the affected list after success', async () => {
@@ -675,6 +961,24 @@ describe('evaluation runs controller', () => {
     await controller.setScope('org-1', 'system-1')
 
     await assert.rejects(controller.getRun('run-current'), (reason) => reason === networkFailure)
+  })
+
+  test('rejects a detail response for a different run', async () => {
+    const { client } = fakeClient(
+      async (endpoint) => {
+        if (endpoint.endsWith('/evaluation-plans')) return { success: true, data: [plan()] }
+        if (endpoint.endsWith('/evaluation-runs')) return { success: true, data: [run()] }
+        return { success: true, data: run({ id: 'run-other' }) }
+      },
+      async () => { throw new Error('No POST expected') },
+    )
+    const controller = createEvaluationRunsController(client)
+    await controller.setScope('org-1', 'system-1')
+
+    await assert.rejects(
+      controller.getRun('run-requested'),
+      (reason) => reason instanceof EvaluationApiRequestError && /request/i.test(reason.message),
+    )
   })
 
   test('rejects unknown and snake_case backend vocabularies instead of trusting compiled unions', async () => {
