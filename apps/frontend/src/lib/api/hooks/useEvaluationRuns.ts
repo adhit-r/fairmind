@@ -48,6 +48,7 @@ const evaluationLayerVerdictsSchema = z.strictObject({
 
 const evaluationPlanSchema = z.strictObject({
   id: z.string(),
+  contractVersion: z.literal('1.0.0'),
   orgId: z.string(),
   workspaceId: z.string(),
   systemId: z.string(),
@@ -81,6 +82,7 @@ const evaluationPreflightSchema = z.strictObject({
 
 const evaluationRunSchema = z.strictObject({
   id: z.string(),
+  contractVersion: z.literal('1.0.0'),
   orgId: z.string(),
   workspaceId: z.string(),
   systemId: z.string(),

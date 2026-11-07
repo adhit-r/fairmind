@@ -35,6 +35,7 @@ function deferred<T>() {
 function plan(overrides: Partial<EvaluationPlan> = {}): EvaluationPlan {
   return {
     id: 'plan-1',
+    contractVersion: '1.0.0',
     orgId: 'org-1',
     workspaceId: 'workspace-1',
     systemId: 'system-1',
@@ -57,6 +58,7 @@ function plan(overrides: Partial<EvaluationPlan> = {}): EvaluationPlan {
 function run(overrides: Partial<EvaluationRun> = {}): EvaluationRun {
   return {
     id: 'run-1',
+    contractVersion: '1.0.0',
     orgId: 'org-1',
     workspaceId: 'workspace-1',
     systemId: 'system-1',
@@ -219,6 +221,62 @@ describe('evaluation runs controller', () => {
     assert.deepEqual(controller.getSnapshot(), {
       plans: [plan()], runs: [run()], plansLoaded: true, loading: false, error: null,
     })
+  })
+
+  test('accepts the canonical versioned backend plan and run contract', async () => {
+    const wirePlan = { ...plan(), contractVersion: '1.0.0' }
+    const wireRun = { ...run(), contractVersion: '1.0.0' }
+    const { client } = fakeClient(
+      async (endpoint) => endpoint.endsWith('/evaluation-plans')
+        ? { success: true, data: [wirePlan] }
+        : { success: true, data: [wireRun] },
+      async () => { throw new Error('No POST expected') },
+    )
+    const controller = createEvaluationRunsController(client)
+
+    await controller.setScope('org-1', 'system-1')
+
+    const snapshot = controller.getSnapshot()
+    assert.equal(snapshot.plans[0]?.contractVersion, '1.0.0')
+    assert.equal(snapshot.runs[0]?.contractVersion, '1.0.0')
+    assert.equal(snapshot.error, null)
+  })
+
+  test('rejects unsupported legacy plan and run contract versions', async () => {
+    const scenarios = [
+      {
+        name: 'plan',
+        plans: [{ ...plan(), contractVersion: '2.0.0' }],
+        runs: [run()],
+        affected: (controller: ReturnType<typeof createEvaluationRunsController>) => (
+          controller.getSnapshot().plans
+        ),
+      },
+      {
+        name: 'run',
+        plans: [plan()],
+        runs: [{ ...run(), contractVersion: '2.0.0' }],
+        affected: (controller: ReturnType<typeof createEvaluationRunsController>) => (
+          controller.getSnapshot().runs
+        ),
+      },
+    ]
+
+    for (const scenario of scenarios) {
+      const { client } = fakeClient(
+        async (endpoint) => ({
+          success: true,
+          data: endpoint.endsWith('/evaluation-plans') ? scenario.plans : scenario.runs,
+        }),
+        async () => { throw new Error('No POST expected') },
+      )
+      const controller = createEvaluationRunsController(client)
+
+      await controller.setScope('org-1', 'system-1')
+
+      assert.deepEqual(scenario.affected(controller), [], scenario.name)
+      assert.match(controller.getSnapshot().error?.message || '', /contractVersion/, scenario.name)
+    }
   })
 
   test('rejects a plan list containing a record from another organization', async () => {
