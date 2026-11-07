@@ -1,0 +1,43 @@
+---
+title: EU AI Act evidence crosswalk
+description: A non-legal guide to how FairMind records can support an organization's own EU AI Act evidence work.
+---
+
+This page shows where FairMind records may help with EU AI Act evidence work. It is not legal advice, a conformity assessment, a certification, or a finding that the Act applies to your system. Your organization stays responsible for its role, risk-category, and obligation analysis, with qualified counsel or compliance specialists.
+
+Read the Act itself: the [Official Journal text of Regulation (EU) 2024/1689](https://eur-lex.europa.eu/eli/reg/2024/1689/oj) and the European Commission's [AI Act policy page](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai). Check EUR-Lex for a newer consolidated version, and check current Commission guidance, before you rely on any date or obligation here.
+
+## Start with applicability
+
+Before mapping any FairMind record, document at least:
+
+1. Your role: provider, deployer, importer, distributor, authorized representative, or general-purpose AI model provider.
+2. The system's intended purpose, users, deployment context, geography, and affected people.
+3. Whether a prohibition, high-risk classification, transparency obligation, general-purpose AI obligation, or other EU law may apply.
+4. Who owns the legal analysis, the decision date, the sources used, and the open questions.
+
+FairMind does not make this classification.
+
+## Where FairMind records can help
+
+Most of the rows below rely on [Assurance V2](/docs/concepts/evidence-trust-review) records, which are default off. The [Evidence Workbench](/docs/workflows/evidence-review) holds mutable records that are weaker evidence.
+
+| AI Act area | Supporting FairMind records | Limit |
+| --- | --- | --- |
+| Risk management, Article 9 | Versioned plans, lifecycle phases, evidence states, and decision records can organize a risk-control workflow. | FairMind is not a complete risk-management system and does not prove that risk was reduced. |
+| Technical documentation, Article 11 and Annex IV | Target, suite, plan, envelope, and evidence hashes support traceability. | You must decide on and write the required technical documentation. |
+| Record-keeping, Article 12 | Admissions, links, reviews, decisions, and audit events are kept in PostgreSQL tables whose update and delete paths are guarded by triggers. | Retention periods, export, and legal record requirements are yours to establish. |
+| Transparency to deployers, Article 13 | Status, limitations, provenance, freshness, and reviewer data can inform internal documentation. | FairMind does not produce instructions for use or transparency content. |
+| Human oversight, Article 14 | Four-eyes evidence review and a separately gated, audited decision exception support separation and accountability. | FairMind does not provide runtime stop, override, or operational oversight of the AI system. |
+| Accuracy, robustness, cybersecurity, Article 15 | Scope, signature, replay, and trust checks protect the integrity of evidence records. | They do not validate model performance, robustness, or security. Only results from a validated evaluator, as listed in [Capability truth](/docs/concepts/capability-truth), describe the system itself. |
+| Quality management system, Article 17 | Controlled records can be inputs to a QMS. | FairMind is not a QMS. |
+| Deployer duties and fundamental-rights impact assessment, Articles 26 and 27 | Records can organize supporting evidence and decisions. | FairMind does not decide deployer duties or complete a fundamental-rights impact assessment. |
+| General-purpose AI model providers, Articles 53 and 55 | Versioned evidence records can support a provider's own files. | FairMind does not produce GPAI technical documentation, the training-content summary, systemic-risk evaluations, or incident reports. |
+
+## Evidence quality checks
+
+For each claim in a compliance file, record the exact run, suite, target, evaluator identity, source artifacts, signer, review status, freshness state, limitations, and decision owner. If any of these is missing, say so. Do not turn an incomplete record into a compliance conclusion.
+
+## Evidence basis
+
+Record types and protections are defined in migrations `013` to `013m` under `apps/backend/migrations/`. Review and decision separation are described in [Permissions and separation](/docs/reference/permissions-and-separation).

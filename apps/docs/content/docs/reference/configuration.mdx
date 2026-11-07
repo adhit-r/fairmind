@@ -35,6 +35,28 @@ Same-origin Next.js proxy:
 BACKEND_INTERNAL_URL=http://localhost:8000 npm run dev
 ```
 
+## Assurance V2 gates
+
+Every Assurance V2 route is unmounted unless `ASSURANCE_V2_ENABLED=true` and its own gate is also `true`. All default to `false`. Turn on only the gates a deployment needs, as an approved change.
+
+| Gate | Mounts |
+| --- | --- |
+| `ASSURANCE_V2_ENABLED` | Nothing on its own; required by every gate below |
+| `ASSURANCE_V2_TARGET_VERSIONS_ENABLED` | Target-version routes |
+| `ASSURANCE_V2_SUITE_VERSIONS_ENABLED` | Suite-version routes |
+| `ASSURANCE_V2_PLANS_ENABLED` | Plan create, activate, and preflight |
+| `ASSURANCE_V2_RUNS_ENABLED` | Run create and read |
+| `ASSURANCE_V2_EVIDENCE_SUBMIT_ENABLED` | Signed Evidence Passport V2 submission |
+| `ASSURANCE_V2_EVIDENCE_LINK_ENABLED` | Linking a verified admission |
+| `ASSURANCE_V2_EVIDENCE_IMPORT_ENABLED` | Unverified report import |
+| `ASSURANCE_V2_EVIDENCE_REVIEW_ENABLED` | Four-eyes evidence review |
+| `ASSURANCE_V2_GOVERNANCE_DECISION_ENABLED` | Governance decisions |
+| `ASSURANCE_V2_SEPARATION_OVERRIDE_ENABLED` | Owner override and delegated grants; also needs the decision gate |
+| `ASSURANCE_V2_EVALUATOR_CATALOG_ENABLED` | Evaluator registration administration |
+| `ASSURANCE_V2_TRUST_ADMINISTRATION_ENABLED` | Issuer, signing-key, and trust-policy administration |
+
+Governance decisions and overrides also require PostgreSQL with migrations `013` to `013m` applied. See [Permissions and separation](/docs/reference/permissions-and-separation).
+
 ## Production mode
 
 Production mode depends on `NODE_ENV=production`. Setting only `ENVIRONMENT=production` is not equivalent. Production validation rejects short secrets and known development placeholder values.

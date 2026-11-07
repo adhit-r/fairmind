@@ -4,6 +4,7 @@
     "register-system",
     "environmental-evaluation",
     "evidence-review",
+    "operator-runbook",
     "remediation-retest",
     "reports-approvals",
     "release-gate-in-ci",

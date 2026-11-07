@@ -32,6 +32,27 @@ FairMind uses explicit states to describe how each evaluator produces evidence.
 | Security testing | Interface-only | Evidence integration is pending. |
 | Model DNA | Static mock | Do not use as assurance evidence. |
 
+## Assurance V2 boundary
+
+Assurance V2 is the evidence-control foundation of the AI assurance control plane. It ships as default-off primitives, not as an end-to-end evaluation product. Each capability needs `ASSURANCE_V2_ENABLED` plus its own gate, listed in [Configuration](/docs/reference/configuration#assurance-v2-gates).
+
+What exists behind the gates:
+
+- Versioned target, suite, and plan records, and run records bound to an execution envelope and content hash.
+- Signed Evidence Passport V2 admission, checked against server-owned evaluator, issuer, key, policy, replay, chronology, and scope records.
+- A separate link from a verified admission to its exact suite execution, and an explicitly unverified import path.
+- Four-eyes evidence review, freshness, and decision eligibility. See [Evidence trust and review](/docs/concepts/evidence-trust-review).
+- Governance decision records, with a separately gated, audited separation exception. See [Permissions and separation](/docs/reference/permissions-and-separation).
+
+What does not exist:
+
+- No FairMind worker, queue, sandbox, or executor runs evaluations. Migration `013m` adds worker tables only; preflight reports `worker_unavailable` for any plan or suite that asks for a FairMind worker.
+- Automatic enforcement is rejected with `automatic_enforcement_disabled`.
+- Lifecycle phase labels in a plan do not mean pre-deployment, realtime, or post-deployment assurance is running.
+- No certification, conformity assessment, legal conclusion, or "verified" designation is produced.
+
+A bounded claim: FairMind provides a default-off evidence-control foundation that can support an organization's evaluation and governance process when its own deployment and control prerequisites are met. Do not shorten that to "FairMind evaluates models", "FairMind is AI Act compliant", or "FairMind approves releases".
+
 ## How to write a bounded finding
 
 Prefer:

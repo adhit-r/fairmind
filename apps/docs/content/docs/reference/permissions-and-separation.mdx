@@ -1,0 +1,75 @@
+---
+title: Permissions and separation
+description: The literal Assurance V2 permissions, four-eyes review, and the gated separation-override path.
+---
+
+The Assurance V2 routes check literal permissions held by the caller's persisted organization membership. A client-supplied role name is never trusted, and a permission is never inferred from another one.
+
+<Callout type="warn" title="Default off">
+Every Assurance V2 route is behind `ASSURANCE_V2_ENABLED` plus its own child gate, and all of them default to `false`. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
+</Callout>
+
+## Human permissions
+
+| Activity | Permission |
+| --- | --- |
+| Create target versions, create and activate suite versions | `evaluation:catalog:admin` |
+| Register, approve, reject, and revoke evaluator registrations | `evaluation:catalog:admin` |
+| Create plans | `evaluation:plan:write` |
+| Activate plans | `evaluation:plan:activate` |
+| Create runs | `evaluation:run:create` |
+| Submit a signed Evidence Passport V2 | `evaluation:evidence:submit` |
+| Import an unverified report | `evaluation:evidence:import` and `evaluation:evidence:link` |
+| Link a verified admission to a suite execution | `evaluation:evidence:link` |
+| Accept or reject evidence | `evaluation:evidence:review` |
+| Record a governance decision, create or use an override grant | `evaluation:decision` |
+| Manage issuers, signing keys, and trust policies | `evaluation:trust:admin` |
+
+A missing permission returns `403` with a route-specific code such as `evaluation_plan_write_forbidden`. A disabled gate leaves the route unmounted, so it returns `404`. Neither response is something to work around.
+
+## Reserved permissions
+
+Two permissions exist in the vocabulary but do not authorize any ordinary human route:
+
+- `evaluation:worker` is reserved for a tenant-bound service principal. No worker route or worker credential issuer is mounted. Migration `013m` adds worker-execution tables, but nothing in the HTTP API uses them yet.
+- `evaluation:separation:override` is only read by the PostgreSQL owner-authority check described below. Granting it through a generic role assignment does not open any route.
+
+## Four-eyes evidence review
+
+Evidence review cannot be overridden. The reviewer must be a different person from:
+
+- the person who requested the run;
+- the person who submitted the evidence;
+- the person who linked the evidence.
+
+A violation returns `evidence_review_separation_required`. Reviews are frozen once a governance decision exists for the run.
+
+## Decision separation
+
+A normal governance decision has the same independence rule: the decider cannot be the run requester, any evidence submitter, or any evidence linker. A violation returns `governance_decision_separation_required`.
+
+Governance decisions, override grants, and owner overrides require PostgreSQL. On any other database the route returns `409 governance_decision_postgresql_required`.
+
+## Separation overrides
+
+When an organization has too few people to keep decisions independent, an exception path exists. It is mounted only when both `ASSURANCE_V2_GOVERNANCE_DECISION_ENABLED` and `ASSURANCE_V2_SEPARATION_OVERRIDE_ENABLED` are on, in addition to the master gate.
+
+| Route (under `/api/v1/ai-governance/organizations/{org_id}/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}`) | Who |
+| --- | --- |
+| `POST /decisions/owner-override` | The organization's canonical owner |
+| `POST /separation-override-grants` | The organization's canonical owner, naming one grantee |
+| `POST /separation-override-grants/{grant_id}/decision` | The named grantee |
+
+The owner check runs in PostgreSQL (migration `013j`). It passes only when the caller is the organization's `owner_id`, the organization is active, the caller's membership is active with the `owner` role, and the system `owner` role holds both `evaluation:decision` and `evaluation:separation:override`.
+
+A delegated grant (migration `013l`) is tied to one run, one grantee, and the current verdict version. It expires after 30 minutes. It is refused when the grantee has no separation conflict to waive, or when the grantee's role lacks `evaluation:decision`.
+
+An override waives only the decision-separation rule. It does not relax four-eyes review, trust checks, evidence freshness, run scope, or the other decision prerequisites. Each override and grant writes an immutable decision or grant record and an audit event, with the stated reason.
+
+## Operating the exception path
+
+Enabling the override gate and giving the owner role `evaluation:separation:override` is a deployment change, not a routine API step. Record the request, reason, approver, scope, and expiry under your own change controls.
+
+## Evidence basis
+
+Permissions are defined in `apps/backend/src/api/evaluation_permissions.py`. Route checks are in `apps/backend/src/api/routers/evaluation_workbench.py`, `imported_evidence.py`, `evaluator_catalog.py`, and `trust_administration_http.py`. Separation rules are in `apps/backend/src/application/services/verified_evidence_review_service.py` and `governance_decision_service.py`. The owner and grantee checks are in migrations `013j` and `013l`.
