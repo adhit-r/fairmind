@@ -21,7 +21,7 @@ const columns = [
       ...frameworks
         .filter((f) => ['eu-ai-act', 'iso-42001', 'nist-ai-rmf', 'gdpr'].includes(f.slug))
         .map((f) => ({ label: f.shortName, href: `/frameworks/${f.slug}/` })),
-      { label: `All ${registryTotals.frameworks} frameworks`, href: '/frameworks/' },
+      { label: `All ${registryTotals.frameworks} in the registry`, href: '/frameworks/' },
     ],
   },
   {

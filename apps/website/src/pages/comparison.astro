@@ -6,7 +6,7 @@ import '../styles/pages.css';
 
 const rows = [
   { need: 'Run a fairness or safety test', evaluators: 'Yes, deeply', grc: 'No', fairmind: 'Yes for fairness, environmental, LLM judge. Imports the rest as Evidence Passports.' },
-  { need: 'Map evidence to framework requirements', evaluators: 'No', grc: 'Yes, by questionnaire', fairmind: `Yes, by workflow run. ${registryTotals.frameworks} frameworks, ${registryTotals.crosswalk} crosswalk links, human-accepted mappings.` },
+  { need: 'Map evidence to framework requirements', evaluators: 'No', grc: 'Yes, by questionnaire', fairmind: `Yes, by workflow run. ${registryTotals.frameworks} frameworks, standards and risk lists, ${registryTotals.crosswalk} crosswalk links, human-accepted mappings.` },
   { need: 'Human approval before anything changes', evaluators: 'Not in scope', grc: 'Sign-off on documents', fairmind: 'A gate step in every workflow. Deny by default; three change rounds escalate.' },
   { need: 'Tamper-evident record of what happened', evaluators: 'Logs', grc: 'Audit log', fairmind: 'Hash-chained run ledger, sealed by the file step, chain state shown on the run page.' },
   { need: 'A verdict your pipeline can read', evaluators: 'Thresholds in code', grc: 'No', fairmind: 'fairmind gate in the CLI and GitHub Actions. Measured failures never give a plain go.' },
@@ -26,7 +26,7 @@ const structuredData = {
 
 <Layout
   title="FairMind vs AI evaluation tools and GRC suites | FairMind"
-  description={`How FairMind fits beside AI evaluation tools and GRC suites: it runs or imports test results and maps them to ${registryTotals.frameworks} frameworks through human-gated workflows.`}
+  description={`FairMind beside eval tools and GRC suites: it runs or imports test results and maps them to ${registryTotals.frameworks} frameworks, standards and risk lists.`}
   structuredData={structuredData}
 >
   <div class="route-page">
