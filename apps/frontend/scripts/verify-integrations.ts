@@ -24,7 +24,6 @@ const endpoints: Array<{ path: string; method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   
   // AI Governance
   { path: '/api/v1/ai-governance/status', method: 'GET', description: 'System status' },
-  { path: '/api/v1/ai-governance/compliance/frameworks', method: 'GET', description: 'Compliance frameworks' },
   
   // Bias Detection
   { path: '/api/v1/bias-detection/detect', method: 'POST', description: 'Bias detection' },

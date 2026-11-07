@@ -142,14 +142,6 @@ def test_untrusted_external_evidence_linking_setting_defaults_disabled() -> None
     )
 
 
-def test_ai_governance_frameworks_endpoint():
-    response = client.get("/api/v1/ai-governance/compliance/frameworks")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    assert any(item["id"] == "eu_ai_act" for item in data)
-
-
 def test_ai_governance_workspace_and_system_registry():
     workspace_resp = client.post(
         "/api/v1/ai-governance/workspaces",
@@ -842,3 +834,33 @@ def test_ai_governance_remediation_task_loop(authenticated_org_database):
     assert refreshed_payload["summary"]["byStatus"]["ready_for_retest"] == 1
     assert refreshed_payload["tasks"][0]["status"] == "ready_for_retest"
     assert refreshed_payload["tasks"][0]["notes"] == "Fixed threshold drift; queued for validation rerun."
+
+
+def test_remediation_summary_counts_status_and_priority():
+    from src.api.routers.ai_governance import _summarize_remediation_tasks
+
+    summary = _summarize_remediation_tasks(
+        [
+            {"status": "open", "priority": "high", "retestRequired": True, "linkedRiskIds": ["r1", "r2"]},
+            {"status": "blocked"},
+            {"status": "closed", "priority": "low"},
+        ],
+        "sys-1",
+    )
+
+    assert summary["systemId"] == "sys-1"
+    assert (summary["totalTasks"], summary["activeTasks"], summary["completedTasks"]) == (3, 2, 1)
+    assert summary["retestRequiredTasks"] == 1
+    assert summary["linkedRiskRefs"] == 2
+    assert summary["byPriority"] == {"low": 1, "medium": 1, "high": 1, "critical": 0}
+
+
+def test_compliance_frameworks_come_from_the_pack_catalogue(authenticated_org_database):
+    from api.routes.pack_catalogue import FRAMEWORK_KEYS, FRAMEWORKS
+
+    response = client.get("/api/v1/ai-governance/compliance/frameworks")
+    assert response.status_code == 200
+    body = {f["id"]: f for f in response.json()}
+    assert set(body) == set(FRAMEWORKS)
+    assert body["ISO42001"]["controls"] == sorted(FRAMEWORK_KEYS["ISO42001"])
+    assert body["NISTRMF"]["name"] == FRAMEWORKS["NISTRMF"].name
