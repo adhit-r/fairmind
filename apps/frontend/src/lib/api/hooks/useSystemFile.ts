@@ -170,8 +170,30 @@ export interface FairnessRunSummary {
 
 export interface CsvInspection {
   rows: number
-  columns: Array<{ name: string; dtype: string; distinct: number; sample: string[] }>
+  columns: Array<{
+    name: string
+    dtype: string
+    distinct: number
+    sample: string[]
+    attribute: { status: 'suggested' | 'possible' | 'too_many_values' | null; basis: string | null }
+  }>
   suggested: { outcome: string | null; prediction: string | null; score: string | null; attributes: string[] }
+  /** SHA-256 of the uploaded bytes; a confirmed run sends it back so the server can refuse a changed file. */
+  fileSha256: string
+  attributeSource: 'inferred' | 'confirmed' | 'none'
+  confirmedBy: string | null
+  confirmedAt: string | null
+  /** The reused attributes come from a run nobody confirmed (older, or sent through the API). */
+  previousRunUnconfirmed: boolean
+  needsBinning: Array<{ name: string; distinct: number }>
+  uncoveredGrounds: string[]
+}
+
+/** What the person confirmed with the mapping; the server records it and checks the reasons. */
+export interface AttributeConfirmation {
+  sha256: string
+  removalReason?: string
+  uncoveredReason?: string
 }
 
 export interface FairnessMapping {
@@ -395,7 +417,7 @@ export function useSystemFile(systemId: string | undefined) {
     return res.data
   }
 
-  const runFairness = async (file: File, mapping: FairnessMapping) => {
+  const runFairness = async (file: File, mapping: FairnessMapping, confirmation?: AttributeConfirmation) => {
     const form = new FormData()
     form.append('file', file)
     form.append('outcome', mapping.outcome)
@@ -403,6 +425,12 @@ export function useSystemFile(systemId: string | undefined) {
     if (mapping.prediction) form.append('prediction', mapping.prediction)
     if (mapping.score) form.append('score', mapping.score)
     if (mapping.favorableLabel) form.append('favorable_label', mapping.favorableLabel)
+    if (confirmation) {
+      form.append('confirm', '1')
+      form.append('confirm_sha256', confirmation.sha256)
+      if (confirmation.removalReason) form.append('removal_reason', confirmation.removalReason)
+      if (confirmation.uncoveredReason) form.append('uncovered_reason', confirmation.uncoveredReason)
+    }
     const res = await apiClient.post<FairnessRunResult>(`${GOV}/systems/${systemId}/fairness-runs`, form, { enableRetry: false, timeout: 120_000 })
     if (!res.success || !res.data) throw new Error(res.error || 'The run failed')
     await refresh()
