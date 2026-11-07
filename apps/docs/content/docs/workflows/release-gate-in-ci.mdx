@@ -7,7 +7,7 @@ An engineer should never fill in a governance form to get a model released. The 
 
 ## What the gate is
 
-Each AI system has a release gate made of five checks: fairness measured, data governance, human oversight, monitoring in place, and environmental impact. A check is **proven** when measured or tool-estimated evidence with confidence 0.70 or higher backs it, **attested** when any other evidence does, and **open** when nothing does. The verdict comes from the impact-by-confidence matrix: the system's risk tier against the gate's overall confidence. A measured fairness failure never produces a plain go.
+Each AI system has a release gate made of five checks: fairness measured, data governance, human oversight, monitoring in place, and environmental impact. A check is **proven** when measured or tool-estimated evidence with confidence 0.70 or higher backs it, **attested** when any other evidence does, and **open** when nothing does. Evidence that is not measured or tool-estimated counts 0.30 at most, the same as a named person's attestation, so a record of statements alone never leaves the unknown band. An environmental assessment counts by its own provenance and confidence. The verdict comes from the impact-by-confidence matrix: the system's risk tier against the gate's overall confidence. A measured fairness failure never produces a plain go.
 
 ## Set up
 
@@ -60,4 +60,4 @@ Exit codes: 0 go, 2 conditional go, 1 no go (or, with `--require-approval`, a re
 
 ## What the gate does not do yet
 
-Only the fairness check has a producer today. Data governance, human oversight and monitoring can be attested by recording evidence in the app, which caps them in the manual confidence band until their own flows exist.
+Only the fairness check has a producer today. Data governance, human oversight and monitoring can be attested by recording evidence in the app, which counts them 0.30 at most until their own flows exist. A client cannot mark its own upload as measured.

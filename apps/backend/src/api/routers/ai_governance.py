@@ -532,6 +532,10 @@ class SystemApprovalRequestCreateRequest(BaseModel):
     requested_by: Optional[str] = None
 
 
+# The release gate trusts these metadata keys; only the server routes that measure something stamp them.
+GATE_PROVENANCE_KEYS = ("provenance_class", "provenance")
+
+
 class EvidenceCollectRequest(BaseModel):
     system_id: str = Field(min_length=1)
     type: str = Field(min_length=1)
@@ -2617,6 +2621,8 @@ async def collect_evidence(
         content=request.content,
     ):
         _require_untrusted_external_evidence_linking_enabled()
+    # A client cannot declare its own record measured; the gate reads what is left as manual.
+    metadata = {k: v for k, v in request.metadata.items() if k not in GATE_PROVENANCE_KEYS}
     evidence_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2636,7 +2642,7 @@ async def collect_evidence(
             "confidence": request.confidence,
             "status": "draft",
             "uploaded_by": current_user.email or current_user.user_id,
-            "metadata_json": json.dumps(request.metadata),
+            "metadata_json": json.dumps(metadata),
             "captured_at": now,
             "created_at": now,
         },
@@ -2648,11 +2654,11 @@ async def collect_evidence(
         "type": request.type,
         "content": request.content,
         "confidence": request.confidence,
-        "metadata": request.metadata,
+        "metadata": metadata,
         "timestamp": now,
         "linkedEntityCount": 0,
         "linkedEntities": [],
-        "metadataSummary": _evidence_metadata_summary(request.metadata, request.content, 0, request.confidence),
+        "metadataSummary": _evidence_metadata_summary(metadata, request.content, 0, request.confidence),
         "workflowState": "collected",
     }
 

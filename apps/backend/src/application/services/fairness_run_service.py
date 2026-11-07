@@ -14,7 +14,7 @@ import json
 import math
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -597,7 +597,7 @@ ATTESTABLE_CHECKS = {
     "monitoring": ("monitoring", "Monitoring attested"),
     "environmental": ("environmental", "Environmental impact attested"),
 }
-ATTESTATION_CONFIDENCE = 0.30  # top of the manual band (confidence.py)
+ATTESTATION_CONFIDENCE = 0.30  # the most any manual record counts in the gate; below the 0.35 estimated band
 
 
 # ---------------------------------------------------------------------------
@@ -652,7 +652,7 @@ def release_gate(
     risk_tier: str,
     evidence: List[Dict[str, Any]],
     *,
-    environmental_assessed: bool = False,
+    environmental_assessed: Union[bool, Dict[str, Any], None] = False,
     monitoring_cadence_hours: Optional[int] = None,
     now: Optional[datetime] = None,
     approval_status: str = "not_requested",
@@ -662,7 +662,13 @@ def release_gate(
 
     Each check reads its newest record (the higher confidence breaks a tie): proven
     when that record is measured or tool-estimated with confidence at or above
-    0.70, attested when it is anything else, open when nothing is on file. The
+    0.70, attested when it is anything else, open when nothing is on file. A record
+    that is not measured or tool-estimated counts at most ATTESTATION_CONFIDENCE
+    whatever route filed it, so statements alone stay in the unknown band; a
+    measured or tool-estimated record below 0.70 is attested at its own confidence.
+    ``environmental_assessed`` is the newest environmental assessment's
+    {provenance_class, confidence}, counted like any other record; True stands for
+    a tool-estimated one at 0.85. The
     verdict comes from the impact-by-confidence matrix; a measured fairness failure
     never lets a system through as a plain go. A rejected release decision makes it
     no go, and ``last_decision`` (the newest decided request) keeps a rejection
@@ -676,7 +682,8 @@ def release_gate(
     for key, label, types in GATE_CHECKS:
         matching = [r for r in evidence if str(r.get("evidenceType") or r.get("type") or "").lower() in types]
         if key == "environmental" and environmental_assessed and not matching:
-            matching = [{"evidenceType": "environmental", "confidence": 0.85, "metadata": {"provenance_class": "tool_estimated"}}]
+            assessment = environmental_assessed if isinstance(environmental_assessed, dict) else {"provenance_class": "tool_estimated", "confidence": 0.85}
+            matching = [{"evidenceType": "environmental", "confidence": assessment["confidence"], "metadata": {"provenance_class": assessment["provenance_class"]}}]
         state, confidence, evidence_id, detail = "open", 0.0, None, None
         stale_for = None
         if key == "monitoring" and monitoring_cadence_hours:
@@ -689,7 +696,8 @@ def release_gate(
         if matching and stale_for is None:
             record = max(matching, key=lambda r: (_record_time(r) or _NO_TIME, float(r.get("confidence") or 0.0)))
             prov = _provenance(record)
-            confidence = cap_confidence_for_provenance(float(record.get("confidence") or 0.0), prov if prov in PROVEN_CLASSES else "manual")
+            raw = float(record.get("confidence") or 0.0)
+            confidence = cap_confidence_for_provenance(raw, prov) if prov in PROVEN_CLASSES else min(cap_confidence_for_provenance(raw, "manual"), ATTESTATION_CONFIDENCE)
             state = "proven" if prov in PROVEN_CLASSES and confidence >= 0.70 else "attested"
             evidence_id = record.get("id")
             content = record.get("content") or {}
@@ -819,7 +827,7 @@ def path_forward(
     risk_tier: str,
     evidence: List[Dict[str, Any]],
     *,
-    environmental_assessed: bool = False,
+    environmental_assessed: Union[bool, Dict[str, Any], None] = False,
     monitoring_cadence_hours: Optional[int] = None,
     lifecycle_stage: Optional[str] = None,
     approval_blockers: Iterable[Dict[str, Any]] = (),
@@ -836,7 +844,8 @@ def path_forward(
 
     def run(steps: tuple) -> Dict[str, Any]:
         extra = [r for r in (_synthetic(check, action, now) for check, action in steps) if r]
-        assessed = environmental_assessed or any(action == "environmental_assessment" for _, action in steps)
+        # A new assessment is priced as tool-estimated, even over a manual one already on file.
+        assessed = True if any(action == "environmental_assessment" for _, action in steps) else environmental_assessed
         return release_gate(risk_tier, evidence + extra, environmental_assessed=assessed, monitoring_cadence_hours=monitoring_cadence_hours, now=now)
 
     base = run(())
@@ -917,7 +926,7 @@ def path_forward(
         if target == "go" and any((c.get("detail") or {}).get("all_checks_pass") is False for c in top["checks"]):
             notes.append("Go is not reachable while a measured check fails; it needs a passing re-run.")
         elif top["confidence"] < need:
-            # Each manual-only check with the most it can count: an upload (0.40) or, for monitoring, an attestation (0.30).
+            # Each manual-only check with the most it can count: an upload or an attestation, both capped at ATTESTATION_CONFIDENCE.
             manual = [
                 f"{label.lower()} ({max((v for (k, _), v in counts.items() if k == key), default=current[key]['confidence']):.2f} at most)"
                 for key, label, _ in GATE_CHECKS
