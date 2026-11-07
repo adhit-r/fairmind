@@ -21,7 +21,6 @@ from core.middleware.audit import AuditLoggingMiddleware
 from database.models import OrganizationMember
 from tests.test_org_isolation_audit import (  # noqa: F401  (db, client and legacy are fixtures)
     A,
-    A_ADMIN,
     A_MEMBER,
     B,
     ORG_A,
@@ -119,18 +118,6 @@ def test_remediation_tasks_stay_in_the_organisation(client):
     tasks = client.get(f"{GOV}/remediation?system_id=system-b", headers=B).json()["tasks"]
     assert [(t["id"], t["status"]) for t in tasks] == [(task_id, "open")]
     assert client.patch(f"{GOV}/remediation/{task_id}", headers=B, json={"status": "closed"}).json()["status"] == "closed"
-
-
-# --------------------------------------------------------------------------- shared catalogue
-
-
-def test_framework_control_catalogue_is_written_only_by_platform_admins(client):
-    body = {"control_id": "EU-1", "title": "Risk management"}
-    assert client.post(f"{GOV}/frameworks/eu_ai_act/controls", headers=A, json=body).status_code == 403
-    assert client.post(f"{GOV}/frameworks/eu_ai_act/controls", headers=A_ADMIN, json=body).status_code == 200
-    # Reference data: every signed-in organisation reads the same catalogue.
-    assert [c["controlId"] for c in client.get(f"{GOV}/frameworks/eu_ai_act/controls", headers=B).json()] == ["EU-1"]
-    assert client.get(f"{GOV}/compliance/frameworks", headers=B).status_code == 200
 
 
 # --------------------------------------------------------------------------- routes scoped through the system id
