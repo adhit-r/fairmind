@@ -127,12 +127,12 @@ def _ensure_migrated_template() -> str:
             schema = connection.execute(text("SELECT current_schema()")).scalar()
         # Through 013d only: later migrations are represented by the ORM tables
         # added below, exactly as the verifier fixtures always modelled them.
-        chain = setup_db.CHAIN
-        setup_db.CHAIN = chain[: chain.index("013e_environmental_tenant_scope.sql")]
+        operators = setup_db.OPERATORS
+        setup_db.OPERATORS = operators[: operators.index("013d_to_013e_environmental_tenant_scope.sql")]
         try:
             setup_db.apply_chain(url, schema)
         finally:
-            setup_db.CHAIN = chain
+            setup_db.OPERATORS = operators
         setup_db.add_orm_tables_and_columns(engine)
         with engine.begin() as connection:
             triggers = connection.execute(
