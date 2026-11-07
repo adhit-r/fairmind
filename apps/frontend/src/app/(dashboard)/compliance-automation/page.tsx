@@ -59,7 +59,7 @@ export default function ComplianceAutomationPage() {
       <div className="min-w-0">
         <div className="mx-auto max-w-7xl">
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
+            <div className="h-12 w-12 animate-spin rounded-full border-[2px] border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         </div>
       </div>
@@ -138,23 +138,23 @@ export default function ComplianceAutomationPage() {
         )}
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-2 border-b border-[var(--fm-line)]">
+        <div className="mb-6 flex flex-wrap gap-2">
           <button
             onClick={() => setActiveTab("schedules")}
-            className={`px-6 py-3 font-bold transition-all ${
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
               activeTab === "schedules"
-                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
-                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
+                ? "bg-[var(--fm-ink)] text-white"
+                : "text-[var(--fm-ink2)] hover:bg-[var(--fm-bg)] hover:text-[var(--fm-ink)]"
             }`}
           >
             Schedules
           </button>
           <button
             onClick={() => setActiveTab("violations")}
-            className={`flex items-center gap-2 px-6 py-3 font-bold transition-all ${
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
               activeTab === "violations"
-                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
-                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
+                ? "bg-[var(--fm-ink)] text-white"
+                : "text-[var(--fm-ink2)] hover:bg-[var(--fm-bg)] hover:text-[var(--fm-ink)]"
             }`}
           >
             Violations
@@ -166,20 +166,20 @@ export default function ComplianceAutomationPage() {
           </button>
           <button
             onClick={() => setActiveTab("remediation")}
-            className={`px-6 py-3 font-bold transition-all ${
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
               activeTab === "remediation"
-                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
-                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
+                ? "bg-[var(--fm-ink)] text-white"
+                : "text-[var(--fm-ink2)] hover:bg-[var(--fm-bg)] hover:text-[var(--fm-ink)]"
             }`}
           >
             Remediation
           </button>
           <button
             onClick={() => setActiveTab("reports")}
-            className={`px-6 py-3 font-bold transition-all ${
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
               activeTab === "reports"
-                ? "border-b border-[var(--fm-line)] bg-[var(--fm-ink)] text-white"
-                : "border-b-4 border-gray-300 hover:border-[var(--fm-ink)]"
+                ? "bg-[var(--fm-ink)] text-white"
+                : "text-[var(--fm-ink2)] hover:bg-[var(--fm-bg)] hover:text-[var(--fm-ink)]"
             }`}
           >
             Reports
