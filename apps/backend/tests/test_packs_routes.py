@@ -781,6 +781,59 @@ def test_testing_a_provider_reports_the_result_and_records_it(tmp_database, monk
     assert client.get(f"{PACKS}/ai-provider").json()["config"]["testMessage"] == "Anthropic rejected the key"
 
 
+def test_the_grok_cli_stands_in_for_the_saved_provider_where_it_is_enabled_and_is_never_saved(tmp_database, monkeypatch, tmp_path):
+    from config.settings import settings
+    from tests.grok_helpers import fake_grok, recorded, stream
+
+    _, client = _org(tmp_database)
+    monkeypatch.setattr(settings, "grok_cli_enabled", False)
+    assert "grok_cli" not in {p["id"] for p in client.get(f"{PACKS}/ai-providers").json()}
+    for path, call in ((f"{PACKS}/ai-provider", client.put), (f"{PACKS}/ai-provider/test", client.post)):
+        response = call(path, json={"provider": "grok_cli"})
+        assert (response.status_code, response.json()["detail"]) == (422, "The Grok CLI is not enabled on this server")
+    _save_provider(client)
+    with tmp_database.connect() as conn:
+        saved = conn.execute(text("SELECT * FROM org_ai_providers")).mappings().one()
+
+    agent = '{"summary": "Model output", "route": "", "confidence": "high"}'
+    calls = fake_grok(monkeypatch, tmp_path, out=stream(agent))
+    assert "grok_cli" in {p["id"] for p in client.get(f"{PACKS}/ai-providers").json()}
+    config = client.get(f"{PACKS}/ai-provider").json()["config"]
+    assert (config["provider"], config["providerName"], config["model"], config["enabled"], config["hasKey"]) == (
+        "grok_cli", "Grok CLI (local)", "grok-4.7", True, False)
+    for response in (client.put(f"{PACKS}/ai-provider", json={"provider": "grok_cli"}), client.delete(f"{PACKS}/ai-provider")):
+        assert response.status_code == 409 and "saves nothing" in response.json()["detail"]
+    client.post(f"{PACKS}/{MONITORING}/install")
+    payload = _completed(_agent(client, _start(client, "agent_activity_monitoring")), "collect")
+    assert (payload["mode"], payload["provider"], payload["model"], payload["summary"]) == ("llm", "grok_cli", "grok-4.7", "Model output")
+    assert '"workflow"' in recorded(calls)[-1]["prompt"]
+
+    fake_grok(monkeypatch, tmp_path)
+    result = client.post(f"{PACKS}/ai-provider/test", json={"provider": "grok_cli"}).json()
+    assert (result["ok"], result["message"], result["models"]) == (True, "grok-4.7 answered", ["grok-4.7", "grok-4.6", "grok-4.5"])
+    with tmp_database.connect() as conn:
+        assert conn.execute(text("SELECT * FROM org_ai_providers")).mappings().one() == saved  # the saved key and test are untouched
+
+    monkeypatch.setattr(settings, "grok_cli_enabled", False)
+    assert client.get(f"{PACKS}/ai-provider").json()["config"]["provider"] == "anthropic"
+
+
+def test_a_saved_grok_cli_row_reads_as_off_where_the_cli_is_not_enabled(tmp_database, monkeypatch):
+    from config.settings import settings
+
+    org_id, client = _installed_org(tmp_database)
+    monkeypatch.setattr(settings, "grok_cli_enabled", False)
+    with tmp_database.begin() as conn:  # as an earlier build saved it
+        conn.execute(
+            text("INSERT INTO org_ai_providers (org_id, provider, model, fields_json, enabled, updated_by, updated_at) "
+                 "VALUES (:org, 'grok_cli', 'grok-4.7', '{}', TRUE, 'u', '2026-11-07T10:00:00')"),
+            {"org": org_id},
+        )
+    config = client.get(f"{PACKS}/ai-provider").json()["config"]
+    assert (config["provider"], config["enabled"]) == ("grok_cli", False)
+    assert _completed(_agent(client, _start(client)), "collect")["mode"] == "rules"
+
+
 def test_with_a_provider_the_model_does_the_step_and_the_trace_is_on_the_ledger(tmp_database, monkeypatch):
     from api.routes import llm
 

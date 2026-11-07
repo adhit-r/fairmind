@@ -16,6 +16,7 @@ from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
+from src.infrastructure.llm import grok_cli
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -1206,8 +1207,25 @@ class AIProviderBody(BaseModel):
     enabled: bool = True
 
 
+# While this server's Grok CLI is enabled it stands in for every organisation's provider, and nothing about it is
+# saved: the organisation's row may sit in a database that servers without the CLI also read.
+# ponytail: one model, the CLI provider's default; add a GROK_CLI_MODEL setting if a developer needs another.
+_CLI_ROW = {
+    "provider": "grok_cli", "model": llm.BY_ID["grok_cli"].default_model, "fields_json": None, "api_key_enc": None,
+    "key_hint": None, "enabled": True, "tested_ok": None, "tested_at": None, "test_message": None, "updated_at": None,
+}
+_CLI_SAVES_NOTHING = "This server uses the Grok CLI for every organisation and saves nothing; switch GROK_CLI_ENABLED off to change the saved provider"
+
+
 def _ai_row(db: Session, org_id: str):
-    return db.execute(text("SELECT * FROM org_ai_providers WHERE org_id = :org"), {"org": org_id}).mappings().fetchone()
+    """The organisation's provider: this server's Grok CLI while it is enabled, else the saved row.
+    A saved CLI row, which an earlier build could write, reads as switched off."""
+    if grok_cli.enabled():
+        return _CLI_ROW
+    row = db.execute(text("SELECT * FROM org_ai_providers WHERE org_id = :org"), {"org": org_id}).mappings().fetchone()
+    if row and getattr(llm.BY_ID.get(row["provider"]), "kind", None) == "cli":
+        return {**row, "enabled": False}
+    return row
 
 
 def _ai_json(row) -> Optional[dict]:
@@ -1235,10 +1253,14 @@ def _body_connection(body: AIProviderBody, stored) -> tuple:
     provider = llm.BY_ID.get(body.provider)
     if not provider:
         raise HTTPException(status_code=422, detail="Unknown provider")
+    if provider.kind == "cli" and not grok_cli.enabled():
+        raise HTTPException(status_code=422, detail="The Grok CLI is not enabled on this server")
     fields = {k: (getattr(body, k) or "").strip() for k in provider.needs}
     key = (body.apiKey or "").strip() or None
     if key is None and stored and stored["provider"] == body.provider:
         key = llm.decrypt(stored["api_key_enc"])
+    if provider.key == "none":
+        key = None
     if provider.key == "required" and not key:
         raise HTTPException(status_code=422, detail="Enter the API key")
     try:
@@ -1261,6 +1283,8 @@ async def get_ai_provider(m: OrgMembership = Depends(_member), db: Session = Dep
 
 @router.put("/ai-provider")
 async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    if grok_cli.enabled():
+        raise HTTPException(status_code=409, detail=_CLI_SAVES_NOTHING)
     _ensure_tables(db)
     stored = _ai_row(db, m.org_id)
     conn, fields = _body_connection(body, stored)
@@ -1299,6 +1323,8 @@ async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_man
 
 @router.delete("/ai-provider")
 async def delete_ai_provider(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    if grok_cli.enabled():
+        raise HTTPException(status_code=409, detail=_CLI_SAVES_NOTHING)
     _ensure_tables(db)
     db.execute(text("DELETE FROM org_ai_providers WHERE org_id = :org"), {"org": m.org_id})
     db.commit()
@@ -1315,6 +1341,7 @@ async def test_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_man
     stored = _ai_row(db, m.org_id)
     if (
         stored
+        and stored is not _CLI_ROW
         and stored["provider"] == body.provider
         and stored["model"] == conn.model
         and json.loads(stored["fields_json"] or "{}") == fields

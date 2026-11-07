@@ -2,9 +2,11 @@
 the encrypted key, a connection test, and one JSON completion.
 
 Claude goes through the official anthropic SDK. Every other provider exposes an
-OpenAI-compatible Chat Completions endpoint and is called over plain HTTP.
+OpenAI-compatible Chat Completions endpoint and is called over plain HTTP, except the
+Grok CLI, which runs on this server for local development only.
 """
 
+import asyncio
 import base64
 import ipaddress
 import json
@@ -22,6 +24,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from config.settings import settings
+from src.infrastructure.llm import grok_cli
 
 TIMEOUT_S = 75  # under Cloudflare's 100 s edge limit, so a slow model fails here and not at the edge
 
@@ -34,10 +37,10 @@ class LLMError(Exception):
 class Provider:
     id: str
     name: str
-    kind: str  # "anthropic" or "openai" (OpenAI-compatible Chat Completions)
+    kind: str  # "anthropic", "openai" (OpenAI-compatible Chat Completions) or "cli" (a CLI on this server)
     base_url: str = ""  # empty when the organisation supplies it
     needs: Tuple[str, ...] = ()  # extra fields: "baseUrl", "endpoint", "region"
-    key: str = "required"  # or "optional"
+    key: str = "required"  # "optional", or "none" when the provider takes no key
     auth: str = "bearer"  # or "api-key" (Azure)
     default_model: str = ""
     model_hint: str = ""
@@ -74,6 +77,7 @@ PROVIDERS: Tuple[Provider, ...] = (
              model_hint="A model you have pulled", docs="https://github.com/ollama/ollama/blob/main/docs/openai.md"),
     Provider("openai_compatible", "Other (OpenAI-compatible)", "openai", needs=("baseUrl",), key="optional",
              model_hint="As your server names it"),
+    Provider("grok_cli", "Grok CLI (local)", "cli", key="none", default_model="grok-4.7"),
 )
 BY_ID = {p.id: p for p in PROVIDERS}
 
@@ -84,7 +88,7 @@ _REGION = re.compile(r"^[a-z]{2}(-[a-z]+)+-\d$")
 
 
 def catalogue() -> List[Dict[str, Any]]:
-    return [{**asdict(p), "needs": list(p.needs)} for p in PROVIDERS]
+    return [{**asdict(p), "needs": list(p.needs)} for p in PROVIDERS if p.kind != "cli" or grok_cli.enabled()]
 
 
 # --- the stored key ---------------------------------------------------------
@@ -217,12 +221,22 @@ def _json_object(text: str) -> Dict[str, Any]:
         raise LLMError("The model answered with malformed JSON")
 
 
+def _with_schema(system: str, schema: Dict[str, Any]) -> str:
+    """For providers without structured output: the schema goes in the instructions."""
+    return f"{system}\n\nAnswer with one JSON object matching this schema: {json.dumps(schema)}"
+
+
 # --- calls ------------------------------------------------------------------
 
 
 async def list_models(conn: Connection) -> List[str]:
     if not conn.provider.lists_models:
         return []
+    if conn.provider.kind == "cli":
+        try:
+            return await asyncio.to_thread(grok_cli.models)
+        except grok_cli.GrokCliError as e:
+            raise LLMError(str(e))
     if conn.provider.kind == "anthropic":
         client = _claude(conn)
         try:
@@ -273,11 +287,18 @@ async def complete(conn: Connection, system: str, user: str, schema: Dict[str, A
         text = next((b.text for b in resp.content if b.type == "text"), "")
         usage = {"inputTokens": resp.usage.input_tokens, "outputTokens": resp.usage.output_tokens}
         model = resp.model
+    elif conn.provider.kind == "cli":
+        try:
+            text = await grok_cli.complete(user, conn.model, system=_with_schema(system, schema))
+        except grok_cli.GrokCliError as e:
+            raise LLMError(str(e))
+        usage = {"inputTokens": None, "outputTokens": None}
+        model = conn.model
     else:
         body = {
             "model": conn.model,
             "messages": [
-                {"role": "system", "content": f"{system}\n\nAnswer with one JSON object matching this schema: {json.dumps(schema)}"},
+                {"role": "system", "content": _with_schema(system, schema)},
                 {"role": "user", "content": user},
             ],
         }

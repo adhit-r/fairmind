@@ -377,9 +377,9 @@ export const useWaitingRuns = () => useOrgResource<RunSummary[]>(`${API_ENDPOINT
 export interface AIProviderOption {
   id: string
   name: string
-  kind: 'anthropic' | 'openai'
+  kind: 'anthropic' | 'openai' | 'cli'
   needs: Array<'baseUrl' | 'endpoint' | 'region'>
-  key: 'required' | 'optional'
+  key: 'required' | 'optional' | 'none'
   default_model: string
   model_hint: string
   lists_models: boolean
