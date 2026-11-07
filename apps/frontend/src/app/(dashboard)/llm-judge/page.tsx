@@ -233,12 +233,7 @@ export default function LLMJudgePage() {
           <div className="grid md:grid-cols-4 gap-4">
             <div className="border border-[var(--fm-line)] p-4 rounded text-center">
               <div className="text-[24px] font-semibold tracking-tight">
-                {Math.round(
-                  (Object.values(result.results).reduce((sum, r) => sum + r.bias_score, 0) /
-                    Object.keys(result.results).length) *
-                    100
-                )}
-                %
+                {formatAverage(Object.values(result.results).map((r) => r.bias_score))}
               </div>
               <p className="text-xs text-gray-600 uppercase font-semibold mt-2">Avg Bias Score</p>
             </div>
@@ -259,12 +254,7 @@ export default function LLMJudgePage() {
 
             <div className="border border-[var(--fm-line)] p-4 rounded text-center">
               <div className="text-[24px] font-semibold tracking-tight">
-                {Math.round(
-                  (Object.values(result.results).reduce((sum, r) => sum + r.confidence, 0) /
-                    Object.keys(result.results).length) *
-                    100
-                )}
-                %
+                {formatAverage(Object.values(result.results).map((r) => r.confidence))}
               </div>
               <p className="text-xs text-gray-600 uppercase font-semibold mt-2">Avg Confidence</p>
             </div>
@@ -287,4 +277,11 @@ export default function LLMJudgePage() {
       )}
     </div>
   )
+}
+
+// Averages only real scores; insufficient results (null) are excluded, never counted as a number.
+function formatAverage(values: Array<number | null>): string {
+  const scored = values.filter((v): v is number => typeof v === 'number')
+  if (scored.length === 0) return 'Not scored'
+  return `${Math.round((scored.reduce((sum, v) => sum + v, 0) / scored.length) * 100)}%`
 }

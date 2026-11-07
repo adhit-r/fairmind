@@ -20,11 +20,13 @@ export interface BiasEvaluationResult {
   timestamp: string
   judge_model: string
   bias_category: string
-  bias_score: number // 0.0 to 1.0
-  confidence: number
+  // "insufficient": the judge call failed or its answer was unusable; score and confidence are null
+  status: 'scored' | 'insufficient'
+  bias_score: number | null // 0.0 to 1.0
+  confidence: number | null
   reasoning: string
   detected_biases: string[]
-  severity: 'low' | 'medium' | 'high' | 'critical'
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'unknown'
   recommendations: string[]
   evidence: string[]
   metadata: Record<string, any>
@@ -50,9 +52,10 @@ export interface MultiJudgeResult {
       evaluations: Record<
         string,
         {
-          bias_score: number
-          confidence: number
-          severity: string
+          status: 'scored' | 'insufficient'
+          bias_score: number | null
+          confidence: number | null
+          severity: 'low' | 'medium' | 'high' | 'critical' | 'unknown'
           reasoning: string
           detected_biases: string[]
         }

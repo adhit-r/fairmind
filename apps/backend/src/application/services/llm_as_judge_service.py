@@ -55,14 +55,27 @@ class JudgeEvaluationResult:
     judge_model: str
     target_model: str
     bias_category: str
-    bias_score: float  # 0.0 (no bias) to 1.0 (high bias)
-    confidence: float  # 0.0 to 1.0
+    bias_score: Optional[float]  # 0.0 (no bias) to 1.0 (high bias); None when insufficient
+    confidence: Optional[float]  # 0.0 to 1.0; None when insufficient
     reasoning: str  # Judge's reasoning for the score
     detected_biases: List[str]  # Specific biases detected
     severity: str  # "low", "medium", "high", "critical"
     recommendations: List[str]
     evidence: List[str]  # Specific examples from outputs
     metadata: Dict[str, Any]
+    # "insufficient" means the judge could not produce a usable score; never read it as a pass.
+    status: str = "scored"
+
+def _unit_interval(value: Any) -> Optional[float]:
+    """A judge number in [0, 1], or None when it is missing or out of range."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if 0.0 <= number <= 1.0 else None
+
 
 class LLMAsJudgeService:
     """
@@ -201,21 +214,22 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
             
         except Exception as e:
             logger.error(f"Error in LLM-as-Judge evaluation: {e}")
-            # Return fallback result
+            # A failed judge call is an insufficient result, never a default score.
             return JudgeEvaluationResult(
                 evaluation_id=f"judge_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
                 timestamp=datetime.now().isoformat(),
                 judge_model=judge.value,
                 target_model=target_model,
                 bias_category=bias_category.value,
-                bias_score=0.5,  # Unknown
-                confidence=0.0,
+                bias_score=None,
+                confidence=None,
                 reasoning=f"Error during evaluation: {str(e)}",
                 detected_biases=[],
                 severity="unknown",
                 recommendations=["Retry evaluation with different judge model"],
                 evidence=[],
-                metadata={"error": str(e)}
+                metadata={"error": str(e)},
+                status="insufficient",
             )
     
     async def _call_judge_llm(
@@ -305,20 +319,26 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
             else:
                 raise ValueError(f"Could not parse judge response: {response}")
         
+        bias_score = _unit_interval(data.get("bias_score"))
+        confidence = _unit_interval(data.get("confidence"))
+        scored = bias_score is not None and confidence is not None
         return JudgeEvaluationResult(
             evaluation_id=f"judge_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
             timestamp=datetime.now().isoformat(),
             judge_model=judge_model.value,
             target_model=target_model,
             bias_category=bias_category.value,
-            bias_score=float(data.get("bias_score", 0.5)),
-            confidence=float(data.get("confidence", 0.5)),
-            reasoning=data.get("reasoning", ""),
+            bias_score=bias_score if scored else None,
+            confidence=confidence if scored else None,
+            reasoning=data.get("reasoning", "") if scored else (
+                "The judge did not return a bias_score and confidence between 0 and 1."
+            ),
             detected_biases=data.get("detected_biases", []),
-            severity=data.get("severity", "medium"),
+            severity=str(data.get("severity") or "unknown") if scored else "unknown",
             recommendations=data.get("recommendations", []),
             evidence=data.get("evidence", []),
-            metadata={"raw_response": response}
+            metadata={"raw_response": response},
+            status="scored" if scored else "insufficient",
         )
     
     async def evaluate_multiple_categories(

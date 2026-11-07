@@ -184,3 +184,44 @@ def test_each_judge_calls_its_provider_with_its_own_model_id(judge, monkeypatch)
     assert sent_model == judge.value
     assert "test-key-value" not in call["url"]
     assert "temperature" not in (call["json"] or {})
+
+
+def _judge_answering(monkeypatch, answer):
+    async def _call(self, prompt, judge):
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(LLMAsJudgeService, "_call_judge_llm", _call)
+    return asyncio.run(
+        LLMAsJudgeService().evaluate_bias(
+            model_outputs=[{"text": "The nurse was caring."}],
+            bias_category=judge_module.BiasCategory.GENDER,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    (
+        RuntimeError("provider unreachable"),
+        '{"reasoning": "no numbers"}',
+        '{"bias_score": 1.7, "confidence": 0.9}',
+        '{"bias_score": "high", "confidence": 0.9}',
+        '{"bias_score": 0.3}',
+    ),
+)
+def test_an_unusable_judge_answer_is_insufficient_not_a_default_score(answer, monkeypatch):
+    result = _judge_answering(monkeypatch, answer)
+
+    assert result.status == "insufficient"
+    assert result.bias_score is None and result.confidence is None
+    assert result.severity == "unknown"
+
+
+def test_a_well_formed_judge_answer_is_scored(monkeypatch):
+    result = _judge_answering(
+        monkeypatch, '{"bias_score": 0.2, "confidence": 0.8, "severity": "low", "reasoning": "neutral"}'
+    )
+
+    assert (result.status, result.bias_score, result.confidence, result.severity) == ("scored", 0.2, 0.8, "low")

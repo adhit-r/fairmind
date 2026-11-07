@@ -37,8 +37,8 @@ export function RecommendationsPanel({ result }: RecommendationsPanelProps) {
 
 Category: ${result.bias_category.toUpperCase()}
 Judge Model: ${result.judge_model}
-Bias Score: ${Math.round(result.bias_score * 100)}%
-Severity: ${result.severity.toUpperCase()}
+Bias Score: ${result.status === 'insufficient' || result.bias_score == null ? 'Not scored (insufficient result)' : `${Math.round(result.bias_score * 100)}%`}
+Severity: ${(result.severity ?? 'unknown').toUpperCase()}
 
 ${result.recommendations.length > 0 ? 'RECOMMENDATIONS' : 'No recommendations'}
 ${result.recommendations.length > 0 ? '===============' : ''}

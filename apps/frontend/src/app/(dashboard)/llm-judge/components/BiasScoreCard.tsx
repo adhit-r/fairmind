@@ -73,10 +73,35 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
     return 'Low/No Bias'
   }
 
+  const categoryLabel = result.bias_category.charAt(0).toUpperCase() + result.bias_category.slice(1)
+
+  // The judge produced no usable score: say so, never show a number.
+  if (result.status === 'insufficient' || result.bias_score == null) {
+    return (
+      <Card className="fm-card p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h3 className="text-xl font-semibold tracking-tight text-[var(--fm-ink)]">Not scored</h3>
+            <p className="text-sm text-[var(--fm-ink2)]">{categoryLabel} Bias</p>
+          </div>
+          <span className="rounded-full bg-[#fff4d6] px-3 py-1 text-xs font-semibold text-[#8a5a00]">
+            Insufficient result
+          </span>
+        </div>
+        <p className="text-sm leading-relaxed text-[var(--fm-ink2)] border-t border-[var(--fm-line)] pt-4">
+          {result.reasoning}
+        </p>
+        <p className="text-xs text-[var(--fm-ink2)]">
+          Judge model: <span className="font-mono text-[var(--fm-ink)]">{result.judge_model}</span>
+        </p>
+      </Card>
+    )
+  }
+
   const severity = result.severity.toLowerCase()
   const severityStyle = getSeverityColor(severity)
   const scoreValue = Math.round(result.bias_score * 100)
-  const confidenceValue = Math.round(result.confidence * 100)
+  const confidenceValue = result.confidence == null ? null : Math.round(result.confidence * 100)
 
   // ========================================================================
   // Render
@@ -94,7 +119,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
             <h3 className="text-xl font-bold capitalize">{severity} Severity</h3>
           </div>
           <p className={`text-sm font-medium ${severityStyle.text}`}>
-            {result.bias_category.charAt(0).toUpperCase() + result.bias_category.slice(1)} Bias
+            {categoryLabel} Bias
           </p>
         </div>
         <Badge variant="outline" className={`border-2 font-bold text-lg px-3 py-1 capitalize`}>
@@ -118,6 +143,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
       </div>
 
       {/* Confidence Level */}
+      {confidenceValue != null && (
       <div className="space-y-3 bg-white/50 p-4 rounded border border-[var(--fm-line)]">
         <div className="flex justify-between items-center">
           <span className="font-semibold">Judge Confidence</span>
@@ -128,6 +154,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
           How confident the judge model is in this evaluation
         </p>
       </div>
+      )}
 
       {/* Judge Info */}
       <div className="grid grid-cols-2 gap-3 bg-white/50 p-4 rounded border border-[var(--fm-line)]">
