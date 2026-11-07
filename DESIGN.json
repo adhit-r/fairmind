@@ -1,99 +1,100 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-17T00:00:00Z",
+  "generatedAt": "2026-11-08T00:00:00Z",
   "title": "Design System: FairMind",
   "extensions": {
     "colorMeta": {
-      "assurance-teal": {
-        "role": "primary",
-        "displayName": "Assurance Teal",
-        "canonical": "oklch(0.60 0.13 163)",
-        "tonalRamp": ["oklch(0.20 0.05 163)", "oklch(0.30 0.07 163)", "oklch(0.40 0.09 163)", "oklch(0.50 0.11 163)", "oklch(0.60 0.13 163)", "oklch(0.72 0.10 163)", "oklch(0.84 0.06 163)", "oklch(0.94 0.03 163)"]
-      },
-      "action-orange": {
-        "role": "secondary",
-        "displayName": "Action Orange",
-        "canonical": "#FF6B35",
-        "tonalRamp": ["#3B1609", "#6A260F", "#993817", "#C94B20", "#FF6B35", "#FF916A", "#FFB79C", "#FFE7DC"]
-      },
-      "deep-ink": {
-        "role": "neutral",
-        "displayName": "Deep Ink",
-        "canonical": "#0F1412",
-        "tonalRamp": ["#0F1412", "#242A27", "#3B423E", "#555D58", "#737C76", "#9CA49F", "#CBD0CC", "#F0F2EF"]
-      }
+      "fm-bg": { "role": "neutral", "displayName": "Page", "canonical": "#f4f4f2", "token": "--fm-bg" },
+      "fm-ink": { "role": "neutral", "displayName": "Ink", "canonical": "#15171a", "token": "--fm-ink" },
+      "fm-ink2": { "role": "neutral", "displayName": "Ink 2", "canonical": "#5a5f68", "token": "--fm-ink2" },
+      "fm-ink3": { "role": "neutral", "displayName": "Ink 3", "canonical": "#6a707c", "token": "--fm-ink3" },
+      "fm-line": { "role": "neutral", "displayName": "Line", "canonical": "rgba(21, 23, 26, 0.08)", "token": "--fm-line" },
+      "fm-brand": { "role": "accent", "displayName": "Brand", "canonical": "#ff6b35", "token": "--fm-brand", "usage": "Marks and highlights only; never a button fill." }
     },
     "typographyMeta": {
-      "headline": { "displayName": "Headline", "purpose": "Page and major section headings." },
-      "title": { "displayName": "Title", "purpose": "Controls, evidence, and panel headings." },
+      "headline": { "displayName": "Headline", "purpose": "Page headings." },
+      "title": { "displayName": "Title", "purpose": "Card and panel headings, the wordmark." },
       "body": { "displayName": "Body", "purpose": "Guidance, findings, and rationale." },
-      "label": { "displayName": "Label", "purpose": "Compact metadata and action labels." }
+      "control": { "displayName": "Control", "purpose": "Button and navigation text." },
+      "label": { "displayName": "Label", "purpose": "10-11px uppercase section labels only." }
     },
     "shadows": [
-      { "name": "action-lift", "value": "6px 6px 0 0 #0F1412", "purpose": "Primary actions and active work surfaces." },
-      { "name": "panel-lift", "value": "8px 8px 0 0 #0F1412", "purpose": "One dominant work panel per task region." }
+      { "name": "fm-shadow", "value": "0 1px 2px rgba(20, 20, 30, 0.04), 0 18px 44px -20px rgba(20, 20, 30, 0.22)", "purpose": "Cards on the page background. Never nested." }
     ],
     "motion": [
-      { "name": "state-fast", "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Button, filter, and row state feedback." }
+      { "name": "state-fast", "value": "150ms ease-out", "purpose": "Colour-only hover and active feedback; removed under reduced motion." }
     ],
     "breakpoints": [
       { "name": "sm", "value": "640px" },
       { "name": "md", "value": "768px" },
       { "name": "lg", "value": "1024px" },
       { "name": "xl", "value": "1280px" }
-    ]
+    ],
+    "retired": {
+      "name": "neobrutalist",
+      "items": ["#0F1412 / #FCFDF8 / #F3F5F0 palette", "hard offset shadows", "border-2 / border-4 border-black", "rounded-none", "font-black uppercase", "press-down transforms", "orange fill buttons", "Raleway"]
+    }
   },
   "components": [
     {
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The main deliberate action on a governance screen.",
-      "html": "<button class=\"ds-button-primary\">RUN EVALUATION</button>",
-      "css": ".ds-button-primary { min-height: 44px; padding: 12px 16px; border: 2px solid #0F1412; border-radius: 0; background: #FF6B35; color: #0F1412; font: 800 12px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .06em; box-shadow: 6px 6px 0 #0F1412; transition: transform 180ms cubic-bezier(.16,1,.3,1), box-shadow 180ms cubic-bezier(.16,1,.3,1); } .ds-button-primary:hover, .ds-button-primary:active { transform: translate(6px, 6px); box-shadow: none; } .ds-button-primary:focus-visible { outline: 2px solid #0F1412; outline-offset: 3px; }"
+      "description": "The main deliberate action on a screen: a dark ink pill.",
+      "html": "<button class=\"ds-button-primary\">Run evaluation</button>",
+      "css": ".ds-button-primary { height: 40px; padding: 0 16px; border: 0; border-radius: 9999px; background: var(--fm-ink); color: #fff; font: 600 13px/1.2 Inter, sans-serif; transition: background-color 150ms ease-out; } .ds-button-primary:hover { background: #000; } .ds-button-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fm-ink); }"
     },
     {
       "name": "Secondary Button",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "A secondary action with the same tactile vocabulary.",
-      "html": "<button class=\"ds-button-secondary\">VIEW EVIDENCE</button>",
-      "css": ".ds-button-secondary { min-height: 44px; padding: 12px 16px; border: 2px solid #0F1412; border-radius: 0; background: #FCFDF8; color: #0F1412; font: 800 12px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .06em; } .ds-button-secondary:hover { background: #F3F5F0; } .ds-button-secondary:focus-visible { outline: 2px solid oklch(0.60 0.13 163); outline-offset: 3px; }"
+      "description": "A secondary action: white pill with a hairline border.",
+      "html": "<button class=\"ds-button-secondary\">View evidence</button>",
+      "css": ".ds-button-secondary { height: 40px; padding: 0 16px; border: 1px solid var(--fm-line); border-radius: 9999px; background: #fff; color: var(--fm-ink2); font: 500 13px/1.2 Inter, sans-serif; transition: border-color 150ms ease-out, color 150ms ease-out; } .ds-button-secondary:hover { border-color: var(--fm-ink); color: var(--fm-ink); } .ds-button-secondary:focus-visible { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--fm-ink); }"
+    },
+    {
+      "name": "Card",
+      "kind": "container",
+      "refersTo": "card",
+      "description": "A task region lifted off the page with the one soft shadow.",
+      "html": "<section class=\"ds-card\"><h2>Evidence</h2></section>",
+      "css": ".ds-card { padding: 24px; border-radius: 14px; background: #fff; color: var(--fm-ink); box-shadow: var(--fm-shadow), inset 0 0 0 1px rgba(255, 255, 255, 0.6); }"
     },
     {
       "name": "Governance Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "A labelled, square field for filters and review metadata.",
-      "html": "<label class=\"ds-field\"><span>CONTROL OWNER</span><input value=\"Governance Team\" /></label>",
-      "css": ".ds-field { display: grid; gap: 6px; color: #0F1412; font: 800 12px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .06em; } .ds-field input { min-height: 44px; padding: 10px 12px; border: 2px solid #0F1412; border-radius: 0; background: #FCFDF8; color: #0F1412; font: 500 14px/1.5 Raleway, system-ui, sans-serif; } .ds-field input:focus-visible { outline: 2px solid oklch(0.60 0.13 163); outline-offset: 2px; }"
+      "description": "A labelled field for filters and review metadata.",
+      "html": "<label class=\"ds-field\"><span>Control owner</span><input /></label>",
+      "css": ".ds-field { display: grid; gap: 6px; color: var(--fm-ink2); font: 500 12.5px/1.2 Inter, sans-serif; } .ds-field input { height: 40px; padding: 0 12px; border: 1px solid var(--fm-line); border-radius: 10px; background: #fff; color: var(--fm-ink); font: 400 13px/1.5 Inter, sans-serif; } .ds-field input:focus-visible { outline: none; border-color: var(--fm-ink); }"
     },
     {
-      "name": "Status Chip",
+      "name": "Status Pill",
       "kind": "chip",
+      "refersTo": "pill",
       "description": "A non-color-only control or evidence state.",
-      "html": "<span class=\"ds-status-chip\">READY FOR REVIEW</span>",
-      "css": ".ds-status-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 4px 8px; border: 2px solid #0F1412; border-radius: 0; background: #F3F5F0; color: #0F1412; font: 800 11px/1.2 Raleway, system-ui, sans-serif; letter-spacing: .05em; }"
+      "html": "<span class=\"ds-pill\">Ready for review</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 9999px; background: var(--fm-bg); color: var(--fm-ink2); font: 600 11.5px/1.2 Inter, sans-serif; white-space: nowrap; }"
     },
     {
       "name": "Control Trace Row",
       "kind": "custom",
-      "description": "The signature scan line for control, evidence, and finding traceability.",
-      "html": "<div class=\"ds-control-row\"><strong>A006.1</strong><span>PII detection and filtering</span><span class=\"ds-control-state\">PARTIAL</span><span>2 evidence</span></div>",
-      "css": ".ds-control-row { display: grid; grid-template-columns: 90px minmax(220px,1fr) 130px 100px; gap: 12px; align-items: center; min-height: 52px; padding: 10px 12px; border-bottom: 2px solid #0F1412; background: #FCFDF8; color: #0F1412; font: 500 14px/1.4 Raleway, system-ui, sans-serif; } .ds-control-row:hover { background: #F3F5F0; } .ds-control-row:focus-within { outline: 2px solid oklch(0.60 0.13 163); outline-offset: -2px; } .ds-control-state { font-weight: 800; font-size: 11px; letter-spacing: .05em; }"
+      "description": "The scan line for control, evidence, and finding traceability.",
+      "html": "<div class=\"ds-control-row\"><strong>A006.1</strong><span>PII detection and filtering</span><span class=\"ds-pill\">Partial</span><span>2 evidence</span></div>",
+      "css": ".ds-control-row { display: grid; grid-template-columns: 90px minmax(220px,1fr) 130px 100px; gap: 12px; align-items: center; min-height: 52px; padding: 10px 12px; border-bottom: 1px solid var(--fm-line); color: var(--fm-ink); font: 400 13px/1.4 Inter, sans-serif; } .ds-control-row:hover { background: var(--fm-bg); } .ds-control-row:focus-within { outline: 2px solid var(--fm-ink); outline-offset: -2px; }"
     }
   ],
   "narrative": {
     "northStar": "The Assurance Workbench",
-    "overview": "FairMind is a shared technical workbench for engineers, compliance leads, and auditors. It is dense enough for evidence review, calm enough for sustained work, and explicit about what is observed, inferred, accepted, failed, or unknown.",
-    "keyCharacteristics": ["System-first navigation with a framework lens.", "Compact scope and decision context.", "Visible provenance, freshness, ownership, and review status.", "Strong borders and selective hard shadows."],
+    "overview": "FairMind is a shared technical workbench for engineers, compliance leads, and auditors. It is calm, precise, and trustworthy, and explicit about what is observed, inferred, accepted, failed, or unknown.",
+    "keyCharacteristics": ["White 14px cards with one soft shadow on a warm grey page.", "Hairline borders in --fm-line.", "Ink, not black, for text and primary fills.", "Rounded-full pill controls; orange is a brand accent only."],
     "rules": [
       { "name": "The Evidence Color Rule", "body": "Color may reinforce a labelled state, but color alone never carries readiness, severity, freshness, or review meaning.", "section": "colors" },
-      { "name": "The Orange Action Rule", "body": "Orange identifies an action or active task. If orange covers an entire dashboard region, it has been overused.", "section": "colors" },
+      { "name": "The Accent Rule", "body": "--fm-brand marks the brand and highlights; it is never a button fill or a page wash.", "section": "colors" },
       { "name": "The Scan First Rule", "body": "A reviewer must identify scope, status, owner, and next action without reading paragraph text.", "section": "typography" },
-      { "name": "The Flat By Default Rule", "body": "Tables, toolbars, filters, and nested content remain flat. A shadow must explain interaction or hierarchy.", "section": "elevation" }
+      { "name": "The One Shadow Rule", "body": "Only cards carry --fm-shadow. Everything inside a card is flat and separated by hairlines.", "section": "elevation" }
     ],
-    "dos": ["Do show company, AI system, framework version, and review period before readiness information.", "Do use shared controls and reviewed evidence links across frameworks.", "Do use tables and split views for dense governance work."],
-    "donts": ["Don't use purple gradients, gradient text, glassmorphism, neon glow, or generic AI product styling.", "Don't place marketing heroes inside the authenticated dashboard.", "Don't imply that a score, accepted artifact, or FairMind evaluation automatically proves compliance or certification."]
+    "dos": ["Do use var(--fm-*) tokens and the shared Card, Button, Pill, and FramedIcon primitives.", "Do show company, AI system, framework version, and review period before readiness information.", "Do use tables and split views inside cards for dense governance work."],
+    "donts": ["Don't reintroduce the retired neobrutalist style.", "Don't use gradients, gloss, glassmorphism, neon glow, or press-down transforms.", "Don't imply that a score, accepted artifact, or FairMind evaluation automatically proves compliance or certification."]
   }
 }
