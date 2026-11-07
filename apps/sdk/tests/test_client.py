@@ -114,3 +114,68 @@ def test_monitoring_inspect_and_attest(tmp_path):
     fm.attest("s", "monitoring", "Dashboards reviewed weekly", "RUN-1")
     assert [(m, p.rsplit("/", 1)[-1]) for m, p, _ in calls] == [("POST", "monitoring-runs"), ("POST", "inspect"), ("POST", "attestations")]
     assert all(c[2].startswith("multipart/") for c in calls[:2]) and calls[2][2] == "application/json"
+
+
+def test_org_id_from_env_or_first_organisation(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"organizations": [{"id": "o1"}, {"id": "o2"}]})
+
+    monkeypatch.delenv("FAIRMIND_ORG_ID", raising=False)
+    fm = make(handler)
+    assert fm.organization_id() == "o1" and fm.organization_id() == "o1"
+    assert calls == ["/api/v1/organizations"]
+    monkeypatch.setenv("FAIRMIND_ORG_ID", "o9")
+    assert make(handler).organization_id() == "o9"
+
+
+def test_file_evaluation_uploads_slots_and_returns_run(tmp_path, monkeypatch):
+    monkeypatch.setenv("FAIRMIND_ORG_ID", "o1")
+    data = tmp_path / "train.csv"
+    data.write_text("a\n1\n")
+    seen = {}
+
+    def handler(request):
+        seen["url"] = str(request.url)
+        seen["body"] = request.read()
+        return httpx.Response(200, json={"id": "ev1", "status": "passed"})
+
+    run = make(handler).run_evaluation("s1", "EV-DAT-01", {"train": data}, {"column": "a"})
+    assert run["status"] == "passed"
+    assert seen["url"] == "http://fm.test/api/v1/packs/evaluations/EV-DAT-01/runs?org_id=o1"
+    assert b'name="train"; filename="train.csv"' in seen["body"]
+    assert b'{"column": "a"}' in seen["body"] and b'name="mode"' not in seen["body"]
+
+
+def test_live_evaluation_waits_for_its_job(monkeypatch):
+    monkeypatch.setenv("FAIRMIND_ORG_ID", "o1")
+    polls = iter([{"id": "j1", "status": "running"}, {"id": "j1", "status": "done", "evidenceId": "ev7"}])
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/runs"):
+            assert b"mode=live" in request.read()  # form-encoded when no files
+            return httpx.Response(202, json={"job": {"id": "j1", "status": "running"}})
+        if path.endswith("/evaluation-jobs/j1"):
+            return httpx.Response(200, json=next(polls))
+        assert path.endswith("/evaluation-runs/ev7")
+        return httpx.Response(200, json={"id": "ev7", "status": "failed"})
+
+    assert make(handler).run_evaluation("s1", "EV-SEC-01", live=True, poll_interval=0)["id"] == "ev7"
+
+
+def test_failed_job_and_missing_file_raise(tmp_path, monkeypatch):
+    monkeypatch.setenv("FAIRMIND_ORG_ID", "o1")
+
+    def handler(request):
+        if request.url.path.endswith("/runs"):
+            return httpx.Response(202, json={"job": {"id": "j1", "status": "failed", "error": "no judge"}})
+        raise AssertionError(request.url)
+
+    fm = make(handler)
+    with pytest.raises(FairMindError, match="no judge"):
+        fm.run_evaluation("s1", "EV-SEC-01", live=True)
+    with pytest.raises(FairMindError, match="No such file"):
+        fm.run_evaluation("s1", "EV-DAT-01", {"train": tmp_path / "missing.csv"})

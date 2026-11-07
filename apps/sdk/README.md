@@ -35,6 +35,12 @@ for check in gate["checks"]:
 | `run_monitoring(system_id, path, *, attributes, prediction=None, score=None, favorable_label=None)` | `POST /systems/{id}/monitoring-runs` |
 | `monitoring_runs(system_id)` | `GET /systems/{id}/monitoring-runs` |
 | `attest(system_id, check, statement, reference=None)` | `POST /systems/{id}/attestations` |
+| `evaluations(query=None, pillar=None)` | `GET /api/v1/packs/evaluations` |
+| `evaluation_engine(evaluation_id)` | `GET /api/v1/packs/evaluations/{id}/engine`: the files and params it takes |
+| `run_evaluation(system_id, evaluation_id, files=None, params=None, live=False, source="upload")` | `POST /api/v1/packs/evaluations/{id}/runs`; waits for behaviour-test jobs and returns the stored run |
+| `evaluation_runs(evaluation_id, system_id=None)` | `GET /api/v1/packs/evaluations/{id}/runs` |
+
+The evaluation methods act in the organisation from `FAIRMIND_ORG_ID`, or the key's first organisation when it is unset.
 
 `attributes` is a list or a comma-separated string. `run_fairness` and `run_monitoring` need `prediction` (a 0/1 column) or `score` (a 0 to 1 column). Responses are plain dicts typed with `TypedDict`s (`Gate`, `GateCheck`, `ClauseMap`, `FairnessRun`, `MonitoringRun`, ...).
 

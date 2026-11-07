@@ -58,7 +58,7 @@ Every failure raises `FairMindError` with the HTTP `status_code` (`None` when th
 
 ## MCP server
 
-`fairmind-mcp` serves six tools over stdio: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot` and `attest_check`. Each returns a compact text summary plus the full response as structured content. The CSV path in `run_fairness_test` and `record_monitoring_snapshot` is a path on the machine running the server, which is normally the developer's own.
+`fairmind-mcp` serves nine tools over stdio: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Each returns a compact text summary plus the full response as structured content. The CSV path in `run_fairness_test` and `record_monitoring_snapshot` is a path on the machine running the server, which is normally the developer's own.
 
 Add it to Claude Code from a checkout:
 

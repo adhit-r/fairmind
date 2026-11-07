@@ -21,7 +21,9 @@ INSTRUCTIONS = (
     "FairMind grades the evidence behind an AI system and answers whether it may ship. "
     "Call list_systems to find a system id, release_gate to read the verdict, run_fairness_test or "
     "record_monitoring_snapshot with a CSV on this machine to add measured evidence, and attest_check "
-    "only for a statement the user has confirmed."
+    "only for a statement the user has confirmed. For the wider catalogue (drift, leakage, prompt injection, "
+    "jailbreaks, counterfactual flip rate, agent configuration and more), call list_evaluations, then "
+    "describe_evaluation for the files and params one takes, then run_evaluation."
 )
 
 
@@ -83,6 +85,30 @@ def render_monitoring(run: Dict[str, Any]) -> str:
         )
     lines.append("  ! marks a value outside its threshold (rate drift above 0.05, impact ratio below 0.80, PSI at or above 0.10)")
     return "\n".join(lines + ["", render_gate(run["gate"])])
+
+
+def render_evaluation_run(run: Dict[str, Any]) -> str:
+    lines = [f"{run.get('evaluationId')}: {str(run.get('status', '')).upper()}, evidence {run.get('id')}"]
+    if run.get("summary"):
+        lines.append(f"  {run['summary']}")
+    for key, value in (run.get("metrics") or {}).items():
+        lines.append(f"  {key}: {value:.3f}" if isinstance(value, float) else f"  {key}: {value}")
+    return "\n".join(lines)
+
+
+def render_engine(spec: Dict[str, Any]) -> str:
+    def part(engine: Dict[str, Any], title: str) -> List[str]:
+        out = [f"{title}: {engine['method']}"]
+        out += [f"  file {s['name']} ({s['kind']}{'' if s['required'] else ', optional'}): {s['help']}" for s in engine["slots"]]
+        out += [f"  param {p['name']} ({p['kind']}{', required' if p['required'] else ''}): {p['help']}" for p in engine["params"]]
+        return out
+
+    lines = part(spec, "Behaviour test against the live system" if spec.get("live") else "On files")
+    if spec.get("platform"):
+        lines.append("  can also read the connected agent platform instead of files (source=connection)")
+    if spec.get("alternate"):
+        lines += part(spec["alternate"], "Also as a behaviour test (live=true)")
+    return "\n".join(lines)
 
 
 def render_clause_map(cmap: Dict[str, Any]) -> str:
@@ -181,6 +207,37 @@ def create_server(client: Optional[FairMind] = None) -> FastMCP:
         """Record that a person states a gate check is satisfied (manual evidence: it attests, it never proves). Only call this with a statement the user has given or confirmed; never invent one. `statement` is at least 12 characters; `reference` optionally points at a document or ticket."""
         done = fm().attest(system_id, check, statement, reference)
         return _result(f"Attested {check}, evidence {done['evidenceId']}\n\n{render_gate(done['gate'])}", dict(done))
+
+    @server.tool()
+    @guarded
+    def list_evaluations(query: Optional[str] = None) -> CallToolResult:
+        """Search FairMind's evaluation catalogue (for example "drift", "injection", "leakage", "counterfactual"). Each entry says what it measures, its pass threshold and whether FairMind can run it."""
+        evals = fm().evaluations(query)
+        if not evals:
+            return _result("No evaluation matches.", {"evaluations": []})
+        lines = [f"{e['id']}  {'runnable' if e.get('runnable') else 'evidence only'}  {e['name']}: {e.get('measures') or ''}" for e in evals]
+        return _result("\n".join(lines), {"evaluations": evals})
+
+    @server.tool()
+    @guarded
+    def describe_evaluation(evaluation_id: str) -> CallToolResult:
+        """The files and params an evaluation takes before run_evaluation, and whether it can run as a behaviour test against the live system."""
+        spec = fm().evaluation_engine(evaluation_id)
+        return _result(render_engine(spec), dict(spec))
+
+    @server.tool()
+    @guarded
+    def run_evaluation(
+        system_id: str,
+        evaluation_id: str,
+        files: Optional[Dict[str, str]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        live: bool = False,
+        use_connection: bool = False,
+    ) -> CallToolResult:
+        """Run a catalogue evaluation and store the result as measured evidence. `files` maps the file names from describe_evaluation to paths on this machine. `live=true` runs its behaviour test against the system's connected endpoint, judged by the organisation's model (this can take minutes). `use_connection=true` reads the organisation's connected agent platform instead of files. Returns passed, failed or insufficient with the metrics."""
+        run = fm().run_evaluation(system_id, evaluation_id, files, params, live=live, source="connection" if use_connection else "upload")
+        return _result(render_evaluation_run(run), dict(run))
 
     return server
 

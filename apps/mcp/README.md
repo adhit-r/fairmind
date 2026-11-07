@@ -12,8 +12,11 @@ An MCP server that lets a coding agent ask FairMind whether an AI system may shi
 | `run_fairness_test` | Uploads a local CSV, stores the measured result as evidence, returns metrics and the new gate |
 | `record_monitoring_snapshot` | Compares recent decisions in a local CSV with the latest fairness run (drift, impact ratio, PSI) |
 | `attest_check` | Records a person's statement that `data_governance`, `human_oversight`, `monitoring` or `environmental` is satisfied |
+| `list_evaluations` | Searches the evaluation catalogue (drift, leakage, prompt injection, jailbreaks, counterfactual flip rate, agent configuration and more) and says which FairMind can run |
+| `describe_evaluation` | The files and params an evaluation takes, and whether it also runs as a behaviour test against the live system |
+| `run_evaluation` | Runs an evaluation on local files, against the live system (`live`) or on the connected agent platform (`use_connection`); stores the result as measured evidence |
 
-Each tool returns a compact text summary and the full API response as structured content. API failures come back as tool errors carrying the HTTP status and the server's message. `attest_check` writes manual evidence, so the tool tells the agent to use only statements the user gave or confirmed.
+Each tool returns a compact text summary and the full API response as structured content. `run_evaluation` waits for behaviour tests, which run as background jobs and can take minutes. The evaluation tools act in the key's first organisation; set `FAIRMIND_ORG_ID` to pick another. API failures come back as tool errors carrying the HTTP status and the server's message. `attest_check` writes manual evidence, so the tool tells the agent to use only statements the user gave or confirmed.
 
 ## Install
 

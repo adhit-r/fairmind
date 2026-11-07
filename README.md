@@ -149,7 +149,7 @@ fairmind verify pack.json        # offline, no network
     api-key: ${{ secrets.FAIRMIND_API_KEY }}
 ```
 
-The [Python SDK](apps/sdk/README.md) wraps the same calls, and the [MCP server](apps/mcp/README.md) gives Claude Code and other MCP clients six tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot` and `attest_check`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
+The [Python SDK](apps/sdk/README.md) wraps the same calls, and the [MCP server](apps/mcp/README.md) gives Claude Code and other MCP clients nine tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
 
 ---
 
