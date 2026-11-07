@@ -83,6 +83,29 @@ export function listText(names: string[]): string {
   return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
+const METRIC_NAMES: Record<string, string> = { disparate_impact: 'impact ratio', equal_opportunity: 'equal opportunity gap', equalized_odds: 'equalized odds gap', calibration: 'calibration gap' }
+type Checked = 'disparate_impact' | 'equal_opportunity' | 'equalized_odds' | 'calibration'
+/** Enough decimals that a value just past its threshold never prints as the threshold itself. */
+const past = (v: number, t: number) => [3, 4, 5, 6].map((d) => v.toFixed(d)).find((s) => Number(s) !== t) ?? String(v)
+
+/**
+ * The result headline, on its real basis: a check fails only when its value crosses the threshold and the
+ * difference is statistically significant, so a pass can hide a value past its threshold. Each such value gets a caveat.
+ */
+export function resultHeadline(result: FairnessRunResult['result']): { pass: boolean; text: string; caveats: string[] } {
+  if (!result.all_checks_pass) return { pass: false, text: 'At least one check outside thresholds', caveats: [] }
+  const caveats = result.attributes.flatMap((a) =>
+    Object.entries(a.checks).flatMap(([k, ok]) => {
+      const m = a[k as Checked]
+      if (!ok || !m?.crosses_threshold) return []
+      const side = k === 'disparate_impact' ? 'below' : 'above'
+      return [`${a.attribute} ${METRIC_NAMES[k] ?? k.replace(/_/g, ' ')} ${past(m.value, m.threshold)} is ${side} ${m.threshold.toFixed(2)}, but the difference is not statistically significant at the configured level of ${m.alpha.toPrecision(2)} (p = ${m.p_value.toPrecision(2)})`]
+    }),
+  )
+  if (!caveats.length) return { pass: true, text: 'All checks within thresholds', caveats }
+  return { pass: true, text: `All checks pass; ${caveats.length === 1 ? 'one value is' : `${caveats.length} values are`} outside thresholds but not statistically significant`, caveats }
+}
+
 /** Where the pre-ticked attributes came from. Reuse from an unconfirmed run never claims a person confirmed it. */
 export function sourceLine(i: Pick<CsvInspection, 'attributeSource' | 'confirmedBy' | 'confirmedAt' | 'previousRunUnconfirmed'>): string {
   if (i.attributeSource === 'none') return 'No column looks like a protected attribute. Choose them.'
@@ -175,6 +198,7 @@ export function FairnessRunPanel({
     setMapping((m) => ({ ...m, attributes: m.attributes.includes(name) ? m.attributes.filter((a) => a !== name) : [...m.attributes, name] }))
 
   const canRun = Boolean(file && state?.ready)
+  const headline = result && resultHeadline(result.result)
 
   return (
     <div id="first-verdict" className="grid gap-3 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:col-span-2 xl:col-span-3">
@@ -333,16 +357,19 @@ export function FairnessRunPanel({
 
       {error && <p className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[12.5px] text-[#b4232c]">{error}</p>}
 
-      {result && (
+      {result && headline && (
         <div className="grid gap-3">
           <div className="text-[13px]">
-            <span className={cn('font-semibold', result.result.all_checks_pass ? 'text-[#1f7a4d]' : 'text-[#b4232c]')}>
-              {result.result.all_checks_pass ? 'All checks within thresholds' : 'At least one check outside thresholds'}
-            </span>
+            <span className={cn('font-semibold', headline.pass ? 'text-[#1f7a4d]' : 'text-[#b4232c]')}>{headline.text}</span>
             <span className="text-[var(--fm-ink2)]">
               {' '}· {result.result.rows.toLocaleString()} rows · evidence confidence {result.result.evidence_confidence.toFixed(2)} (measured) · saved as evidence · attributes confirmed by you
             </span>
           </div>
+          {headline.caveats.length > 0 && (
+            <ul className="grid gap-0.5 text-[12.5px] text-[var(--fm-ink2)]">
+              {headline.caveats.map((c) => <li key={c}>{c}.</li>)}
+            </ul>
+          )}
           {notTested && (
             <div className="text-[12.5px] text-[var(--fm-ink2)]">
               Not tested: {listText(notTested.grounds)}.{notTested.reason && ` ${notTested.reason}`}
@@ -390,7 +417,7 @@ export function FairnessRunPanel({
             </table>
           </div>
           <div className="text-[11.5px] text-[var(--fm-ink3)]">
-            Thresholds: impact ratio at or above {result.result.thresholds.disparate_impact_ratio} (four-fifths rule), gaps at or below {result.result.thresholds.gap}. Intervals are 95% bootstrap.
+            Thresholds: impact ratio at or above {result.result.thresholds.disparate_impact_ratio} (four-fifths rule), gaps at or below {result.result.thresholds.gap}. A check fails only when its value crosses the threshold and the difference is statistically significant: permutation p-value below {result.result.thresholds.alpha.toPrecision(2)}, Bonferroni-adjusted for {result.result.thresholds.tests} tests. Intervals are 95% bootstrap.
           </div>
           <VerdictExplainer gate={result.gate} compact />
           <div>

@@ -56,6 +56,17 @@ jobs:
 `
 }
 
+const SNAPSHOT_CHECKS: Record<string, string> = { disparate_impact: 'impact ratio', selection_rate_stable: 'selection-rate drift', score_stable: 'score drift' }
+
+/** A snapshot's bar label: the lowest impact ratio, then the checks it actually failed, which may be drift rather than the ratio. */
+export function snapshotLabel(run: Pick<MonitoringRunSummary, 'allChecksPass' | 'attributes'>, ratio: number | null): string {
+  const lead = `Lowest impact ratio ${ratio === null ? 'not available' : ratio.toFixed(2)}`
+  if (run.allChecksPass === null) return `${lead}, check result not recorded`
+  if (run.allChecksPass) return `${lead}, all checks within thresholds`
+  const failing = run.attributes.flatMap((a) => Object.entries(a.checks ?? {}).filter(([, ok]) => !ok).map(([k]) => `${a.attribute} ${SNAPSHOT_CHECKS[k] ?? k.replace(/_/g, ' ')}`))
+  return `${lead}, outside thresholds: ${failing.length ? failing.join(', ') : 'at least one check'}`
+}
+
 /** Expected cadence, snapshot age, the last snapshots as bars, and the cron job that keeps them coming. */
 export function WatchPanel({
   systemId,
@@ -76,12 +87,16 @@ export function WatchPanel({
   const latest = runs[0]
   const stale = latest ? Date.now() - new Date(latest.createdAt).getTime() > STALE_AFTER_CADENCES * policy.cadenceHours * 3_600_000 : false
   const options = CADENCES.some((c) => c.hours === policy.cadenceHours) ? CADENCES : [...CADENCES, { hours: policy.cadenceHours, label: `Every ${policy.cadenceHours} hours`, cron: cronFor(policy.cadenceHours) }]
-  const trend = runs.slice(0, TREND_LENGTH).reverse().map((r) => ({
-    at: r.createdAt,
-    ok: r.allChecksPass !== false,
-    ratio: r.attributes.length ? Math.min(...r.attributes.map((a) => a.disparateImpactRatio)) : null,
-    drift: r.attributes.reduce<number | null>((m, a) => (a.maxRateDrift === null || a.maxRateDrift === undefined ? m : Math.max(m ?? 0, a.maxRateDrift)), null),
-  }))
+  const trend = runs.slice(0, TREND_LENGTH).reverse().map((r) => {
+    const ratio = r.attributes.length ? Math.min(...r.attributes.map((a) => a.disparateImpactRatio)) : null
+    return {
+      at: r.createdAt,
+      ok: r.allChecksPass !== false,
+      ratio,
+      label: snapshotLabel(r, ratio),
+      drift: r.attributes.reduce<number | null>((m, a) => (a.maxRateDrift === null || a.maxRateDrift === undefined ? m : Math.max(m ?? 0, a.maxRateDrift)), null),
+    }
+  })
   const snippet = workflow(systemId, cronFor(policy.cadenceHours), latest?.attributes.map((a) => a.attribute) ?? [])
 
   async function change(hours: number) {
@@ -134,7 +149,7 @@ export function WatchPanel({
           <div className="mt-2 flex gap-2 overflow-x-auto">
             {trend.map((t) => (
               <div key={t.at} className="grid w-[58px] shrink-0 justify-items-center gap-0.5 text-[11.5px] tabular-nums">
-                <svg width="28" height="40" viewBox="0 0 28 40" role="img" aria-label={`Impact ratio ${t.ratio === null ? 'not available' : t.ratio.toFixed(2)}, ${t.ok ? 'within thresholds' : 'outside thresholds'}`}>
+                <svg width="28" height="40" viewBox="0 0 28 40" role="img" aria-label={t.label}>
                   <rect x="0" y="0" width="28" height="40" rx="4" fill="var(--fm-line)" />
                   <rect x="0" y={40 - 40 * Math.min(Math.max(t.ratio ?? 0, 0), 1)} width="28" height={40 * Math.min(Math.max(t.ratio ?? 0, 0), 1)} rx="4" fill={t.ok ? '#1f7a4d' : '#b4232c'} />
                 </svg>

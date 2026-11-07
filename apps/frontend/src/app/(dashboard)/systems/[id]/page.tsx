@@ -38,8 +38,13 @@ const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key
 
 const CHECK_NAMES: Record<string, string> = { disparate_impact: 'impact ratio', equal_opportunity: 'equal opportunity', equalized_odds: 'equalized odds', calibration: 'calibration' }
 
-/** "Within thresholds, gender 0.95, region 0.91" or "Outside thresholds: gender calibration, region equalized odds". */
+/**
+ * "Within thresholds, gender 0.95, region 0.91", "Checks pass; outside thresholds but not statistically significant:
+ * gender impact ratio" or "Outside thresholds: gender calibration, region equalized odds".
+ */
 function fairnessSummary(run: FairnessRunSummary): string {
+  const noisy = run.attributes.flatMap((a) => (a.passedOnSignificance ?? []).map((k) => `${a.attribute} ${CHECK_NAMES[k] ?? k.replace(/_/g, ' ')}`))
+  if (run.allChecksPass && noisy.length) return `Checks pass; outside thresholds but not statistically significant: ${noisy.join(', ')}`
   if (run.allChecksPass) return `Within thresholds, ${run.attributes.map((a) => `${a.attribute} ${a.disparateImpactRatio.toFixed(2)}`).join(', ')}`
   const failing = run.attributes.flatMap((a) => Object.entries(a.checks).filter(([, ok]) => !ok).map(([k]) => `${a.attribute} ${CHECK_NAMES[k] ?? k.replace(/_/g, ' ')}`))
   return failing.length ? `Outside thresholds: ${failing.join(', ')}` : 'Outside thresholds'

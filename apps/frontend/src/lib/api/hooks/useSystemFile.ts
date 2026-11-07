@@ -163,9 +163,22 @@ export interface FairnessRunSummary {
   title: string
   rows: number | null
   allChecksPass: boolean | null
-  attributes: Array<{ attribute: string; disparateImpactRatio: number; checks: Record<string, boolean> }>
+  /** passedOnSignificance: checks that pass with the value past its threshold, because the difference is not significant. */
+  attributes: Array<{ attribute: string; disparateImpactRatio: number; checks: Record<string, boolean>; passedOnSignificance: string[] }>
   confidence: number
   createdAt: string
+}
+
+/** One measured metric: the value, its threshold, and the permutation test that decides whether a crossing counts. */
+export interface FairnessMetric {
+  value: number
+  confidence_interval: [number, number]
+  is_fair: boolean
+  threshold: number
+  crosses_threshold: boolean
+  significant: boolean
+  p_value: number
+  alpha: number
 }
 
 export interface CsvInspection {
@@ -214,16 +227,18 @@ export interface FairnessRunResult {
     all_checks_pass: boolean
     smallest_group: number | null
     evidence_confidence: number
-    thresholds: { disparate_impact_ratio: number; gap: number }
+    /** alpha: the significance level after the Bonferroni split over `tests` checks. */
+    thresholds: { disparate_impact_ratio: number; gap: number; alpha: number; tests: number }
     attributes: Array<{
       attribute: string
       groups: Record<string, number>
       selection_rates: Record<string, number>
       disparate_impact_ratio: number
-      demographic_parity: { value: number; confidence_interval: [number, number]; is_fair: boolean }
-      equal_opportunity: { value: number; confidence_interval: [number, number]; is_fair: boolean }
-      equalized_odds: { value: number; confidence_interval: [number, number]; is_fair: boolean }
-      calibration: { value: number; confidence_interval: [number, number]; is_fair: boolean } | null
+      disparate_impact: FairnessMetric
+      demographic_parity: FairnessMetric
+      equal_opportunity: FairnessMetric
+      equalized_odds: FairnessMetric
+      calibration: FairnessMetric | null
       checks: Record<string, boolean>
       small_groups: string[]
     }>
