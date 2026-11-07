@@ -13,14 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { IconBrain, IconTarget, IconCheck, IconX, IconAlertTriangle, IconSparkles, IconShield } from '@tabler/icons-react'
 import { apiClient } from '@/lib/api/api-client'
-
-const JUDGE_MODELS = [
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  { value: 'gpt-4', label: 'GPT-4' },
-  { value: 'claude-3-opus', label: 'Claude 3 Opus' },
-  { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
-  { value: 'gemini-pro', label: 'Gemini Pro' },
-]
+import { useAvailableModels } from '@/lib/api/hooks/useLLMJudge'
 
 const BIAS_CATEGORIES = [
   { value: 'gender', label: 'Gender Bias' },
@@ -70,6 +63,7 @@ const SOTA_METHODS = [
 ]
 
 export default function LLMTestingPage() {
+  const { models: judgeModels } = useAvailableModels()
   const { toast } = useToast()
   const [activeMethod, setActiveMethod] = useState('llm-as-judge')
   const [loading, setLoading] = useState(false)
@@ -78,7 +72,7 @@ export default function LLMTestingPage() {
 
   // LLM-as-Judge form state
   const [judgeForm, setJudgeForm] = useState({
-    judgeModel: 'gpt-4-turbo',
+    judgeModel: 'gpt-6.1-sol',
     biasCategory: 'gender',
     targetModel: '',
     prompts: '',
@@ -283,7 +277,7 @@ export default function LLMTestingPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {JUDGE_MODELS.map((model) => (
+                    {judgeModels.map((model) => (
                       <SelectItem key={model.value} value={model.value}>
                         {model.label}
                       </SelectItem>
@@ -318,7 +312,7 @@ export default function LLMTestingPage() {
                 id="targetModel"
                 value={judgeForm.targetModel}
                 onChange={(e) => setJudgeForm({ ...judgeForm, targetModel: e.target.value })}
-                placeholder="e.g., gpt-4, claude-3, custom-model"
+                placeholder="e.g., support-bot-v2, custom-model"
                 className="border border-[var(--fm-line)]"
               />
             </div>

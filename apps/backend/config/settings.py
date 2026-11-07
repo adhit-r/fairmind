@@ -156,6 +156,8 @@ class Settings(BaseSettings):
     sendgrid_api_key: Optional[str] = None
     resend_api_key: Optional[str] = None
     resend_from_email: str = "noreply@fairmind.ai"
+    # How often published policy rules are re-checked for newly failing systems; 0 turns alerts off.
+    policy_alert_interval_seconds: int = 900
     admin_email: str = "admin@fairmind.ai"
     
     # Error Tracking
@@ -178,7 +180,8 @@ class Settings(BaseSettings):
     
     # LLM Configuration
     google_api_key: Optional[str] = None
-    llm_model: str = "gemini-1.5-flash"
+    openai_api_key: Optional[str] = None
+    llm_model: str = "gemini-3.8-flash"
     
     # Encryption Configuration
     compliance_encryption_key: Optional[str] = None

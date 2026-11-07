@@ -388,7 +388,7 @@ export const frameworks: Framework[] = [
     name: 'NIST AI 600-1, AI Risk Management Framework: Generative Artificial Intelligence Profile',
     shortName: 'NIST AI 600-1',
     region: 'United States',
-    type: 'Voluntary framework',
+    type: 'Risk profile',
     title: 'NIST AI 600-1 Generative AI Profile: the 12 risks, mapped',
     description:
       'Govern generative AI and LLM agents against the 12 risks in NIST AI 600-1, from confabulation to information security, with evidence for each.',
@@ -478,9 +478,9 @@ export const frameworks: Framework[] = [
     shortName: 'EU AI Act',
     region: 'European Union',
     type: 'Binding regulation',
-    title: 'EU AI Act compliance: bias, risk, and oversight evidence',
+    title: 'EU AI Act compliance: risk, oversight and logging evidence',
     description:
-      'Map AI bias testing, risk management, logging, and human oversight evidence to EU AI Act obligations for high-risk AI systems with FairMind.',
+      'Map risk management, logging, human oversight and bias testing evidence to EU AI Act obligations for high-risk AI systems, including AI agents.',
     summary:
       'The EU AI Act is a risk-based regulation that entered into force on 1 August 2024. Prohibited practices and general-purpose AI obligations already apply. The 2026 Digital Omnibus moved high-risk obligations to December 2027 for Annex III systems and August 2028 for products covered by Annex I. Providers of high-risk systems must show how they manage risk, govern training data for bias, keep logs, and enable human oversight.',
     requirements: [
@@ -594,7 +594,7 @@ export const frameworks: Framework[] = [
     shortName: 'NIST AI RMF',
     region: 'United States',
     type: 'Voluntary framework',
-    title: 'NIST AI RMF: map, measure, and manage AI bias with evidence',
+    title: 'NIST AI RMF: Govern, Map, Measure and Manage, with evidence',
     description:
       'Implement the NIST AI Risk Management Framework with traceable evidence for the Govern, Map, Measure, and Manage functions, including fairness and harmful bias.',
     summary:
@@ -698,7 +698,7 @@ export const frameworks: Framework[] = [
     shortName: 'GDPR',
     region: 'European Union',
     type: 'Binding regulation',
-    title: 'GDPR and AI: automated decisions, DPIAs, fairness evidence',
+    title: 'GDPR and AI: automated decisions, DPIAs and human review',
     description:
       'Document GDPR obligations for AI systems: fairness and accuracy principles, Article 22 automated decisions, and Data Protection Impact Assessments.',
     summary:

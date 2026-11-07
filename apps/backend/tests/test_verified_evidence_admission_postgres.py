@@ -1256,7 +1256,7 @@ def test_native_unique_diagnostics_match_the_migration_occupancy_allowlist(
             with session.begin_nested():
                 session.execute(text(f'INSERT INTO "{probe_name}" (value) VALUES (1)'))
 
-        assert caught.value.orig.pgcode == "23505"
+        assert caught.value.orig.sqlstate == "23505"
         assert caught.value.orig.diag.constraint_name == constraint_name
         assert (
             SqlAlchemyEvaluationWorkbenchRepository._evidence_database_error_kind(caught.value)
@@ -2278,7 +2278,7 @@ class _CorruptDeferredReceiptRepository(SqlAlchemyEvaluationWorkbenchRepository)
     def _raise_evidence_database_error(self, error: DBAPIError) -> None:
         self.failure_class = type(error).__name__
         self.driver_failure_class = type(error.orig).__name__
-        self.sqlstate = getattr(error.orig, "pgcode", None)
+        self.sqlstate = getattr(error.orig, "sqlstate", None)
         super()._raise_evidence_database_error(error)
 
 
@@ -2306,7 +2306,7 @@ def test_deferred_receipt_corruption_is_one_durable_rejection_and_exact_replay(
     finally:
         corrupt_session.close()
 
-    assert repository.failure_class == "InternalError"
+    assert repository.failure_class == "ProgrammingError"
     assert repository.sqlstate == "P0001"
     assert repository.driver_failure_class == "RaiseException"
     _assert_empty_graph(factory, scenario)
@@ -2376,7 +2376,7 @@ class _RaiseUnrelatedConstraintAfterGraphRepository(SqlAlchemyEvaluationWorkbenc
         try:
             self.db.execute(text(self._failure_statement))
         except DBAPIError as error:
-            self.sqlstate = getattr(error.orig, "pgcode", None)
+            self.sqlstate = getattr(error.orig, "sqlstate", None)
             self.constraint_name = getattr(error.orig.diag, "constraint_name", None)
             raise
 

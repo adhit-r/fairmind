@@ -245,6 +245,9 @@ def test_journeys_list_has_five_active_requirements_each(tmp_database):
     journeys = client.get(f"{PACKS}/journeys").json()
     assert journeys and all(j["active"] >= 5 for j in journeys)
     assert [j["name"] for j in journeys] == sorted(j["name"] for j in journeys)
+    assert all(j["type"] for j in journeys)
+    owasp = client.get(f"{PACKS}/journeys/OWASPLLM").json()
+    assert owasp["type"] == "Risk taxonomy"
     assert client.get(f"{PACKS}/journeys/nope").status_code == 404
 
 

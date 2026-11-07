@@ -1,21 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AttestableCheck } from '@/lib/api/hooks/useSystemFile'
 
 const CHECK_PROMPT: Record<AttestableCheck, string> = {
   data_governance: 'Where the training and evaluation data came from, its lawful basis, and who owns it.',
   human_oversight: 'Who reviews or can override the system\'s decisions, and when.',
   monitoring: 'How the system is watched in production and who is paged.',
-  environmental: 'What is known about the system\'s energy and carbon footprint.',
 }
 
-/** A person states that a check is satisfied. Recorded as manual evidence: it attests, it never proves. */
+/**
+ * A person states that a check is satisfied. Recorded as manual evidence: it attests, it never proves.
+ * It opens wherever the Attest button was (the checks list or the explainer's path), so it scrolls itself into view and takes focus.
+ */
 export function AttestForm({ check, onSubmit, onCancel }: { check: AttestableCheck; onSubmit: (statement: string, reference?: string) => Promise<void>; onCancel: () => void }) {
   const [statement, setStatement] = useState('')
   const [reference, setReference] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const statementRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    statementRef.current?.scrollIntoView({ block: 'center' })
+    statementRef.current?.focus({ preventScroll: true })
+  }, [])
 
   async function submit() {
     setBusy(true)
@@ -32,6 +40,8 @@ export function AttestForm({ check, onSubmit, onCancel }: { check: AttestableChe
     <div className="mt-2 grid gap-2 rounded-[10px] border border-[var(--fm-line)] bg-white p-3">
       <p className="text-[12px] text-[var(--fm-ink2)]">{CHECK_PROMPT[check]} This is recorded as attested, in the manual confidence band; measured evidence can replace it later.</p>
       <textarea
+        ref={statementRef}
+        aria-label="Attestation statement"
         value={statement}
         onChange={(e) => setStatement(e.target.value)}
         rows={3}

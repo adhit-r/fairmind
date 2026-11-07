@@ -299,7 +299,7 @@ export default function CompliancePage() {
                       <span className={LABEL}>{pillarName(j.pillar)}</span>
                       <b className="text-[15px] font-semibold">{j.name}</b>
                       <p className={cn('m-0 flex-grow text-[13px] leading-normal', MUTED)}>
-                        {j.binding ? `${j.binding}. ` : ''}
+                        {[j.type, j.binding].filter(Boolean).map((x) => `${x}. `).join('')}
                         {plugged ? `${j.coveredInstalled} of ${j.active} requirements covered now; ` : ''}
                         {plural(j.contributingPacks.length, 'pack')} cover {j.coveredAll} of {j.active} requirements.
                       </p>

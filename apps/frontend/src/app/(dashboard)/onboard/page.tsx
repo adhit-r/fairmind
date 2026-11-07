@@ -4,41 +4,60 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
+import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
+import { confirmApplicability, type ApplicabilityDraft } from '@/lib/api/hooks/useApplicability'
 import { STAGES } from '@/components/layout/AppShell'
-
-const TIERS: AISystemSummary['riskTier'][] = ['low', 'medium', 'high', 'critical']
 
 const field =
   'h-10 w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[14px] outline-none focus:border-[var(--fm-ink)]'
 const label = 'block text-[12.5px] font-medium text-[var(--fm-ink2)]'
 
-/** Register one AI system. Creates a workspace and the system in the backend, then opens the overview. */
+/**
+ * Register one AI system. Creates a workspace and the system, records the confirmed tier and frameworks,
+ * then opens the system file. If recording the tier fails, a retry records it on the system already created.
+ */
 export default function OnboardPage() {
   const { createWorkspaceAndSystem } = useSystemContext()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [draft, setDraft] = useState<ApplicabilityDraft | null>(null)
+  const [registeredId, setRegisteredId] = useState<string | null>(null)
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!draft) return
     const f = new FormData(e.currentTarget)
     const v = (k: string) => String(f.get(k) ?? '').trim()
     setBusy(true)
     setError(null)
+    let id = registeredId
     try {
-      await createWorkspaceAndSystem({
-        workspaceName: v('workspace'),
-        workspaceOwner: v('workspaceOwner'),
-        systemName: v('name'),
-        systemOwner: v('owner'),
-        riskTier: v('tier') as AISystemSummary['riskTier'],
-        stage: v('stage') as AISystemSummary['stage'],
-        systemVersion: v('version') || undefined,
-        businessLine: v('line') || undefined,
-      })
-      router.push('/dashboard')
+      if (!id) {
+        const system = await createWorkspaceAndSystem({
+          workspaceName: v('workspace'),
+          workspaceOwner: v('workspaceOwner'),
+          systemName: v('name'),
+          systemOwner: v('owner'),
+          riskTier: draft.tier,
+          stage: v('stage') as AISystemSummary['stage'],
+          systemVersion: v('version') || undefined,
+          businessLine: v('line') || undefined,
+        })
+        id = system.id
+        setRegisteredId(id)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed')
+      setBusy(false)
+      return
+    }
+    try {
+      // Without answers (suggestions could not load) the tier is confirmed later on the system file.
+      if (draft.body) await confirmApplicability(id, draft.body)
+      router.push(`/systems/${id}`)
+    } catch (err) {
+      setError(`System registered. The tier and rules were not recorded: ${err instanceof Error ? err.message : 'request failed'}`)
       setBusy(false)
     }
   }
@@ -79,14 +98,6 @@ export default function OnboardPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className={label} htmlFor="tier">Risk tier</label>
-              <select id="tier" name="tier" defaultValue="medium" className={`${field} capitalize`}>
-                {TIERS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
-            <div>
               <label className={label} htmlFor="stage">Lifecycle stage</label>
               <select id="stage" name="stage" defaultValue="onboard" className={field}>
                 {STAGES.map((s) => (
@@ -95,6 +106,11 @@ export default function OnboardPage() {
               </select>
             </div>
           </div>
+        </section>
+
+        <section className="grid gap-3 border-t border-[var(--fm-line)] pt-5">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">What you&apos;re shipping</h2>
+          <ApplicabilityForm onChange={setDraft} />
         </section>
 
         <section className="grid gap-3 border-t border-[var(--fm-line)] pt-5">
@@ -111,16 +127,26 @@ export default function OnboardPage() {
           </div>
         </section>
 
-        {error && <p className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">{error}</p>}
+        {error && (
+          <p className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">
+            {error}
+            {registeredId && (
+              <>
+                {' '}
+                <Link href={`/systems/${registeredId}`} className="font-semibold underline">Open the system file</Link>
+              </>
+            )}
+          </p>
+        )}
 
         <div className="flex items-center justify-end gap-3">
           <Link href="/dashboard" className="text-[13px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]">Cancel</Link>
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !draft || !(draft.ready || draft.failed)}
             className="h-10 rounded-full bg-[var(--fm-ink)] px-5 text-[13px] font-semibold text-white disabled:opacity-60"
           >
-            {busy ? 'Registering' : 'Register system'}
+            {busy ? 'Registering' : registeredId ? 'Record tier and rules' : 'Register system'}
           </button>
         </div>
       </form>

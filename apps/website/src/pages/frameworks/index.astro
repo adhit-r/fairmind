@@ -32,8 +32,8 @@ const structuredData = [
 ---
 
 <Layout
-  title={`${registryTotals.frameworks} AI governance frameworks: EU AI Act, ISO 42001, NIST`}
-  description={`The ${registryTotals.frameworks} frameworks in FairMind's registry, from the EU AI Act and ISO/IEC 42001 to the OWASP Agentic Top 10, with requirements and workflows mapped.`}
+  title={`${registryTotals.frameworks} AI governance frameworks, standards and risk lists`}
+  description={`The ${registryTotals.frameworks} frameworks, standards and risk lists in FairMind's registry, from the EU AI Act and ISO/IEC 42001 to the OWASP Agentic Top 10, each mapped to workflows.`}
   structuredData={structuredData}
 >
   <section class="fw-hero">
@@ -42,7 +42,7 @@ const structuredData = [
         <ol><li><a href="/">Home</a></li><li aria-current="page">Frameworks</li></ol>
       </nav>
       <p class="kicker">Frameworks</p>
-      <h1>{registryTotals.frameworks} frameworks. <em>One set of evidence.</em></h1>
+      <h1>{registryTotals.frameworks} frameworks, standards and risk lists. <em>One set of evidence.</em></h1>
       <p class="fw-lead">
         {registryTotals.mapped} are mapped to {registryTotals.requirements} requirements, so one approved record can
         satisfy every requirement it covers. {registryTotals.frameworks - registryTotals.mapped} are tracked for
@@ -53,7 +53,7 @@ const structuredData = [
 
   <section class="section">
     <div class="wrap">
-      <div class="fw-filters" role="group" aria-label="Filter frameworks" data-filters hidden>
+      <div class="fw-filters" role="group" aria-label="Filter the registry" data-filters hidden>
         <button type="button" class="fw-chip" aria-pressed="true" data-kind="all">All {registryTotals.frameworks}</button>
         {kinds.map((k) => (
           <button type="button" class="fw-chip" aria-pressed="false" data-kind={k}>{kindLabels[k]} {counts[k]}</button>

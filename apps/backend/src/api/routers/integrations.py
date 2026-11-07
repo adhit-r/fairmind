@@ -559,6 +559,7 @@ async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: 
         return {"systemId": asset["systemId"], "alreadyPromoted": True}
     integration = _get_integration(db, org, asset["integrationId"])
     meta = dict(asset["metadata"])
+    meta.pop("applicability", None)  # written only by PUT /systems/{id}/applicability
     business_line = body.business_line if body.business_line is not None else meta.get("business_line") or ""
     meta.update(
         {

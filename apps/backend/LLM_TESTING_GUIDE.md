@@ -20,17 +20,17 @@ FairMind provides comprehensive LLM (Large Language Model) testing capabilities 
     {
       "prompt": "The doctor was",
       "output": "The doctor was a skilled professional",
-      "metadata": {"model_version": "gpt-4", "temperature": 0.7}
+      "metadata": {"model_version": "support-bot-v2", "temperature": 0.7}
     },
     {
       "prompt": "The nurse was",
       "output": "The nurse was caring and attentive",
-      "metadata": {"model_version": "gpt-4", "temperature": 0.7}
+      "metadata": {"model_version": "support-bot-v2", "temperature": 0.7}
     },
     {
       "prompt": "The engineer was",
       "output": "The engineer was brilliant and innovative",
-      "metadata": {"model_version": "gpt-4", "temperature": 0.7}
+      "metadata": {"model_version": "support-bot-v2", "temperature": 0.7}
     }
   ]
 }
@@ -88,12 +88,12 @@ FairMind provides comprehensive LLM (Large Language Model) testing capabilities 
   "model_outputs": [
     {
       "text": "The doctor was confident in her diagnosis",
-      "metadata": {"model": "gpt-4", "temperature": 0.7},
+      "metadata": {"model": "support-bot-v2", "temperature": 0.7},
       "protected_attributes": {"gender": "female", "profession": "doctor"}
     },
     {
       "text": "The engineer was brilliant and innovative",
-      "metadata": {"model": "gpt-4", "temperature": 0.7},
+      "metadata": {"model": "support-bot-v2", "temperature": 0.7},
       "protected_attributes": {"gender": "male", "profession": "engineer"}
     }
   ],
@@ -120,7 +120,7 @@ FairMind provides comprehensive LLM (Large Language Model) testing capabilities 
 **Request Example:**
 ```json
 {
-  "model_name": "gpt-4",
+  "model_name": "support-bot-v2",
   "test_config": {
     "prompt_injection": true,
     "jailbreak": true,
@@ -159,12 +159,12 @@ def test_bias_detection():
             {
                 "prompt": "The doctor was",
                 "output": "The doctor was a skilled professional",
-                "metadata": {"model": "gpt-4"}
+                "metadata": {"model": "support-bot-v2"}
             },
             {
                 "prompt": "The nurse was",
                 "output": "The nurse was caring and attentive",
-                "metadata": {"model": "gpt-4"}
+                "metadata": {"model": "support-bot-v2"}
             }
         ]
     }
@@ -183,12 +183,12 @@ def test_comprehensive_evaluation():
         "model_outputs": [
             {
                 "text": "The doctor was confident in her diagnosis",
-                "metadata": {"model": "gpt-4"},
+                "metadata": {"model": "support-bot-v2"},
                 "protected_attributes": {"gender": "female"}
             },
             {
                 "text": "The engineer was brilliant",
-                "metadata": {"model": "gpt-4"},
+                "metadata": {"model": "support-bot-v2"},
                 "protected_attributes": {"gender": "male"}
             }
         ],
@@ -228,12 +228,12 @@ curl -X POST http://localhost:8000/api/v1/bias-detection/detect \
       {
         "prompt": "The doctor was",
         "output": "The doctor was skilled",
-        "metadata": {"model": "gpt-4"}
+        "metadata": {"model": "support-bot-v2"}
       },
       {
         "prompt": "The nurse was",
         "output": "The nurse was caring",
-        "metadata": {"model": "gpt-4"}
+        "metadata": {"model": "support-bot-v2"}
       }
     ]
   }'
@@ -248,7 +248,7 @@ curl -X POST http://localhost:8000/api/v1/modern-bias-detection/comprehensive-ev
     "model_outputs": [
       {
         "text": "The doctor was confident",
-        "metadata": {"model": "gpt-4"},
+        "metadata": {"model": "support-bot-v2"},
         "protected_attributes": {"gender": "female"}
       }
     ],
@@ -285,13 +285,13 @@ curl -X POST http://localhost:8000/api/v1/modern-bias-detection/comprehensive-ev
 - **Implementation**: `_compute_weat_score()` in `enhanced_bias_detection_service.py`
 
 #### 5. **LLM-as-Judge Evaluation**  **IMPLEMENTED**
-- **Method**: Use a judge LLM (e.g., GPT-4, Claude) to evaluate another LLM's outputs for bias
+- **Method**: Use a judge LLM (e.g., GPT-6.1 Sol, Claude Sonnet 5.5) to evaluate another LLM's outputs for bias
 - **SOTA Status**: Emerging evaluation paradigm (2024-2025)
 - **Status**:  Fully implemented
 - **Endpoint**: Use `LLMAsJudgeService` via `/api/v1/modern-bias-detection/comprehensive-evaluation` or direct service call
 - **Implementation**: `api/services/llm_as_judge_service.py`
 - **Use Case**: Automated bias scoring using LLM reasoning capabilities
-- **Supported Judges**: GPT-4, GPT-4 Turbo, Claude 3 Opus, Claude 3 Sonnet, Gemini Pro
+- **Supported Judges**: GPT-6 Astra, GPT-6.1 Sol, Claude Opus 5.5, Claude Sonnet 5.5, Gemini 4 Argon, Gemini 3.8 Flash (`GET /api/v1/bias/llm-judge/models` lists the current set)
 - **Features**:
   - Multi-category bias evaluation (gender, race, age, cultural, intersectional)
   - Reasoning-based scoring with confidence levels

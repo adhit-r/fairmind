@@ -41,6 +41,9 @@ from .india_compliance_rag import IndiaComplianceRAG
 
 logger = logging.getLogger(__name__)
 
+# Room for reasoning and thinking tokens on top of the visible-output budget each call asks for.
+REASONING_HEADROOM_TOKENS = 16000
+
 
 # ============================================================================
 # LLM Configuration
@@ -74,10 +77,10 @@ class AIComplianceAutomationService:
             if not OPENAI_AVAILABLE:
                 raise ImportError("OpenAI provider selected but 'openai' package is not installed.")
             self.client = AsyncOpenAI(api_key=api_key or settings.openai_api_key)
-            self.model = "gpt-4"
+            self.model = "gpt-6.1-sol"
         elif provider == LLMProvider.GEMINI:
             self.client = httpx.AsyncClient()
-            self.model = settings.llm_model or "gemini-1.5-flash"
+            self.model = settings.llm_model
             self.api_key = api_key or settings.google_api_key
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
@@ -96,8 +99,9 @@ class AIComplianceAutomationService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.7,
-                max_tokens=max_tokens,
+                # Current OpenAI models reason: no temperature, and the cap covers reasoning tokens too.
+                reasoning_effort="low",
+                max_completion_tokens=max_tokens + REASONING_HEADROOM_TOKENS,
             )
             return response.choices[0].message.content
             
@@ -109,17 +113,20 @@ class AIComplianceAutomationService:
             full_prompt = f"{system_prompt}\n\n{user_prompt}"
             try:
                 response = await self.client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}",
-                    headers={"Content-Type": "application/json"},
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+                    # The key goes in a header: in the URL it would show up in raise_for_status() errors and logs.
+                    headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
                     json={
                         "contents": [{"parts": [{"text": full_prompt}]}],
-                        "generationConfig": {"maxOutputTokens": max_tokens}
+                        # Gemini 3.x thinks by default, and thought tokens count toward the cap.
+                        "generationConfig": {"maxOutputTokens": max_tokens + REASONING_HEADROOM_TOKENS}
                     },
                     timeout=60.0
                 )
                 response.raise_for_status()
                 result = response.json()
-                return result["candidates"][0]["content"]["parts"][0]["text"]
+                parts = result["candidates"][0]["content"]["parts"]
+                return "".join(p.get("text", "") for p in parts if not p.get("thought"))
             except Exception as e:
                 logger.error(f"Gemini API call failed: {e}")
                 raise
@@ -141,7 +148,7 @@ class AIComplianceAutomationService:
         """
         Use LLM to analyze compliance gaps and suggest fixes.
 
-        Leverages GPT-4 to provide intelligent analysis of compliance gaps
+        Uses an LLM to provide intelligent analysis of compliance gaps
         with legal context and India-specific remediation guidance.
 
         Args:

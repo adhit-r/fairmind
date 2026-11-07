@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import type { ClauseMap } from '@/lib/api/hooks/useSystemFile'
 import { cn } from '@/lib/utils'
 
@@ -16,19 +17,32 @@ function Dot({ state }: { state: 'proven' | 'attested' | 'open' }) {
   )
 }
 
+/** The scoped subtitle names every confirmed framework, mapped or not; null when the map is not scoped. */
+export function scopeLine(map: ClauseMap): string | null {
+  if (!map.scoped) return null
+  const names = (map.confirmed ?? map.frameworks).map((f) => shortFrameworkName(f.name)).join(', ')
+  return `For the frameworks this system answers to: ${names}.${map.frameworks.length === 0 ? ' None of these frameworks map to the gate checks yet.' : ''}`
+}
+
 /** The release gate read clause by clause: which articles and controls each check speaks to, and how well. */
 export function ClauseMapPanel({ map }: { map: ClauseMap }) {
   const [openKey, setOpenKey] = useState<string | null>(map.frameworks[0]?.key ?? null)
   const [showAll, setShowAll] = useState(false)
   const frameworks = showAll ? map.frameworks : map.frameworks.slice(0, LEAD)
   const rest = map.frameworks.length - LEAD
-  if (map.frameworks.length === 0) return null
+  const scope = scopeLine(map)
+  // A scoped map with nothing mapped still shows, so the confirmed frameworks are named.
+  if (map.frameworks.length === 0 && !map.scoped) return null
 
   return (
     <div className="grid min-w-0 gap-3 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:col-span-2 xl:col-span-3">
       <div>
         <div className="text-[13.5px] font-semibold">What the gate says per framework</div>
-        <div className="text-[12px] text-[var(--fm-ink2)]">Each gate check maps to the clauses it satisfies, supports or aligns with. A clause is as good as its best-evidenced check.</div>
+        <div className="text-[12px] text-[var(--fm-ink2)]">
+          {scope && `${scope} `}
+          Each gate check maps to the clauses it satisfies, supports or aligns with. A clause is as good as its best-evidenced check.
+          {map.scoped === false && ' Showing every framework: none chosen yet.'}
+        </div>
       </div>
       <div className="grid gap-1.5">
         {frameworks.map((fw) => {
@@ -37,7 +51,7 @@ export function ClauseMapPanel({ map }: { map: ClauseMap }) {
           return (
             <div key={fw.key} className="rounded-[10px] border border-[var(--fm-line)] bg-white">
               <button type="button" onClick={() => setOpenKey(open ? null : fw.key)} className="flex w-full items-center gap-3 px-3 py-2 text-left">
-                <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{fw.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium" title={fw.name}>{shortFrameworkName(fw.name)}</span>
                 <span className="text-[12px] tabular-nums text-[var(--fm-ink2)]">
                   {evidenced} of {fw.counts.total} clause{fw.counts.total === 1 ? '' : 's'} evidenced
                   {fw.counts.attested > 0 && <span className="text-[var(--fm-ink3)]"> ({fw.counts.attested} attested)</span>}

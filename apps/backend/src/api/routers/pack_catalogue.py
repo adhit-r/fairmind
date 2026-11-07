@@ -132,6 +132,7 @@ class Framework(BaseModel):
     name: str
     pillar: str
     version: Optional[str] = None
+    type: Optional[str] = None
     binding: Optional[str] = None
     status: Optional[str] = None
 

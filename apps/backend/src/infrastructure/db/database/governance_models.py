@@ -3758,6 +3758,42 @@ class OrgPolicyEvaluation(Base):
     )
 
 
+class OrgPolicyAlert(Base):
+    """A published rule failing on a system: opened when it starts failing, resolved when it stops."""
+
+    __tablename__ = "org_policy_alerts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_version = Column(Integer, nullable=False)
+    system_id = Column(String, nullable=False)
+    rule_id = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    enforcement = Column(String, nullable=False)
+    detail = Column(Text, nullable=False, default="")
+    status = Column(String, nullable=False, default="open")
+    opened_at = Column(String, nullable=False)
+    resolved_at = Column(String, nullable=True)
+    notified_at = Column(String, nullable=True)
+    acknowledged_by = Column(String, nullable=True)
+    acknowledged_at = Column(String, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'resolved')", name="ck_org_policy_alert_status"),
+        # One open alert per rule and system, so concurrent sweeps cannot raise it twice.
+        Index(
+            "uq_org_policy_alert_open",
+            "org_id",
+            "policy_id",
+            "rule_id",
+            "system_id",
+            unique=True,
+            postgresql_where=(status == "open"),
+        ),
+    )
+
+
 class GovernanceApprovalWorkflow(Base):
     """Approval workflow definition."""
 
