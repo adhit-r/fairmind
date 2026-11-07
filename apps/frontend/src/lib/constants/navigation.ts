@@ -76,7 +76,7 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
         title: "LLM Judge",
         href: "/llm-judge",
         icon: IconRobot,
-        description: "Evaluation pack unavailable",
+        description: "AI Evaluation",
       },
       {
         title: "Explainability Studio",

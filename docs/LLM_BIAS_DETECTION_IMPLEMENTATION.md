@@ -1,6 +1,6 @@
 # LLM Bias Detection Implementation Guide
 
-> **Current release status (August 29, 2026): Historical implementation reference.** The canonical FairMind API does not mount the modern-bias evaluator router, and the related dashboard routes render inert availability states. The modules and examples below are not a supported or independently validated execution capability; they remain reference material for future P2/P3 calibration, isolation, evidence-contract, and security work.
+> **Current release status (November 7, 2026): Historical implementation reference.** The canonical FairMind API does not mount the modern-bias evaluator router, and the related dashboard routes render inert availability states. WEAT and SEAT now run as the catalogue engine EV-FAI-05. The modules and examples below are not a supported or independently validated execution capability; they remain reference material for future P2/P3 calibration, isolation, evidence-contract, and security work.
 
 ## Overview
 This document records the legacy proposed LLM bias-detection implementation. It does not establish that its methods, results, compliance assessments, or recommendations are available or trustworthy in the current release.

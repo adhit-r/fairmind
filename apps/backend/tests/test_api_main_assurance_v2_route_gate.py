@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 
 import pytest
+from fastapi.routing import iter_route_contexts
 
 import api.main as main_module
 from config.settings import settings
@@ -98,7 +99,7 @@ ALL_CORE_CAPABILITY_PATHS = set().union(*CORE_CAPABILITY_PATHS.values())
 
 
 def _route_paths() -> set[str]:
-    return {route.path for route in main_module.app.routes}
+    return {route.path for route in iter_route_contexts(main_module.app.routes)}
 
 
 def _assurance_v2_paths(paths: set[str]) -> set[str]:

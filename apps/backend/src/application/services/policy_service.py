@@ -19,12 +19,16 @@ read per AI system from the governance tables (see FACTS).
 
 from __future__ import annotations
 
+import asyncio
+import html
 import json
+import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from database.governance_models import (
@@ -38,6 +42,7 @@ from database.governance_models import (
     GovernanceRisk,
     OrgPolicy,
     OrgPolicyAcknowledgement,
+    OrgPolicyAlert,
     OrgPolicyEvaluation,
     OrgPolicyVersion,
 )
@@ -237,6 +242,80 @@ def evaluate_rule(rule: dict, facts: dict) -> tuple[str, str]:
     if evaluate_condition(rule["check"], facts, notes):
         return "pass", "All conditions met"
     return "fail", "; ".join(notes)
+
+
+def _conditions(items: Any) -> dict | None:
+    """A model's flat list of conditions as one condition: all of them must hold."""
+    if not isinstance(items, list):
+        return None
+    conds = [
+        {k: v for k, v in c.items() if not (k == "value" and c.get("op") == "exists")}
+        for c in items
+        if isinstance(c, dict)
+    ]
+    if not conds:
+        return None
+    return conds[0] if len(conds) == 1 else {"all": conds}
+
+
+_CONDITION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "fact": {"type": "string"},
+        "op": {"type": "string", "enum": list(OPS)},
+        "value": {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "number"},
+                {"type": "boolean"},
+                {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "number"}]}},
+                {"type": "null"},
+            ]
+        },
+    },
+    "required": ["fact", "op", "value"],
+    "additionalProperties": False,
+}
+DRAFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "summary": {"type": "string"},
+        "body": {"type": "string"},
+        "rules": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "severity": {"type": "string", "enum": list(SEVERITIES)},
+                    "enforcement": {"type": "string", "enum": list(ENFORCEMENTS)},
+                    "when": {"type": "array", "items": _CONDITION_SCHEMA},
+                    "check": {"type": "array", "items": _CONDITION_SCHEMA},
+                    "controls": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["id", "title", "severity", "enforcement", "when", "check", "controls"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["name", "summary", "body", "rules"],
+    "additionalProperties": False,
+}
+DRAFT_SYSTEM = """You draft AI governance policies for an organization.
+Write the policy text in plain Markdown: purpose, scope, the requirements, roles and responsibilities,
+and exceptions. Keep it specific to the brief and the organization's AI systems; do not invent facts
+about the organization.
+Then turn each requirement that the platform can check into a rule. A rule has:
+- id: short kebab-case, unique; title: one plain sentence
+- severity: low, medium, high or critical; enforcement: block (stops a release approval) or warn
+- when: conditions that decide whether the rule applies to a system (empty list: every system)
+- check: conditions that must all hold for the system to pass
+- controls: references from the controls list that the rule gives evidence for (only listed refs)
+A condition is {fact, op, value}. Use only the listed facts, or system.metadata.<key> for a value
+recorded in the system's metadata. Use null as the value for the exists op, a list for in and not_in.
+Only write rules for requirements these facts can express; leave the rest as policy text."""
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +536,80 @@ class PolicyService:
                 }
             )
         return out
+
+    def draft_context(self, org_id: str, brief: str) -> str:
+        """What the model may know to draft a policy: the brief, the rule language, controls, systems."""
+        s = GovernanceAISystem.__table__
+        systems = [
+            dict(r)
+            for r in self.db.execute(
+                select(s.c.name, s.c.system_type, s.c.risk_tier, s.c.lifecycle_stage)
+                .where(s.c.org_id == org_id)
+                .order_by(s.c.name)
+                .limit(50)
+            ).mappings()
+        ]
+        p = OrgPolicy.__table__
+        existing = list(self.db.execute(select(p.c.name).where(p.c.org_id == org_id, p.c.status != "retired")).scalars())
+        controls = [
+            {"ref": ref, "title": c["title"], "requirement": c["parent_requirement_title"]}
+            for ref, c in self._controls_by_ref().items()
+        ]
+        return json.dumps(
+            {
+                "brief": brief,
+                "facts": FACTS,
+                "ops": list(OPS),
+                "controls": controls,
+                "aiSystems": systems,
+                "existingPolicies": existing,
+            },
+            default=str,
+        )
+
+    def create_from_draft(self, org_id: str, actor: str, data: dict) -> tuple[dict, list[str]]:
+        """Save a model's draft as a draft policy, keeping only rules that pass validation."""
+        known = self._controls_by_ref()
+        rules, dropped, seen = [], [], set()
+        for raw in data.get("rules") or []:
+            if not isinstance(raw, dict):
+                continue
+            label = str(raw.get("title") or raw.get("id") or "Untitled rule")
+            when = _conditions(raw.get("when"))
+            candidate = {
+                "id": raw.get("id"),
+                "title": raw.get("title"),
+                "severity": raw.get("severity", "medium"),
+                "enforcement": raw.get("enforcement", "warn"),
+                "check": _conditions(raw.get("check")),
+                **({"when": when} if when else {}),
+                "controls": [c for c in raw.get("controls") or [] if c in known],
+            }
+            if candidate["check"] is None:
+                candidate.pop("check")
+            try:
+                rule = validate_rules([candidate])[0]
+            except ValueError as error:
+                dropped.append(f"{label}: {str(error).removeprefix('rules[0]').lstrip('.: ')}")
+                continue
+            if rule["id"] in seen:
+                dropped.append(f"{label}: duplicate id {rule['id']!r}")
+                continue
+            seen.add(rule["id"])
+            rules.append(rule)
+        name = str(data.get("name") or "").strip()[:200] or "Untitled AI policy"
+        policy = self.create(
+            org_id,
+            actor,
+            {
+                "name": name,
+                "summary": str(data.get("summary") or "")[:2000],
+                "body": str(data.get("body") or "")[:200_000],
+                "owner": None,
+                "rules": rules,
+            },
+        )
+        return policy, dropped
 
     # -- writing ------------------------------------------------------------
 
@@ -771,3 +924,189 @@ class PolicyService:
             "runId": run["runId"],
             "evaluatedAt": run["evaluatedAt"],
         }
+
+    # -- alerts ---------------------------------------------------------------
+
+    def enforcing_orgs(self) -> list[str]:
+        """Organizations with at least one published policy."""
+        p = OrgPolicy.__table__
+        return list(
+            self.db.execute(
+                select(p.c.org_id).where(p.c.published_version.is_not(None), p.c.status != "retired").distinct()
+            ).scalars()
+        )
+
+    def sync_alerts(self, org_id: str) -> int:
+        """Open an alert for each published rule newly failing on a system, resolve those no longer failing.
+
+        Returns how many alerts were opened.
+        """
+        a = OrgPolicyAlert.__table__
+        failing = {
+            (r["policyId"], r["ruleId"], r["systemId"]): r for r in self.current_results(org_id) if r["outcome"] == "fail"
+        }
+        now, still_open = _now(), set()
+        for row in self.db.execute(select(a).where(a.c.org_id == org_id, a.c.status == "open")).mappings():
+            key = (row["policy_id"], row["rule_id"], row["system_id"])
+            if key in failing:
+                still_open.add(key)
+            else:
+                self.db.execute(
+                    update(a).where(a.c.id == row["id"], a.c.status == "open").values(status="resolved", resolved_at=now)
+                )
+        opened = 0
+        for key, r in failing.items():
+            if key in still_open:
+                continue
+            result = self.db.execute(
+                pg_insert(a)
+                .values(
+                    id=str(uuid.uuid4()),
+                    org_id=org_id,
+                    policy_id=r["policyId"],
+                    policy_version=r["policyVersion"],
+                    system_id=r["systemId"],
+                    rule_id=r["ruleId"],
+                    severity=r["severity"],
+                    enforcement=r["enforcement"],
+                    detail=r["detail"],
+                    status="open",
+                    opened_at=now,
+                )
+                .on_conflict_do_nothing()  # another sweep opened it first
+            )
+            opened += result.rowcount or 0
+        self.db.commit()
+        return opened
+
+    def alerts(self, org_id: str, include_resolved: bool = False) -> list[dict]:
+        a, p, s = OrgPolicyAlert.__table__, OrgPolicy.__table__, GovernanceAISystem.__table__
+        query = (
+            select(a, p.c.name.label("policy_name"), p.c.rules_json, s.c.name.label("system_name"))
+            .join(p, p.c.id == a.c.policy_id)
+            .outerjoin(s, s.c.id == a.c.system_id)
+            .where(a.c.org_id == org_id)
+            .order_by(a.c.opened_at.desc())
+        )
+        if not include_resolved:
+            query = query.where(a.c.status == "open")
+        out = []
+        for r in self.db.execute(query).mappings():
+            titles = {rule["id"]: rule["title"] for rule in json.loads(r["rules_json"] or "[]")}
+            out.append(
+                {
+                    "id": r["id"],
+                    "policyId": r["policy_id"],
+                    "policyName": r["policy_name"],
+                    "policyVersion": r["policy_version"],
+                    "systemId": r["system_id"],
+                    "systemName": r["system_name"] or r["system_id"],
+                    "ruleId": r["rule_id"],
+                    "ruleTitle": titles.get(r["rule_id"], r["rule_id"]),
+                    "severity": r["severity"],
+                    "enforcement": r["enforcement"],
+                    "detail": r["detail"],
+                    "status": r["status"],
+                    "openedAt": r["opened_at"],
+                    "resolvedAt": r["resolved_at"],
+                    "notifiedAt": r["notified_at"],
+                    "acknowledgedBy": r["acknowledged_by"],
+                    "acknowledgedAt": r["acknowledged_at"],
+                }
+            )
+        return out
+
+    def acknowledge_alert(self, org_id: str, alert_id: str, user_id: str) -> dict | None:
+        a = OrgPolicyAlert.__table__
+        self.db.execute(
+            update(a)
+            .where(a.c.id == alert_id, a.c.org_id == org_id, a.c.acknowledged_at.is_(None))
+            .values(acknowledged_by=str(user_id), acknowledged_at=_now())
+        )
+        self.db.commit()
+        return next((x for x in self.alerts(org_id, include_resolved=True) if x["id"] == alert_id), None)
+
+    def _recipient(self, org_id: str, policy: dict) -> str | None:
+        """The policy owner when it is an email address, otherwise the member who created the policy."""
+        owner = (policy.get("owner") or "").strip()
+        if _EMAIL.fullmatch(owner):
+            return owner
+        creator = _same_id(policy.get("created_by"))
+        for member in self.acknowledgements(org_id, policy["id"]) or []:
+            if _same_id(member["userId"]) == creator and _EMAIL.fullmatch(member["email"] or ""):
+                return member["email"]
+        return None
+
+    def unnotified_alerts(self) -> list[dict]:
+        """Open alerts nobody has been told about yet, each with the address to tell."""
+        a, p = OrgPolicyAlert.__table__, OrgPolicy.__table__
+        org_ids = self.db.execute(
+            select(a.c.org_id).where(a.c.status == "open", a.c.notified_at.is_(None)).distinct()
+        ).scalars()
+        pending = []
+        for org_id in list(org_ids):
+            policies = {
+                r["id"]: dict(r)
+                for r in self.db.execute(
+                    select(p.c.id, p.c.owner, p.c.created_by).where(p.c.org_id == org_id)
+                ).mappings()
+            }
+            for alert in self.alerts(org_id):
+                if alert["notifiedAt"] is None and alert["policyId"] in policies:
+                    pending.append({**alert, "recipient": self._recipient(org_id, policies[alert["policyId"]])})
+        return pending
+
+    def mark_notified(self, alert_id: str) -> None:
+        a = OrgPolicyAlert.__table__
+        self.db.execute(update(a).where(a.c.id == alert_id).values(notified_at=_now()))
+        self.db.commit()
+
+
+_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+def alert_email(alert: dict, frontend_url: str) -> tuple[str, str]:
+    """Subject and HTML for a newly failing rule. Every value from the database is escaped."""
+    e = lambda value: html.escape(str(value))  # noqa: E731
+    action = "It blocks release approval for this system." if alert["enforcement"] == "block" else "It is a warning."
+    subject = f"Policy rule failing on {alert['systemName']}: {alert['ruleTitle']}"
+    body = (
+        f"<p>A published rule of <b>{e(alert['policyName'])}</b> (version {e(alert['policyVersion'])}) "
+        f"started failing on <b>{e(alert['systemName'])}</b>.</p>"
+        f"<p><b>{e(alert['ruleTitle'])}</b><br>{e(alert['detail'])}</p>"
+        f"<p>{e(action)}</p>"
+        f'<p><a href="{e(frontend_url.rstrip("/"))}/policies/{e(alert["policyId"])}">Open the policy</a></p>'
+    )
+    return subject, body
+
+
+async def sweep_policy_alerts(
+    session_factory: Callable[[], Session],
+    send_email: Callable[[str, str, str], Awaitable[bool]],
+    frontend_url: str,
+) -> int:
+    """Raise alerts for newly failing rules in every enforcing organization and email each new one once."""
+
+    def collect() -> list[dict]:
+        db = session_factory()
+        try:
+            service = PolicyService(db)
+            for org_id in service.enforcing_orgs():
+                service.sync_alerts(org_id)
+            return service.unnotified_alerts()
+        finally:
+            db.close()
+
+    pending = await asyncio.to_thread(collect)
+    sent = 0
+    for alert in pending:
+        if alert["recipient"]:
+            if not await send_email(alert["recipient"], *alert_email(alert, frontend_url)):
+                continue  # try again on the next sweep
+            sent += 1
+        db = session_factory()
+        try:
+            PolicyService(db).mark_notified(alert["id"])
+        finally:
+            db.close()
+    return sent

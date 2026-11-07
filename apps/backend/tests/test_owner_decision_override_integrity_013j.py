@@ -12,6 +12,7 @@ from threading import Event, Thread
 import pytest
 
 from migrations.owner_decision_override_integrity_migration import sql_for
+from tests.pg import ORM_COLUMNS_AFTER_PARTIAL_CHAIN
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -281,6 +282,7 @@ def postgresql_013i_session_factory():
                 {"schema": schema},
             )
             session.execute(text((MIGRATIONS / migration).read_text(encoding="utf-8")))
+        session.execute(text(ORM_COLUMNS_AFTER_PARTIAL_CHAIN))
         session.commit()
         yield factory
     finally:
@@ -319,6 +321,7 @@ def postgresql_013j_session_factory():
                 {"schema": schema},
             )
             session.execute(text((MIGRATIONS / migration).read_text(encoding="utf-8")))
+        session.execute(text(ORM_COLUMNS_AFTER_PARTIAL_CHAIN))
         session.commit()
         yield factory
     finally:
@@ -642,10 +645,6 @@ def test_postgresql14_013j_preserves_normal_governance_decisions(
     from sqlalchemy import text
 
     factory = postgresql_013j_session_factory
-    # The decision ORM maps 013l's grant column; this 013j schema only needs the column.
-    with factory() as session:
-        session.execute(text("ALTER TABLE governance_evaluation_decisions ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT"))
-        session.commit()
     graph = _ready_graph(factory)
     result = _decide(factory, graph, decider_id=str(uuid.uuid4()))
     assert result["verdictVersion"] == 1

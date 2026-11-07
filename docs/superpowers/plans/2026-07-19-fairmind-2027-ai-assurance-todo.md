@@ -32,7 +32,7 @@
 - [x] Add 30-day transactional idempotency and an append-only per-organization audit hash chain.
   - Checkpoint: migration 013h makes PostgreSQL the database-clock authority for exact 2,592,000-second idempotency generations, immutable completion bindings, expired-only atomic rollover, and non-deletable identity anchors. Every enabled Assurance V2 mutation reaches the shared transactional UoW, and successful plus expected/domain-rejected outcomes bind to the per-organization audit chain. This is a minimum anti-reexecution window, not bounded data retention or production-runtime proof. See `docs/audits/2026-08-13-p0-idempotency-audit-integrity.md`.
 - [x] Feature-disable automatic enforcement, untrusted external linking, workers, and unsupported modality packs at both API and UI boundaries.
-  - Checkpoint: automatic enforcement and FairMind-worker delivery are unconditionally unavailable for new legacy and Assurance V2 plans, and retired switches cannot re-enable them. New generic Evidence Hub external URLs and direct entity links are default-off at API and UI boundaries; the explicit reviewed-linking lane does not restore legacy Passport linking. Unsupported LLM-judge, LLM-testing, modern-bias, multimodal, and explainability evaluator surfaces are represented by inert dashboard availability states with no evaluator hooks, forms, fake results, exports, or endpoint requests; their dedicated routers are unmounted. Assurance V2 target-kind vocabulary, including `vision_model`, is preserved.
+  - Checkpoint: automatic enforcement and FairMind-worker delivery are unconditionally unavailable for new legacy and Assurance V2 plans, and retired switches cannot re-enable them. New generic Evidence Hub external URLs and direct entity links are default-off at API and UI boundaries; the explicit reviewed-linking lane does not restore legacy Passport linking. Unsupported modern-bias, multimodal, and explainability evaluator surfaces are represented by inert dashboard availability states with no evaluator hooks, forms, fake results, exports, or endpoint requests; their dedicated routers are unmounted. The LLM judge stays available as a supporting signal and reports an insufficient result, never a default score, when a judge call fails. Assurance V2 target-kind vocabulary, including `vision_model`, is preserved.
 - [x] Add forward migration 013 without rewriting migration 012; extend checksum-ledger drift detection.
 - [x] Mark existing plans/runs contract v1 without fabricating registry identities; keep them readable but prevent new execution until upgraded.
 
@@ -64,11 +64,21 @@ cannot enter formal evidence review or governance decision authority.
 
 ## P1 — Isolated execution foundation
 
-- [ ] Add migration 014 for worker identities, leased jobs, suite attempts, artifacts, and cancellation.
-- [ ] Implement a PostgreSQL `FOR UPDATE SKIP LOCKED` queue with 60-second leases, 20-second heartbeats, expiry recovery, and manifest-controlled retries capped at three.
+- [x] Add migration 013m for worker identities, leased jobs, suite attempts, artifacts, and cancellation.
+  - Checkpoint: migration 013m extends the existing suite-execution job rather than creating a competing state machine, and adds tenant-bound worker identities, lease-token-hash-only attempts, content-addressed artifact metadata, exact attempt-artifact links, and run/suite cancellation requests. PostgreSQL 14 is release authority with a frozen operator ledger/catalog and controlled or append-only mutations; SQLite installs exact fail-closed parity objects but rejects worker writes. This schema foundation does not claim queue, heartbeat, completion, object-storage, broker, sandbox, or worker-route behavior. See `docs/audits/2026-08-30-p1-worker-execution-foundation.md`.
+- [x] Implement a PostgreSQL `FOR UPDATE SKIP LOCKED` queue with 60-second leases, 20-second heartbeats, expiry recovery, and manifest-controlled retries capped at three.
+  - Checkpoint: the application exposes only tenant/service-principal-bound claim and heartbeat operations over one PostgreSQL-authoritative adapter. Claim uses database time, bounded private expiry recovery, suite worker-type matching, and `FOR UPDATE SKIP LOCKED`; it creates exactly one attempt with a 60-second lease and persists only the SHA-256 of the 43-character opaque token. Heartbeat requires the same tenant, service subject, active worker identity, live attempt, and token, then renews the lease for 60 seconds and returns the 20-second heartbeat hint. Run materialization freezes `min(manifest maxAttempts or 1, 3)` onto each suite execution. SQLite fails closed. Concrete execution, completion, Passport verification, cancellation arbitration, and public worker routes remain later P1 rows. See `docs/audits/2026-08-30-p1-leased-worker-queue.md`.
 - [ ] Implement `queued`, `leased`, `running`, `awaiting_evidence`, `succeeded`, `failed`, `timed_out`, and `cancelled` job states.
 - [ ] Require the live lease token and matching signed Passport v2 for completion; cancellation wins races.
-- [ ] Add `WorkerCapabilities` and `EvaluationWorker.execute(ExecutionEnvelopeV2)` ports.
+- [x] Add `WorkerCapabilities` and `EvaluationWorker.execute(ExecutionEnvelopeV2)` ports.
+  - Checkpoint: the immutable `WorkerCapabilities` declaration exposes the worker
+    type and supported execution depths and lifecycle phases. The declaration-only
+    `EvaluationWorkerPort.execute` boundary now requires the domain's exact
+    `ExecutionEnvelopeV2` object rather than an untyped JSON mapping and returns a
+    frozen JSON result. No concrete executor, route, sandbox, credential handoff,
+    or runtime validation is implied. A later integration must preserve the
+    canonical builder output and envelope hash when constructing the typed input.
+    See `docs/audits/2026-08-30-p1-typed-worker-execution-port.md`.
 - [ ] Store artifacts by immutable SHA-256 in S3/MinIO-compatible storage; exclude credentials, secrets, and chain-of-thought.
 - [ ] Resolve opaque target/artifact bindings through short-lived brokers.
 - [ ] Run evaluators non-root with read-only roots, ephemeral scratch, no host socket, dropped capabilities, restrictive syscalls, bounded resources, quarantined inputs, and deny-default network.

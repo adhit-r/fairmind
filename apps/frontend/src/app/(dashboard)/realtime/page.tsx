@@ -44,7 +44,7 @@ export default function RealtimeIntegrationPage() {
     // Configuration State
     const [config, setConfig] = useState<ModelConfig>({
         provider: 'openai',
-        model_name: 'gpt-3.5-turbo',
+        model_name: 'gpt-6.1-terra',
         model_type: 'chat_completion',
         api_key: '',
         temperature: 0.7,
@@ -222,7 +222,7 @@ export default function RealtimeIntegrationPage() {
                                     <Input
                                         value={config.model_name}
                                         onChange={(e) => setConfig({ ...config, model_name: e.target.value })}
-                                        placeholder="e.g., gpt-4, claude-3-opus"
+                                        placeholder="e.g., gpt-6.1-sol, claude-sonnet-5-5"
                                         className="border border-[var(--fm-line)]"
                                     />
                                 </div>

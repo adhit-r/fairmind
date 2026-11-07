@@ -30,6 +30,8 @@ export interface SystemRecord {
   updatedAt: string
   readiness: number
   lifecycleSummary: LifecycleSummary
+  /** The confirmed tier and frameworks; null until a person confirms them. */
+  applicability?: import('./useApplicability').ApplicabilityRecord | null
 }
 
 export interface EvidenceSummary {
@@ -98,6 +100,56 @@ export interface ReleaseGate {
   open: number
   /** Published policy rules that fail for this system once released. */
   policy?: { blocking: PolicyRuleFailure[]; warnings: PolicyRuleFailure[] }
+  /** How the verdict was reached: the tier it was computed on and that tier's row of the decision matrix. */
+  explain?: GateExplain
+  /** The cheapest steps FairMind can record that move the verdict up, worked out by the gate itself. */
+  path?: GatePath
+}
+
+export type Verdict = ReleaseGate['verdict']
+
+export interface GateExplain {
+  tier: string
+  effectiveTier: SystemRecord['riskTier']
+  impact: 'low' | 'medium' | 'high'
+  tierNote: string | null
+  tierSource: {
+    suggestedTier: SystemRecord['riskTier']
+    ruleIds: string[]
+    confirmedBy: string
+    confirmedAt: string
+    tierBelowSuggestion: boolean
+    overrideAcceptedBy: string | null
+  } | null
+  perCheck: number
+  row: Array<{ band: ReleaseGate['band']; from: number; to: number | null; verdict: Verdict }>
+}
+
+export interface GatePathStep {
+  check: GateCheck['key']
+  action: 'fairness_run' | 'environmental_assessment' | 'monitoring_snapshot' | 'attest' | 'evidence_upload'
+  evidenceClass: 'measured' | 'tool_estimated' | 'manual'
+  counts: number
+  gain: number
+  note: string | null
+}
+
+export interface GatePathOption {
+  kind: 'measured_first' | 'attestations'
+  steps: GatePathStep[]
+  confidenceAfter: number
+  verdictAfter: Verdict
+  approvalReady: boolean
+}
+
+export interface GatePath {
+  target: 'go' | 'conditional_go' | null
+  options: GatePathOption[]
+  /** The shortest route to Go when Go is reachable; null when it is not, or when a warning-level policy rule caps the verdict. */
+  toGo?: GatePathOption | null
+  ceiling: { confidence: number; verdict: Verdict }
+  notes: string[]
+  approvalBlockers: Array<{ key: string; text: string; met: boolean }>
 }
 
 export interface PolicyRuleFailure {
@@ -113,15 +165,51 @@ export interface FairnessRunSummary {
   title: string
   rows: number | null
   allChecksPass: boolean | null
-  attributes: Array<{ attribute: string; disparateImpactRatio: number; checks: Record<string, boolean> }>
+  /** passedOnSignificance: checks that pass with the value past its threshold, because the difference is not significant. */
+  attributes: Array<{ attribute: string; disparateImpactRatio: number; checks: Record<string, boolean>; passedOnSignificance: string[] }>
   confidence: number
   createdAt: string
 }
 
+/** One measured metric: the value, its threshold, and the permutation test that decides whether a crossing counts. */
+export interface FairnessMetric {
+  value: number
+  confidence_interval: [number, number]
+  is_fair: boolean
+  threshold: number
+  crosses_threshold: boolean
+  significant: boolean
+  p_value: number
+  alpha: number
+}
+
 export interface CsvInspection {
   rows: number
-  columns: Array<{ name: string; dtype: string; distinct: number; sample: string[] }>
+  columns: Array<{
+    name: string
+    dtype: string
+    distinct: number
+    sample: string[]
+    /** ground: the one ground this column covers when ticked, by the server's name and value checks. */
+    attribute: { status: 'suggested' | 'possible' | 'too_many_values' | null; basis: string | null; ground: string | null }
+  }>
   suggested: { outcome: string | null; prediction: string | null; score: string | null; attributes: string[] }
+  /** SHA-256 of the uploaded bytes; a confirmed run sends it back so the server can refuse a changed file. */
+  fileSha256: string
+  attributeSource: 'inferred' | 'confirmed' | 'none'
+  confirmedBy: string | null
+  confirmedAt: string | null
+  /** The reused attributes come from a run nobody confirmed (older, or sent through the API). */
+  previousRunUnconfirmed: boolean
+  needsBinning: Array<{ name: string; distinct: number }>
+  uncoveredGrounds: string[]
+}
+
+/** What the person confirmed with the mapping; the server records it and checks the reasons. */
+export interface AttributeConfirmation {
+  sha256: string
+  removalReason?: string
+  uncoveredReason?: string
 }
 
 export interface FairnessMapping {
@@ -141,20 +229,24 @@ export interface FairnessRunResult {
     all_checks_pass: boolean
     smallest_group: number | null
     evidence_confidence: number
-    thresholds: { disparate_impact_ratio: number; gap: number }
+    /** alpha: the significance level after the Bonferroni split over `tests` checks. */
+    thresholds: { disparate_impact_ratio: number; gap: number; alpha: number; tests: number }
     attributes: Array<{
       attribute: string
       groups: Record<string, number>
       selection_rates: Record<string, number>
       disparate_impact_ratio: number
-      demographic_parity: { value: number; confidence_interval: [number, number]; is_fair: boolean }
-      equal_opportunity: { value: number; confidence_interval: [number, number]; is_fair: boolean }
-      equalized_odds: { value: number; confidence_interval: [number, number]; is_fair: boolean }
-      calibration: { value: number; confidence_interval: [number, number]; is_fair: boolean } | null
+      disparate_impact: FairnessMetric
+      demographic_parity: FairnessMetric
+      equal_opportunity: FairnessMetric
+      equalized_odds: FairnessMetric
+      calibration: FairnessMetric | null
       checks: Record<string, boolean>
       small_groups: string[]
     }>
   }
+  /** What the server recorded as confirmed; notTested is the grounds no confirmed attribute covers. */
+  confirmation: { confirmed: boolean; by: string | null; at: string | null; attributes: string[]; notTested: string[] } | null
   gate: ReleaseGate
 }
 
@@ -247,9 +339,14 @@ export interface ClauseMap {
   verdict: string | null
   confidence: number | null
   frameworks: ClauseMapFramework[]
+  /** True when the map is limited to the frameworks confirmed for this system. */
+  scoped?: boolean
+  /** The confirmed frameworks, including any with no clause mapped to a gate check. */
+  confirmed?: Array<{ key: string; name: string }>
 }
 
-export type AttestableCheck = 'data_governance' | 'human_oversight' | 'monitoring' | 'environmental'
+/** Environmental is not attested from the UI: an attestation would shadow any later assessment. */
+export type AttestableCheck = 'data_governance' | 'human_oversight' | 'monitoring'
 
 export interface SystemFile {
   system: SystemRecord | null
@@ -343,7 +440,7 @@ export function useSystemFile(systemId: string | undefined) {
     return res.data
   }
 
-  const runFairness = async (file: File, mapping: FairnessMapping) => {
+  const runFairness = async (file: File, mapping: FairnessMapping, confirmation?: AttributeConfirmation) => {
     const form = new FormData()
     form.append('file', file)
     form.append('outcome', mapping.outcome)
@@ -351,6 +448,12 @@ export function useSystemFile(systemId: string | undefined) {
     if (mapping.prediction) form.append('prediction', mapping.prediction)
     if (mapping.score) form.append('score', mapping.score)
     if (mapping.favorableLabel) form.append('favorable_label', mapping.favorableLabel)
+    if (confirmation) {
+      form.append('confirm', '1')
+      form.append('confirm_sha256', confirmation.sha256)
+      if (confirmation.removalReason) form.append('removal_reason', confirmation.removalReason)
+      if (confirmation.uncoveredReason) form.append('uncovered_reason', confirmation.uncoveredReason)
+    }
     const res = await apiClient.post<FairnessRunResult>(`${GOV}/systems/${systemId}/fairness-runs`, form, { enableRetry: false, timeout: 120_000 })
     if (!res.success || !res.data) throw new Error(res.error || 'The run failed')
     await refresh()

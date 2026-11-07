@@ -26,6 +26,10 @@ from tests.test_owner_decision_override_integrity_013j import (
     _install_owner_role,
 )
 from tests.test_verified_evidence_admission_postgres import postgres_session_factory
+from tests.pg import (
+    DROP_ORM_COLUMNS_AFTER_PARTIAL_CHAIN,
+    ORM_COLUMNS_AFTER_PARTIAL_CHAIN,
+)
 
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 REASON = "No independent decision owner is available for this exact run."
@@ -40,6 +44,7 @@ def delegated_override_session_factory():
     try:
         schema = session.scalar(text("SELECT current_schema()"))
         assert isinstance(schema, str) and schema
+        session.execute(text(DROP_ORM_COLUMNS_AFTER_PARTIAL_CHAIN))
         for migration in (
             "013g_operational_evidence_freshness.sql",
             "013h_idempotency_retention_integrity.sql",
@@ -56,6 +61,7 @@ def delegated_override_session_factory():
                 {"schema": schema},
             )
             session.execute(text((MIGRATIONS / migration).read_text(encoding="utf-8")))
+        session.execute(text(ORM_COLUMNS_AFTER_PARTIAL_CHAIN))
         session.commit()
     finally:
         session.close()

@@ -17,6 +17,7 @@ from ..services.llm_as_judge_service import (
     BiasCategory,
     JudgeEvaluationResult
 )
+from src.infrastructure.llm import grok_cli
 
 logger = logging.getLogger(__name__)
 # Stateless: scores the text in the request. It spends the platform's judge-model
@@ -30,6 +31,36 @@ router = APIRouter(
 # Initialize service
 llm_judge_service = LLMAsJudgeService()
 
+JUDGE_LABELS = {
+    JudgeModel.GPT_6_ASTRA: "GPT-6 Astra (OpenAI)",
+    JudgeModel.GPT_6_1_SOL: "GPT-6.1 Sol (OpenAI)",
+    JudgeModel.CLAUDE_OPUS_5_5: "Claude Opus 5.5 (Anthropic)",
+    JudgeModel.CLAUDE_SONNET_5_5: "Claude Sonnet 5.5 (Anthropic)",
+    JudgeModel.GEMINI_4_ARGON: "Gemini 4 Argon (Google)",
+    JudgeModel.GEMINI_3_8_FLASH: "Gemini 3.8 Flash (Google)",
+    JudgeModel.GROK_4_7: "Grok 4.7 (Grok CLI, local)",
+    JudgeModel.GROK_4_6: "Grok 4.6 (Grok CLI, local)",
+}
+GROK_CLI_OFF = "The Grok CLI is not enabled on this server"
+
+
+def _judges() -> List[JudgeModel]:
+    """The judges this server can run: Grok judges only where the Grok CLI is enabled."""
+    return [m for m in JudgeModel if not m.value.startswith("grok-") or grok_cli.enabled()]
+
+
+def _judge(value: str) -> JudgeModel:
+    try:
+        judge = JudgeModel(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid judge model: {value}. Must be one of: {[m.value for m in _judges()]}"
+        )
+    if judge not in _judges():
+        raise HTTPException(status_code=400, detail=GROK_CLI_OFF)
+    return judge
+
 # ============================================================================
 # Pydantic Models (Request/Response Schemas)
 # ============================================================================
@@ -37,7 +68,7 @@ llm_judge_service = LLMAsJudgeService()
 class EvaluationInput(BaseModel):
     """Input for LLM-as-Judge evaluation"""
     text: str  # The text to evaluate for bias
-    judge_model: str = "gpt-4-turbo"  # Judge model to use
+    judge_model: str = "gpt-6.1-sol"  # Judge model to use
     bias_categories: Optional[List[str]] = None  # Specific categories to evaluate
     target_model: str = "unknown"  # Name of the model being evaluated
 
@@ -45,9 +76,9 @@ class EvaluationInput(BaseModel):
         schema_extra = {
             "example": {
                 "text": "The CEO was a skilled businessman who managed his team effectively.",
-                "judge_model": "gpt-4-turbo",
+                "judge_model": "gpt-6.1-sol",
                 "bias_categories": ["gender", "professional"],
-                "target_model": "gpt-4"
+                "target_model": "support-bot-v2"
             }
         }
 
@@ -69,7 +100,7 @@ class BiasEvaluationResponse(BaseModel):
 class BatchEvaluationRequest(BaseModel):
     """Request for batch evaluation across multiple categories"""
     text: str
-    judge_model: str = "gpt-4-turbo"
+    judge_model: str = "gpt-6.1-sol"
     bias_categories: List[str] = ["gender", "race", "age", "cultural"]
     target_model: str = "unknown"
 
@@ -77,9 +108,9 @@ class BatchEvaluationRequest(BaseModel):
         schema_extra = {
             "example": {
                 "text": "The nurse was compassionate and caring in her approach.",
-                "judge_model": "claude-3-opus",
+                "judge_model": "claude-sonnet-5-5",
                 "bias_categories": ["gender", "professional", "cultural"],
-                "target_model": "openai-gpt4"
+                "target_model": "support-bot-v2"
             }
         }
 
@@ -92,7 +123,7 @@ class AvailableModelsResponse(BaseModel):
 class MultiJudgeEvaluationRequest(BaseModel):
     """Request for multi-judge comparison"""
     text: str
-    judge_models: List[str] = ["gpt-4-turbo", "claude-3-opus"]
+    judge_models: List[str] = ["gpt-6.1-sol", "claude-sonnet-5-5"]
     bias_categories: List[str] = ["gender", "race"]
 
 # ============================================================================
@@ -108,13 +139,7 @@ async def get_available_models():
         - models: List of available judge models
         - categories: List of bias categories
     """
-    models = [
-        {"value": "gpt-4", "label": "GPT-4 (OpenAI)"},
-        {"value": "gpt-4-turbo", "label": "GPT-4 Turbo (OpenAI)"},
-        {"value": "claude-3-opus", "label": "Claude 3 Opus (Anthropic)"},
-        {"value": "claude-3-sonnet", "label": "Claude 3 Sonnet (Anthropic)"},
-        {"value": "gemini-pro", "label": "Gemini Pro (Google)"},
-    ]
+    models = [{"value": m.value, "label": JUDGE_LABELS[m]} for m in _judges()]
 
     categories = [
         "gender",
@@ -144,14 +169,7 @@ async def evaluate_single_category(request: EvaluationInput):
         HTTPException: If evaluation fails
     """
     try:
-        # Validate judge model
-        try:
-            judge_model = JudgeModel[request.judge_model.upper().replace("-", "_")]
-        except KeyError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid judge model: {request.judge_model}. Must be one of: {[m.value for m in JudgeModel]}"
-            )
+        judge_model = _judge(request.judge_model)
 
         # Get primary bias category (default to first provided or gender)
         category_str = request.bias_categories[0] if request.bias_categories else "gender"
@@ -218,14 +236,7 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
         HTTPException: If evaluation fails
     """
     try:
-        # Validate judge model
-        try:
-            judge_model = JudgeModel[request.judge_model.upper().replace("-", "_")]
-        except KeyError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid judge model: {request.judge_model}"
-            )
+        judge_model = _judge(request.judge_model)
 
         # Validate bias categories
         valid_categories = []
@@ -306,6 +317,8 @@ async def evaluate_with_multiple_judges(
     Returns:
         Results from each judge model
     """
+    if any(j.startswith("grok-") for j in request.judge_models) and not grok_cli.enabled():
+        raise HTTPException(status_code=400, detail=GROK_CLI_OFF)
     try:
         results = {}
         validated_categories = []
@@ -319,7 +332,7 @@ async def evaluate_with_multiple_judges(
 
         for judge_model_str in request.judge_models:
             try:
-                judge_model = JudgeModel[judge_model_str.upper().replace("-", "_")]
+                judge_model = JudgeModel(judge_model_str)
 
                 # Evaluate with this judge
                 model_outputs = [{
@@ -348,7 +361,7 @@ async def evaluate_with_multiple_judges(
                         for category, result in batch_results.items()
                     }
                 }
-            except KeyError:
+            except ValueError:
                 logger.warning(f"Skipping invalid judge model: {judge_model_str}")
 
         return {
@@ -372,6 +385,6 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "llm-judge",
-        "available_models": [m.value for m in JudgeModel],
+        "available_models": [m.value for m in _judges()],
         "available_categories": [c.value for c in BiasCategory]
     }

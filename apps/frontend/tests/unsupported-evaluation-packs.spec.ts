@@ -1,6 +1,6 @@
 import { expect, test, type Route } from '@playwright/test'
 
-const unsupportedRequestPattern = /\/api\/v1\/(?:bias\/llm-judge|bias-detection(?:-v2)?|modern-bias(?:-detection)?|multimodal-bias(?:-detection)?)/
+const unsupportedRequestPattern = /\/api\/v1\/(?:bias-detection(?:-v2)?|modern-bias(?:-detection)?|multimodal-bias(?:-detection)?)/
 
 async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({
@@ -12,8 +12,6 @@ async function fulfillJson(route: Route, body: unknown) {
 
 for (const [path, pageHeading] of [
   ['/explainability-studio', 'Explainability Studio'],
-  ['/llm-judge', 'LLM Judge'],
-  ['/llm-testing', 'LLM Testing'],
   ['/multimodal-bias', 'Multimodal Bias Detection'],
 ] as const) {
   test(`${pageHeading} is an inert unsupported-pack boundary`, async ({ page }) => {

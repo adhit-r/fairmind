@@ -290,7 +290,7 @@ export default function IntegrationsPage() {
                   const out = await promote(a.id, body)
                   await refreshSystems()
                   setSelectedSystemId(out.systemId)
-                  router.push(`/systems/${out.systemId}`)
+                  router.push(`/systems/${out.systemId}#onboard`)
                 }}
                 onIgnore={() => ignore(a.id)}
               />

@@ -11,7 +11,9 @@ import logging
 import time
 from typing import Optional, Dict, Any
 from fastapi import Request, Response
+from fastapi.routing import iter_route_contexts
 from starlette.background import BackgroundTask
+from starlette.routing import Match
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from datetime import datetime, timezone
@@ -22,6 +24,23 @@ logger = logging.getLogger("fairmind.audit")
 # SQL condition for activity feeds: leaves out the rows of read-only requests,
 # which an audit log keeps, so a feed's own reads cannot push changes out of it.
 NOT_A_READ = "action NOT LIKE 'GET %' AND action NOT LIKE 'HEAD %' AND action NOT LIKE 'OPTIONS %'"
+
+
+def route_template(request: Request) -> Optional[str]:
+    """The full template ("/api/v1/invitations/{token}") of the route that handled the request.
+
+    FastAPI 0.137+ includes routers lazily: scope["route"] is the route as declared
+    on its router, without the include prefix. The app's effective routes carry the
+    full path; when one route is included more than once, the one matching this
+    request is it.
+    """
+    route = request.scope.get("route")
+    if route is None:
+        return None
+    contexts = [c for c in iter_route_contexts(request.app.routes) if c.original_route is route]
+    if len(contexts) > 1:
+        contexts = [c for c in contexts if c.matches(request.scope)[0] == Match.FULL] or contexts
+    return contexts[0].path if contexts else getattr(route, "path", None)
 
 
 class AuditLoggingMiddleware(BaseHTTPMiddleware):
@@ -117,7 +136,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         context["org_id"] = getattr(request.state, "org_id", None)
         # The matched route's template ("/invitations/{token}"), never the raw path,
         # whose parameters may be credentials.
-        context["route"] = getattr(request.scope.get("route"), "path", None)
+        context["route"] = route_template(request)
 
     def _generate_request_id(self) -> str:
         """Generate a unique request ID for tracking."""

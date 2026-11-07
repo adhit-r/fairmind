@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
+import { Pill, cap } from '@/components/packs/parts'
+import { shortFrameworkName, tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
@@ -13,6 +16,7 @@ import { WatchPanel } from './WatchPanel'
 import { AttestForm } from './AttestForm'
 import { ConditionsForm } from './ConditionsForm'
 import { ClauseMapPanel } from './ClauseMapPanel'
+import { VERDICT_LABEL, VERDICT_TONE, VerdictExplainer, tierOverride } from './VerdictExplainer'
 import { TargetPanel } from './TargetPanel'
 import { cn } from '@/lib/utils'
 
@@ -28,15 +32,19 @@ const JOURNEY: Array<{ key: JourneyKey; label: string; purpose: string }> = [
   { key: 'operate', label: 'Operate', purpose: 'The system runs, is watched, and its audit record stays current.' },
 ]
 
-const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Conditional go', no_go: 'No go' }
-const VERDICT_TONE: Record<string, string> = { go: 'text-[#1f7a4d]', conditional_go: 'text-[#a14d00]', no_go: 'text-[#b4232c]' }
-const ATTESTABLE = new Set(['data_governance', 'human_oversight', 'monitoring', 'environmental'])
+// Environmental is left out: an attestation would shadow any later assessment, which the path recommends instead.
+const ATTESTABLE = new Set<string>(['data_governance', 'human_oversight', 'monitoring'])
 const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key)
 
 const CHECK_NAMES: Record<string, string> = { disparate_impact: 'impact ratio', equal_opportunity: 'equal opportunity', equalized_odds: 'equalized odds', calibration: 'calibration' }
 
-/** "Within thresholds, gender 0.95, region 0.91" or "Outside thresholds: gender calibration, region equalized odds". */
+/**
+ * "Within thresholds, gender 0.95, region 0.91", "Checks pass; outside thresholds but not statistically significant:
+ * gender impact ratio" or "Outside thresholds: gender calibration, region equalized odds".
+ */
 function fairnessSummary(run: FairnessRunSummary): string {
+  const noisy = run.attributes.flatMap((a) => (a.passedOnSignificance ?? []).map((k) => `${a.attribute} ${CHECK_NAMES[k] ?? k.replace(/_/g, ' ')}`))
+  if (run.allChecksPass && noisy.length) return `Checks pass; outside thresholds but not statistically significant: ${noisy.join(', ')}`
   if (run.allChecksPass) return `Within thresholds, ${run.attributes.map((a) => `${a.attribute} ${a.disparateImpactRatio.toFixed(2)}`).join(', ')}`
   const failing = run.attributes.flatMap((a) => Object.entries(a.checks).filter(([, ok]) => !ok).map(([k]) => `${a.attribute} ${CHECK_NAMES[k] ?? k.replace(/_/g, ' ')}`))
   return failing.length ? `Outside thresholds: ${failing.join(', ')}` : 'Outside thresholds'
@@ -74,18 +82,19 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function Action({ children, onClick, href, primary = true, disabled }: { children: ReactNode; onClick?: () => void; href?: string; primary?: boolean; disabled?: boolean }) {
+function Action({ children, onClick, href, primary = true, disabled, expanded }: { children: ReactNode; onClick?: () => void; href?: string; primary?: boolean; disabled?: boolean; expanded?: boolean }) {
   const cls = cn(
     'inline-flex h-9 items-center rounded-full px-4 text-[12.5px] font-semibold disabled:opacity-60',
     primary ? 'bg-[var(--fm-ink)] text-white' : 'border border-[var(--fm-line)] bg-white font-medium text-[var(--fm-ink2)] hover:border-[var(--fm-ink)] hover:text-[var(--fm-ink)]',
   )
   if (href && !onClick) return <Link href={href} className={cls}>{children}</Link>
-  return <button type="button" onClick={onClick} disabled={disabled} className={cls}>{children}</button>
+  return <button type="button" onClick={onClick} disabled={disabled} aria-expanded={expanded} className={cls}>{children}</button>
 }
 
 function Stage({ step, status, children, actions }: { step: (typeof JOURNEY)[number]; status: StageStatus; children: ReactNode; actions: ReactNode }) {
   return (
     <section
+      id={step.key}
       aria-label={step.label}
       className={cn('fm-card grid gap-4 p-5 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-start', status === 'upcoming' && 'opacity-80')}
     >
@@ -118,12 +127,14 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest } = useSystemFile(id)
+  const { confirm: confirmApplicability, acceptOverride } = useApplicability()
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [attesting, setAttesting] = useState<AttestableCheck | null>(null)
   const [conditioning, setConditioning] = useState(false)
+  const [confirmingTier, setConfirmingTier] = useState(false)
 
   const open = (href: string) => {
     if (id) setSelectedSystemId(id)
@@ -174,7 +185,13 @@ export default function SystemFilePage() {
   const latestReport = reports[0]
   const latestMonitoring = monitoringRuns[0]
   const seal = seals[0]
+  const override = tierOverride(gate?.explain)
   const envStatus = typeof env.data?.recommendation === 'string' ? env.data.recommendation : env.data?.recommendation?.status
+  const applicability = s?.applicability ?? null
+  const awaitingSecond = !!applicability?.tierBelowSuggestion && !applicability.overrideAcceptedBy
+  // explain arrives with the gate's explanation fields; older gate payloads have none.
+  const tierNote = (gate as (NonNullable<typeof gate> & { explain?: { tierNote?: string | null } }) | null)?.explain?.tierNote ?? null
+  const subline = 'block whitespace-normal text-[11.5px] leading-snug text-[var(--fm-ink3)]'
 
   return (
     <div className="grid gap-4">
@@ -182,13 +199,35 @@ export default function SystemFilePage() {
         <Link href="/dashboard" className="hover:text-[var(--fm-ink)]">Today</Link> · {line || 'Unassigned'} · System file
       </div>
 
-      <header className="fm-card grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <header className="fm-card grid gap-5 p-6 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
         <div className="min-w-0">
           <h1 className="truncate text-[30px] font-semibold leading-[1.1] tracking-[-.03em] lg:text-[34px]">{loading && !s ? 'Loading' : s?.name}</h1>
           <div className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact label="Owner" value={s?.owner || 'Unassigned'} />
             <Fact label="Business line" value={line || 'Unassigned'} />
-            <Fact label="Risk tier" value={<span className="capitalize">{s?.riskTier ?? ''}</span>} />
+            <Fact
+              label="Risk tier"
+              value={
+                <>
+                  <span className="capitalize">{s?.riskTier ?? ''}</span>
+                  {s?.riskTier === 'critical' && !tierNote && ' (read as high by the gate)'}
+                  {s && (
+                    <span className={subline}>
+                      {!applicability ? (
+                        <span className="mt-0.5 inline-block"><Pill tone="you">Not confirmed</Pill></span>
+                      ) : applicability.tierBelowSuggestion ? (
+                        <span className="text-[#a14d00]">Below the suggested {cap(applicability.suggestedTier)}</span>
+                      ) : applicability.tier !== applicability.suggestedTier ? (
+                        `Above the suggested ${cap(applicability.suggestedTier)}, confirmed by ${applicability.confirmedBy} on ${when(applicability.confirmedAt)}`
+                      ) : (
+                        `Suggested ${cap(applicability.suggestedTier)}, confirmed by ${applicability.confirmedBy} on ${when(applicability.confirmedAt)}`
+                      )}
+                    </span>
+                  )}
+                  {tierNote && <span className={subline}>{tierNote}</span>}
+                </>
+              }
+            />
             <Fact label="Source" value={source === 'mlflow' ? 'MLflow registry' : source === 'github' ? 'GitHub' : 'Registered manually'} />
           </div>
         </div>
@@ -214,13 +253,48 @@ export default function SystemFilePage() {
 
       {actionError && <p className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">{actionError}</p>}
 
-      <Stage step={JOURNEY[0]} status={statusOf('onboard')} actions={<>
-        <Action onClick={() => open('/tests')}>Run the first evaluation</Action>
+      <Stage step={JOURNEY[0]} status={statusOf('onboard')} actions={applicability ? <>
+        <Action href="#first-verdict">Run the first fairness test</Action>
+        <Action onClick={() => setConfirmingTier(!confirmingTier)} expanded={confirmingTier} primary={false}>Change tier or rules</Action>
+      </> : <>
+        <Action onClick={() => setConfirmingTier(!confirmingTier)} expanded={confirmingTier}>Confirm tier and rules</Action>
         <Action href="/integrations" primary={false}>Connect sources</Action>
       </>}>
         <Fact label="Registered" value={when(s?.createdAt) || ''} />
-        <Fact label="Workspace" value={s?.workspaceId ? 'Assigned' : 'None'} />
-        <Fact label="Record" value={s?.owner && line ? 'Owner and business line set' : 'Owner or business line missing'} />
+        <Fact label="Rules it answers to" value={<span className="whitespace-normal">{applicability?.frameworks.length ? applicability.frameworks.map((f) => shortFrameworkName(f.name)).join(', ') : 'Not chosen'}</span>} />
+        <Fact label="Tier basis" value={<span className="whitespace-normal">{tierBasis(applicability)}</span>} />
+        <Fact
+          label="Record"
+          value={
+            <span className="whitespace-normal">
+              {applicability ? `Applicability decision saved as evidence, rules version ${applicability.rulesVersion}` : s?.owner && line ? 'Owner and business line set' : 'Owner or business line missing'}
+            </span>
+          }
+        />
+        {awaitingSecond && applicability && (
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2 xl:col-span-3">
+            <span className="text-[12.5px] text-[#a14d00]">Lowered tier awaits a second person</span>
+            <Action onClick={() => act('accept', async () => { await acceptOverride(id, applicability.evidenceId); await refresh() })} disabled={busy !== null} primary={false}>
+              {busy === 'accept' ? 'Accepting' : 'Accept the lower tier'}
+            </Action>
+          </div>
+        )}
+        {confirmingTier && s && (
+          <div className="rounded-[12px] border border-[var(--fm-line)] p-4 sm:col-span-2 xl:col-span-3">
+            <ApplicabilityForm
+              autoFocus
+              record={applicability}
+              currentTier={s.riskTier}
+              submitLabel="Confirm"
+              onCancel={() => setConfirmingTier(false)}
+              onSubmit={(body) => act('applicability', async () => {
+                await confirmApplicability(s.id, body)
+                setConfirmingTier(false)
+                await refresh()
+              })}
+            />
+          </div>
+        )}
       </Stage>
 
       <Stage step={JOURNEY[1]} status={statusOf('assess')} actions={<>
@@ -282,6 +356,7 @@ export default function SystemFilePage() {
         ) : (
           <Action onClick={() => open('/audit-reports')} primary={false}>Release report</Action>
         )}
+        {override && <p className={cn('max-w-[220px] text-[11.5px] leading-snug', override.pending ? 'text-[#a14d00]' : 'text-[var(--fm-ink3)]')}>{override.text}</p>}
       </>}>
         <Fact label="Request" value={!req ? 'Not requested' : req.status === 'pending' ? `Pending since ${when(req.createdAt)}` : `${req.status[0].toUpperCase()}${req.status.slice(1)}${req.updatedAt ? ` on ${when(req.updatedAt)}` : ''}`} />
         <Fact label="Decisions recorded" value={approval ? `${approval.decisions.length}` : ''} />
@@ -328,6 +403,7 @@ export default function SystemFilePage() {
             </ul>
             {attesting && (
               <AttestForm
+                key={attesting}
                 check={attesting}
                 onCancel={() => setAttesting(null)}
                 onSubmit={async (statement, reference) => {
@@ -351,11 +427,11 @@ export default function SystemFilePage() {
                 </ul>
               </>
             )}
-            {gate.reasons.length > 0 && <p className="mt-2 text-[12.5px] text-[var(--fm-ink2)]">{gate.reasons.join('. ')}.</p>}
+            <VerdictExplainer gate={gate} onAttest={(check) => isAttestable(check) && setAttesting(check)} onOpen={open} />
           </div>
         )}
         {req?.status === 'pending' && gate?.verdict === 'no_go' && (
-          <p className="text-[12.5px] text-[#b4232c] sm:col-span-2 xl:col-span-3">Approval is blocked: {gate.reasons[0] ?? 'the release gate says no go'}.</p>
+          <p className="text-[12.5px] text-[#b4232c] sm:col-span-2 xl:col-span-3">Approval is blocked: {gate.reasons[0]?.replace(/\.$/, '') ?? 'the release gate says no go'}.</p>
         )}
         {req?.status === 'pending' && gate?.verdict === 'conditional_go' && conditioning && (
           <div className="sm:col-span-2 xl:col-span-3">

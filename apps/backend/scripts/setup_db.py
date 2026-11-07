@@ -53,6 +53,7 @@ CHAIN = (
     "013j_owner_decision_override_integrity.sql",
     "013k_verified_evidence_link_integrity.sql",
     "013l_delegated_separation_override_grant_integrity.sql",
+    "013m_worker_execution_foundation.sql",
 )
 # PostgreSQL 18's frozen assurance catalog is measured with this between 010 and 011.
 PG18_RECONCILIATION = "upgrade_paths/010_to_011_drift_reconciliation.sql"

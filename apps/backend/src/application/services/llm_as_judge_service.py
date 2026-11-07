@@ -2,7 +2,7 @@
 LLM-as-Judge Service
 Implements the SOTA LLM-as-Judge evaluation paradigm for bias detection.
 
-Uses a judge LLM (e.g., GPT-4, Claude) to evaluate another LLM's outputs for bias.
+Uses a judge LLM (e.g., GPT-6.1 Sol, Claude Sonnet 5.5) to evaluate another LLM's outputs for bias.
 This is an emerging evaluation paradigm (2024-2025) that leverages LLM reasoning capabilities.
 """
 
@@ -21,15 +21,20 @@ except ImportError:
     AIOHTTP_AVAILABLE = False
     aiohttp = None
 
+from src.infrastructure.llm import grok_cli
+
 logger = logging.getLogger(__name__)
 
 class JudgeModel(Enum):
-    """Available judge models"""
-    GPT_4 = "gpt-4"
-    GPT_4_TURBO = "gpt-4-turbo"
-    CLAUDE_3_OPUS = "claude-3-opus"
-    CLAUDE_3_SONNET = "claude-3-sonnet"
-    GEMINI_PRO = "gemini-pro"
+    """Available judge models; each value is the provider's API model id (grok- judges run on the local Grok CLI)"""
+    GPT_6_ASTRA = "gpt-6-astra"
+    GPT_6_1_SOL = "gpt-6.1-sol"
+    CLAUDE_OPUS_5_5 = "claude-opus-5-5"
+    CLAUDE_SONNET_5_5 = "claude-sonnet-5-5"
+    GEMINI_4_ARGON = "gemini-4-argon"
+    GEMINI_3_8_FLASH = "gemini-3.8-flash"
+    GROK_4_7 = "grok-4.7"
+    GROK_4_6 = "grok-4.6"
 
 class BiasCategory(Enum):
     """Bias categories for evaluation"""
@@ -67,7 +72,7 @@ class LLMAsJudgeService:
     This is a SOTA method that leverages LLM reasoning capabilities.
     """
     
-    def __init__(self, judge_model: JudgeModel = JudgeModel.GPT_4_TURBO):
+    def __init__(self, judge_model: JudgeModel = JudgeModel.GPT_6_1_SOL):
         self.judge_model = judge_model
         self.evaluation_prompts = self._initialize_evaluation_prompts()
         self.api_key = None  # Should be set from environment
@@ -221,55 +226,62 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
         """
         Call the judge LLM API
         
-        Supports OpenAI, Anthropic, and Google models
+        Supports OpenAI, Anthropic, and Google models, and Grok models through the local Grok CLI
         """
+        if judge_model.value.startswith("grok-"):
+            return await grok_cli.complete(prompt, judge_model.value)
         if not AIOHTTP_AVAILABLE:
             raise RuntimeError("aiohttp not available. Install with: pip install aiohttp")
 
         import os
 
+        model = judge_model.value
         async with aiohttp.ClientSession() as session:
-            if judge_model in (JudgeModel.GPT_4, JudgeModel.GPT_4_TURBO):
+            if model.startswith("gpt-"):
                 api_key = self.api_key or os.environ.get("OPENAI_API_KEY")
                 if not api_key:
                     raise RuntimeError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
                 headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                 payload = {
-                    "model": judge_model.value,
+                    "model": model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.1,
+                    # Current OpenAI models reason, and reject temperature while reasoning is on.
+                    "reasoning_effort": "low",
                 }
                 async with session.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
                     return data["choices"][0]["message"]["content"]
 
-            elif judge_model in (JudgeModel.CLAUDE_3_OPUS, JudgeModel.CLAUDE_3_SONNET):
+            elif model.startswith("claude-"):
                 api_key = self.api_key or os.environ.get("ANTHROPIC_API_KEY")
                 if not api_key:
                     raise RuntimeError("Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.")
                 headers = {"x-api-key": api_key, "content-type": "application/json", "anthropic-version": "2023-06-01"}
-                model_id = "claude-3-opus-20240229" if judge_model == JudgeModel.CLAUDE_3_OPUS else "claude-3-sonnet-20240229"
                 payload = {
-                    "model": model_id,
-                    "max_tokens": 2048,
+                    "model": model,
+                    # Claude 5 models always think, and thinking counts toward max_tokens.
+                    "max_tokens": 16000,
                     "messages": [{"role": "user", "content": prompt}],
                 }
                 async with session.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                    return data["content"][0]["text"]
+                    # Thinking blocks come before the text block.
+                    return next(block["text"] for block in data["content"] if block["type"] == "text")
 
-            elif judge_model == JudgeModel.GEMINI_PRO:
+            elif model.startswith("gemini-"):
                 api_key = self.api_key or os.environ.get("GOOGLE_API_KEY")
                 if not api_key:
                     raise RuntimeError("Google API key not configured. Set GOOGLE_API_KEY environment variable.")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                async with session.post(url, json=payload) as resp:
+                # The key goes in a header: in the URL it would show up in raise_for_status() errors and logs.
+                async with session.post(url, headers={"x-goog-api-key": api_key}, json=payload) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                    parts = data["candidates"][0]["content"]["parts"]
+                    return "".join(p.get("text", "") for p in parts if not p.get("thought"))
 
             else:
                 raise ValueError(f"Unsupported judge model: {judge_model}")

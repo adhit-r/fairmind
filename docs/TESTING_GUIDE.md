@@ -1,10 +1,8 @@
 # LLM-as-Judge Testing & Verification Guide
 
-**Status**: Historical guide; canonical LLM-as-Judge routes are quarantined
-**Date**: August 29, 2026
-**Objective**: Preserve legacy test reference without implying a runnable current capability
-
-> The canonical application no longer mounts `/api/v1/bias/llm-judge`. The dashboard route is an inert availability state, and the requests below are expected to fail closed. Current verification lives in `apps/backend/tests/test_llm_judge_routes.py` and `apps/frontend/tests/unsupported-evaluation-packs.spec.ts`. Do not use this guide as release evidence.
+**Status**: Phase 1-2 Implementation Complete
+**Date**: February 17, 2026
+**Objective**: Verify backend API + frontend components work end-to-end
 
 ---
 
@@ -12,9 +10,9 @@
 
 ### 1. Environment Setup
 - [ ] Backend `.env` has API keys configured:
-  - `OPENAI_API_KEY` (for GPT-4 Turbo)
-  - `ANTHROPIC_API_KEY` (for Claude 3 Opus)
-  - `GOOGLE_API_KEY` (for Gemini Pro)
+  - `OPENAI_API_KEY` (for GPT-6 Astra and GPT-6.1 Sol)
+  - `ANTHROPIC_API_KEY` (for Claude Opus 5.5 and Claude Sonnet 5.5)
+  - `GOOGLE_API_KEY` (for Gemini 4 Argon and Gemini 3.8 Flash)
 - [ ] Frontend `.env.local` has correct backend URL (`NEXT_PUBLIC_API_URL`)
 - [ ] Backend server runs without errors on `http://localhost:8000`
 - [ ] Frontend development server runs on `http://localhost:3000`
@@ -57,12 +55,12 @@ curl http://localhost:8000/api/v1/bias/llm-judge/models
 **Expected Response**:
 ```json
 {
-  "judges": [
-    { "id": "gpt-4-turbo", "name": "GPT-4 Turbo", "provider": "OpenAI" },
-    { "id": "claude-3-opus", "name": "Claude 3 Opus", "provider": "Anthropic" },
+  "models": [
+    { "value": "gpt-6-astra", "label": "GPT-6 Astra (OpenAI)" },
+    { "value": "gpt-6.1-sol", "label": "GPT-6.1 Sol (OpenAI)" },
     ...
   ],
-  "bias_categories": [
+  "categories": [
     "gender", "race", "age", "cultural", "socioeconomic",
     "intersectional", "professional", "religious"
   ]
@@ -75,7 +73,7 @@ curl -X POST http://localhost:8000/api/v1/bias/llm-judge/evaluate \
   -H "Content-Type: application/json" \
   -d '{
     "text": "A businessman works hard to support his family.",
-    "judge_model": "gpt-4-turbo",
+    "judge_model": "gpt-6.1-sol",
     "bias_category": "gender",
     "target_model": "test-model"
   }'
@@ -92,7 +90,7 @@ curl -X POST http://localhost:8000/api/v1/bias/llm-judge/evaluate \
   "recommendations": ["Use gender-neutral terms like 'professional' instead of 'businessman'"],
   "evidence": ["A businessman works hard"],
   "reasoning": "The text uses gendered language...",
-  "judge_model": "gpt-4-turbo",
+  "judge_model": "gpt-6.1-sol",
   "timestamp": "2026-02-17T12:34:56Z"
 }
 ```
@@ -103,7 +101,7 @@ curl -X POST http://localhost:8000/api/v1/bias/llm-judge/evaluate-batch \
   -H "Content-Type: application/json" \
   -d '{
     "text": "A businessman works hard to support his family.",
-    "judge_model": "gpt-4-turbo",
+    "judge_model": "gpt-6.1-sol",
     "bias_categories": ["gender", "age", "professional"],
     "target_model": "test-model"
   }'
@@ -120,7 +118,7 @@ curl -X POST http://localhost:8000/api/v1/bias/llm-judge/evaluate-batch \
   -H "Content-Type: application/json" \
   -d '{
     "text": "",
-    "judge_model": "gpt-4-turbo",
+    "judge_model": "gpt-6.1-sol",
     "bias_categories": ["gender"]
   }'
 
@@ -359,7 +357,7 @@ curl -X POST http://localhost:8000/api/v1/bias/llm-judge/evaluate-batch \
 ### Full Workflow Test
 1. Navigate to `/dashboard/llm-judge` ✓
 2. Paste or upload sample text ✓
-3. Select judge model (GPT-4 Turbo recommended) ✓
+3. Select judge model (GPT-6.1 Sol recommended) ✓
 4. Select 3-4 bias categories ✓
 5. (Optional) Enter target model name ✓
 6. Click "Start Evaluation" ✓

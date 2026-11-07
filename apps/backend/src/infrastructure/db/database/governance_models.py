@@ -1168,6 +1168,9 @@ class GovernanceEvaluationRunSuiteExecution(Base):
     failure_message = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    available_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    max_attempts = Column(Integer, nullable=False, default=1)
+    attempt_count = Column(Integer, nullable=False, default=0)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1315,6 +1318,451 @@ class GovernanceEvaluationRunSuiteExecution(Base):
             "(created_at <= completed_at AND completed_at <= updated_at "
             "AND (started_at IS NULL OR started_at <= completed_at)))",
             name="ck_governance_evaluation_suite_execution_timestamp_order",
+        ),
+        CheckConstraint(
+            "max_attempts BETWEEN 1 AND 3",
+            name="ck_governance_evaluation_suite_execution_max_attempts_013m",
+        ),
+        CheckConstraint(
+            "attempt_count BETWEEN 0 AND max_attempts",
+            name="ck_governance_evaluation_suite_execution_attempt_count_013m",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("available_at", nullable=False),
+            name="ck_governance_evaluation_suite_execution_available_at_013m",
+        ),
+        Index(
+            "idx_governance_evaluation_suite_execution_queue_013m",
+            "org_id",
+            "technical_status",
+            "available_at",
+            "created_at",
+            "id",
+            postgresql_where=(technical_status == "queued"),
+            sqlite_where=(technical_status == "queued"),
+        ),
+    )
+
+
+class GovernanceEvaluationWorkerIdentity(Base):
+    """Tenant-bound service identity; credentials are never persisted here."""
+
+    __tablename__ = "governance_evaluation_worker_identities"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    principal_subject = Column(String, nullable=False)
+    worker_type = Column(String, nullable=False)
+    capabilities_json = Column(Text, nullable=False)
+    capabilities_hash = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="active")
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    revoked_by = Column(String, nullable=True)
+    revoked_at = Column(String, nullable=True)
+    revocation_reason = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "org_id", name="uq_governance_evaluation_worker_identity_tenant"
+        ),
+        UniqueConstraint(
+            "org_id",
+            "principal_subject",
+            name="uq_governance_evaluation_worker_principal",
+        ),
+        CheckConstraint(
+            "principal_subject = trim(principal_subject) "
+            "AND length(principal_subject) BETWEEN 1 AND 200",
+            name="ck_governance_evaluation_worker_identity_subject",
+        ),
+        CheckConstraint(
+            "worker_type = trim(worker_type) "
+            "AND length(worker_type) BETWEEN 1 AND 100",
+            name="ck_governance_evaluation_worker_identity_type",
+        ),
+        CheckConstraint(
+            "substr(trim(capabilities_json), 1, 1) = '{' "
+            "AND substr(trim(capabilities_json), -1, 1) = '}' "
+            "AND length(capabilities_json) BETWEEN 2 AND 65536",
+            name="ck_governance_evaluation_worker_capabilities",
+        ),
+        CheckConstraint(
+            _lower_hex64("capabilities_hash"),
+            name="ck_governance_evaluation_worker_capabilities_hash",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("created_at", nullable=False),
+            name="ck_governance_evaluation_worker_created_at",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("revoked_at"),
+            name="ck_governance_evaluation_worker_revoked_at",
+        ),
+        CheckConstraint(
+            "(status IN ('active', 'disabled') AND revoked_by IS NULL "
+            "AND revoked_at IS NULL AND revocation_reason IS NULL) OR "
+            "(status = 'revoked' AND revoked_by IS NOT NULL "
+            "AND revoked_at IS NOT NULL AND revocation_reason IS NOT NULL "
+            "AND revocation_reason = trim(revocation_reason) "
+            "AND length(revocation_reason) BETWEEN 1 AND 2000)",
+            name="ck_governance_evaluation_worker_identity_status",
+        ),
+    )
+
+
+class GovernanceEvaluationSuiteAttempt(Base):
+    """One leased execution attempt with only the lease-token digest stored."""
+
+    __tablename__ = "governance_evaluation_suite_attempts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    suite_execution_id = Column(String, nullable=False, index=True)
+    attempt_number = Column(Integer, nullable=False)
+    worker_identity_id = Column(String, nullable=False)
+    technical_status = Column(String, nullable=False, default="leased")
+    lease_token_hash = Column(String, nullable=False)
+    leased_at = Column(String, nullable=False)
+    last_heartbeat_at = Column(String, nullable=False)
+    lease_expires_at = Column(String, nullable=False)
+    started_at = Column(String, nullable=True)
+    completed_at = Column(String, nullable=True)
+    evidence_run_id = Column(String, nullable=True)
+    passport_revision_id = Column(String, nullable=True)
+    failure_code = Column(String, nullable=True)
+    failure_message = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "suite_execution_id",
+            "org_id",
+            name="uq_governance_evaluation_suite_attempt_tenant",
+        ),
+        UniqueConstraint(
+            "suite_execution_id",
+            "attempt_number",
+            name="uq_governance_evaluation_suite_attempt_number",
+        ),
+        ForeignKeyConstraint(
+            ["suite_execution_id", "run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.run_id",
+                "governance_evaluation_run_suite_executions.workspace_id",
+                "governance_evaluation_run_suite_executions.system_id",
+                "governance_evaluation_run_suite_executions.org_id",
+            ],
+            name="fk_governance_evaluation_suite_attempt_execution",
+        ),
+        ForeignKeyConstraint(
+            ["worker_identity_id", "org_id"],
+            [
+                "governance_evaluation_worker_identities.id",
+                "governance_evaluation_worker_identities.org_id",
+            ],
+            name="fk_governance_evaluation_suite_attempt_worker",
+        ),
+        ForeignKeyConstraint(
+            ["passport_revision_id", "evidence_run_id", "system_id", "org_id"],
+            [
+                "governance_evidence_passport_revisions.id",
+                "governance_evidence_passport_revisions.evidence_run_id",
+                "governance_evidence_passport_revisions.system_id",
+                "governance_evidence_passport_revisions.org_id",
+            ],
+            name="fk_governance_evaluation_suite_attempt_passport",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "attempt_number BETWEEN 1 AND 3",
+            name="ck_governance_evaluation_suite_attempt_number",
+        ),
+        CheckConstraint(
+            "technical_status IN ('leased', 'running', 'succeeded', 'failed', "
+            "'timed_out', 'cancelled')",
+            name="ck_governance_evaluation_suite_attempt_status",
+        ),
+        CheckConstraint(
+            _lower_hex64("lease_token_hash"),
+            name="ck_governance_evaluation_suite_attempt_lease_token",
+        ),
+        CheckConstraint(
+            "(evidence_run_id IS NULL AND passport_revision_id IS NULL) OR "
+            "(evidence_run_id IS NOT NULL AND passport_revision_id IS NOT NULL)",
+            name="ck_governance_evaluation_suite_attempt_evidence",
+        ),
+        CheckConstraint(
+            "leased_at <= last_heartbeat_at AND last_heartbeat_at < lease_expires_at",
+            name="ck_governance_evaluation_suite_attempt_lease",
+        ),
+        CheckConstraint(
+            "(technical_status = 'leased' AND started_at IS NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'running' AND started_at IS NOT NULL "
+            "AND completed_at IS NULL) OR "
+            "(technical_status = 'succeeded' AND started_at IS NOT NULL "
+            "AND completed_at IS NOT NULL AND evidence_run_id IS NOT NULL "
+            "AND passport_revision_id IS NOT NULL AND failure_code IS NULL "
+            "AND failure_message IS NULL) OR "
+            "(technical_status IN ('failed', 'timed_out', 'cancelled') "
+            "AND completed_at IS NOT NULL)",
+            name="ck_governance_evaluation_suite_attempt_state",
+        ),
+        CheckConstraint(
+            "(failure_code IS NULL AND failure_message IS NULL) OR "
+            "(failure_code IS NOT NULL AND failure_message IS NOT NULL "
+            "AND failure_code = trim(failure_code) "
+            "AND length(failure_code) BETWEEN 1 AND 200 "
+            "AND failure_message = trim(failure_message) "
+            "AND length(failure_message) BETWEEN 1 AND 4000)",
+            name="ck_governance_evaluation_suite_attempt_failure",
+        ),
+        CheckConstraint(
+            f"({_canonical_utc_timestamp('leased_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('last_heartbeat_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('lease_expires_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('started_at')}) AND "
+            f"({_canonical_utc_timestamp('completed_at')}) AND "
+            f"({_canonical_utc_timestamp('created_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('updated_at', nullable=False)})",
+            name="ck_governance_evaluation_suite_attempt_timestamps",
+        ),
+        Index(
+            "uq_governance_evaluation_suite_active_attempt_013m",
+            "suite_execution_id",
+            unique=True,
+            postgresql_where=technical_status.in_(("leased", "running")),
+            sqlite_where=technical_status.in_(("leased", "running")),
+        ),
+        Index(
+            "idx_governance_evaluation_suite_attempt_lease_expiry_013m",
+            "technical_status",
+            "lease_expires_at",
+            "suite_execution_id",
+            postgresql_where=technical_status.in_(("leased", "running")),
+            sqlite_where=technical_status.in_(("leased", "running")),
+        ),
+    )
+
+
+class GovernanceEvaluationArtifact(Base):
+    """Immutable content-addressed metadata for one quarantined worker artifact."""
+
+    __tablename__ = "governance_evaluation_artifacts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    sha256 = Column(String, nullable=False)
+    media_type = Column(String, nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    storage_key = Column(Text, nullable=False)
+    state = Column(String, nullable=False, default="quarantined")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    available_at = Column(String, nullable=True)
+    rejected_at = Column(String, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "org_id", name="uq_governance_evaluation_artifact_tenant"
+        ),
+        UniqueConstraint(
+            "org_id", "sha256", name="uq_governance_evaluation_artifact_digest"
+        ),
+        UniqueConstraint(
+            "org_id",
+            "storage_key",
+            name="uq_governance_evaluation_artifact_storage",
+        ),
+        CheckConstraint(
+            _lower_hex64("sha256"),
+            name="ck_governance_evaluation_artifact_sha256",
+        ),
+        CheckConstraint(
+            "media_type = trim(media_type) AND length(media_type) BETWEEN 1 AND 200",
+            name="ck_governance_evaluation_artifact_media_type",
+        ),
+        CheckConstraint(
+            "size_bytes BETWEEN 0 AND 1073741824",
+            name="ck_governance_evaluation_artifact_size",
+        ),
+        CheckConstraint(
+            "storage_key = trim(storage_key) "
+            "AND length(storage_key) BETWEEN 1 AND 512",
+            name="ck_governance_evaluation_artifact_storage_key",
+        ),
+        CheckConstraint(
+            "(state = 'quarantined' AND available_at IS NULL "
+            "AND rejected_at IS NULL AND rejection_reason IS NULL) OR "
+            "(state = 'available' AND available_at IS NOT NULL "
+            "AND rejected_at IS NULL AND rejection_reason IS NULL) OR "
+            "(state = 'rejected' AND available_at IS NULL "
+            "AND rejected_at IS NOT NULL AND rejection_reason IS NOT NULL "
+            "AND rejection_reason = trim(rejection_reason) "
+            "AND length(rejection_reason) BETWEEN 1 AND 2000)",
+            name="ck_governance_evaluation_artifact_state",
+        ),
+        CheckConstraint(
+            f"({_canonical_utc_timestamp('created_at', nullable=False)}) AND "
+            f"({_canonical_utc_timestamp('available_at')}) AND "
+            f"({_canonical_utc_timestamp('rejected_at')})",
+            name="ck_governance_evaluation_artifact_timestamps",
+        ),
+    )
+
+
+class GovernanceEvaluationAttemptArtifact(Base):
+    """Ordered binding from a signed Passport descriptor to stored content."""
+
+    __tablename__ = "governance_evaluation_attempt_artifacts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    suite_execution_id = Column(String, nullable=False)
+    attempt_id = Column(String, nullable=False, index=True)
+    artifact_id = Column(String, nullable=False)
+    passport_artifact_id = Column(String, nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    role = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "org_id", name="uq_governance_evaluation_attempt_artifact_tenant"
+        ),
+        UniqueConstraint(
+            "attempt_id",
+            "passport_artifact_id",
+            name="uq_governance_evaluation_attempt_artifact_id",
+        ),
+        UniqueConstraint(
+            "attempt_id",
+            "ordinal",
+            name="uq_governance_evaluation_attempt_artifact_ordinal",
+        ),
+        ForeignKeyConstraint(
+            ["attempt_id", "suite_execution_id", "org_id"],
+            [
+                "governance_evaluation_suite_attempts.id",
+                "governance_evaluation_suite_attempts.suite_execution_id",
+                "governance_evaluation_suite_attempts.org_id",
+            ],
+            name="fk_governance_evaluation_attempt_artifact_attempt",
+        ),
+        ForeignKeyConstraint(
+            ["artifact_id", "org_id"],
+            [
+                "governance_evaluation_artifacts.id",
+                "governance_evaluation_artifacts.org_id",
+            ],
+            name="fk_governance_evaluation_attempt_artifact_blob",
+        ),
+        CheckConstraint(
+            "passport_artifact_id = trim(passport_artifact_id) "
+            "AND length(passport_artifact_id) BETWEEN 1 AND 200",
+            name="ck_governance_evaluation_attempt_artifact_passport_id",
+        ),
+        CheckConstraint(
+            "ordinal BETWEEN 0 AND 49",
+            name="ck_governance_evaluation_attempt_artifact_ordinal",
+        ),
+        CheckConstraint(
+            "role = trim(role) AND length(role) BETWEEN 1 AND 100",
+            name="ck_governance_evaluation_attempt_artifact_role",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("created_at", nullable=False),
+            name="ck_governance_evaluation_attempt_artifact_created_at",
+        ),
+    )
+
+
+class GovernanceEvaluationCancellation(Base):
+    """Immutable run- or suite-level cancellation request."""
+
+    __tablename__ = "governance_evaluation_cancellations"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    suite_execution_id = Column(String, nullable=True)
+    scope_kind = Column(String, nullable=False)
+    requested_by = Column(String, nullable=False)
+    requested_at = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "org_id", name="uq_governance_evaluation_cancellation_tenant"
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+            name="fk_governance_evaluation_cancellation_run",
+        ),
+        ForeignKeyConstraint(
+            ["suite_execution_id", "run_id", "workspace_id", "system_id", "org_id"],
+            [
+                "governance_evaluation_run_suite_executions.id",
+                "governance_evaluation_run_suite_executions.run_id",
+                "governance_evaluation_run_suite_executions.workspace_id",
+                "governance_evaluation_run_suite_executions.system_id",
+                "governance_evaluation_run_suite_executions.org_id",
+            ],
+            name="fk_governance_evaluation_cancellation_execution",
+        ),
+        CheckConstraint(
+            "(scope_kind = 'run' AND suite_execution_id IS NULL) OR "
+            "(scope_kind = 'suite' AND suite_execution_id IS NOT NULL)",
+            name="ck_governance_evaluation_cancellation_scope",
+        ),
+        CheckConstraint(
+            "requested_by = trim(requested_by) "
+            "AND length(requested_by) BETWEEN 1 AND 200",
+            name="ck_governance_evaluation_cancellation_requester",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("requested_at", nullable=False),
+            name="ck_governance_evaluation_cancellation_requested_at",
+        ),
+        CheckConstraint(
+            "reason = trim(reason) AND length(reason) BETWEEN 1 AND 2000",
+            name="ck_governance_evaluation_cancellation_reason",
+        ),
+        Index(
+            "uq_governance_evaluation_run_cancellation_013m",
+            "run_id",
+            unique=True,
+            postgresql_where=suite_execution_id.is_(None),
+            sqlite_where=suite_execution_id.is_(None),
+        ),
+        Index(
+            "uq_governance_evaluation_suite_cancellation_013m",
+            "suite_execution_id",
+            unique=True,
+            postgresql_where=suite_execution_id.is_not(None),
+            sqlite_where=suite_execution_id.is_not(None),
+        ),
+        Index(
+            "idx_governance_evaluation_cancellation_scope_013m",
+            "org_id",
+            "system_id",
+            "run_id",
         ),
     )
 
@@ -3306,6 +3754,42 @@ class OrgPolicyEvaluation(Base):
     __table_args__ = (
         CheckConstraint(
             "outcome IN ('pass', 'fail', 'not_applicable')", name="ck_org_policy_eval_outcome"
+        ),
+    )
+
+
+class OrgPolicyAlert(Base):
+    """A published rule failing on a system: opened when it starts failing, resolved when it stops."""
+
+    __tablename__ = "org_policy_alerts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    policy_id = Column(String, ForeignKey("org_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_version = Column(Integer, nullable=False)
+    system_id = Column(String, nullable=False)
+    rule_id = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    enforcement = Column(String, nullable=False)
+    detail = Column(Text, nullable=False, default="")
+    status = Column(String, nullable=False, default="open")
+    opened_at = Column(String, nullable=False)
+    resolved_at = Column(String, nullable=True)
+    notified_at = Column(String, nullable=True)
+    acknowledged_by = Column(String, nullable=True)
+    acknowledged_at = Column(String, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'resolved')", name="ck_org_policy_alert_status"),
+        # One open alert per rule and system, so concurrent sweeps cannot raise it twice.
+        Index(
+            "uq_org_policy_alert_open",
+            "org_id",
+            "policy_id",
+            "rule_id",
+            "system_id",
+            unique=True,
+            postgresql_where=(status == "open"),
         ),
     )
 

@@ -237,3 +237,93 @@ def test_policy_results_are_evidence_for_assigned_framework_controls(assurance_c
     assert passing["evidenceTrace"][0]["label"] == "Every system has a named owner (Ownership v1)"
     assert (passing["acceptedEvidenceCount"], passing["freshness"]) == (1, "current")
     assert controls()["A001.2"]["evidenceTrace"] == [] and readiness()["missingEvidence"] == 1
+
+
+def test_ai_drafts_a_policy_with_only_valid_rules(assurance_client, monkeypatch):
+    from types import SimpleNamespace
+
+    from api.routes import policy_center
+
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        _seed_catalog_and_system(session)
+    brief = {"brief": "We screen loan applications with a credit model."}
+    refused = client.post(f"{BASE}/draft", json=brief)
+    assert refused.status_code == 409 and "Organisation settings" in refused.json()["detail"]
+
+    sent = {}
+
+    async def complete(conn, system, user, schema):
+        sent.update(system=system, user=user, schema=schema)
+        rule = {"severity": "high", "enforcement": "block", "when": [], "controls": ["aiuc-1:A001.1", "aiuc-1:Z9"]}
+        return {
+            "name": "Credit model policy",
+            "summary": "Rules for the credit model.",
+            "body": "## Purpose\nGovern the credit model.",
+            "rules": [
+                {**rule, "id": "owner", "title": "Each system has an owner", "check": [{"fact": "system.owner", "op": "exists", "value": None}]},
+                {**rule, "id": "made-up", "title": "Uses a fact that does not exist", "check": [{"fact": "system.vibes", "op": "eq", "value": 1}]},
+                {**rule, "id": "owner", "title": "Duplicate id", "check": [{"fact": "risks.open", "op": "eq", "value": 0}]},
+            ],
+        }, {"model": "test-model", "latencyMs": 1, "usage": {}}
+
+    monkeypatch.setattr(policy_center, "_org_model", lambda db, org: SimpleNamespace(provider=SimpleNamespace(id="anthropic")))
+    monkeypatch.setattr(policy_center.llm, "complete", complete)
+    drafted = client.post(f"{BASE}/draft", json=brief)
+    assert drafted.status_code == 201, drafted.text
+    policy = drafted.json()
+    assert (policy["name"], policy["status"]) == ("Credit model policy", "draft")
+    assert [r["id"] for r in policy["rules"]] == ["owner"]
+    assert policy["rules"][0]["check"] == {"fact": "system.owner", "op": "exists"}
+    assert policy["controlRefs"] == ["aiuc-1:A001.1"]
+    assert policy["draft"]["model"] == "test-model" and len(policy["draft"]["dropped"]) == 2
+    assert "credit model" in sent["user"] and "aiuc-1:A001.1" in sent["user"] and "System A" in sent["user"]
+
+
+
+
+def test_newly_failing_rules_raise_one_alert_and_email_the_owner_once(assurance_client):
+    import asyncio
+
+    from src.application.services.policy_service import PolicyService, sweep_policy_alerts
+
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        _seed_catalog_and_system(session)
+    rule = {**OWNER_RULE, "title": "Every system has a <b>named</b> owner", "enforcement": "block"}
+    policy = client.post(BASE, json={"name": "Ownership", "owner": "risk@org-a.test", "rules": [rule]}).json()
+    for action in ("submit", "approve", "publish"):
+        assert client.post(f"{BASE}/{policy['id']}/actions", json={"action": action}).status_code == 200
+
+    sent = []
+
+    async def send(to, subject, html):
+        sent.append((to, subject, html))
+        return True
+
+    sweep = lambda: asyncio.run(sweep_policy_alerts(session_factory, send, "https://app.test"))  # noqa: E731
+    assert sweep() == 1 and sweep() == 0
+    to, subject, html = sent[0]
+    assert to == "risk@org-a.test" and "System A" in subject
+    assert "&lt;b&gt;named&lt;/b&gt;" in html and "<b>named</b>" not in html
+    assert f"https://app.test/policies/{policy['id']}" in html
+    with session_factory() as session:
+        assert PolicyService(session).sync_alerts(ORG_A) == 0  # already open: never raised twice
+
+    alerts = client.get(f"{BASE}/alerts").json()
+    assert [(a["systemName"], a["ruleId"], a["status"]) for a in alerts] == [("System A", "named-owner", "open")]
+    assert alerts[0]["notifiedAt"] is not None
+    acked = client.post(f"{BASE}/alerts/{alerts[0]['id']}/acknowledge").json()
+    assert acked["acknowledgedAt"] is not None
+    assert client.post(f"{BASE}/alerts/missing/acknowledge").status_code == 404
+
+    with session_factory() as session:
+        session.execute(
+            GovernanceAISystem.__table__.update().where(GovernanceAISystem.__table__.c.id == "system-a").values(owner="Risk office")
+        )
+        session.commit()
+    assert sweep() == 0 and client.get(f"{BASE}/alerts").json() == []
+    resolved = client.get(f"{BASE}/alerts", params={"include_resolved": "true"}).json()
+    assert resolved[0]["status"] == "resolved" and resolved[0]["resolvedAt"] is not None

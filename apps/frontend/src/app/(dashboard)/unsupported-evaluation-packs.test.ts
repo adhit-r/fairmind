@@ -4,8 +4,6 @@ import test from 'node:test'
 
 const pageSources = [
   ['Explainability Studio', new URL('./explainability-studio/page.tsx', import.meta.url)],
-  ['LLM Judge', new URL('./llm-judge/page.tsx', import.meta.url)],
-  ['LLM Testing', new URL('./llm-testing/page.tsx', import.meta.url)],
   ['Multimodal Bias Detection', new URL('./multimodal-bias/page.tsx', import.meta.url)],
 ] as const
 
@@ -28,10 +26,6 @@ for (const [pageName, pageUrl] of pageSources) {
 }
 
 test('navigation and adjacent workflows describe the pack as unavailable', () => {
-  assert.match(
-    navigationSource,
-    /title: ['"]LLM Judge['"][\s\S]*description: ['"]Evaluation pack unavailable['"]/,
-  )
   assert.match(
     navigationSource,
     /title: ['"]Explainability Studio['"][\s\S]*description: ['"]Evaluation pack unavailable['"]/,

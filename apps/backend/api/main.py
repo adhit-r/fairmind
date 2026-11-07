@@ -14,7 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.routing import iter_route_contexts
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -42,6 +44,20 @@ from src.application.services.governance_assurance_service import OrgMembership
 
 # Get logger
 logger = get_logger("main")
+
+
+async def _policy_alert_loop(interval: int) -> None:
+    """Re-check published policy rules on a timer and email the owner when one starts failing."""
+    from database.connection import db_manager as orm_db_manager
+    from src.application.services.policy_service import sweep_policy_alerts
+    from src.infrastructure.email.resend_service import email_service
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await sweep_policy_alerts(orm_db_manager.SessionLocal, email_service.send_policy_alert, settings.frontend_url)
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Policy alert sweep failed: {e}")
 
 
 @asynccontextmanager
@@ -107,17 +123,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Compliance automation scheduler not started: {e}")
     
+    policy_alerts = None
+    if settings.policy_alert_interval_seconds > 0:
+        policy_alerts = asyncio.create_task(_policy_alert_loop(settings.policy_alert_interval_seconds))
+
     logger.info("Application startup complete")
     
     # Log all registered routes
-    for route in app.routes:
-        if hasattr(route, "methods"):
+    for route in iter_route_contexts(app.routes):
+        if route.methods:
             logger.info(f"Route: {route.path} Methods: {route.methods}")
     
     yield
     
     # Shutdown
     logger.info("Starting application shutdown")
+    if policy_alerts:
+        policy_alerts.cancel()
     
     # Close database connections
     try:
@@ -368,6 +390,7 @@ _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags=["fairness"], required=False)
+_include_router("api.routes.applicability", prefix="/api/v1/ai-governance", tags=["applicability"], required=False)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
@@ -508,6 +531,7 @@ _include_router("api.routes.compliance_check", tags=["compliance"], required=Fal
 _include_router("api.routes.compliance_reporting", tags=["compliance-reporting"], required=False)
 _include_router("api.routes.datasets", tags=["datasets"], required=False)
 _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-compliance"], required=False)
+_include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
 _include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
@@ -521,10 +545,10 @@ _include_router("api.routes.compliance_audit", tags=["compliance-audit"], requir
 # The legacy /api/approvals router writes the same approval tables without the
 # tenant and actor guarantees enforced by the primary governance API. Keep it
 # unmounted; clients must use /api/v1/ai-governance approval endpoints.
-# The legacy llm-judge, modern-bias, and multimodal-bias routers expose
-# uncalibrated evaluator implementations without the Assurance V2 execution,
-# isolation, or signed-evidence contract. Keep them unmounted until their
-# modality packs pass the independent P2/P3 release gates.
+# The legacy modern-bias and multimodal-bias routers expose uncalibrated
+# evaluator implementations without the Assurance V2 execution, isolation, or
+# signed-evidence contract. Keep them unmounted until their modality packs pass
+# the independent P2/P3 release gates (WEAT/SEAT now runs as engine EV-FAI-05).
 
 logger.info("Explicit API router map registered")
 
