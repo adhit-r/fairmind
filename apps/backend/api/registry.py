@@ -8,6 +8,7 @@ validation, and fail-fast error handling.
 from typing import Dict, List, Optional, Set, Callable, Any
 from dataclasses import dataclass, field
 from fastapi import APIRouter, FastAPI
+from fastapi.routing import iter_route_contexts
 from pathlib import Path
 import importlib
 import inspect
@@ -133,8 +134,8 @@ class RouteRegistry:
         
         # Extract route metadata
         routes = []
-        for route in router.routes:
-            if hasattr(route, 'methods'):
+        for route in iter_route_contexts(router.routes):
+            if route.methods:
                 metadata = RouteMetadata(
                     path=route.path,
                     methods=route.methods,

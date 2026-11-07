@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from fastapi.routing import iter_route_contexts
 
 from config.settings import settings
 from src.application.ports.evaluation_workbench import MutationResult
@@ -99,7 +100,7 @@ def test_router_exposes_the_complete_versioned_trust_administration_contract(
     client, _state, _service = route_client
     routes = {
         (method, route.path)
-        for route in client.app.routes
+        for route in iter_route_contexts(client.app.routes)
         for method in getattr(route, "methods", set())
         if method in {"GET", "POST"}
         and "/evaluation-v2/trust" in getattr(route, "path", "")
