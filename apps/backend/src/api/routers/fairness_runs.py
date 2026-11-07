@@ -1,7 +1,7 @@
 """Fairness runs, monitoring runs, attestations and the release gate for one AI system.
 
-POST /systems/{id}/fairness-runs/inspect   columns and a suggested mapping for a CSV
-POST /systems/{id}/fairness-runs           run the metrics, store measured evidence
+POST /systems/{id}/fairness-runs/inspect   columns, a suggested mapping and protected attributes (inferred, or reused from the last run)
+POST /systems/{id}/fairness-runs           run the metrics, store measured evidence and the attribute confirmation
 POST /systems/{id}/monitoring-runs         current scores against the last run; drift as measured evidence
 GET  /systems/{id}/monitoring-policy       expected snapshot cadence and the drift window (defaults when none stored)
 PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops counting as proven, sustained drift opens a finding
@@ -44,6 +44,7 @@ from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
     FairnessRunError,
+    confirm_attributes,
     inspect_csv,
     release_gate,
     run_fairness,
@@ -147,9 +148,24 @@ async def inspect_fairness_csv(
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     try:
-        return inspect_csv(await _read_upload(file))
+        return inspect_csv(await _read_upload(file), _last_run_metadata(db, system_id))
     except FairnessRunError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+def _last_run_metadata(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
+    """Metadata of the system's latest fairness run, whose attributes the next inspect reuses."""
+    row = db.execute(
+        text("SELECT metadata_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'fairness_test' AND source = 'fairmind.fairness_library' ORDER BY created_at DESC LIMIT 1"),
+        {"id": system_id},
+    ).fetchone()
+    return json.loads(row[0] or "{}") if row else None
+
+
+def _confirmation_summary(record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not record:
+        return None
+    return {"confirmed": bool(record.get("confirmed")), "by": record.get("confirmedBy"), "at": record.get("confirmedAt"), "attributes": record.get("attributes") or [], "notTested": record.get("uncoveredGrounds") or []}
 
 
 @router.post("/systems/{system_id}/fairness-runs")
@@ -162,6 +178,10 @@ async def create_fairness_run(
     prediction: Optional[str] = Form(None),
     score: Optional[str] = Form(None),
     favorable_label: Optional[str] = Form(None),
+    confirm: Optional[str] = Form(None, description='"1" when a person confirmed the attributes in the UI'),
+    confirm_sha256: Optional[str] = Form(None),
+    removal_reason: Optional[str] = Form(None),
+    uncovered_reason: Optional[str] = Form(None),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -169,9 +189,17 @@ async def create_fairness_run(
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_row(db, system_id)
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
+    data = await _read_upload(file)
+    now = datetime.now(timezone.utc).isoformat()
     try:
+        # The suggestion is recomputed from these bytes, so a client cannot choose what it was shown.
+        confirmation = confirm_attributes(
+            inspect_csv(data, _last_run_metadata(db, system_id)), attribute_list,
+            via_ui=confirm == "1", actor=_authenticated_actor(current_user), now=now,
+            confirm_sha256=confirm_sha256, removal_reason=removal_reason, uncovered_reason=uncovered_reason,
+        )
         result = run_fairness(
-            await _read_upload(file),
+            data,
             outcome=outcome,
             prediction=prediction or None,
             score=score or None,
@@ -181,7 +209,6 @@ async def create_fairness_run(
     except FairnessRunError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    now = datetime.now(timezone.utc).isoformat()
     evidence_id = str(uuid.uuid4())
     run_id = str(uuid.uuid4())
     title = f"Fairness test on {', '.join(attribute_list)} ({result['rows']} rows)"
@@ -189,7 +216,9 @@ async def create_fairness_run(
         "provenance_class": "measured",
         "run_id": run_id,
         "file_name": file.filename,
+        "file_sha256": confirmation["fileSha256"],
         "mapping": result["mapping"],
+        "attribute_confirmation": confirmation,
         "thresholds": result["thresholds"],
         "computed_at": now,
         "library": "fairness_library.metrics",
@@ -223,6 +252,7 @@ async def create_fairness_run(
         "systemId": system_id,
         "title": title,
         "result": result,
+        "confirmation": _confirmation_summary(confirmation),
         "gate": _gate_payload(db, system_id, system.risk_tier),
     }
 
@@ -256,6 +286,7 @@ async def list_fairness_runs(
                     for a in content.get("attributes", [])
                 ],
                 "confidence": row[3],
+                "confirmation": _confirmation_summary(json.loads(row[4] or "{}").get("attribute_confirmation")),
                 "createdAt": row[5],
             }
         )

@@ -7,9 +7,11 @@ which until now was never reachable from any route.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -31,10 +33,25 @@ MIN_GROUP_SIZE = 30
 OUTCOME_HINTS = ("y_true", "label", "outcome", "target", "actual", "ground_truth", "truth", "repaid", "defaulted", "default", "churned", "hired", "readmitted", "fraud", "claim_paid")
 PREDICTION_HINTS = ("y_pred", "prediction", "pred", "decision", "predicted", "approved", "selected")
 SCORE_HINTS = ("score", "proba", "probability", "p_", "prob", "risk_score", "likelihood")
-ATTRIBUTE_HINTS = (
-    "gender", "sex", "age", "age_band", "age_group", "caste", "religion", "region", "state", "district",
-    "language", "race", "ethnicity", "disability", "nationality", "marital", "urban_rural", "tier",
-)
+# Protected grounds FairMind looks for in a file, and the column-name hint for each ground. A hint matches
+# whole tokens of a column name (camelCase split), so "statement_date", "mortgage" and "sussex" do not match.
+GROUNDS = ("gender", "age", "caste or social category", "religion", "disability", "language", "marital status", "region")
+ATTRIBUTE_HINTS: Dict[str, Optional[str]] = {
+    "gender": "gender", "sex": "gender",
+    "age": "age", "age_band": "age", "age_group": "age", "dob": "age", "date_of_birth": "age", "birth_date": "age", "birthdate": "age",
+    "caste": "caste or social category", "social_category": "caste or social category",
+    "religion": "religion", "disability": "disability", "language": "language", "marital": "marital status",
+    "region": "region", "state": "region", "district": "region", "urban_rural": "region", "city_tier": "region",
+    "race": None, "ethnicity": None, "nationality": None,
+}
+# A bare "tier" is a city tier; "customer_tier" and "premium_tier" are not protected. A column named "category"
+# counts only through the reservation-values check, so it is not a name hint.
+EXACT_ATTRIBUTE_HINTS = {"tier": "region"}
+RESERVATION_VALUES = {"gen", "general", "obc", "sc", "st", "ews"}
+GENDER_VALUES = {"m", "f", "male", "female", "x", "other", "transgender", "nonbinary", "non-binary"}
+MAX_ATTRIBUTE_VALUES = 50  # more groups than this cannot be compared; bin first
+POSSIBLE_BASIS = "Few distinct values; the name is not a protected attribute. Tick it only if it stands in for one."
+REASON_MIN_CHARS = 12
 
 DI_THRESHOLD = 0.80   # four-fifths rule
 GAP_THRESHOLD = 0.05  # equal opportunity and equalized odds difference
@@ -85,8 +102,57 @@ def _match(columns: Iterable[str], hints: Iterable[str]) -> Optional[str]:
     return None
 
 
-def inspect_csv(data: bytes) -> Dict[str, Any]:
-    """Columns, a few sample values each, and a suggested mapping to confirm."""
+def _tokens(name: str) -> List[str]:
+    """Lower-case words of a column name: "applicantAgeBand" and "applicant_age_band" both give applicant, age, band."""
+    return [t.lower() for t in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+", name)]
+
+
+def _attribute_hint(name: str) -> Optional[str]:
+    """The longest attribute hint found as whole adjacent tokens of the column name."""
+    if name.strip().lower() in EXACT_ATTRIBUTE_HINTS:
+        return name.strip().lower()
+    tokens = _tokens(name)
+    found = []
+    for hint in ATTRIBUTE_HINTS:
+        run = _tokens(hint)
+        if any(tokens[i:i + len(run)] == run for i in range(len(tokens) - len(run) + 1)):
+            found.append((len(run), hint))
+    return max(found)[1] if found else None
+
+
+def _attribute_column(name: str, series: pd.Series) -> Dict[str, Any]:
+    """Whether one column looks like a protected attribute, why, and which ground it covers."""
+    distinct = int(series.dropna().nunique())
+    hint = _attribute_hint(name)
+    ground = {**ATTRIBUTE_HINTS, **EXACT_ATTRIBUTE_HINTS}.get(hint) if hint else None
+    basis = f'Name matches "{hint}"' if hint else None
+    if hint and distinct > MAX_ATTRIBUTE_VALUES:
+        return {"status": "too_many_values", "basis": basis, "ground": ground}
+    values = {str(v).strip().lower() for v in series.dropna().unique()} if 2 <= distinct <= 12 else set()
+    if values and values <= RESERVATION_VALUES:
+        return {"status": "suggested", "basis": "The values look like reservation categories", "ground": "caste or social category"}
+    if values and values <= GENDER_VALUES:
+        return {"status": "suggested", "basis": f"{basis}, and the values look like gender" if basis else "The values look like gender", "ground": "gender"}
+    if basis:
+        return {"status": "suggested", "basis": basis, "ground": ground}
+    if 2 <= distinct <= 12:
+        return {"status": "possible", "basis": POSSIBLE_BASIS, "ground": None}
+    return {"status": None, "basis": None, "ground": None}
+
+
+def uncovered_grounds(attributes: Iterable[str], columns: List[Dict[str, Any]]) -> List[str]:
+    """The grounds no chosen column covers, in GROUNDS order."""
+    chosen = set(attributes)
+    covered = {c["attribute"]["ground"] for c in columns if c["name"] in chosen}
+    return [g for g in GROUNDS if g not in covered]
+
+
+def inspect_csv(data: bytes, previous: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Columns, a few sample values each, and a suggested mapping to confirm.
+
+    ``previous`` is the metadata of the system's last fairness run: its attributes that exist in this
+    file are suggested instead of inferring again, so monitoring and later runs test the same columns.
+    """
     frame = _read_csv(data)
     columns = [str(c) for c in frame.columns]
     binary_like = [c for c in columns if frame[c].dropna().nunique() <= 2]
@@ -94,28 +160,106 @@ def inspect_csv(data: bytes) -> Dict[str, Any]:
         c for c in columns
         if pd.api.types.is_numeric_dtype(frame[c]) and frame[c].dropna().between(0, 1).all() and frame[c].dropna().nunique() > 2
     ]
-    low_card = [c for c in columns if 2 <= frame[c].dropna().nunique() <= 12 and c not in binary_like]
     outcome = _match(binary_like, OUTCOME_HINTS) or _match(columns, OUTCOME_HINTS)
     prediction = _match([c for c in binary_like if c != outcome], PREDICTION_HINTS) or _match(columns, PREDICTION_HINTS)
     if outcome is None:
         # No recognisable name: the first 0/1 column that is not the prediction is the best guess to confirm.
         outcome = next((c for c in binary_like if c != prediction), None)
     score = _match(numeric_unit, SCORE_HINTS) or _match(columns, SCORE_HINTS)
-    attributes = [c for c in columns if c not in (outcome, prediction, score) and _match([c], ATTRIBUTE_HINTS)]
-    if not attributes:
-        attributes = [c for c in low_card if c not in (outcome, prediction, score)][:3]
+    mapped = (outcome, prediction, score)
+    assessed = {c: {"status": None, "basis": None, "ground": None} if c in mapped else _attribute_column(c, frame[c]) for c in columns}
+    attributes = [c for c in columns if assessed[c]["status"] == "suggested"]
+    source = "inferred" if attributes else "none"
+    confirmed_by = confirmed_at = None
+    previous_unconfirmed = False
+
+    confirmation = (previous or {}).get("attribute_confirmation") or {}
+    earlier = confirmation.get("attributes") or ((previous or {}).get("mapping") or {}).get("attributes") or []
+    reused = [a for a in earlier if a in assessed and a not in mapped and assessed[a]["status"] != "too_many_values"]
+    if reused:
+        person = bool(confirmation.get("confirmed"))
+        for c in columns:
+            if c in reused:
+                if assessed[c]["status"] != "suggested":
+                    assessed[c] = {**assessed[c], "basis": "Confirmed in the last run" if person else "Used in the last run"}
+                assessed[c]["status"] = "suggested"
+            elif assessed[c]["status"] == "suggested":
+                assessed[c] = {**assessed[c], "status": "possible", "basis": f"{assessed[c]['basis']}; not used in the last run"}
+        attributes, source = reused, "confirmed"
+        confirmed_by, confirmed_at = (confirmation.get("confirmedBy"), confirmation.get("confirmedAt")) if person else (None, None)
+        previous_unconfirmed = not person
+
+    described = [
+        {
+            "name": c,
+            "dtype": str(frame[c].dtype),
+            "distinct": int(frame[c].dropna().nunique()),
+            "sample": [str(v) for v in frame[c].dropna().unique()[:5]],
+            "attribute": assessed[c],
+        }
+        for c in columns
+    ]
     return {
         "rows": int(len(frame)),
-        "columns": [
-            {
-                "name": c,
-                "dtype": str(frame[c].dtype),
-                "distinct": int(frame[c].dropna().nunique()),
-                "sample": [str(v) for v in frame[c].dropna().unique()[:5]],
-            }
-            for c in columns
-        ],
+        "fileSha256": hashlib.sha256(data).hexdigest(),
+        "columns": described,
         "suggested": {"outcome": outcome, "prediction": prediction, "score": score, "attributes": attributes},
+        "attributeSource": source,
+        "confirmedBy": confirmed_by,
+        "confirmedAt": confirmed_at,
+        "previousRunUnconfirmed": previous_unconfirmed,
+        "needsBinning": [{"name": c["name"], "distinct": c["distinct"]} for c in described if c["attribute"]["status"] == "too_many_values"],
+        "uncoveredGrounds": uncovered_grounds(attributes, described),
+    }
+
+
+def _and(items: List[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def confirm_attributes(
+    inspection: Dict[str, Any],
+    attributes: List[str],
+    *,
+    via_ui: bool,
+    actor: str,
+    now: str,
+    confirm_sha256: Optional[str] = None,
+    removal_reason: Optional[str] = None,
+    uncovered_reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    """The attribute confirmation stored with a run, against the suggestion recomputed from the same bytes.
+
+    A run from the UI (``via_ui``) is a person confirming: the file must be the one they saw, and unticking a
+    suggestion or leaving a ground uncovered needs a reason. API and CLI runs are recorded as not confirmed.
+    """
+    suggested = inspection["suggested"]["attributes"]
+    removed = [a for a in suggested if a not in attributes]
+    grounds = uncovered_grounds(attributes, inspection["columns"])
+    removal = (removal_reason or "").strip() or None
+    uncovered = (uncovered_reason or "").strip() or None
+    if via_ui:
+        if (confirm_sha256 or "").strip().lower() != inspection["fileSha256"]:
+            raise FairnessRunError("The file changed since you confirmed it")
+        if removed and len(removal or "") < REASON_MIN_CHARS:
+            raise FairnessRunError(f"You unticked {_and(removed)} from the suggested protected attributes; say why")
+        if grounds and len(uncovered or "") < REASON_MIN_CHARS:
+            raise FairnessRunError(f"Say where {_and(grounds)} are tested, or why they don't apply")
+    return {
+        "via": "ui" if via_ui else "api",
+        "confirmed": via_ui,
+        "suggested": suggested,
+        "suggestedReasons": {c["name"]: c["attribute"]["basis"] for c in inspection["columns"] if c["name"] in suggested},
+        "source": inspection["attributeSource"],
+        "attributes": attributes,
+        "added": [a for a in attributes if a not in suggested],
+        "removed": removed,
+        "removalReason": removal,
+        "uncoveredGrounds": grounds,
+        "uncoveredReason": uncovered,
+        "fileSha256": inspection["fileSha256"],
+        "confirmedBy": actor if via_ui else None,
+        "confirmedAt": now if via_ui else None,
     }
 
 

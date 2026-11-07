@@ -1,5 +1,6 @@
 """First verdict: CSV in, measured evidence and a gate out."""
 
+import hashlib
 import io
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,105 @@ def test_inspect_suggests_a_mapping():
     assert out["suggested"]["prediction"] == "prediction"
     assert out["suggested"]["score"] == "score"
     assert set(out["suggested"]["attributes"]) == {"gender", "region"}
+    assert out["attributeSource"] == "inferred" and out["previousRunUnconfirmed"] is False
+    by_name = {c["name"]: c["attribute"] for c in out["columns"]}
+    assert by_name["gender"]["basis"] == 'Name matches "gender", and the values look like gender'
+    assert by_name["applicant_id"]["status"] is None and by_name["label"]["status"] is None
+
+
+def test_attribute_hints_match_whole_tokens():
+    from src.application.services.fairness_run_service import _attribute_hint
+
+    for name in ("statement_date", "mortgage", "usage", "sussex", "customer_tier", "premium_tier", "category", "agent_id"):
+        assert _attribute_hint(name) is None, name
+    for name, hint in (("tier", "tier"), ("CityTier", "city_tier"), ("applicant_age_band", "age_band"), ("dateOfBirth", "date_of_birth"), ("DOB", "dob"), ("home_state", "state"), ("maritalStatus", "marital")):
+        assert _attribute_hint(name) == hint, name
+
+
+def test_inspect_reads_values_flags_binning_and_lists_uncovered_grounds():
+    rng = np.random.default_rng(5)
+    n = 200
+    frame = pd.DataFrame({
+        "statement_date": [f"2026-{1 + i % 12:02d}-{1 + i % 28:02d}" for i in range(n)],
+        "customer_tier": rng.choice(["basic", "silver", "gold"], size=n),
+        "CityTier": rng.choice(["1", "2", "3"], size=n),
+        "applicantAgeBand": rng.choice(["18-25", "26-35", "36-45"], size=n),
+        "dateOfBirth": [f"19{50 + i % 50}-01-{1 + i % 28:02d}" for i in range(n)],
+        "cat": rng.choice(["GEN", "OBC", "SC", "ST"], size=n),
+        "sx": rng.choice(["M", "F"], size=n),
+        "label": rng.integers(0, 2, size=n),
+        "prediction": rng.integers(0, 2, size=n),
+    })
+    data = frame.to_csv(index=False).encode()
+    out = inspect_csv(data)
+    attr = {c["name"]: c["attribute"] for c in out["columns"]}
+    assert out["fileSha256"] == hashlib.sha256(data).hexdigest()
+    assert out["suggested"]["attributes"] == ["CityTier", "applicantAgeBand", "cat", "sx"]
+    assert attr["cat"]["basis"] == "The values look like reservation categories"
+    assert attr["sx"]["basis"] == "The values look like gender"
+    assert attr["customer_tier"] == {"status": "possible", "basis": attr["customer_tier"]["basis"], "ground": None} and "Tick it only if" in attr["customer_tier"]["basis"]
+    assert attr["statement_date"]["status"] is None
+    assert attr["dateOfBirth"]["status"] == "too_many_values" and out["needsBinning"] == [{"name": "dateOfBirth", "distinct": 200}]
+    assert out["uncoveredGrounds"] == ["religion", "disability", "language", "marital status"]
+    # Nothing that looks protected: no fallback guess, the person chooses.
+    plain = inspect_csv(frame[["customer_tier", "label", "prediction"]].to_csv(index=False).encode())
+    assert plain["suggested"]["attributes"] == [] and plain["attributeSource"] == "none"
+
+
+def test_inspect_reuses_the_last_runs_attributes():
+    data = _csv()
+    older = inspect_csv(data, {"mapping": {"attributes": ["gender", "dropped_column"]}})
+    assert older["suggested"]["attributes"] == ["gender"] and older["attributeSource"] == "confirmed"
+    assert older["previousRunUnconfirmed"] is True and older["confirmedBy"] is None
+    region = next(c["attribute"] for c in older["columns"] if c["name"] == "region")
+    assert region["status"] == "possible" and region["basis"].endswith("not used in the last run")
+    confirmed = inspect_csv(data, {"attribute_confirmation": {"confirmed": True, "attributes": ["region"], "confirmedBy": "risk.officer", "confirmedAt": "2026-11-01T00:00:00+00:00"}})
+    assert confirmed["suggested"]["attributes"] == ["region"] and confirmed["confirmedBy"] == "risk.officer" and confirmed["previousRunUnconfirmed"] is False
+    assert "gender" in confirmed["uncoveredGrounds"]
+
+
+def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it():
+    client = TestClient(app, client=(f"conf-{uuid.uuid4().hex[:8]}", 50000), headers=auth_headers())
+    ws = client.post("/api/v1/ai-governance/workspaces", json={"name": "Confirm ws", "owner": "owner"}).json()
+    sid = client.post("/api/v1/ai-governance/systems", json={"workspace_id": ws["id"], "name": "Confirmed", "owner": "owner", "risk_tier": "medium", "lifecycle_stage": "assess"}).json()["id"]
+    base = f"/api/v1/ai-governance/systems/{sid}"
+    data = _csv()
+    inspected = client.post(f"{base}/fairness-runs/inspect", files={"file": ("p.csv", data, "text/csv")}).json()
+    assert inspected["attributeSource"] == "inferred" and inspected["fileSha256"] == hashlib.sha256(data).hexdigest()
+
+    def run(**form):
+        fields = {"outcome": "label", "prediction": "prediction", "attributes": "gender", "confirm": "1", "confirm_sha256": inspected["fileSha256"], **form}
+        return client.post(f"{base}/fairness-runs", files={"file": ("p.csv", data, "text/csv")}, data=fields)
+
+    assert run(confirm_sha256="0" * 64).json()["detail"] == "The file changed since you confirmed it"
+    assert run().json()["detail"] == "You unticked region from the suggested protected attributes; say why"
+    assert run(removal_reason="too short").status_code == 422
+    uncovered = run(removal_reason="Region only routes cases to branch teams")
+    assert uncovered.status_code == 422 and uncovered.json()["detail"].startswith("Say where age, caste or social category,")
+    ok = run(removal_reason="Region only routes cases to branch teams", uncovered_reason="Not collected for this product")
+    assert ok.status_code == 200, ok.text
+    summary = ok.json()["confirmation"]
+    assert summary["confirmed"] is True and summary["by"] == "admin@test.invalid" and summary["attributes"] == ["gender"]
+    assert "region" in summary["notTested"] and "gender" not in summary["notTested"]
+    assert client.get(f"{base}/fairness-runs").json()[0]["confirmation"] == summary
+
+    stored = next(e for e in client.get(f"{base}/evidence").json() if e["id"] == ok.json()["evidenceId"])["metadata"]
+    record = stored["attribute_confirmation"]
+    assert stored["file_sha256"] == inspected["fileSha256"] == record["fileSha256"]
+    assert record["via"] == "ui" and record["source"] == "inferred" and set(record["suggested"]) == {"gender", "region"}
+    assert record["removed"] == ["region"] and record["added"] == [] and record["removalReason"].startswith("Region only")
+    assert record["suggestedReasons"]["region"] == 'Name matches "region"' and record["uncoveredReason"] == "Not collected for this product"
+
+    again = client.post(f"{base}/fairness-runs/inspect", files={"file": ("q.csv", data, "text/csv")}).json()
+    assert again["attributeSource"] == "confirmed" and again["suggested"]["attributes"] == ["gender"]
+    assert again["confirmedBy"] == "admin@test.invalid" and again["previousRunUnconfirmed"] is False
+
+    # An API or CLI run is never refused for reasons, and is recorded as not confirmed by a person.
+    api = client.post(f"{base}/fairness-runs", files={"file": ("p.csv", data, "text/csv")}, data={"outcome": "label", "prediction": "prediction", "attributes": "region"})
+    assert api.status_code == 200, api.text
+    assert api.json()["confirmation"]["confirmed"] is False and api.json()["confirmation"]["by"] is None
+    last = client.post(f"{base}/fairness-runs/inspect", files={"file": ("q.csv", data, "text/csv")}).json()
+    assert last["suggested"]["attributes"] == ["region"] and last["previousRunUnconfirmed"] is True and last["confirmedBy"] is None
 
 
 def test_run_measures_every_metric_with_intervals():
