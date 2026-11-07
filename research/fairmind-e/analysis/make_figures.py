@@ -260,7 +260,7 @@ def figure_mitigations(path: Path, out: Path) -> None:
     # accounting group high; label each where it actually is.
     ax.text(floor - 4, len(physical) - 0.32, "physical reruns", fontsize=6.4,
             color=MUTED, style="italic")
-    ax.text(floor - 4, len(entries) - 0.72, "accounting scenarios (hatched, no rerun)",
+    ax.text(floor - 4, len(entries) - 0.72, "placeholder factors, illustrative only",
             fontsize=6.4, color=MUTED, style="italic")
     ax.set_title("Mitigation outcomes, separated by what was actually executed",
                  loc="left", fontsize=7.5, color=INK, pad=6)
