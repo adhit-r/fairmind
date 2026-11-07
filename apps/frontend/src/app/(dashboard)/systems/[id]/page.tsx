@@ -5,6 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
+import { Pill, cap } from '@/components/packs/parts'
+import { tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
@@ -86,6 +89,7 @@ function Action({ children, onClick, href, primary = true, disabled }: { childre
 function Stage({ step, status, children, actions }: { step: (typeof JOURNEY)[number]; status: StageStatus; children: ReactNode; actions: ReactNode }) {
   return (
     <section
+      id={step.key}
       aria-label={step.label}
       className={cn('fm-card grid gap-4 p-5 lg:grid-cols-[180px_minmax(0,1fr)_auto] lg:items-start', status === 'upcoming' && 'opacity-80')}
     >
@@ -118,12 +122,14 @@ export default function SystemFilePage() {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest } = useSystemFile(id)
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh, requestDecision, recordDecision, inspectCsv, runFairness, runMonitoring, saveMonitoringPolicy, attest } = useSystemFile(id)
+  const { confirm: confirmApplicability, acceptOverride } = useApplicability()
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [attesting, setAttesting] = useState<AttestableCheck | null>(null)
   const [conditioning, setConditioning] = useState(false)
+  const [confirmingTier, setConfirmingTier] = useState(false)
 
   const open = (href: string) => {
     if (id) setSelectedSystemId(id)
@@ -175,6 +181,11 @@ export default function SystemFilePage() {
   const latestMonitoring = monitoringRuns[0]
   const seal = seals[0]
   const envStatus = typeof env.data?.recommendation === 'string' ? env.data.recommendation : env.data?.recommendation?.status
+  const applicability = s?.applicability ?? null
+  const awaitingSecond = !!applicability?.tierBelowSuggestion && !applicability.overrideAcceptedBy
+  // explain arrives with the gate's explanation fields; older gate payloads have none.
+  const tierNote = (gate as (NonNullable<typeof gate> & { explain?: { tierNote?: string | null } }) | null)?.explain?.tierNote ?? null
+  const subline = 'block whitespace-normal text-[11.5px] leading-snug text-[var(--fm-ink3)]'
 
   return (
     <div className="grid gap-4">
@@ -188,7 +199,27 @@ export default function SystemFilePage() {
           <div className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
             <Fact label="Owner" value={s?.owner || 'Unassigned'} />
             <Fact label="Business line" value={line || 'Unassigned'} />
-            <Fact label="Risk tier" value={<span className="capitalize">{s?.riskTier ?? ''}</span>} />
+            <Fact
+              label="Risk tier"
+              value={
+                <>
+                  <span className="capitalize">{s?.riskTier ?? ''}</span>
+                  {s?.riskTier === 'critical' && !tierNote && ' (read as high by the gate)'}
+                  {s && (
+                    <span className={subline}>
+                      {!applicability ? (
+                        <span className="mt-0.5 inline-block"><Pill tone="you">Not confirmed</Pill></span>
+                      ) : applicability.tierBelowSuggestion ? (
+                        <span className="text-[#a14d00]">Below the suggested {cap(applicability.suggestedTier)}</span>
+                      ) : (
+                        `Suggested ${cap(applicability.suggestedTier)}, confirmed by ${applicability.confirmedBy} on ${when(applicability.confirmedAt)}`
+                      )}
+                    </span>
+                  )}
+                  {tierNote && <span className={subline}>{tierNote}</span>}
+                </>
+              }
+            />
             <Fact label="Source" value={source === 'mlflow' ? 'MLflow registry' : source === 'github' ? 'GitHub' : 'Registered manually'} />
           </div>
         </div>
@@ -214,13 +245,40 @@ export default function SystemFilePage() {
 
       {actionError && <p className="rounded-[10px] bg-[#fde9ea] px-3 py-2 text-[13px] text-[#b4232c]">{actionError}</p>}
 
-      <Stage step={JOURNEY[0]} status={statusOf('onboard')} actions={<>
-        <Action onClick={() => open('/tests')}>Run the first evaluation</Action>
+      <Stage step={JOURNEY[0]} status={statusOf('onboard')} actions={applicability ? <>
+        <Action href="#first-verdict">Run the first fairness test</Action>
+        <Action onClick={() => setConfirmingTier(!confirmingTier)} primary={false}>Change tier or rules</Action>
+      </> : <>
+        <Action onClick={() => setConfirmingTier(!confirmingTier)}>Confirm tier and rules</Action>
         <Action href="/integrations" primary={false}>Connect sources</Action>
       </>}>
         <Fact label="Registered" value={when(s?.createdAt) || ''} />
-        <Fact label="Workspace" value={s?.workspaceId ? 'Assigned' : 'None'} />
+        <Fact label="Rules it answers to" value={<span className="whitespace-normal">{applicability?.frameworks.length ? applicability.frameworks.map((f) => f.name).join(', ') : 'Not chosen'}</span>} />
+        <Fact label="Tier basis" value={<span className="whitespace-normal">{tierBasis(applicability)}</span>} />
         <Fact label="Record" value={s?.owner && line ? 'Owner and business line set' : 'Owner or business line missing'} />
+        {awaitingSecond && (
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2 xl:col-span-3">
+            <span className="text-[12.5px] text-[#a14d00]">Lowered tier awaits a second person</span>
+            <Action onClick={() => act('accept', async () => { await acceptOverride(id); await refresh() })} disabled={busy !== null} primary={false}>
+              {busy === 'accept' ? 'Accepting' : 'Accept the lower tier'}
+            </Action>
+          </div>
+        )}
+        {confirmingTier && s && (
+          <div className="rounded-[12px] border border-[var(--fm-line)] p-4 sm:col-span-2 xl:col-span-3">
+            <ApplicabilityForm
+              record={applicability}
+              currentTier={s.riskTier}
+              submitLabel="Confirm"
+              onCancel={() => setConfirmingTier(false)}
+              onSubmit={(body) => act('applicability', async () => {
+                await confirmApplicability(s.id, body)
+                setConfirmingTier(false)
+                await refresh()
+              })}
+            />
+          </div>
+        )}
       </Stage>
 
       <Stage step={JOURNEY[1]} status={statusOf('assess')} actions={<>
