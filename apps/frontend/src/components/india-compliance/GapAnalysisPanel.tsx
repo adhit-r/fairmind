@@ -55,21 +55,6 @@ const getSeverityColor = (severity: string) => {
   }
 }
 
-const getSeverityIcon = (severity: string) => {
-  switch (severity) {
-    case 'critical':
-      return ''
-    case 'high':
-      return '🟠'
-    case 'medium':
-      return '🟡'
-    case 'low':
-      return ''
-    default:
-      return ''
-  }
-}
-
 const getEffortColor = (effort: string) => {
   switch (effort) {
     case 'low':
@@ -176,7 +161,6 @@ export const GapAnalysisPanel: React.FC<GapAnalysisPanelProps> = ({
             <Card key={section.severity}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <span>{getSeverityIcon(section.severity)}</span>
                   {section.label}
                 </CardTitle>
                 <CardDescription>
@@ -189,7 +173,7 @@ export const GapAnalysisPanel: React.FC<GapAnalysisPanelProps> = ({
                     <CollapsibleTrigger asChild>
                       <button
                         onClick={() => toggleGap(gap.control_id)}
-                        className={`w-full p-4 rounded-lg border-2 text-left transition-colors ${getSeverityColor(gap.severity)} hover:opacity-80`}
+                        className={`w-full p-4 rounded-lg border text-left transition-colors ${getSeverityColor(gap.severity)} hover:opacity-80`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">

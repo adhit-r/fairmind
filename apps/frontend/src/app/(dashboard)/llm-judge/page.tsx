@@ -62,7 +62,7 @@ export default function LLMJudgePage() {
       </div>
 
       {/* Info Alert */}
-      <Alert className="border-2 border-blue-500 bg-blue-50">
+      <Alert className="border border-blue-500 bg-blue-50">
         <IconInfoCircle className="h-5 w-5 text-blue-600" />
         <AlertDescription className="text-blue-900">
           <strong>New Feature:</strong> LLM-as-Judge evaluation is now available. Your text is evaluated by
@@ -75,7 +75,7 @@ export default function LLMJudgePage() {
         // Input Phase
         <div className="space-y-6">
           {modelsError && (
-            <Alert className="border-2 border-red-500 bg-red-50">
+            <Alert className="border border-red-500 bg-red-50">
               <AlertDescription className="text-red-900">
                 Failed to load available models. Please refresh the page.
               </AlertDescription>
@@ -116,7 +116,7 @@ export default function LLMJudgePage() {
           </div>
 
           {/* FAQ */}
-          <div className="bg-gray-50 border-2 border-gray-300 p-6 rounded space-y-4">
+          <div className="bg-gray-50 border border-gray-300 p-6 rounded space-y-4">
             <h3 className="font-bold text-lg">Frequently Asked Questions</h3>
 
             <div className="space-y-3">
@@ -261,7 +261,7 @@ export default function LLMJudgePage() {
           </div>
 
           {/* Next Steps */}
-          <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-400 p-6 rounded space-y-4">
+          <div className="bg-green-50 border border-green-400 p-6 rounded-[14px] space-y-4">
             <h3 className="font-bold text-lg">
               <IconArrowRight className="w-5 h-5 inline mr-2" />
               Next Steps

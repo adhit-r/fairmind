@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api/api-client";
-import { IconPlus, IconRefresh, IconCircleCheck } from "@tabler/icons-react";
+import { IconPlus, IconRefresh, IconCircleCheck, IconCircleX, IconDownload } from "@tabler/icons-react";
 
 interface SystemStatus {
   scheduler_running: boolean;
@@ -59,7 +59,7 @@ export default function ComplianceAutomationPage() {
       <div className="min-w-0">
         <div className="mx-auto max-w-7xl">
           <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
+            <div className="h-12 w-12 animate-spin rounded-full border border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
           </div>
         </div>
       </div>
@@ -98,9 +98,9 @@ export default function ComplianceAutomationPage() {
                 <div className="mt-2 text-sm font-semibold text-gray-600">Active Schedules</div>
                 <div className="mt-1 text-xs text-gray-500">
                   {status.scheduler_running ? (
-                    <span className="text-green-600">✓ Scheduler Running</span>
+                    <span className="inline-flex items-center gap-1 text-green-600"><IconCircleCheck className="h-3.5 w-3.5" aria-hidden /> Scheduler Running</span>
                   ) : (
-                    <span className="text-red-600">✗ Scheduler Stopped</span>
+                    <span className="inline-flex items-center gap-1 text-red-600"><IconCircleX className="h-3.5 w-3.5" aria-hidden /> Scheduler Stopped</span>
                   )}
                 </div>
               </div>
@@ -132,7 +132,7 @@ export default function ComplianceAutomationPage() {
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 rounded-lg border-2 border-red-600 bg-red-50 p-4">
+          <div className="mb-6 rounded-lg border border-red-600 bg-red-50 p-4">
             <p className="text-red-800 font-semibold">{error}</p>
           </div>
         )}
@@ -253,7 +253,7 @@ function SchedulesSection() {
       )}
 
       {schedules.length === 0 ? (
-        <div className="rounded-lg border-2 border-gray-300 bg-gray-50 p-8 text-center">
+        <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
           <p className="text-gray-600">No schedules configured. Create one to get started.</p>
         </div>
       ) : (
@@ -320,7 +320,7 @@ function ViolationsSection() {
 
   if (violations.length === 0) {
     return (
-      <div className="rounded-lg border-2 border-green-600 bg-green-50 p-8 text-center">
+      <div className="rounded-lg border border-green-600 bg-green-50 p-8 text-center">
         <IconCircleCheck size={48} className="mx-auto mb-4 text-green-600" />
         <p className="text-lg font-bold text-green-800">No Active Violations</p>
         <p className="mt-2 text-green-700">Great! Your systems are in compliance.</p>
@@ -335,7 +335,7 @@ function ViolationsSection() {
         {violations.map((violation) => (
           <div
             key={violation.id}
-            className={`rounded-lg border-2 p-4 ${getSeverityColor(violation.severity)}`}
+            className={`rounded-lg border p-4 ${getSeverityColor(violation.severity)}`}
           >
             <div className="flex items-start justify-between">
               <div>
@@ -360,7 +360,7 @@ function RemediationSection() {
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold text-black">Remediation Plans</h2>
-      <div className="rounded-lg border-2 border-gray-300 bg-gray-50 p-8 text-center">
+      <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
         <p className="text-gray-600">Remediation plans will appear here when violations are detected.</p>
         <p className="mt-2 text-sm text-gray-500">
           AI-generated step-by-step guidance for addressing compliance gaps.
@@ -397,7 +397,7 @@ function ReportsSection() {
     <div>
       <h2 className="mb-6 text-2xl font-bold text-black">Generated Reports</h2>
       {reports.length === 0 ? (
-        <div className="rounded-lg border-2 border-gray-300 bg-gray-50 p-8 text-center">
+        <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
           <p className="text-gray-600">No reports generated yet. Create a schedule to get started.</p>
         </div>
       ) : (
@@ -422,7 +422,7 @@ function ReportsSection() {
                     {new Date(report.generated_at).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4">
-                    <button className="text-blue-600 font-bold hover:underline">📥 Download</button>
+                    <button className="inline-flex items-center gap-1 text-blue-600 font-bold hover:underline"><IconDownload className="h-4 w-4" aria-hidden /> Download</button>
                   </td>
                 </tr>
               ))}

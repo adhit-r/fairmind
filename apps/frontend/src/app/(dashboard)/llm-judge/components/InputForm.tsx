@@ -133,7 +133,7 @@ export function InputForm({
 
       {/* Errors */}
       {(error || localError) && (
-        <Alert className="border-2 border-red-500 bg-red-50">
+        <Alert className="border border-red-500 bg-red-50">
           <IconAlertTriangle className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
             {localError || error?.message}
@@ -312,9 +312,9 @@ export function InputForm({
       </div>
 
       {/* Info Box */}
-      <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded">
+      <div className="bg-blue-50 border border-blue-200 p-4 rounded">
         <p className="text-xs text-blue-900">
-          <strong>💡 Tip:</strong> This evaluation sends your text to the selected judge model for bias analysis.
+          <strong>Tip:</strong> This evaluation sends your text to the selected judge model for bias analysis.
           The model will evaluate your text across the selected bias categories and provide detailed reasoning
           and recommendations.
         </p>

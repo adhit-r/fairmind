@@ -116,7 +116,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
 
   return (
     <Card
-      className={`border-2 ${severityStyle.border} p-6 space-y-6 ${severityStyle.bg}`}
+      className={`border ${severityStyle.border} p-6 space-y-6 ${severityStyle.bg}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -129,7 +129,7 @@ export function BiasScoreCard({ result }: BiasScoreCardProps) {
             {categoryLabel} Bias
           </p>
         </div>
-        <Badge variant="outline" className={`border-2 font-bold text-lg px-3 py-1 capitalize`}>
+        <Badge variant="outline" className={`border font-bold text-lg px-3 py-1 capitalize`}>
           {getScoreInterpretation(result.bias_score)}
         </Badge>
       </div>
