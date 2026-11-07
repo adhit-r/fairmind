@@ -1250,7 +1250,8 @@ async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Se
             "owner": request.owner,
             "risk_tier": request.risk_tier,
             "lifecycle_stage": request.lifecycle_stage,
-            "metadata_json": json.dumps(request.metadata),
+            # applicability is written only by PUT /systems/{id}/applicability, never taken from the client.
+            "metadata_json": json.dumps({k: v for k, v in request.metadata.items() if k != "applicability"}),
             "created_at": now,
             "updated_at": now,
         },

@@ -186,6 +186,21 @@ def test_confirm_sets_the_tier_keeps_metadata_and_records_evidence():
     assert stored["content"] == record
 
 
+def test_create_ignores_a_client_sent_applicability_record():
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    ws = client.post(f"{GOV}/workspaces", json={"name": "Applicability ws", "owner": "owner"}).json()
+    forged = {"tier": "low", "confirmedBy": "someone-else@test.invalid", "tierBelowSuggestion": True, "overrideAcceptedBy": "someone-else@test.invalid"}
+    created = client.post(
+        f"{GOV}/systems",
+        json={"workspace_id": ws["id"], "name": "Loan scoring", "risk_tier": "low", "lifecycle_stage": "onboard",
+              "metadata": {"business_line": "retail lending", "applicability": forged}},
+    )
+    assert created.status_code == 200, created.text
+    system = client.get(f"{GOV}/systems/{created.json()['id']}").json()
+    assert system["applicability"] is None and "applicability" not in system["metadata"]
+    assert system["metadata"]["business_line"] == "retail lending"
+
+
 def test_confirm_refusals():
     client = _client(str(uuid.uuid4()), "owner@test.invalid")
     sid = _system(client)
@@ -223,7 +238,9 @@ def test_a_lower_tier_needs_a_second_person():
     record = accepted.json()["applicability"]
     assert record["overrideAcceptedBy"] == "reviewer@test.invalid" and record["overrideAcceptedAt"]
     assert record["evidenceId"] == lowered["evidenceId"] and accepted.json()["gate"]["riskTier"] == "medium"
-    assert owner.get(f"{GOV}/systems/{sid}").json()["applicability"] == record
+    system = owner.get(f"{GOV}/systems/{sid}").json()
+    assert system["applicability"] == record and system["riskTier"] == "medium"
+    assert system["metadata"]["business_line"] == "retail lending" and system["metadata"]["source"] == "onboard"
     types = [e["evidenceType"] for e in owner.get(f"{GOV}/systems/{sid}/evidence").json()]
     assert types.count("applicability_override_accepted") == 1 and types.count("applicability_decision") == 1
     assert reviewer.post(accept).status_code == 409
