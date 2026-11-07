@@ -9,15 +9,22 @@ TARGETS=(apps/backend apps/frontend apps/website apps/docs)
 
 violations=0
 for t in "${TARGETS[@]}"; do
-  if [ -d "$t" ]; then
-    if rg -n "$PATTERN" "$t" \
-      --glob '!**/archive/**' \
-      --glob '!**/node_modules/**' \
-      --glob '!**/.next/**' \
-      --glob '!**/dist/**' \
-      --glob '!**/*.md'; then
-      violations=1
-    fi
+  if [ ! -d "$t" ]; then
+    echo "Archive check target missing: $t"
+    exit 1
+  fi
+  rc=0
+  rg -n "$PATTERN" "$t" \
+    --glob '!**/archive/**' \
+    --glob '!**/node_modules/**' \
+    --glob '!**/.next/**' \
+    --glob '!**/dist/**' \
+    --glob '!**/*.md' || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    violations=1
+  elif [ "$rc" -ge 2 ]; then
+    echo "Archive check could not search $t (rg exit $rc)."
+    exit 1
   fi
 done
 

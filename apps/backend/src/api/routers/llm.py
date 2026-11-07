@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from config.settings import settings
-from src.application.services.api_boundary_dependencies import grok_cli
+from src.application.services.llm_runtime import grok_cli
 
 TIMEOUT_S = 75  # under Cloudflare's 100 s edge limit, so a slow model fails here and not at the edge
 

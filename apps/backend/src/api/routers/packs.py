@@ -16,7 +16,7 @@ from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
-from src.application.services.api_boundary_dependencies import grok_cli
+from src.application.services.llm_runtime import grok_cli
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
