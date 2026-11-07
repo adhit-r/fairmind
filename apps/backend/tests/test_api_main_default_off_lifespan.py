@@ -7,6 +7,7 @@ from pathlib import Path
 import uuid
 
 from fastapi.testclient import TestClient
+from fastapi.routing import iter_route_contexts
 import pytest
 
 import api.main as main_module
@@ -139,7 +140,7 @@ def test_default_off_main_lifespan_keeps_legacy_plan_write_and_read_available(
             main_module.app,
             headers={"Authorization": f"Bearer {_token(user_id)}"},
         ) as client:
-            assert not any("/evaluation-v2/" in route.path for route in main_module.app.routes)
+            assert not any("/evaluation-v2/" in route.path for route in iter_route_contexts(main_module.app.routes))
             created = client.post(plans_url, json=_plan_payload())
             assert created.status_code == 201, created.text
             listed = client.get(plans_url)

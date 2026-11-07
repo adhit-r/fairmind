@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.routing import iter_route_contexts
 from contextlib import asynccontextmanager
 import asyncio
 import logging
@@ -130,8 +131,8 @@ async def lifespan(app: FastAPI):
     logger.info("Application startup complete")
     
     # Log all registered routes
-    for route in app.routes:
-        if hasattr(route, "methods"):
+    for route in iter_route_contexts(app.routes):
+        if route.methods:
             logger.info(f"Route: {route.path} Methods: {route.methods}")
     
     yield

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fastapi.routing import iter_route_contexts
 
 from config.auth import TokenData, TokenType, UserRole, get_current_active_user
 
@@ -45,7 +46,7 @@ def test_organization_list_supplies_effective_custom_role_permissions(monkeypatc
 
     assert any(
         route.path == "/api/v1/organizations" and "GET" in route.methods
-        for route in production_app.routes
+        for route in iter_route_contexts(production_app.routes)
     )
 
     database = OrganizationListDatabase()

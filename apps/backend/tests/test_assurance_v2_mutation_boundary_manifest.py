@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, RouteContext, iter_route_contexts
 from sqlalchemy.orm import Session
 
 from api.composition.evaluation_workbench import (
@@ -352,7 +352,7 @@ MUTATION_MANIFEST = (
 )
 
 
-def _mounted_mutation_routes() -> tuple[APIRoute, ...]:
+def _mounted_mutation_routes() -> tuple[RouteContext, ...]:
     """Mount the V2 child routers exactly as ``api.main`` does when enabled."""
 
     app = FastAPI()
@@ -373,8 +373,8 @@ def _mounted_mutation_routes() -> tuple[APIRoute, ...]:
         app.include_router(route_router, prefix=API_PREFIX)
     return tuple(
         route
-        for route in app.routes
-        if isinstance(route, APIRoute)
+        for route in iter_route_contexts(app.routes)
+        if isinstance(route.original_route, APIRoute)
         and route.path.startswith(f"{API_PREFIX}/organizations/{{org_id}}")
         and route.methods == {"POST"}
     )
@@ -507,7 +507,7 @@ def _mutation_command_uses_operation_parameter(node: ast.AST) -> bool:
     return False
 
 
-def _route_by_endpoint() -> dict[str, APIRoute]:
+def _route_by_endpoint() -> dict[str, RouteContext]:
     return {route.endpoint.__name__: route for route in _mounted_mutation_routes()}
 
 
