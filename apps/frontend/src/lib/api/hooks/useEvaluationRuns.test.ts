@@ -242,10 +242,14 @@ describe('evaluation runs controller', () => {
     assert.equal(snapshot.error, null)
   })
 
-  test('rejects unsupported legacy plan and run contract versions', async () => {
+  test('rejects missing or unsupported legacy plan and run contract versions', async () => {
+    const unversionedPlan: Record<string, unknown> = { ...plan() }
+    const unversionedRun: Record<string, unknown> = { ...run() }
+    delete unversionedPlan.contractVersion
+    delete unversionedRun.contractVersion
     const scenarios = [
       {
-        name: 'plan',
+        name: 'unsupported plan',
         plans: [{ ...plan(), contractVersion: '2.0.0' }],
         runs: [run()],
         affected: (controller: ReturnType<typeof createEvaluationRunsController>) => (
@@ -253,9 +257,25 @@ describe('evaluation runs controller', () => {
         ),
       },
       {
-        name: 'run',
+        name: 'unsupported run',
         plans: [plan()],
         runs: [{ ...run(), contractVersion: '2.0.0' }],
+        affected: (controller: ReturnType<typeof createEvaluationRunsController>) => (
+          controller.getSnapshot().runs
+        ),
+      },
+      {
+        name: 'unversioned plan',
+        plans: [unversionedPlan],
+        runs: [run()],
+        affected: (controller: ReturnType<typeof createEvaluationRunsController>) => (
+          controller.getSnapshot().plans
+        ),
+      },
+      {
+        name: 'unversioned run',
+        plans: [plan()],
+        runs: [unversionedRun],
         affected: (controller: ReturnType<typeof createEvaluationRunsController>) => (
           controller.getSnapshot().runs
         ),
