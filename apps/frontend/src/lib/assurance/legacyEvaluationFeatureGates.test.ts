@@ -11,25 +11,23 @@ test('legacy evaluation feature gates default-deny automatic enforcement, worker
   const gates = resolveLegacyEvaluationFeatureGates({})
 
   assert.deepEqual(gates, {
-    fairmindWorkerDelivery: false,
     legacyEvidenceLinking: false,
   })
   assert.deepEqual(allowedLegacyEnforcementModes(), ['advisory', 'human_approval'])
-  assert.deepEqual(allowedLegacyDeliveryModes(gates), ['external_provider', 'imported_report'])
+  assert.deepEqual(allowedLegacyDeliveryModes(), ['external_provider', 'imported_report'])
 })
 
-test('legacy automatic enforcement stays unavailable when the old environment flag is true', () => {
+test('retired automatic and worker environment flags cannot revive unsupported capabilities', () => {
   const retiredEnvironment = {
     automaticEnforcement: 'true',
-    fairmindWorkerDelivery: 'TRUE',
+    fairmindWorkerDelivery: 'true',
     legacyEvidenceLinking: '1',
   }
   const gates = resolveLegacyEvaluationFeatureGates(retiredEnvironment)
 
   assert.deepEqual(gates, {
-    fairmindWorkerDelivery: false,
     legacyEvidenceLinking: false,
   })
   assert.deepEqual(allowedLegacyEnforcementModes(), ['advisory', 'human_approval'])
-  assert.deepEqual(allowedLegacyDeliveryModes(gates), ['external_provider', 'imported_report'])
+  assert.deepEqual(allowedLegacyDeliveryModes(), ['external_provider', 'imported_report'])
 })

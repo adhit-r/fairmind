@@ -64,7 +64,7 @@ const deliveryModeLabels: Record<DeliveryMode, string> = {
 
 // The selects offer only the modes this deployment has switched on.
 const enabledEnforcementModes = allowedLegacyEnforcementModes()
-const enabledDeliveryModes = allowedLegacyDeliveryModes(legacyEvaluationFeatureGates)
+const enabledDeliveryModes = allowedLegacyDeliveryModes()
 
 const PLAN_TONE = { draft: 'you', active: 'done', archived: 'plain' } as const
 
