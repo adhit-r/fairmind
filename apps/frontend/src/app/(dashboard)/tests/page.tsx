@@ -63,7 +63,7 @@ const deliveryModeLabels: Record<DeliveryMode, string> = {
 }
 
 // The selects offer only the modes this deployment has switched on.
-const enabledEnforcementModes = allowedLegacyEnforcementModes(legacyEvaluationFeatureGates)
+const enabledEnforcementModes = allowedLegacyEnforcementModes()
 const enabledDeliveryModes = allowedLegacyDeliveryModes(legacyEvaluationFeatureGates)
 
 const PLAN_TONE = { draft: 'you', active: 'done', archived: 'plain' } as const
@@ -101,7 +101,11 @@ function preflightPresentation(plan: EvaluationPlan, preflight: EvaluationPrefli
   }
   return {
     canPrepareRun,
-    stateLabel: preflight.code === 'executor_unavailable' ? 'Executor unavailable' : 'Evidence link required',
+    stateLabel: preflight.code === 'automatic_enforcement_disabled'
+      ? 'Automatic enforcement unavailable'
+      : preflight.code === 'executor_unavailable'
+        ? 'Executor unavailable'
+        : 'Evidence link required',
     message: preflight.message,
     nextAction: preflight.nextAction,
   }
