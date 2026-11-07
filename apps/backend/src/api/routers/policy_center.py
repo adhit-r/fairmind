@@ -102,8 +102,8 @@ def enforce(
 
 
 @router.get("/evaluations")
-def latest_evaluations(membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)) -> list[dict]:
-    return PolicyService(db).latest_results(membership.org_id)
+def current_evaluations(membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)) -> list[dict]:
+    return PolicyService(db).current_results(membership.org_id)
 
 
 @router.get("/gate/{system_id}")
@@ -192,4 +192,4 @@ def policy_evaluations(
     policy_id: str, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
 ) -> list[dict]:
     _found(PolicyService(db).get(membership.org_id, policy_id, membership.user_id))
-    return PolicyService(db).latest_results(membership.org_id, policy_id)
+    return PolicyService(db).current_results(membership.org_id, policy_id)

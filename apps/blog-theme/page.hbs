@@ -1,0 +1,23 @@
+{{!< default}}
+{{#post}}
+<div class="wrap article page">
+  <aside class="toc-col"></aside>
+  <article class="doc">
+    {{#match @page.show_title_and_feature_image}}
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a>{{> icon name="chevron" size="12"}}<span>{{title}}</span></nav>
+    <h1>{{title}}</h1>
+    {{#if custom_excerpt}}<p class="dek">{{custom_excerpt}}</p>{{/if}}
+    {{/match}}
+    {{#match slug "docket"}}
+    <section class="mod due wide" data-due="50" data-all hidden>
+      <header class="mh"><h2>Every tracked date</h2><span class="count">Counted from today</span></header>
+      <ol></ol>
+    </section>
+    {{/match}}
+    <div class="prose gh-content{{#match slug "docket"}} docket-text{{/match}}">
+      {{content}}
+    </div>
+  </article>
+  <aside class="side">{{> newsletter}}</aside>
+</div>
+{{/post}}

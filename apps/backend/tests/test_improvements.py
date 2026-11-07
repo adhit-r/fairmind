@@ -379,6 +379,7 @@ class TestIntegration:
                 role=token_data.role,
                 permissions=token_data.permissions,
                 token_type=token_data.token_type,
+                principal_kind=token_data.principal_kind,
             )
 
         monkeypatch.setattr(core_routes, "cache_manager", FakeCache())

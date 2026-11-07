@@ -66,7 +66,7 @@ export default function EvaluationsPage() {
   }
 
   const all = evals.data ?? []
-  const built = all.filter((e) => e.engine === 'Engine exists').length
+  const runs = all.filter((e) => e.runnable).length
   const readable = all.filter((e) => e.results).length
   const recorded = all.filter((e) => e.results && e.results.status !== 'not_run').length
 
@@ -75,7 +75,7 @@ export default function EvaluationsPage() {
       <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Evaluations' }]} />
       <Heading
         title="Evaluations"
-        lead={`${all.length} evaluations measure how your AI systems behave. ${built} have an engine that runs today. FairMind records results for ${readable} of them from your fairness, monitoring and environmental checks; ${recorded} have results so far, and a passing one marks the requirements it tests as tested.`}
+        lead={`${all.length} evaluations measure how your AI systems behave. FairMind runs ${runs} of them itself on files you upload, and records results for ${readable} in all, including your fairness, monitoring and environmental checks; ${recorded} have results so far, and a passing one marks the requirements it tests as tested.`}
       />
 
       <section aria-label="Filters" className="pk-card flex flex-wrap items-center gap-3 px-5 py-4">
@@ -149,7 +149,7 @@ export default function EvaluationsPage() {
                 {rows.map((e) => (
                   <tr key={e.id} id={e.id} className="scroll-mt-24 border-t border-[#15171a14] align-top">
                     <td className="max-w-[300px] py-[10px] pr-3">
-                      <b className="font-semibold">{e.name}</b>
+                      <Link href={`/compliance/evaluations/${e.id}`} className="font-semibold hover:underline">{e.name}</Link>
                       <div className={`mt-0.5 text-[12.5px] leading-snug ${MUTED}`}>{e.measures}</div>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         <Pill>{cap((catalogue.data?.pillars.find((p) => p.id === e.pillar)?.name ?? e.pillar.toLowerCase()))}</Pill>
@@ -164,7 +164,9 @@ export default function EvaluationsPage() {
                       ) : e.results.status === 'not_run' ? (
                         <div className="flex flex-col gap-1">
                           <span><ResultPill status="not_run" /></span>
-                          <span className={`text-[12px] leading-snug ${MUTED}`}>{HOW_TO_RUN}</span>
+                          <span className={`text-[12px] leading-snug ${MUTED}`}>
+                            {e.runnable ? <Link href={`/compliance/evaluations/${e.id}`} className="font-semibold underline">Run it on your files</Link> : HOW_TO_RUN}
+                          </span>
                         </div>
                       ) : (
                         <div className="flex flex-col gap-1.5">
@@ -183,8 +185,11 @@ export default function EvaluationsPage() {
                       )}
                     </td>
                     <td className="py-[10px] pr-3">
-                      <EnginePill engine={e.engine} />
-                      {e.codeLocation && <div className="mt-1 break-all font-mono text-[11px]">{e.codeLocation}</div>}
+                      {e.runnable ? (
+                        <Link href={`/compliance/evaluations/${e.id}`}><Pill tone="done" dot>Runs in FairMind</Pill></Link>
+                      ) : (
+                        <EnginePill engine={e.engine} />
+                      )}
                     </td>
                     <td className="max-w-[220px] py-[10px] pr-3">
                       <div>{e.pattern.name}</div>

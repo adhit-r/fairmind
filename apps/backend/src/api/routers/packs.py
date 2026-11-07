@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
 from api.routes import llm
+from src.application.services import eval_engines
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -420,6 +421,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "pattern": {"id": pattern.id, "name": pattern.name},
         "pack": _pack_ref(pack_id),
         "engine": ev.engine,
+        "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
         "codeLocation": ev.codeLocation,
         "tests": [
             {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}
@@ -553,6 +555,7 @@ async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depen
             "coveredAll": EVERY_PACK.count(fk),
             "coveredInstalled": org.count(fk),
             "contributingPacks": [p for p in PACKS if FRAMEWORK_KEYS[fk] & cat.PACK_DONE[p]],
+            "type": fw.type,
             "binding": fw.binding,
             **_framework_workflows(fk, installed, latest),
         }
@@ -652,6 +655,7 @@ async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), d
         "name": fw.name,
         "pillar": fw.pillar,
         "version": fw.version,
+        "type": fw.type,
         "binding": fw.binding,
         "status": fw.status,
         "active": len(keys),

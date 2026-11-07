@@ -16,6 +16,10 @@ inputs:
     description: Pass the job on a conditional go
     required: false
     default: "false"
+  require-approval:
+    description: Fail the job unless the system's release decision is approved (with or without conditions)
+    required: false
+    default: "false"
   predictions:
     description: Path to a predictions CSV. When set, a fairness test runs and is stored as evidence before the gate is read.
     required: false
@@ -37,14 +41,17 @@ inputs:
     required: false
     default: ""
   cli-source:
-    description: Where to install the CLI from (a path or a pip requirement)
+    description: Where to install the CLI from (a path or a pip requirement). Empty installs the CLI that ships with this action.
     required: false
-    default: "./apps/cli"
+    default: ""
 
 outputs:
   verdict:
     description: go, conditional_go or no_go
     value: ${{ steps.gate.outputs.verdict }}
+  approval:
+    description: The release decision, not_requested, pending, approved or rejected
+    value: ${{ steps.gate.outputs.approval }}
 
 runs:
   using: composite
@@ -56,7 +63,9 @@ runs:
       shell: bash
       env:
         CLI_SOURCE: ${{ inputs.cli-source }}
-      run: python -m pip install --quiet "$CLI_SOURCE"
+      # GitHub checks out the whole repository for `uses: owner/repo/path@ref`, so
+      # apps/cli sits three levels above the action in a customer's job and in this repo.
+      run: python -m pip install --quiet "${CLI_SOURCE:-$GITHUB_ACTION_PATH/../../../apps/cli}"
 
     - name: Run the fairness test
       if: inputs.predictions != ''
@@ -85,6 +94,7 @@ runs:
         FAIRMIND_API_KEY: ${{ inputs.api-key }}
         SYSTEM: ${{ inputs.system }}
         ALLOW_CONDITIONAL: ${{ inputs.allow-conditional }}
+        REQUIRE_APPROVAL: ${{ inputs.require-approval }}
       run: |
         set +e
         fairmind gate --system "$SYSTEM" --json > gate.json
@@ -92,9 +102,16 @@ runs:
         set -e
         if [ "$code" -eq 3 ]; then cat gate.json; exit 3; fi
         verdict=$(python -c 'import json; print(json.load(open("gate.json"))["verdict"])')
+        approval=$(python -c 'import json; print(json.load(open("gate.json")).get("approvalStatus", "not_reported"))')
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        echo "approval=$approval" >> "$GITHUB_OUTPUT"
         fairmind gate --system "$SYSTEM" || true
+        if [ "$REQUIRE_APPROVAL" = "true" ] && [ "$approval" != "approved" ]; then
+          echo "::error title=FairMind release gate::release decision is $approval for system $SYSTEM"
+          exit 1
+        fi
         if [ "$verdict" = "go" ]; then exit 0; fi
-        if [ "$verdict" = "conditional_go" ] && [ "$ALLOW_CONDITIONAL" = "true" ]; then exit 0; fi
+        # An approved conditional go passes require-approval: the reviewer accepted its conditions.
+        if [ "$verdict" = "conditional_go" ] && { [ "$ALLOW_CONDITIONAL" = "true" ] || [ "$REQUIRE_APPROVAL" = "true" ]; }; then exit 0; fi
         echo "::error title=FairMind release gate::$verdict for system $SYSTEM"
         exit 1

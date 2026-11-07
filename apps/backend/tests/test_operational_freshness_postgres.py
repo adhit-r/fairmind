@@ -62,6 +62,8 @@ def operational_freshness_session_factory(postgres_session_factory):
             {"schema": schema},
         )
         session.execute(text(MIGRATION_013G.read_text(encoding="utf-8")))
+        # The decision ORM maps 013l's grant column; this pre-013l schema only needs the column.
+        session.execute(text("ALTER TABLE governance_evaluation_decisions ADD COLUMN IF NOT EXISTS separation_override_grant_id TEXT"))
         session.commit()
     finally:
         session.close()

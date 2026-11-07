@@ -28,5 +28,6 @@
 
 - FairMind now uses Neon/PostgreSQL as the primary database target.
 - PostgreSQL is required (local, Docker, or a Neon branch). Create the schema with `uv run python scripts/setup_db.py`; check it with `uv run python scripts/setup_db.py verify`.
+- Framework, pack, workflow and evaluation reference data (51 frameworks incl. ISO 42001, NIST AI RMF, EU AI Act, RBI FREE-AI) ships in `src/api/routers/pack_catalogue_data/` and needs no seeding. To change it, edit `docs/product/FairMind_agentic_packs_catalogue_v2.3.xlsx` and run `uv run --with openpyxl python scripts/export_pack_catalogue.py ../../docs/product/FairMind_agentic_packs_catalogue_v2.3.xlsx src/api/routers/pack_catalogue_data/catalogue.json` (it also rewrites `workbook.json`, every sheet verbatim, and merges `additions.json`).
 - Tests need `FAIRMIND_TEST_POSTGRES_URL` pointing at a disposable server they may create databases on (never Neon).
 - Dataset and model file artifacts are stored locally unless a separate object storage adapter is configured.

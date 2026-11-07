@@ -8,6 +8,7 @@ import io
 import json
 import logging
 import hashlib
+import secrets
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone
 import pandas as pd
@@ -28,9 +29,7 @@ class DatasetStorageService:
     def _generate_dataset_id(self, user_id: str, filename: str) -> str:
         """Generate unique dataset ID"""
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
-        hash_input = f"{user_id}{filename}{timestamp}".encode()
-        hash_suffix = hashlib.md5(hash_input).hexdigest()[:8]
-        return f"ds_{timestamp}_{hash_suffix}"
+        return f"ds_{timestamp}_{secrets.token_hex(4)}"
     
     def _calculate_file_hash(self, content: bytes) -> str:
         """Calculate MD5 hash of file content"""

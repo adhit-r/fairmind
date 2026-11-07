@@ -96,6 +96,16 @@ export interface ReleaseGate {
   proven: number
   attested: number
   open: number
+  /** Published policy rules that fail for this system once released. */
+  policy?: { blocking: PolicyRuleFailure[]; warnings: PolicyRuleFailure[] }
+}
+
+export interface PolicyRuleFailure {
+  policyId: string
+  policyName: string
+  ruleId: string
+  ruleTitle: string
+  detail: string
 }
 
 export interface FairnessRunSummary {

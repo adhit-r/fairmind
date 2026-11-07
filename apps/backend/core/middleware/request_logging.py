@@ -98,14 +98,5 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             logger.clear_context()
     
     def _get_client_ip(self, request: Request) -> str:
-        """Get client IP address from request."""
-        # Check for forwarded headers (reverse proxy)
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        
+        """Get client IP address from request (see middleware.security.client_ip)."""
         return request.client.host if request.client else "unknown"

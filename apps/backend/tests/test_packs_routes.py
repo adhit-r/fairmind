@@ -245,6 +245,9 @@ def test_journeys_list_has_five_active_requirements_each(tmp_database):
     journeys = client.get(f"{PACKS}/journeys").json()
     assert journeys and all(j["active"] >= 5 for j in journeys)
     assert [j["name"] for j in journeys] == sorted(j["name"] for j in journeys)
+    assert all(j["type"] for j in journeys)
+    owasp = client.get(f"{PACKS}/journeys/OWASPLLM").json()
+    assert owasp["type"] == "Risk taxonomy"
     assert client.get(f"{PACKS}/journeys/nope").status_code == 404
 
 
@@ -657,7 +660,8 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
-    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"] is None  # no stored results to read yet
+    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"] is None  # no engine and no stored results to read
+    assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"]["status"] == "not_run"  # has an engine, not run yet
 
 
 def test_deciding_on_your_own_proposal_is_recorded_not_blocked(tmp_database):

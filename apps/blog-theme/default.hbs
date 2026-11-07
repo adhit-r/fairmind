@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="{{@site.locale}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{meta_title}}</title>
+<meta name="color-scheme" content="light dark">
+<link rel="preload" href="{{asset "fonts/literata-latin.woff2"}}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{asset "css/screen.css"}}">
+{{ghost_head}}
+</head>
+<body class="{{body_class}}">
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="{{@site.url}}">
+      <span class="name">{{@site.title}}</span>
+      <span class="sub">AI regulation guides from FairMind</span>
+    </a>
+    <button class="search" type="button" data-ghost-search aria-haspopup="dialog" aria-label="Search guides">{{> icon name="search"}}<span>Search guides, articles and controls</span></button>
+    <div class="acts">
+      <a class="act" href="{{@site.url}}/docket/" aria-label="Deadlines">{{> icon name="calendar" size="20"}}<span>Deadlines</span><b class="badge" data-due-badge hidden></b></a>
+      <a class="btn line" href="https://fairmind.xyz">FairMind</a>
+      {{#if @site.members_enabled}}{{#unless @member}}<a class="btn solid" href="#/portal/signup" data-portal="signup">Subscribe</a>{{/unless}}{{/if}}
+    </div>
+  </div>
+</header>
+{{navigation}}
+
+<main id="main">
+{{{body}}}
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div>
+      <span class="name">{{@site.title}}</span>
+      <p>{{@site.description}}</p>
+    </div>
+    <div>
+      <h2>Frameworks</h2>
+      <ul>{{#get "tags" filter="slug:[{{@custom.topic_tags}}]" limit="20"}}{{#foreach tags}}<li><a href="{{url}}">{{name}}</a></li>{{/foreach}}{{/get}}</ul>
+    </div>
+    <div>
+      <h2>Blog</h2>
+      <ul><li><a href="{{@site.url}}/docket/">Deadlines</a></li><li><a href="{{@site.url}}/rss/">RSS</a></li></ul>
+    </div>
+    <div>
+      <h2>FairMind</h2>
+      <ul><li><a href="https://fairmind.xyz">Product</a></li><li><a href="https://fairmind.xyz/request-access?utm_source=blog&utm_medium=footer&utm_campaign=blog">Request access</a></li></ul>
+    </div>
+  </div>
+  <div class="wrap small">Published by FairMind. Guides support readiness work and are not legal advice.</div>
+</footer>
+{{#get "pages" filter="slug:docket" limit="1"}}{{#foreach pages}}<template id="docket-src">{{content}}</template>{{/foreach}}{{/get}}
+<script src="{{asset "js/main.js"}}" defer></script>
+{{ghost_foot}}
+</body>
+</html>

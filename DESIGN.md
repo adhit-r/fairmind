@@ -210,7 +210,7 @@ These are the v2 trust-panel and API contract rules. A legacy response that does
 
 Every evidence detail view shows the exact scope before the result: organization, workspace, AI system, target version and digest, plan hash, suite version and digest, suite execution, lifecycle phase, execution depth, delivery source, evaluator identity and adapter version, and envelope/passport identifiers. Scope is part of the query key; when any scope identity changes, the prior panel clears before the next response is shown. Responses whose organization, system, plan, run, suite execution, target, or envelope does not match the requested scope are rejected and rendered as a bounded error.
 
-The v2 preview route is `/assurance/evaluations/:runId` and is gated independently by `NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED` and the backend `assurance_v2_enabled` flag. When either gate is off, the UI renders a disabled/unavailable state and does not fall back to v1 or fixture evidence.
+The v2 preview route is `/assurance/evaluations/:runId`. Its request boundary requires both frontend gates, `NEXT_PUBLIC_ASSURANCE_V2_UI_ENABLED` and `NEXT_PUBLIC_ASSURANCE_V2_RUN_UI_ENABLED`; when either frontend gate is off, the UI renders an explicit disabled state and makes no v2 run request. The API independently requires both backend gates, `assurance_v2_enabled` and `assurance_v2_runs_enabled`. The canonical app does not mount the run routes when either backend gate is off; direct or compatibility-router mounting also enforces a stable feature-disabled guard before endpoint authentication, request-body parsing, database access, or service composition. The client keeps any server rejection bounded as denied or unavailable, and no gate state falls back to v1 or fixture evidence.
 
 The trust panel keeps these states visible beside the three result axes:
 
@@ -234,6 +234,10 @@ The capability registry is the source for dashboard labels, documentation, websi
 | `retired` | New execution is rejected; historical evidence remains readable | Show retired and invalidation/freshness state | Historical evidence only |
 
 The current product remains an internal, default-off evidence-integrity foundation. It may claim governance planning, evidence ingestion, and reviewer workflow only after their respective release gates; it must not claim certification, automatic compliance, automatic enforcement, or “FairMind Verified.”
+
+Automatic-enforcement values remain part of the stored contract so historical plans and runs stay readable, but new legacy and Assurance V2 plans cannot select that mode. The retired legacy API and UI environment switches do not re-enable it.
+
+FairMind-worker delivery values also remain part of the stored contract for historical and V2 compatibility, but the legacy creation boundary never exposes or accepts them. The retired legacy API and UI environment switches do not re-enable worker delivery; historical worker-labelled plans stay readable while activation and run preparation remain blocked.
 
 ### Worker Security Envelope
 

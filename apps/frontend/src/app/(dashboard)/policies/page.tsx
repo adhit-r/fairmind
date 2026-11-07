@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { BTN, BTN_P, Empty, ErrorNote, Heading, Loading, MUTED, Pill, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Empty, ErrorNote, Heading, Loading, MUTED, Pill } from '@/components/packs/parts'
 import { OutcomePill, PolicyStatusPill } from '@/components/policies/PolicyPills'
 import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import {
@@ -85,14 +85,13 @@ function Enforcement({ evaluations, policies, onRun }: { evaluations: Evaluation
   const [busy, setBusy] = useState(false)
   const names = new Map(policies.map((p) => [p.id, p]))
   const failing = evaluations.filter((e) => e.outcome === 'fail')
-  const last = evaluations.reduce((acc, e) => (e.evaluatedAt > acc ? e.evaluatedAt : acc), '')
   return (
     <section aria-labelledby="enf" className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div>
           <h2 id="enf" className="m-0 text-lg font-semibold">Enforcement</h2>
           <span className={`text-[13px] ${MUTED}`}>
-            Published rules run against every AI system on publish and on demand.{last && ` Last run ${when(last)}.`}
+            Published rules checked against every AI system as its data stands now. A failing blocking rule stops the release approval. Running enforcement records these results for the audit trail.
           </span>
         </div>
         <button type="button" className={BTN} disabled={busy} onClick={async () => { setBusy(true); await onRun(); setBusy(false) }}>
@@ -125,40 +124,70 @@ function Enforcement({ evaluations, policies, onRun }: { evaluations: Evaluation
   )
 }
 
+function ControlList({ title, controls }: { title: string; controls: FrameworkCoverage['controls'] }) {
+  if (!controls.length) return null
+  return (
+    <details className="text-[13px]">
+      <summary className="cursor-pointer font-semibold">{controls.length} {title}</summary>
+      <ul className="m-0 mt-2 flex max-h-64 list-none flex-col gap-2 overflow-y-auto p-0">
+        {controls.map((c) => (
+          <li key={c.ref} className="flex flex-col gap-0.5">
+            <span><code className="text-[12px]">{c.externalId}</code> <span className={MUTED}>{c.title}</span></span>
+            {c.coveredBy.map((r) => (
+              <span key={`${r.policyId}:${r.ruleId}`} className={`text-[12px] ${MUTED}`}>
+                <Link href={`/policies/${r.policyId}`} className="underline">{r.policyName}</Link> / {r.ruleTitle}
+                {r.failingSystems ? `: failing on ${r.failingSystems} system${r.failingSystems === 1 ? '' : 's'}` : ''}
+              </span>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 function Coverage({ coverage }: { coverage: FrameworkCoverage[] }) {
   return (
     <section aria-labelledby="cov" className="flex flex-col gap-3.5">
       <div>
         <h2 id="cov" className="m-0 text-lg font-semibold">Framework coverage</h2>
-        <span className={`text-[13px] ${MUTED}`}>Framework controls that at least one policy rule maps to.</span>
+        <span className={`text-[13px] ${MUTED}`}>
+          Controls mapped to a published policy rule, and whether that rule holds on every system it applies to right now.
+        </span>
       </div>
       {!coverage.length ? (
         <Empty>No framework is imported yet. Import one under Frameworks to map policies to its controls.</Empty>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {coverage.map((f) => {
-            const pct = f.totalControls ? Math.round((f.coveredControls / f.totalControls) * 100) : 0
-            const uncovered = f.controls.filter((c) => !c.coveredBy.length)
+            const pct = (n: number) => (f.totalControls ? (n / f.totalControls) * 100 : 0)
+            const by = (status: string) => f.controls.filter((c) => c.status === status)
             return (
               <article key={f.frameworkKey} className="pk-card flex flex-col gap-3 p-5">
                 <div className="flex items-baseline justify-between gap-2">
                   <b className="text-[15px] font-semibold">{f.name}</b>
                   <span className={`text-[12px] ${MUTED}`}>{f.versionLabel}</span>
                 </div>
-                <div className="text-[13px]"><b>{f.coveredControls}</b> of {f.totalControls} controls covered ({pct}%)</div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#f4f4f2]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${f.name} coverage`}>
-                  <div className="h-full rounded-full bg-[var(--fm-ink,#15171a)]" style={{ width: `${pct}%` }} />
+                <div className="text-[13px]"><b>{f.coveredControls}</b> of {f.totalControls} controls mapped to a published policy</div>
+                <div
+                  className="flex h-2 overflow-hidden rounded-full bg-[#f4f4f2]"
+                  role="img"
+                  aria-label={`${f.name}: ${f.passingControls} passing, ${f.failingControls} failing, ${f.uncheckedControls} not checked, ${f.totalControls - f.coveredControls} with no policy`}
+                >
+                  <div className="h-full bg-[#00704e]" style={{ width: `${pct(f.passingControls)}%` }} />
+                  <div className="h-full bg-[#b42318]" style={{ width: `${pct(f.failingControls)}%` }} />
+                  <div className="h-full bg-[#15171a40]" style={{ width: `${pct(f.uncheckedControls)}%` }} />
                 </div>
-                {uncovered.length > 0 && (
-                  <details className="text-[13px]">
-                    <summary className="cursor-pointer font-semibold">{uncovered.length} controls with no policy</summary>
-                    <ul className="m-0 mt-2 flex max-h-64 list-none flex-col gap-1 overflow-y-auto p-0">
-                      {uncovered.map((c) => (
-                        <li key={c.ref}><code className="text-[12px]">{c.externalId}</code> <span className={MUTED}>{c.title}</span></li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
+                <div className="flex flex-wrap gap-1.5">
+                  <Pill tone="done">{f.passingControls} passing</Pill>
+                  <Pill tone="block">{f.failingControls} failing</Pill>
+                  <Pill>{f.uncheckedControls} not checked</Pill>
+                  <Pill>{f.totalControls - f.coveredControls} no policy</Pill>
+                </div>
+                <ControlList title="failing controls" controls={by('failing')} />
+                <ControlList title="controls not checked yet" controls={by('unchecked')} />
+                <ControlList title="passing controls" controls={by('passing')} />
+                <ControlList title="controls with no policy" controls={by('unmapped')} />
               </article>
             )
           })}

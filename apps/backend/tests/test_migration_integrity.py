@@ -20,6 +20,8 @@ from config.migration_integrity import (
     FROZEN_013G_OPERATOR_CHECKSUM,
     FROZEN_013H_OPERATOR_CHECKSUM,
     FROZEN_013I_OPERATOR_CHECKSUM,
+    FROZEN_013K_OPERATOR_CHECKSUM,
+    FROZEN_013L_OPERATOR_CHECKSUM,
     FROZEN_ASSURANCE_MIGRATIONS,
     FROZEN_POSTGRESQL_ASSURANCE_CATALOGS,
     POSTGRESQL_ASSURANCE_CATALOG_SPEC,
@@ -71,6 +73,18 @@ POSTGRES_013J_OPERATOR = (
 )
 POSTGRES_OPERATOR_CHAIN_THROUGH_013J = POSTGRES_OPERATOR_CHAIN + (
     POSTGRES_013J_OPERATOR,
+)
+POSTGRES_013K_OPERATOR = (
+    "upgrade_paths/013j_to_013k_verified_evidence_link_integrity.sql"
+)
+POSTGRES_OPERATOR_CHAIN_THROUGH_013K = POSTGRES_OPERATOR_CHAIN_THROUGH_013J + (
+    POSTGRES_013K_OPERATOR,
+)
+POSTGRES_013L_OPERATOR = (
+    "upgrade_paths/013k_to_013l_delegated_separation_override_grant_integrity.sql"
+)
+POSTGRES_OPERATOR_CHAIN_THROUGH_013L = POSTGRES_OPERATOR_CHAIN_THROUGH_013K + (
+    POSTGRES_013L_OPERATOR,
 )
 POSTGRESQL_013B_PREREQUISITE_CONSTRAINTS = frozenset(
     {
@@ -537,7 +551,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     assert isinstance(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS, MappingProxyType)
     assert set(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS) == {14, 18}
     expected_digests = {
-        14: "c181fd00d2c65009cd17a673c0462d92d557c73dc7976f800a4bcb83ae4c6fd2",
+        14: "18acdb1569c601bf99c45b22d5de45fe3b749acaf4bb7bb5644a7eba265e2f3a",
         18: "ca00ef6d75a35294ac915de43d8f1a188a77a784060065d3947f982e8e6920a4",
     }
     for major, digest in expected_digests.items():
@@ -732,6 +746,51 @@ def test_013j_operator_direct_and_ledger_sources_are_frozen() -> None:
     )
     assert operator_source.count(
         "\\ir ../013j_owner_decision_override_integrity.sql"
+    ) == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
+def test_013k_operator_direct_and_ledger_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013k_verified_evidence_link_integrity.sql"
+    operator = MIGRATIONS / POSTGRES_013K_OPERATOR
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key == "013j-to-013k-verified-evidence-link-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013K_OPERATOR_CHECKSUM
+    )
+    assert operator_source.count("\\ir ../013k_verified_evidence_link_integrity.sql") == 1
+    assert frozen.ledger_key in operator_source
+    assert frozen.checksum in operator_source
+
+
+def test_013l_operator_direct_and_ledger_sources_are_frozen() -> None:
+    import hashlib
+
+    direct = MIGRATIONS / "013l_delegated_separation_override_grant_integrity.sql"
+    operator = MIGRATIONS / POSTGRES_013L_OPERATOR
+    frozen = next(
+        item
+        for item in FROZEN_ASSURANCE_MIGRATIONS
+        if item.ledger_key
+        == "013k-to-013l-delegated-separation-override-grant-integrity-v1"
+    )
+    operator_source = operator.read_text(encoding="utf-8")
+
+    assert hashlib.sha256(direct.read_bytes()).hexdigest() == frozen.checksum
+    assert hashlib.sha256(operator.read_bytes()).hexdigest() == (
+        FROZEN_013L_OPERATOR_CHECKSUM
+    )
+    assert operator_source.count(
+        "\\ir ../013l_delegated_separation_override_grant_integrity.sql"
     ) == 1
     assert frozen.ledger_key in operator_source
     assert frozen.checksum in operator_source
@@ -1254,7 +1313,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
     try:
         for ordinal, schema_name in enumerate(schemas):
             _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+            for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
                 result = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
@@ -1265,7 +1324,7 @@ def test_native_production_catalog_freeze_matches_two_operator_installs_and_tamp
                 replay = _run_postgresql_operator_migration(
                     POSTGRES_URL,
                     schema_name,
-                    POSTGRES_013J_OPERATOR,
+                    POSTGRES_013L_OPERATOR,
                 )
                 assert replay.returncode == 0, replay.stderr
 
@@ -1552,7 +1611,7 @@ def test_native_013j_startup_rejects_every_missing_or_disabled_guard() -> None:
     )
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -1635,7 +1694,7 @@ def test_native_013j_catalog_rejects_function_acl_relation_and_trigger_drift() -
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,
@@ -1958,7 +2017,7 @@ def test_native_013i_startup_rejects_disabled_and_missing_trigger() -> None:
     engine = None
     try:
         _install_postgresql_base_through_012(POSTGRES_URL, schema_name)
-        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013J:
+        for migration_name in POSTGRES_OPERATOR_CHAIN_THROUGH_013L:
             result = _run_postgresql_operator_migration(
                 POSTGRES_URL,
                 schema_name,

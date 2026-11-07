@@ -1,0 +1,21 @@
+{{!< default}}
+<div class="wrap layout">
+  {{> rail}}
+  <div class="grid">
+    {{#tag}}
+    <section class="mod hero topic">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="{{@site.url}}/">Home</a>{{> icon name="chevron" size="12"}}<span>{{name}}</span></nav>
+      <h1>{{name}}</h1>
+      {{#if description}}<p class="lede">{{description}}</p>{{/if}}
+      <dl class="facts"><div><dt>Guides</dt><dd>{{../pagination.total}}</dd></div><div><dt>Latest</dt><dd>{{#foreach ../posts limit="1"}}{{date published_at format="D MMM YYYY"}}{{/foreach}}</dd></div></dl>
+    </section>
+    {{/tag}}
+    {{> due limit="5"}}
+    <section class="mod list">
+      <header class="mh"><h2>Guides</h2><span class="count">{{pagination.total}} published</span></header>
+      {{#foreach posts}}{{> row}}{{else}}<p class="empty">No guides published under this topic yet.</p>{{/foreach}}
+      {{#match pagination.pages ">" 1}}<div class="pager">{{pagination}}</div>{{/match}}
+    </section>
+    <div class="side">{{> newsletter}}</div>
+  </div>
+</div>

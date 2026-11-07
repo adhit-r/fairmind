@@ -606,6 +606,7 @@ $("scrub").addEventListener("input", e => { const v = +e.target.value; setTime(v
 $("toNow").onclick = () => setTime(NOW);
 
 // ---------- ask the record: language in, an addressable view out
+const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 function answer(view, note, t, s) {
   const link = `fm://retail-bank/record@${new Date(t).toISOString().slice(0, 16)}Z/${s ? s.n.toLowerCase().replace(/\s+/g, "-") : "estate"}`;
   $("answer").innerHTML = `<span class="arrow">VIEW SET →</span><span>${view}</span><span class="sep">·</span><span>${note}</span><span class="cite">REPLAY LINK <b>${link}</b></span><button type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText('${link}')">Copy</button><button type="button">Export for RBI</button>`;
@@ -619,7 +620,7 @@ function ask(q) {
     const end = Math.min(NOW, Date.UTC(2027, mon + 1, 1) - 60e3), start = Date.UTC(2027, mon, 1);
     const ss = EV.filter(e => e.k === "seal" && e.t >= start && e.t <= end);
     selected = ss.length ? SYS[ss[ss.length - 1].s] : selected; setTime(end);
-    return answer(`The record at the end of ${m[2][0].toUpperCase() + m[2].slice(1)}`, `${ss.length} decisions sealed that month: ${ss.map(e => SYS[e.s].n + " (" + DEC[e.dec].toLowerCase() + ")").join(", ")}.`, end, null);
+    return answer(`The record at the end of ${esc(m[2][0].toUpperCase() + m[2].slice(1))}`, `${ss.length} decisions sealed that month: ${ss.map(e => SYS[e.s].n + " (" + DEC[e.dec].toLowerCase() + ")").join(", ")}.`, end, null);
   }
   if (/replay|as it was|what did i see/.test(q) && byName) { const x = fold(NOW).st[byName.i]; const last = x.seals[x.seals.length - 1]; if (last) return replay(last); }
   if (/held|hold/.test(q)) { const h = SYS.filter((s, i) => fold(tCur).st[i].held); if (h.length) { select(h[0]); return answer(`<b>${h.length}</b> held: ${h.map(s => s.n).join(", ")}`, `${fold(tCur).st[h[0].i].held.why}.`, tCur, h[0]); } }

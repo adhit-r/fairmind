@@ -16,12 +16,6 @@
   font-size: clamp(1.05rem, 1.4vw, 1.25rem);
 }
 
-.fw-hero h1 em {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 400;
-}
-
 .fw-filters {
   display: flex;
   flex-wrap: wrap;
@@ -165,6 +159,21 @@
 .fw-reqs dd {
   margin: 0;
   color: var(--ink-78);
+}
+
+.fw-controls {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--ink2);
+  font-size: 0.85rem;
+}
+
+.fw-counts,
+.fw-sources {
+  max-width: 48rem;
+  margin: 1rem 0 0;
+  color: var(--ink2);
+  font-size: 0.95rem;
 }
 
 .fw-split {

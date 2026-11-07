@@ -80,13 +80,25 @@ export interface Evaluation {
   evaluatedAt: string
 }
 
+export type ControlStatus = 'passing' | 'failing' | 'unchecked' | 'unmapped'
+
 export interface CoverageControl {
   ref: string
   externalId: string
   title: string
   requirementId: string
   requirementTitle: string
-  coveredBy: Array<{ policyId: string; policyName: string; policyStatus: PolicyStatus; ruleId: string; ruleTitle: string }>
+  status: ControlStatus
+  coveredBy: Array<{
+    policyId: string
+    policyName: string
+    policyVersion: number
+    ruleId: string
+    ruleTitle: string
+    enforcement: 'block' | 'warn'
+    passingSystems: number
+    failingSystems: number
+  }>
 }
 
 export interface FrameworkCoverage {
@@ -95,6 +107,9 @@ export interface FrameworkCoverage {
   versionLabel: string
   totalControls: number
   coveredControls: number
+  passingControls: number
+  failingControls: number
+  uncheckedControls: number
   controls: CoverageControl[]
 }
 

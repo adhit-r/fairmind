@@ -250,7 +250,11 @@ class EvaluationPreflightResponse(BaseModel):
     can_prepare_run: bool = Field(alias="canPrepareRun")
     fairmind_execution_available: bool = Field(alias="fairmindExecutionAvailable")
     code: Literal[
-        "contract_upgrade_required", "executor_unavailable", "evidence_link_required"
+        "automatic_enforcement_disabled",
+        "contract_upgrade_required",
+        "executor_unavailable",
+        "evidence_link_required",
+        "legacy_evidence_linking_disabled",
     ]
     message: str
     next_action: str = Field(alias="nextAction")
@@ -510,6 +514,7 @@ async def _read_evidence_passport_body(request: Request, limit: int) -> bytes:
 
 def organization_membership(
     org_id: str,
+    request: Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> OrgMembership:
@@ -518,6 +523,8 @@ def organization_membership(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Organization membership required"
         )
+    # The organisation this request acts in, which its audit row records.
+    request.state.org_id = membership.org_id
     return membership
 
 

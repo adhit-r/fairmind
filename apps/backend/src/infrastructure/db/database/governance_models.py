@@ -98,7 +98,7 @@ def _canonical_utc_timestamp(column: str, *, nullable: bool = True) -> str:
         f"AND substr({column}, 11, 1) = 'T' "
         f"AND substr({column}, 14, 1) = ':' "
         f"AND substr({column}, 17, 1) = ':' "
-        f"AND right({column}, 6) = '+00:00' "
+        f"AND substr({column}, length({column}) - 5, 6) = '+00:00' "
         f"AND {year} BETWEEN 1 AND 9999 "
         f"AND {month} BETWEEN 1 AND 12 "
         f"AND {day} BETWEEN 1 AND ({maximum_day}) "
@@ -2099,6 +2099,96 @@ class GovernanceEvaluationSuiteEvidenceLink(Base):
     )
 
 
+class GovernanceSeparationOverrideGrant(Base):
+    """Immutable, named, exact-run authority for one delegated decision."""
+
+    __tablename__ = "governance_separation_override_grants"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False)
+    workspace_id = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    run_id = Column(String, nullable=False)
+    run_contract_version = Column(String, nullable=False)
+    envelope_id = Column(String, nullable=False)
+    envelope_hash = Column(String, nullable=False)
+    evidence_set_json = Column(Text, nullable=False)
+    evidence_set_hash = Column(String, nullable=False)
+    expected_verdict_version = Column(Integer, nullable=False)
+    granted_by = Column(String, nullable=False)
+    grantee_actor_id = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)
+    granted_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "org_id", "workspace_id", "system_id", "run_id",
+            "run_contract_version", "envelope_id", "envelope_hash",
+            "evidence_set_hash",
+            name="uq_governance_separation_override_grant_exact_graph",
+        ),
+        ForeignKeyConstraint(
+            [
+                "run_id", "run_contract_version", "envelope_id", "envelope_hash",
+                "workspace_id", "system_id", "org_id",
+            ],
+            [
+                "governance_evaluation_runs.id",
+                "governance_evaluation_runs.contract_version",
+                "governance_evaluation_runs.envelope_id",
+                "governance_evaluation_runs.envelope_hash",
+                "governance_evaluation_runs.workspace_id",
+                "governance_evaluation_runs.system_id",
+                "governance_evaluation_runs.org_id",
+            ],
+            name="fk_governance_separation_override_grant_run",
+        ),
+        CheckConstraint(
+            "run_contract_version = '2.0.0'",
+            name="ck_governance_separation_override_grant_contract",
+        ),
+        CheckConstraint(
+            "expected_verdict_version >= 0",
+            name="ck_governance_separation_override_grant_verdict_version",
+        ),
+        CheckConstraint(
+            "granted_by <> grantee_actor_id",
+            name="ck_governance_separation_override_grant_distinct_actors",
+        ),
+        CheckConstraint(
+            "reason = trim(reason) AND length(reason) BETWEEN 1 AND 2000",
+            name="ck_governance_separation_override_grant_reason",
+        ),
+        CheckConstraint(
+            _lower_hex64("envelope_hash"),
+            name="ck_governance_separation_override_grant_envelope_hash",
+        ),
+        CheckConstraint(
+            _lower_hex64("evidence_set_hash"),
+            name="ck_governance_separation_override_grant_evidence_hash",
+        ),
+        CheckConstraint(
+            "substr(trim(evidence_set_json), 1, 1) = '{' "
+            "AND substr(trim(evidence_set_json), -1, 1) = '}' "
+            "AND length(evidence_set_json) BETWEEN 2 AND 1048576",
+            name="ck_governance_separation_override_grant_evidence_set",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("granted_at", nullable=False),
+            name="ck_governance_separation_override_grant_granted_at",
+        ),
+        CheckConstraint(
+            _canonical_utc_timestamp("expires_at", nullable=False),
+            name="ck_governance_separation_override_grant_expires_at",
+        ),
+        Index(
+            "idx_governance_separation_override_grants_scope",
+            "org_id", "system_id", "run_id", "grantee_actor_id",
+        ),
+    )
+
+
 class GovernanceEvaluationDecision(Base):
     """Immutable CAS decision history for one v2 evaluation run."""
 
@@ -2119,6 +2209,7 @@ class GovernanceEvaluationDecision(Base):
     rationale = Column(Text, nullable=False)
     decided_by = Column(String, nullable=False)
     owner_override_reason = Column(Text, nullable=True)
+    separation_override_grant_id = Column(String, nullable=True)
     evidence_set_json = Column(Text, nullable=False)
     evidence_set_hash = Column(String, nullable=False)
     decided_at = Column(String, nullable=False)
@@ -2137,6 +2228,10 @@ class GovernanceEvaluationDecision(Base):
             "run_id",
             "verdict_version",
             name="uq_governance_evaluation_decision_run_version",
+        ),
+        UniqueConstraint(
+            "separation_override_grant_id",
+            name="uq_governance_evaluation_decision_separation_override_grant",
         ),
         ForeignKeyConstraint(
             [
@@ -2158,6 +2253,25 @@ class GovernanceEvaluationDecision(Base):
                 "governance_evaluation_runs.org_id",
             ],
             name="fk_governance_evaluation_decision_run_envelope",
+        ),
+        ForeignKeyConstraint(
+            [
+                "separation_override_grant_id", "org_id", "workspace_id",
+                "system_id", "run_id", "run_contract_version", "envelope_id",
+                "envelope_hash", "evidence_set_hash",
+            ],
+            [
+                "governance_separation_override_grants.id",
+                "governance_separation_override_grants.org_id",
+                "governance_separation_override_grants.workspace_id",
+                "governance_separation_override_grants.system_id",
+                "governance_separation_override_grants.run_id",
+                "governance_separation_override_grants.run_contract_version",
+                "governance_separation_override_grants.envelope_id",
+                "governance_separation_override_grants.envelope_hash",
+                "governance_separation_override_grants.evidence_set_hash",
+            ],
+            name="fk_governance_evaluation_decision_separation_override_grant",
         ),
         CheckConstraint(
             "run_contract_version = '2.0.0'",
@@ -2193,6 +2307,10 @@ class GovernanceEvaluationDecision(Base):
             "owner_override_reason = trim(owner_override_reason) AND "
             "length(trim(owner_override_reason)) BETWEEN 1 AND 2000",
             name="ck_governance_evaluation_decision_owner_override",
+        ),
+        CheckConstraint(
+            "owner_override_reason IS NULL OR separation_override_grant_id IS NULL",
+            name="ck_governance_evaluation_decision_override_kind",
         ),
         CheckConstraint(
             _lower_hex64("evidence_set_hash"),
@@ -3526,6 +3644,61 @@ class OrgAIProvider(Base):
     tested_at = Column(String, nullable=True)
     test_message = Column(String, nullable=True)
     updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class OrgPlatformConnection(Base):
+    """An organization's key for an agent platform it lets FairMind read for configuration audits, encrypted at rest."""
+
+    __tablename__ = "org_platform_connections"
+
+    org_id = Column(String, primary_key=True)
+    platform = Column(String, primary_key=True)  # claude_managed_agents
+    api_key_enc = Column(Text, nullable=False)
+    key_hint = Column(String, nullable=True)
+    tested_ok = Column(Boolean, nullable=True)
+    tested_at = Column(String, nullable=True)
+    test_message = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceAISystemTarget(Base):
+    """How FairMind calls an AI system for behaviour tests: one per system, auth encrypted at rest."""
+
+    __tablename__ = "governance_ai_system_targets"
+
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # openai (Chat Completions) or http (JSON in, JSON out)
+    url = Column(String, nullable=False)
+    fields_json = Column(Text, nullable=False, default="{}")  # model, systemPrompt, intendedUse, authHeader, requestTemplate, responsePath
+    auth_enc = Column(Text, nullable=True)
+    auth_hint = Column(String, nullable=True)
+    tested_ok = Column(Boolean, nullable=True)
+    tested_at = Column(String, nullable=True)
+    test_message = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceEvaluationJob(Base):
+    """A behaviour test running in the background, so progress can be read while it calls the system under test."""
+
+    __tablename__ = "governance_evaluation_jobs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    evaluation_id = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="running")  # running | done | failed
+    phase = Column(String, nullable=True)
+    done = Column(Integer, nullable=False, default=0)
+    total = Column(Integer, nullable=False, default=0)
+    error = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 

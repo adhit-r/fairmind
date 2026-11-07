@@ -16,7 +16,7 @@ export interface Props {
 
 const {
   title,
-  description = `FairMind is an agentic AI governance platform. Governance runs as agent workflows mapped to ${registryTotals.frameworks} frameworks, and a person decides at every gate.`,
+  description = `FairMind is an agentic AI governance platform. Governance runs as agent workflows mapped to ${registryTotals.frameworks} frameworks, standards and risk lists, and a person decides at every gate.`,
   image = '/og-image.png',
   imageAlt = 'FairMind: governance that runs itself, decisions that stay human',
   canonical,
@@ -33,7 +33,7 @@ const nav = [
   { label: 'Platform', href: '/features/' },
   { label: 'Frameworks', href: '/frameworks/' },
   { label: 'Use cases', href: '/use-cases/' },
-  { label: 'Research', href: '/blog/' },
+  { label: 'Research', href: '/research/' },
 ];
 const isCurrent = (href: string) => path.startsWith(href);
 
@@ -99,7 +99,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'https://app.fairmind.xyz';
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@1&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
     />
 
     {[...siteSchema, ...pageSchema].map((schema) => (

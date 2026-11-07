@@ -3,7 +3,7 @@ Modern Bias Detection API Routes
 Exposes the latest explainability and bias detection capabilities
 """
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
@@ -415,25 +415,28 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
             bias_tests = []
             total_tests = 0
             biased_count = 0
-            overall_risk_score = 0.0
+            scores = []
             
             for row in results:
                 total_tests += 1
                 if row.is_biased:
                     biased_count += 1
-                overall_risk_score += float(row.bias_score or 0)
+                if row.bias_score is not None:
+                    scores.append(float(row.bias_score))
                 
                 bias_tests.append({
                     "test_name": row.test_name or "Unknown Test",
-                    "bias_score": float(row.bias_score or 0),
+                    "bias_score": None if row.bias_score is None else float(row.bias_score),
                     "is_biased": bool(row.is_biased),
-                    "confidence": float(row.confidence or 0),
+                    "confidence": None if row.confidence is None else float(row.confidence),
                     "category": row.category or "unknown"
                 })
             
-            # Calculate overall risk
-            avg_bias_score = overall_risk_score / total_tests if total_tests > 0 else 0.0
-            if avg_bias_score >= 0.7:
+            # Calculate overall risk from the scored tests only; with none there is nothing to score.
+            avg_bias_score = sum(scores) / len(scores) if scores else None
+            if avg_bias_score is None:
+                overall_risk = "unknown"
+            elif avg_bias_score >= 0.7:
                 overall_risk = "high"
             elif avg_bias_score >= 0.4:
                 overall_risk = "medium"
@@ -455,7 +458,6 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
             for row in explain_results:
                 explainability_analysis.append({
                     "method": row.explainability_method or "Unknown",
-                    "confidence": 0.85,  # Could be calculated from test results
                     "insights": [row.insights] if row.insights else [],
                     "visualizations": []
                 })
@@ -470,54 +472,42 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
                         "Review training data for demographic balance",
                         "Implement bias mitigation techniques",
                         "Add fairness constraints to model training"
-                    ] if biased_count > 0 else ["No bias detected in recent tests"],
+                    ] if biased_count > 0 else ["No bias detected in recent tests"] if total_tests > 0
+                    else ["No bias test results available. Run bias detection tests first."],
                     "compliance_status": {
-                        "gdpr_compliant": True,  # Would be calculated from compliance checks
-                        "ai_act_compliant": False,  # Would be calculated from compliance checks
-                        "fairness_score": float(1.0 - avg_bias_score) if total_tests > 0 else 1.0
+                        "fairness_score": None if avg_bias_score is None else float(1.0 - avg_bias_score)
                     },
                     "evaluation_summary": {
                         "total_tests_run": total_tests,
                         "biased_tests": biased_count,
-                        "bias_rate": float(biased_count / total_tests) if total_tests > 0 else 0.0
+                        "bias_rate": float(biased_count / total_tests) if total_tests > 0 else None
                     }
                 }
             }
     except Exception as e:
+        # A failed read is not "zero tests run".
         logger.error(f"Error getting detection results: {e}")
-        # Return empty structure if no data available
-        return {
-            "success": True,
-            "data": {
-                "overall_risk": "unknown",
-                "bias_tests": [],
-                "explainability_analysis": [],
-                "recommendations": ["No bias test results available. Run bias detection tests first."],
-                "compliance_status": {
-                    "gdpr_compliant": False,
-                    "ai_act_compliant": False,
-                    "fairness_score": 0.0
-                },
-                "evaluation_summary": {
-                    "total_tests_run": 0,
-                    "biased_tests": 0,
-                    "bias_rate": 0.0
-                }
-            }
-        }
+        raise HTTPException(status_code=500, detail="Failed to get detection results")
 
 @router.get("/evaluation-history")
-async def get_evaluation_history(limit: int = 10):
+async def get_evaluation_history(limit: int = Query(10, ge=1, le=100), m: OrgMembership = Depends(org_member)):
     """
-    Get recent evaluation history (placeholder - would integrate with database)
+    This organisation's stored bias test results, newest first
     """
     try:
-        # This would typically query a database for evaluation history
-        return {
-            "message": "Evaluation history endpoint - would integrate with database",
-            "limit": limit,
-            "note": "This is a placeholder implementation"
-        }
+        from database.connection import db_manager
+        from sqlalchemy import text
+
+        with db_manager.get_session() as session:
+            rows = session.execute(text("""
+                SELECT id, test_name, bias_score, is_biased, confidence, category, explainability_method, created_at
+                FROM bias_test_results
+                WHERE org_id = :org_id
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """), {"org_id": m.org_id, "limit": limit}).mappings().all()
+
+        return {"success": True, "history": [dict(row) for row in rows], "total": len(rows)}
     except Exception as e:
         logger.error(f"Error getting evaluation history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get evaluation history: {str(e)}")

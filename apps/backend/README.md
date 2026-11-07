@@ -17,9 +17,6 @@
 # Install dependencies
 uv sync
 
-# Create developer account (dev@fairmind.ai / dev)
-uv run python scripts/create_dev_user.py
-
 # Start the backend
 uv run python -m uvicorn api.main:app --reload --port 8000
 ```

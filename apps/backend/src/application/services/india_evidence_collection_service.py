@@ -728,10 +728,7 @@ class IndiaEvidenceCollectionService:
                 },
             }
 
-            logger.info(
-                f"Security controls evidence collected. Encryption: {encryption_enabled}, "
-                f"MFA: {mfa_enabled}, Audit logging: {audit_logging_enabled}"
-            )
+            logger.info("Security controls evidence collected for control SS_001")
 
             return result
 

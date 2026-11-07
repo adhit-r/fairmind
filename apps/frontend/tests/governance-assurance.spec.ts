@@ -682,8 +682,7 @@ test('clears the previous assignment before loading another system scope', async
   const workbench = page.getByTestId('framework-controls-workbench')
 
   await expect(workbench.getByText('A006.1', { exact: true })).toBeVisible()
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await expect(workbench.getByText('A006.1', { exact: true })).toHaveCount(0)
   await expect(workbench.getByLabel('Loading framework catalog')).toBeVisible()
@@ -869,8 +868,7 @@ test('clears evidence artifacts and stale drawer state when system scope changes
   await page.keyboard.press('Escape')
   await expect(page.getByRole('heading', { name: 'Claims limitation register' })).toHaveCount(0)
 
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await expect(page.getByRole('button', { name: /Claims limitation register/i })).toHaveCount(0)
   await expect(page.getByText(`Loading evidence for ${secondSystem.name}`)).toBeVisible()
@@ -936,7 +934,9 @@ test('shows framework scope and backend blockers before the overview readiness a
   await expect(readiness).toContainText('1 not started')
 
   const text = await overview.innerText()
-  expect(text.indexOf('READINESS BLOCKERS')).toBeLessThan(text.indexOf('AIUC-1 READINESS'))
+  const blockersAt = text.indexOf('Readiness Blockers')
+  expect(blockersAt).toBeGreaterThan(-1)
+  expect(blockersAt).toBeLessThan(text.indexOf('AIUC-1 Readiness'))
   await expect(overview).not.toContainText(/compliance rate|evidence completeness|go$|certif/i)
 })
 
@@ -994,8 +994,6 @@ test('uses the reports route as a read-only auditor lens and redirects legacy bo
 
   await page.goto('/audit-reports')
   await expect(page).toHaveURL(/\/reports\?view=builder$/)
-  await page.goto('/compliance')
-  await expect(page).toHaveURL(/\/compliance-dashboard$/)
   await page.goto('/compliance/dashboard')
   await expect(page).toHaveURL(/\/compliance-dashboard$/)
   await page.goto('/remediation-wizard')
@@ -1142,8 +1140,7 @@ test('clears approval actions while a newly selected system approval is loading'
   const approval = page.getByRole('region', { name: 'Approval decision' })
   await expect(approval.getByRole('button', { name: 'Approve request' })).toBeVisible()
 
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await expect(approval.getByLabel('Loading approval decision')).toBeVisible()
   await expect(approval.getByRole('button', { name: 'Approve request' })).toHaveCount(0)
@@ -1163,8 +1160,7 @@ test('does not let an old-system refresh strand the newly selected approval scop
   const approval = page.getByRole('region', { name: 'Approval decision' })
   await expect(approval.getByText('Not submitted', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Refresh overview' }).click()
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await page.waitForTimeout(850)
   await expect(approval.getByLabel('Loading approval decision')).toHaveCount(0)
@@ -1201,8 +1197,7 @@ test('keeps report history and preview pinned to the current system across delay
   await page.goto('/reports?view=builder')
   const studio = page.getByRole('region', { name: 'Report builder and history' })
   await expect(studio.getByRole('heading', { name: 'Assurance Report Studio' })).toBeVisible()
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: secondSystem.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
 
   await expect(studio).toContainText('Underwriting assurance snapshot')
   await expect(studio).not.toContainText('Claims assurance snapshot')
@@ -1212,8 +1207,7 @@ test('keeps report history and preview pinned to the current system across delay
 
   await studio.getByRole('button', { name: 'Preview' }).click()
   await expect(studio).toContainText('Selected preview · Underwriting assurance snapshot')
-  await page.getByRole('combobox', { name: 'System scope' }).click()
-  await page.getByRole('option', { name: system.name }).click()
+  await page.getByLabel('Switch system').selectOption({ label: system.name })
   await expect(studio).not.toContainText('Selected preview · Underwriting assurance snapshot')
   await expect(studio).not.toContainText('Underwriting assurance snapshot')
 })

@@ -1,0 +1,39 @@
+{{!< default}}
+<div class="wrap layout">
+  {{> rail}}
+  <div class="grid">
+    {{#is "home"}}
+    {{#foreach posts limit="1"}}{{> lead}}{{/foreach}}
+    <section class="mod fresh">
+      <header class="mh"><h2>New guides</h2></header>
+      <ul>
+        {{#foreach posts from="2" limit="3"}}
+        <li>
+          <a href="{{url}}">{{> flags}}<span>{{title}}</span></a>
+          <span class="m">{{#primary_tag}}{{name}} / {{/primary_tag}}{{reading_time minute="1 min" minutes="% min"}}</span>
+        </li>
+        {{else}}<li class="m">More guides are on the way.</li>
+        {{/foreach}}
+      </ul>
+    </section>
+    {{#match pagination.total ">" 4}}
+    <section class="mod list" id="all">
+      <header class="mh"><h2>Earlier guides</h2></header>
+      {{#foreach posts from="5"}}{{> row}}{{/foreach}}
+      {{#match pagination.pages ">" 1}}<div class="pager">{{pagination}}</div>{{/match}}
+    </section>
+    {{/match}}
+    {{else}}
+    <section class="mod list" id="all">
+      <header class="mh"><h2>All guides, page {{pagination.page}}</h2><span class="count">{{pagination.total}} published</span></header>
+      {{#foreach posts}}{{> row}}{{else}}<p class="empty">No guides published yet.</p>{{/foreach}}
+      {{#match pagination.pages ">" 1}}<div class="pager">{{pagination}}</div>{{/match}}
+    </section>
+    {{/is}}
+    <div class="side">
+      {{> due limit="5"}}
+      {{> newsletter}}
+
+    </div>
+  </div>
+</div>
