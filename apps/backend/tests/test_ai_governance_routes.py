@@ -935,3 +935,4 @@ def test_compliance_frameworks_come_from_the_pack_catalogue(authenticated_org_da
     assert set(body) == set(FRAMEWORKS)
     assert body["ISO42001"]["controls"] == sorted(FRAMEWORK_KEYS["ISO42001"])
     assert body["NISTRMF"]["name"] == FRAMEWORKS["NISTRMF"].name
+    assert body["ISO42001"]["priority"] == "P0"
