@@ -1,5 +1,7 @@
 # fairmind-mcp
 
+<!-- mcp-name: io.github.adhit-r/fairmind -->
+
 An MCP server that lets a coding agent ask FairMind whether an AI system may ship, and run fairness tests on CSVs from your machine. It is a thin layer over the [`fairmind` Python SDK](../sdk/README.md) and talks to the server over stdio.
 
 ## Tools
