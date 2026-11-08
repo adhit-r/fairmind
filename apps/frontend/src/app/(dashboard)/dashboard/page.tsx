@@ -57,6 +57,9 @@ function Overview() {
   }
   const { requests: allRequests } = usePendingDecisions()
   const { frameworks } = useAIGovernance()
+  // P0 frameworks; fall back to all when the API sends no priorities.
+  const core = frameworks.filter((f) => f.priority === 'P0')
+  const coreFrameworks = core.length ? core : frameworks
   const stage = useSearchParams().get('stage')
 
   const real = useMemo(() => systems.filter((s) => s.metadata?.source !== 'fallback'), [systems])
@@ -268,16 +271,26 @@ function Overview() {
           </div>
         </div>
         <div className="fm-card p-5">
-          <h2 className="text-[15px] font-semibold">Frameworks</h2>
-          <p className="text-[12.5px] text-[var(--fm-ink2)]">Control sets available to bind evidence against.</p>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-[15px] font-semibold">Frameworks</h2>
+            {frameworks.length > 0 && (
+              <span className="text-[12px] tabular-nums text-[var(--fm-ink2)]">{coreFrameworks.length} core of {frameworks.length}</span>
+            )}
+          </div>
+          <p className="text-[12.5px] text-[var(--fm-ink2)]">Core control sets. The rest are in the catalogue.</p>
           <div className="mt-3 grid gap-2.5">
-            {frameworks.map((f) => (
+            {coreFrameworks.map((f) => (
               <Link key={f.id} href="/compliance" className="flex items-center justify-between gap-3 border-t border-[var(--fm-line)] pt-2.5 text-[13px]">
                 <span className="font-medium">{f.name}</span>
                 <span className="tabular-nums text-[var(--fm-ink2)]">{f.controls?.length ?? 0} controls</span>
               </Link>
             ))}
             {frameworks.length === 0 && <p className="text-[13px] text-[var(--fm-ink2)]">No frameworks loaded.</p>}
+            {frameworks.length > coreFrameworks.length && (
+              <Link href="/compliance" className="justify-self-end border-t border-[var(--fm-line)] pt-2.5 text-[13px] font-medium text-[var(--fm-ink)]">
+                See all {frameworks.length} frameworks
+              </Link>
+            )}
           </div>
         </div>
       </section>

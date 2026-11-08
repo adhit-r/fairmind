@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
+import { readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 
 export type RunStatus = 'queued' | 'running' | 'waiting' | 'blocked' | 'done' | 'failed'
 export type StepKind =
@@ -293,37 +294,51 @@ export interface Resource<T> {
   reload: () => void
 }
 
-/** GET a path; a null path stays idle. Reload keeps the old data on screen while it refetches. */
+type ResourceValue<T> = Omit<Resource<T>, 'reload'>
+/** Resource state keyed by its request path, which carries the organisation and the record id. */
+export type ResourceState<T> = EvaluationScopeState<ResourceValue<T>>
+
+const pending = <T,>(path: string | null): ResourceValue<T> => ({ data: null, loading: path !== null, error: null })
+
+/** What a path shows: its own state, or nothing (loading) while the state still belongs to another path. */
+export const viewResource = <T,>(state: ResourceState<T>, path: string | null): ResourceValue<T> =>
+  readEvaluationScopeState(state, path ?? '', pending<T>(path))
+
+/** Fetch `path` into its own scope; a response that lands after the scope moved on is dropped. */
+export async function loadResource<T>(
+  get: (path: string) => Promise<ApiResponse<T>>,
+  path: string,
+  update: (next: (s: ResourceState<T>) => ResourceState<T>) => void,
+) {
+  update((s) => ({ scopeKey: path, value: s.scopeKey === path ? { ...s.value, loading: true } : pending<T>(path) }))
+  const commit = (v: Partial<ResourceValue<T>>) =>
+    update((s) => writeEvaluationScopeState(s, path, { ...s.value, ...v, loading: false }))
+  try {
+    const res = await get(path)
+    commit(res.success && res.data !== undefined ? { data: res.data, error: null } : { error: res.error || res.message || 'Request failed' })
+  } catch (e: unknown) {
+    commit({ error: e instanceof Error ? e.message : 'Request failed' })
+  }
+}
+
+/** GET a path; a null path stays idle. Reload keeps the old data on screen while it refetches; a new path never shows the previous one's. */
 function useResource<T>(path: string | null): Resource<T> {
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(path !== null)
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<ResourceState<T>>(() => ({ scopeKey: path ?? '', value: pending<T>(path) }))
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
     if (path === null) return
     let active = true
-    setLoading(true)
-    apiClient
-      .get<T>(path)
-      .then((res) => {
-        if (!active) return
-        if (res.success && res.data !== undefined) {
-          setData(res.data)
-          setError(null)
-        } else {
-          setError(res.error || res.message || 'Request failed')
-        }
-      })
-      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'Request failed'))
-      .finally(() => active && setLoading(false))
+    void loadResource<T>((p) => apiClient.get<T>(p), path, (next) => {
+      if (active) setState(next)
+    })
     return () => {
       active = false
     }
   }, [path, tick])
 
   const reload = useCallback(() => setTick((t) => t + 1), [])
-  return { data, loading, error, reload }
+  return { ...viewResource(state, path), reload }
 }
 
 const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`

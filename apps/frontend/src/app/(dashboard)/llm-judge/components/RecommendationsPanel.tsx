@@ -144,7 +144,7 @@ Evaluation ID: ${result.evaluation_id}
 
             {/* Expanded Content */}
             {expandedIndex === index && (
-              <div className="mt-4 space-y-4 bg-blue-50 p-4 rounded border-2 border-blue-200">
+              <div className="mt-4 space-y-4 bg-blue-50 p-4 rounded border border-blue-200">
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-gray-700">Full Recommendation</p>
                   <p className="text-sm leading-relaxed text-gray-800">
@@ -155,7 +155,7 @@ Evaluation ID: ${result.evaluation_id}
                 {/* Implementation Tips */}
                 <div className="bg-white p-3 rounded border border-blue-200">
                   <p className="text-xs font-semibold uppercase text-gray-600 mb-2">
-                    💭 How to implement this
+                    How to implement this
                   </p>
                   <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
                     <li>Review the evidence provided to understand the specific issue</li>
