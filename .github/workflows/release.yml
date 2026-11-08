@@ -79,21 +79,41 @@ jobs:
       base64-subjects: ${{ needs.python-packages.outputs.hashes }}
       upload-assets: true
 
-  # Publishes to PyPI through a trusted publisher (no token): PyPI accepts this
-  # repository, this workflow file and the pypi environment for each project.
+  # Publishes to PyPI through trusted publishers (no token). PyPI allows one
+  # pending publisher per repository, workflow and environment, so each
+  # package has its own environment.
   pypi:
     needs: python-packages
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - project: fairmind
+            files: fairmind-*
+            environment: pypi
+          - project: fairmind-cli
+            files: fairmind_cli-*
+            environment: pypi-cli
+          - project: fairmind-mcp
+            files: fairmind_mcp-*
+            environment: pypi-mcp
     environment:
-      name: pypi
-      url: https://pypi.org/project/fairmind-mcp/
+      name: ${{ matrix.environment }}
+      url: https://pypi.org/project/${{ matrix.project }}/
     permissions:
       id-token: write   # PyPI trusted publishing
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: dist
-          path: dist/
+          path: all/
+      - name: Pick this project's files
+        env:
+          FILES: ${{ matrix.files }}
+        run: |
+          mkdir dist
+          mv all/$FILES dist/
+          ls dist
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   # Lists the MCP server in the official MCP Registry once fairmind-mcp is on PyPI.
