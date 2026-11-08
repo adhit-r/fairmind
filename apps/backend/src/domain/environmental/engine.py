@@ -61,11 +61,10 @@ def _resolve_provenance(assessment: Mapping[str, Any]) -> str:
 
 
 def _resolve_confidence(assessment: Mapping[str, Any], provenance: str) -> float:
-    """Derive the evidence-confidence score, provenance-capped.
+    """Derive the evidence-confidence score from the provenance class alone.
 
-    An explicitly supplied score is honoured but never allowed to exceed what its
-    provenance class permits (a claimed 0.95 on vendor-reported data is capped);
-    an ``unknown`` provenance forces 0.0 regardless of any claimed score.
+    A supplied score is kept on the assessment for audit but does not enter the
+    gate; ``unknown`` provenance is 0.0.
     """
     score = assessment.get("confidence_score", assessment.get("evidence_confidence"))
     return cap_confidence_for_provenance(score, provenance)
