@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import { test } from 'node:test'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
+import { apiClient } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
+import { runHook, stub } from './runHookForTest'
 import { NAVIGATION_ITEMS } from '../../constants/navigation'
 import { EvaluationRunList } from '../../../app/(dashboard)/evidence/components/EvaluationRunList'
 import type {
@@ -260,4 +262,102 @@ test('resolves every system assignment to its matching framework version', async
       ['assignment-aiuc', 'aiuc-1', 'version-aiuc'],
     ],
   )
+})
+
+test('framework assignments from another system surface as an error, never as data', async () => {
+  const { useFrameworkAssignments, GovernanceScopeMismatchError } = await governanceContract()
+  const get = stub(apiClient, 'get', async () => ({
+    success: true,
+    data: [
+      { id: 'assignment-1', orgId: 'org-1', systemId: 'system-1', frameworkVersionId: 'version-1' },
+      { id: 'assignment-2', orgId: 'org-1', systemId: 'system-2', frameworkVersionId: 'version-1' },
+    ],
+  }))
+  try {
+    const { result, states } = runHook(() => useFrameworkAssignments('org-1', 'system-1'))
+    await result.refresh()
+    assert.ok(states[0].error instanceof GovernanceScopeMismatchError)
+    assert.deepEqual(states[0].data, [])
+  } finally {
+    get()
+  }
+})
+
+test('matching framework assignments load normally', async () => {
+  const { useFrameworkAssignments } = await governanceContract()
+  const assignment = { id: 'assignment-1', orgId: 'org-1', systemId: 'system-1', frameworkVersionId: 'version-1' }
+  const get = stub(apiClient, 'get', async () => ({ success: true, data: [assignment] }))
+  try {
+    const { result, states } = runHook(() => useFrameworkAssignments('org-1', 'system-1'))
+    await result.refresh()
+    assert.equal(states[0].error, null)
+    assert.deepEqual(states[0].data, [assignment])
+  } finally {
+    get()
+  }
+})
+
+test('a framework assignment created for another organization is rejected', async () => {
+  const { useFrameworkAssignments } = await governanceContract()
+  const post = stub(apiClient, 'post', async () => ({
+    success: true,
+    data: { id: 'assignment-1', orgId: 'org-2', systemId: 'system-1', frameworkVersionId: 'version-1' },
+  }))
+  try {
+    const { result } = runHook(() => useFrameworkAssignments('org-1', 'system-1'))
+    await assert.rejects(result.assign('version-1'), /requested orgId/)
+  } finally {
+    post()
+  }
+})
+
+test('a control assessment update answered for another organization or record is rejected', async () => {
+  const { useFrameworkAssignmentControls } = await governanceContract()
+  const updated: ControlAssessmentUpdateResult = {
+    id: 'assessment-1', orgId: 'org-2', systemId: 'system-1', frameworkAssignmentId: 'assignment-1',
+    controlDefinitionId: 'control-1', applicability: 'applicable', status: 'accepted', owner: null,
+    createdAt: '2026-07-17T00:00:00Z', updatedAt: '2026-07-17T00:00:00Z',
+  }
+  const patch = stub(apiClient, 'patch', async () => ({ success: true, data: updated }))
+  try {
+    const { result } = runHook(() => useFrameworkAssignmentControls('org-1', 'assignment-1'))
+    await assert.rejects(result.updateAssessment('assessment-1', { status: 'accepted' }), /requested orgId/)
+    await assert.rejects(result.updateAssessment('assessment-9', { status: 'accepted' }), /requested id/)
+  } finally {
+    patch()
+  }
+})
+
+test('an evidence run ingested for a different passport is rejected', async () => {
+  const { useEvidenceRuns } = await governanceContract()
+  const post = stub(apiClient, 'post', async () => ({
+    success: true,
+    data: { id: 'evidence-run-1', runId: 'run-1', passportId: 'passport-other' },
+  }))
+  try {
+    const { result } = runHook(() => useEvidenceRuns('org-1', 'system-1'))
+    const passport = { passportId: 'passport-1', evaluation: { runId: 'run-1' } } as EvidencePassportInput
+    await assert.rejects(result.ingestRun(passport), /requested passportId/)
+  } finally {
+    post()
+  }
+})
+
+test('evidence mappings for another control or mapping record set the error state', async () => {
+  const { useEvidenceMappingReview, GovernanceScopeMismatchError } = await governanceContract()
+  const post = stub(apiClient, 'post', async () => ({
+    success: true,
+    data: { id: 'mapping-other', evidenceId: 'evidence-1', controlAssessmentId: 'assessment-other' },
+  }))
+  try {
+    const { result, states } = runHook(() => useEvidenceMappingReview('org-1'))
+    await assert.rejects(result.createMapping('evidence-1', 'assessment-1'), /requested controlAssessmentId/)
+    assert.ok(states[1] instanceof GovernanceScopeMismatchError)
+    states[1] = null
+    const review: EvidenceMappingReviewInput = { state: 'accepted', reviewVersion: 1 }
+    await assert.rejects(result.reviewMapping('mapping-1', review), /requested id/)
+    assert.ok(states[1] instanceof GovernanceScopeMismatchError)
+  } finally {
+    post()
+  }
 })

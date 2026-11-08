@@ -9,7 +9,7 @@ import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
 import { Pill, cap } from '@/components/packs/parts'
 import { shortFrameworkName, tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
-import { useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
+import { systemFileScopeKey, useSystemFile, type AttestableCheck, type FairnessRunSummary, type SystemRecord } from '@/lib/api/hooks/useSystemFile'
 import { FairnessRunPanel } from './FairnessRunPanel'
 import { MonitoringRunPanel } from './MonitoringRunPanel'
 import { WatchPanel } from './WatchPanel'
@@ -122,8 +122,14 @@ function Stage({ step, status, children, actions }: { step: (typeof JOURNEY)[num
   )
 }
 
+/** Remounts per organisation and system, so open forms, errors and busy flags never carry over to another system. */
 export default function SystemFilePage() {
   const { id } = useParams<{ id: string }>()
+  const { selectedOrg } = useOrg()
+  return <SystemFileBody key={systemFileScopeKey(selectedOrg?.id, id)} id={id} />
+}
+
+function SystemFileBody({ id }: { id: string }) {
   const router = useRouter()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()

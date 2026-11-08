@@ -1416,7 +1416,13 @@ async def get_frameworks():
     from api.routes.pack_catalogue import FRAMEWORK_KEYS, FRAMEWORKS
 
     return [
-        {"id": fw.key, "name": fw.name, "description": fw.version or "", "controls": sorted(FRAMEWORK_KEYS[fw.key])}
+        {
+            "id": fw.key,
+            "name": fw.name,
+            "description": fw.version or "",
+            "priority": fw.priority,
+            "controls": sorted(FRAMEWORK_KEYS[fw.key]),
+        }
         for fw in FRAMEWORKS.values()
     ]
 

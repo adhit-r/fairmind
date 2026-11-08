@@ -1,14 +1,16 @@
 'use client'
 
 import { useParams } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { GATE_KINDS, decisionsFor, useAIProvider, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
 import { BTN, BTN_P, Crumbs, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Num, Pill, StatusPill, lifecycleStage, cap, when } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/lib/api/hooks/useAuth'
+import { useOrg } from '@/context/OrgContext'
+import { useSession } from '@/context/SessionContext'
+import { evaluationScopeKey } from '@/lib/evaluation-scope-state'
 
 const DECISION_LABEL: Record<Decision, [string, string]> = {
   approve: ['Approve', 'Approving'],
@@ -34,13 +36,15 @@ function detailOf(e: RunEvent): string {
   return ''
 }
 
+/** Remounts per organisation and run, so drafted output, notes and errors never carry over to another run. */
 export default function RunPage() {
   const { runId } = useParams<{ runId: string }>()
-  const { getCurrentUser } = useAuth()
-  const [me, setMe] = useState<string | null>(null)
-  useEffect(() => {
-    getCurrentUser().then((u) => setMe(u?.id ?? null)).catch(() => setMe(null))
-  }, [getCurrentUser])
+  const { selectedOrg } = useOrg()
+  return <RunView key={evaluationScopeKey({ organizationId: selectedOrg?.id, runId })} runId={runId} />
+}
+
+function RunView({ runId }: { runId: string }) {
+  const me = useSession().user?.id ?? null
   const run = useRun(runId)
   const { decideRun, submitStepOutput, runAgent } = usePackActions()
   const provider = useAIProvider()

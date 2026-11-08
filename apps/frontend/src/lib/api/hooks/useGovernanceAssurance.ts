@@ -277,6 +277,23 @@ export function unwrapGovernanceResponse<T>(response: ApiResponse<T>): T {
   return normalizeGovernanceResponse(response.data as T)
 }
 
+export class GovernanceScopeMismatchError extends Error {
+  constructor(resource: string, field: string) {
+    super(`The ${resource} response does not match the requested ${field}.`)
+    this.name = 'GovernanceScopeMismatchError'
+  }
+}
+
+/** Throws when a parsed response names a different organization, system or record than the request asked for. */
+export function requireResponseScope<T>(resource: string, value: T, expected: { [K in keyof T]?: T[K] }): T {
+  for (const [field, wanted] of Object.entries(expected)) {
+    if ((value as Record<string, unknown> | null | undefined)?.[field] !== wanted) {
+      throw new GovernanceScopeMismatchError(resource, field)
+    }
+  }
+  return value
+}
+
 function useGovernanceResource<T>(
   enabled: boolean,
   empty: T,
@@ -406,12 +423,19 @@ export function useFrameworkAssignments(orgId?: string, systemId?: string) {
   } = useGovernanceResource(
     Boolean(orgId && systemId),
     [] as FrameworkAssignment[],
-    useCallback(async () => unwrapGovernanceResponse(await apiClient.get<FrameworkAssignment[]>(API_ENDPOINTS.aiGovernance.frameworkAssignments(orgId!, systemId!))), [orgId, systemId]),
+    useCallback(async () => {
+      const assignments = unwrapGovernanceResponse(await apiClient.get<FrameworkAssignment[]>(API_ENDPOINTS.aiGovernance.frameworkAssignments(orgId!, systemId!)))
+      return assignments.map((assignment) => requireResponseScope('framework assignment', assignment, { orgId, systemId }))
+    }, [orgId, systemId]),
   )
 
   const assign = useCallback(async (frameworkVersionId: string) => {
     if (!orgId || !systemId) throw new Error('An organization and AI system are required to assign a framework')
-    const assignment = unwrapGovernanceResponse(await apiClient.post<FrameworkAssignment>(API_ENDPOINTS.aiGovernance.frameworkAssignments(orgId, systemId), { frameworkVersionId }))
+    const assignment = requireResponseScope(
+      'framework assignment',
+      unwrapGovernanceResponse(await apiClient.post<FrameworkAssignment>(API_ENDPOINTS.aiGovernance.frameworkAssignments(orgId, systemId), { frameworkVersionId })),
+      { orgId, systemId, frameworkVersionId },
+    )
     await refreshAssignments()
     return assignment
   }, [orgId, refreshAssignments, systemId])
@@ -446,7 +470,11 @@ export function useFrameworkAssignmentControls(orgId?: string, assignmentId?: st
     update: Partial<Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>>,
   ) => {
     if (!orgId) throw new Error('An organization is required to update a control assessment')
-    const assessment = unwrapGovernanceResponse(await apiClient.patch<ControlAssessmentUpdateResult>(API_ENDPOINTS.aiGovernance.controlAssessment(orgId, assessmentId), update))
+    const assessment = requireResponseScope(
+      'control assessment',
+      unwrapGovernanceResponse(await apiClient.patch<ControlAssessmentUpdateResult>(API_ENDPOINTS.aiGovernance.controlAssessment(orgId, assessmentId), update)),
+      { id: assessmentId, orgId },
+    )
     await Promise.all([refreshControls(), refreshReadiness()])
     return assessment
   }, [orgId, refreshControls, refreshReadiness])
@@ -497,7 +525,11 @@ export function useEvidenceRuns(orgId?: string, systemId?: string) {
 
   const ingestRun = useCallback(async (passport: EvidencePassportInput) => {
     if (!orgId || !systemId) throw new Error('An organization and AI system are required to ingest evidence')
-    const evidenceRun = unwrapGovernanceResponse(await apiClient.post<EvidenceRun>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId, systemId), evidencePassportRequestBody(passport)))
+    const evidenceRun = requireResponseScope(
+      'evidence run',
+      unwrapGovernanceResponse(await apiClient.post<EvidenceRun>(API_ENDPOINTS.aiGovernance.evidenceRuns(orgId, systemId), evidencePassportRequestBody(passport))),
+      { passportId: passport.passportId, runId: passport.evaluation.runId },
+    )
     await refreshRuns()
     return evidenceRun
   }, [orgId, refreshRuns, systemId])
@@ -509,10 +541,10 @@ export function useEvidenceMappingReview(orgId?: string) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const execute = useCallback(async <T,>(request: () => Promise<ApiResponse<T>>) => {
+  const execute = useCallback(async <T,>(request: () => Promise<ApiResponse<T>>, expected: { [K in keyof T]?: T[K] }) => {
     setLoading(true)
     try {
-      const result = unwrapGovernanceResponse(await request())
+      const result = requireResponseScope('evidence mapping', unwrapGovernanceResponse(await request()), expected)
       setError(null)
       return result
     } catch (reason) {
@@ -526,7 +558,7 @@ export function useEvidenceMappingReview(orgId?: string) {
 
   const createMapping = useCallback(async (evidenceId: string, controlAssessmentId: string, rationale?: string) => {
     if (!orgId) throw new Error('An organization is required to map evidence')
-    return execute(() => apiClient.post<EvidenceMapping>(API_ENDPOINTS.aiGovernance.evidenceMappings(orgId, evidenceId), { controlAssessmentId, rationale }))
+    return execute(() => apiClient.post<EvidenceMapping>(API_ENDPOINTS.aiGovernance.evidenceMappings(orgId, evidenceId), { controlAssessmentId, rationale }), { evidenceId, controlAssessmentId })
   }, [execute, orgId])
 
   const reviewMapping = useCallback(async (
@@ -534,7 +566,7 @@ export function useEvidenceMappingReview(orgId?: string) {
     review: EvidenceMappingReviewInput,
   ) => {
     if (!orgId) throw new Error('An organization is required to review evidence mappings')
-    return execute(() => apiClient.post<EvidenceMapping>(API_ENDPOINTS.aiGovernance.reviewEvidenceMapping(orgId, mappingId), review))
+    return execute(() => apiClient.post<EvidenceMapping>(API_ENDPOINTS.aiGovernance.reviewEvidenceMapping(orgId, mappingId), review), { id: mappingId })
   }, [execute, orgId])
 
   return { loading, error, createMapping, reviewMapping }

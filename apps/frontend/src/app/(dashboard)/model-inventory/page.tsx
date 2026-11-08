@@ -53,11 +53,11 @@ function SystemRow({ system, onClick }: { system: AISystem; onClick: () => void 
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-base font-semibold">{system.name}</p>
-            <Badge className={`border-2 px-2 py-0.5 text-[10px] font-semibold uppercase ${RISK_TIER_COLORS[system.riskTier] ?? 'border-[var(--fm-line)] bg-white text-[var(--fm-ink)]'}`}>
+            <Badge className={`border px-2 py-0.5 text-[10px] font-semibold uppercase ${RISK_TIER_COLORS[system.riskTier] ?? 'border-[var(--fm-line)] bg-white text-[var(--fm-ink)]'}`}>
               {system.riskTier} risk
             </Badge>
             {ls.criticalBlockers > 0 && (
-              <Badge className="border-2 border-red-600 bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-800">
+              <Badge className="border border-red-600 bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-800">
                 <IconAlertHexagon className="mr-1 h-2.5 w-2.5" />
                 {ls.criticalBlockers} blocker{ls.criticalBlockers !== 1 ? 's' : ''}
               </Badge>
@@ -146,7 +146,7 @@ export default function ModelInventoryPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="bg-gradient-to-br from-[#f0f4ff] via-white to-[#fff4de] p-6 rounded-[14px] shadow-[var(--fm-shadow)]">
+      <Card className="bg-white p-6 rounded-[14px] shadow-[var(--fm-shadow)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +241,7 @@ export default function ModelInventoryPage() {
       )}
 
       {!loading && error && (
-        <div className="rounded-3xl border-2 border-red-600 bg-red-50 p-6">
+        <div className="rounded-3xl border border-red-600 bg-red-50 p-6">
           <div className="flex items-start gap-3">
             <IconAlertTriangle className="mt-0.5 h-5 w-5 text-red-700" />
             <div>
@@ -249,7 +249,7 @@ export default function ModelInventoryPage() {
               <p className="text-sm text-red-700">{error.message}</p>
               <Button
                 variant="neutral"
-                className="mt-3 border-2 border-red-700 font-bold text-red-700"
+                className="mt-3 border border-red-700 font-bold text-red-700"
                 onClick={() => void refreshSystems()}
               >
                 Retry
