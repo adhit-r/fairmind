@@ -135,6 +135,7 @@ class Framework(BaseModel):
     type: Optional[str] = None
     binding: Optional[str] = None
     status: Optional[str] = None
+    priority: Optional[str] = None
 
 
 class Requirement(BaseModel):

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
+import { requireResponseScope } from './useGovernanceAssurance'
 
 export type RemediationPriority = 'low' | 'medium' | 'high' | 'critical'
 export type RemediationStatus = 'open' | 'in_progress' | 'blocked' | 'done'
@@ -232,7 +233,7 @@ export function useRemediation(systemId?: string) {
         throw new Error(response.error || 'Failed to load remediation tasks')
       }
 
-      const normalizedTasks = sortTasks((response.data.tasks || []).map(normalizeTask))
+      const normalizedTasks = sortTasks((response.data.tasks || []).map((task) => normalizeTask(requireResponseScope('remediation task', task, { systemId: targetSystemId }))))
       setTasks(normalizedTasks)
     } catch (err) {
       if (currentRequest !== requestVersion.current) {
@@ -308,7 +309,7 @@ export function useRemediation(systemId?: string) {
           throw new Error(response.error || 'Failed to create remediation task')
         }
 
-        const nextTask = normalizeTask(response.data)
+        const nextTask = normalizeTask(requireResponseScope('remediation task', response.data, { systemId }))
         setTasks((current) => sortTasks([nextTask, ...current.filter((task) => task.id !== nextTask.id)]))
         return nextTask
       } catch (err) {
@@ -340,7 +341,7 @@ export function useRemediation(systemId?: string) {
           throw new Error(response.error || 'Failed to update remediation task')
         }
 
-        const nextTask = normalizeTask(response.data)
+        const nextTask = normalizeTask(requireResponseScope('remediation task', response.data, { id: taskId }))
         setTasks((current) => sortTasks(current.map((task) => (task.id === taskId ? nextTask : task))))
         return nextTask
       } catch (err) {

@@ -10,6 +10,7 @@ export interface ComplianceFramework {
   id: string
   name: string
   description: string
+  priority?: string | null
   controls: any[]
 }
 
