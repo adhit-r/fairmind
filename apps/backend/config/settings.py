@@ -11,7 +11,7 @@ try:
     validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
-from pydantic import Field
+from pydantic import Field, SecretStr
 from functools import lru_cache
 
 
@@ -91,6 +91,19 @@ class Settings(BaseSettings):
     # Issuer, public-key, and trust-policy administration remains independently
     # hidden until PostgreSQL 013f and the literal trust-admin permission release.
     assurance_v2_trust_administration_enabled: bool = False
+    # Human upload of evaluation input artifacts to the write-once S3 store.
+    # Hidden until enabled with the master switch and the store settings below.
+    assurance_v2_artifact_upload_enabled: bool = False
+    # A dedicated least-privilege IAM user (s3:PutObject and s3:GetObject on the
+    # prefix only), separate from aws_access_key_id. No defaults: the store
+    # refuses to build until every value is set.
+    evaluation_artifact_s3_bucket: Optional[str] = None
+    evaluation_artifact_s3_prefix: Optional[str] = None
+    evaluation_artifact_s3_region: Optional[str] = None
+    evaluation_artifact_s3_endpoint_url: Optional[str] = None
+    evaluation_artifact_aws_access_key_id: Optional[str] = None
+    evaluation_artifact_aws_secret_access_key: Optional[SecretStr] = None
+    evaluation_artifact_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=1073741824)
     # Generic Evidence Hub URLs and direct entity links are untrusted until a
     # reviewed deployment explicitly enables this compatibility capability.
     untrusted_external_evidence_linking_enabled: bool = False

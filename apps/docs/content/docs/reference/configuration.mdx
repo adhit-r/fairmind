@@ -54,6 +54,20 @@ Every Assurance V2 route is unmounted unless `ASSURANCE_V2_ENABLED=true` and its
 | `ASSURANCE_V2_SEPARATION_OVERRIDE_ENABLED` | Owner override and delegated grants; also needs the decision gate |
 | `ASSURANCE_V2_EVALUATOR_CATALOG_ENABLED` | Evaluator registration administration |
 | `ASSURANCE_V2_TRUST_ADMINISTRATION_ENABLED` | Issuer, signing-key, and trust-policy administration |
+| `ASSURANCE_V2_ARTIFACT_UPLOAD_ENABLED` | Evaluation input artifact upload to the write-once S3 store; also needs the `EVALUATION_ARTIFACT_*` settings below |
+
+### Evaluation artifact store
+
+Uploads go to S3 through a dedicated IAM user that holds only `s3:PutObject` and `s3:GetObject` on the configured prefix, never the general `AWS_ACCESS_KEY_ID`. None of these has a default; with any of them unset, uploads return `503 artifact_store_unavailable`.
+
+| Setting | Meaning |
+| --- | --- |
+| `EVALUATION_ARTIFACT_S3_BUCKET` | Bucket name |
+| `EVALUATION_ARTIFACT_S3_PREFIX` | Key prefix ending in `/`; objects are stored at `<prefix>sha256/<digest>` |
+| `EVALUATION_ARTIFACT_S3_REGION` | Bucket region |
+| `EVALUATION_ARTIFACT_AWS_ACCESS_KEY_ID`, `EVALUATION_ARTIFACT_AWS_SECRET_ACCESS_KEY` | The dedicated IAM user's key |
+| `EVALUATION_ARTIFACT_S3_ENDPOINT_URL` | Optional; leave unset for AWS |
+| `EVALUATION_ARTIFACT_MAX_BYTES` | Largest accepted upload, default 10 MiB |
 
 ### What the master switch does on its own
 
@@ -68,11 +82,11 @@ With the master switch on, startup fails closed unless:
 
 - the database is PostgreSQL. Any other database fails at startup with `unsupported database dialect for assurance v2`, so Assurance V2 as a whole, including reviews, imports, freshness, and decisions, is PostgreSQL-only;
 - `ASSURANCE_MIGRATION_SCHEMA` names an existing schema;
-- migrations `013` to `013m` are applied and the migration ledger matches;
+- migrations `013` to `013n` are applied and the migration ledger matches;
 - the installed catalog matches the frozen fingerprint for the PostgreSQL major version (14 or 18) in `FROZEN_POSTGRESQL_ASSURANCE_CATALOGS`.
 
 <Callout type="warn" title="Known limitation: PostgreSQL 18 and Neon">
-The frozen PostgreSQL 18 fingerprint is still the `013j` measurement, and it includes the Neon project role graph. On Neon or PostgreSQL 18 with `013k` to `013m` applied, startup with the master switch on fails closed until the fingerprint is re-measured there. Adding or removing a Neon project role also changes the fingerprint. See `apps/backend/migrations/upgrade_paths/README.md`.
+The frozen PostgreSQL 18 fingerprint is still the `013j` measurement, and it includes the Neon project role graph. On Neon or PostgreSQL 18 with `013k` to `013n` applied, startup with the master switch on fails closed until the fingerprint is re-measured there. Adding or removing a Neon project role also changes the fingerprint. See `apps/backend/migrations/upgrade_paths/README.md`.
 </Callout>
 
 See [Permissions and separation](/docs/reference/permissions-and-separation) for who can use each route.
