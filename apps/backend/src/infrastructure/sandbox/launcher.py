@@ -30,7 +30,8 @@ LABEL = "io.fairmind.sandbox=1"
 LABEL_FILTER = "label=io.fairmind.sandbox=1"
 NAME_PREFIX = "fm-sbx-"
 HARD_OUTPUT_CAP = 64 * 1024
-_DOCKER_TIMEOUT = 30  # seconds for inspect, rm and ps calls
+_DOCKER_TIMEOUT = 30  # seconds for info, inspect, rm and ps calls
+_MAX_INT = 2**53  # metrics stay exact as JSON numbers and as floats downstream
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _REPOSITORY = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+")
@@ -146,7 +147,11 @@ _BUDGETS = {
 
 
 def limits_for(config: SandboxConfig, budgets: Mapping[str, Any]) -> Limits:
-    """The envelope budgets as sandbox limits; a missing budget takes the host ceiling, one above it is refused."""
+    """The envelope budgets as sandbox limits; a missing budget takes the host ceiling.
+
+    A budget above the ceiling is refused, and so is one below the floor the runner needs (64 MiB,
+    8 processes): raising it silently would make the evidence misstate the confinement.
+    """
     if not isinstance(budgets, Mapping):
         raise SandboxRefused("invalid_budget")
     values: dict[str, float] = {}
@@ -158,12 +163,14 @@ def limits_for(config: SandboxConfig, budgets: Mapping[str, Any]) -> Limits:
         if value > ceiling:
             raise SandboxRefused("budget_exceeds_host")
         values[key] = value
+    if values["maxMemoryMiB"] < 64 or values["maxProcesses"] < 8:
+        raise SandboxRefused("budget_below_floor")
     whole = {k: math.ceil(v) for k, v in values.items()}
     return Limits(
         duration_seconds=float(values["maxDurationSeconds"]),
         cpu_seconds=whole["maxCpuSeconds"],
-        memory_mib=max(whole["maxMemoryMiB"], 64),
-        processes=max(whole["maxProcesses"], 8),
+        memory_mib=whole["maxMemoryMiB"],
+        processes=whole["maxProcesses"],
         disk_mib=whole["maxDiskMiB"],
         input_bytes=whole["maxInputBytes"],
         output_bytes=min(whole["maxOutputBytes"], HARD_OUTPUT_CAP),
@@ -233,7 +240,11 @@ def _scalar(value: Any) -> bool:
         return True
     if isinstance(value, str):
         return len(value) <= 64
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return abs(value) < _MAX_INT
+    return isinstance(value, float)
 
 
 def parse_runner_output(raw: bytes, cap: int = HARD_OUTPUT_CAP) -> dict[str, Any]:
@@ -249,12 +260,12 @@ def parse_runner_output(raw: bytes, cap: int = HARD_OUTPUT_CAP) -> dict[str, Any
             parse_constant=_reject_constant,
             parse_float=_finite_float,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+    except (ValueError, RecursionError) as exc:  # ValueError covers JSONDecodeError, bad UTF-8 and the int digit limit
         raise RunnerOutputInvalid("output is not JSON") from exc
-    if not isinstance(value, dict) or value.get("v") != 1 or isinstance(value.get("v"), bool):
+    if not isinstance(value, dict) or type(value.get("v")) is not int or value["v"] != 1:
         raise RunnerOutputInvalid("unknown output version")
     if set(value) == {"v", "error"}:
-        if value["error"] not in RUNNER_ERRORS:
+        if not isinstance(value["error"], str) or value["error"] not in RUNNER_ERRORS:
             raise RunnerOutputInvalid("unknown error code")
         return value
     if set(value) != {"v", "engine", "status", "metrics"}:
@@ -263,6 +274,7 @@ def parse_runner_output(raw: bytes, cap: int = HARD_OUTPUT_CAP) -> dict[str, Any
     if (
         not isinstance(value["engine"], str)
         or not re.fullmatch(r"EV-[A-Z]{2,5}-[0-9]{2}", value["engine"])
+        or not isinstance(value["status"], str)
         or value["status"] not in RUNNER_STATUSES
         or not isinstance(metrics, dict)
         or len(metrics) > 32
@@ -279,28 +291,41 @@ class SandboxResult:
 
 
 class SandboxLauncher:
+    """Runs one sandbox at a time. start() must succeed before run(); every run reaps first."""
+
     def __init__(self, config: SandboxConfig) -> None:
         self._config = config
         # The docker CLI gets this environment and nothing from the launcher's own.
         self._env = {"DOCKER_HOST": config.docker_host, "PATH": "/usr/bin:/bin"}
+        self._checked = False
+        self._lock = threading.Lock()
 
     def _docker(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [self._config.docker_cli, *args],
-            env=self._env,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=_DOCKER_TIMEOUT,
-            check=False,
-        )
+        """A docker CLI call; a timeout or exec failure comes back as returncode -1, never as an exception."""
+        try:
+            return subprocess.run(
+                [self._config.docker_cli, *args],
+                env=self._env,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=_DOCKER_TIMEOUT,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return subprocess.CompletedProcess(list(args), -1, "", "")
 
     def check_host(self) -> None:
         """Refuses a daemon that would silently ignore the cgroup limits or seccomp."""
         info = self._docker("info", "--format", "{{json .}}")
         if info.returncode != 0:
             raise SandboxUnavailable("docker daemon is not reachable")
-        data = json.loads(info.stdout)
+        try:
+            data = json.loads(info.stdout)
+        except ValueError:
+            data = None
+        if not isinstance(data, dict):
+            raise SandboxUnavailable("docker info is not a JSON object")
         options = " ".join(data.get("SecurityOptions") or [])
         if not all(data.get(key) is True for key in ("MemoryLimit", "SwapLimit", "PidsLimit", "CpuCfsQuota")):
             raise SandboxUnavailable("docker daemon cannot enforce memory, swap, pids and cpu limits")
@@ -309,24 +334,46 @@ class SandboxLauncher:
         if self._config.require_rootless and "name=rootless" not in options:
             raise SandboxUnavailable("docker daemon is not rootless")
 
-    def reap(self) -> int:
-        """Removes every labelled sandbox container; run on start, when no sandbox may legitimately exist."""
+    def _labelled(self) -> list[str]:
         listed = self._docker("ps", "--all", "--quiet", "--no-trunc", "--filter", LABEL_FILTER)
         if listed.returncode != 0:
             raise SandboxUnavailable("cannot list sandbox containers")
-        ids = [i for i in listed.stdout.split() if re.fullmatch(r"[0-9a-f]{64}", i)]
+        return [i for i in listed.stdout.split() if re.fullmatch(r"[0-9a-f]{64}", i)]
+
+    def reap(self) -> int:
+        """Removes every labelled sandbox container, and refuses if any is left afterwards.
+
+        Runs on start and before each run, when no sandbox may legitimately exist (one at a time).
+        """
+        ids = self._labelled()
         if ids:
             self._docker("rm", "--force", *ids)
+            if self._labelled():
+                raise SandboxUnavailable("cannot remove sandbox containers")
         return len(ids)
 
     def start(self) -> int:
-        self.check_host()
-        return self.reap()
+        """Checks the daemon and reaps; run() refuses until this has succeeded."""
+        with self._lock:
+            self._checked = False
+            self.check_host()
+            removed = self.reap()
+            self._checked = True
+            return removed
 
     def run(self, digest: str, budgets: Mapping[str, Any], payload: bytes) -> SandboxResult:
         limits = limits_for(self._config, budgets)
         if not isinstance(payload, (bytes, bytearray)) or len(payload) > limits.input_bytes:
             raise SandboxRefused("input_too_large")
+        with self._lock:
+            if not self._checked:
+                raise SandboxUnavailable("start() has not checked the docker daemon")
+            # Also removes a container left by an earlier run whose rm failed, or whose create
+            # finished after its client was killed; refuses to launch while one survives.
+            self.reap()
+            return self._run(digest, limits, payload)
+
+    def _run(self, digest: str, limits: Limits, payload: bytes) -> SandboxResult:
         name = NAME_PREFIX + uuid.uuid4().hex
         argv = build_argv(self._config, digest, limits, name)
         deadline = time.monotonic() + limits.duration_seconds
@@ -357,10 +404,12 @@ class SandboxLauncher:
             except RunnerOutputInvalid:
                 return SandboxResult("output_invalid")
         finally:
-            self._docker("rm", "--force", name)
+            # Kill the client first so it cannot finish a create after the rm. A failed or timed-out
+            # rm leaves the container to the next run's reap, which refuses to launch beside it.
             if process.poll() is None:
                 process.kill()
-                process.wait()
+            process.wait()
+            self._docker("rm", "--force", name)
 
     def _oom_killed(self, name: str) -> bool:
         inspected = self._docker("inspect", "--format", "{{.State.OOMKilled}}", name)

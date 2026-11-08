@@ -1,14 +1,18 @@
 """The sandbox launcher's fixed docker run template, its budget handling and the runner output parser."""
 
 import json
+import os
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from src.infrastructure.sandbox import launcher as launcher_module
 from src.infrastructure.sandbox import (
     RunnerOutputInvalid,
     SandboxConfig,
+    SandboxLauncher,
     SandboxRefused,
     SandboxUnavailable,
     build_argv,
@@ -111,6 +115,13 @@ def test_budgets_cannot_inject_or_exceed(budgets, code):
     assert caught.value.code == code
 
 
+@pytest.mark.parametrize("budgets", [{"maxMemoryMiB": 32}, {"maxMemoryMiB": 63.5}, {"maxProcesses": 2}, {"maxProcesses": 7}])
+def test_budgets_below_the_floor_are_refused_not_raised(budgets):
+    with pytest.raises(SandboxRefused) as caught:
+        limits_for(config(), budgets)
+    assert caught.value.code == "budget_below_floor"
+
+
 def test_fractional_budgets_round_up_and_unrelated_keys_are_ignored():
     limits = limits_for(config(), {"maxMemoryMiB": 100.2, "maxCases": 10, "maxCostUsd": 0})
     assert limits.memory_mib == 101
@@ -206,6 +217,7 @@ def line(value):
 def test_parser_accepts_the_two_closed_shapes():
     assert parse_runner_output(line(RESULT)) == RESULT
     assert parse_runner_output(line({"v": 1, "error": "input_invalid"})) == {"v": 1, "error": "input_invalid"}
+    assert parse_runner_output(line({**RESULT, "metrics": {"n": 2**53 - 1}}))["metrics"]["n"] == 2**53 - 1
 
 
 @pytest.mark.parametrize(
@@ -232,6 +244,14 @@ def test_parser_accepts_the_two_closed_shapes():
         line({**RESULT, "metrics": {"a": "x" * 65}}),
         line({**RESULT, "metrics": {str(i): i for i in range(33)}}),
         line({"v": 1, "error": "anything else"}),
+        line({"v": 1, "error": []}),  # unhashable: must not raise TypeError
+        line({"v": 1, "error": {}}),
+        line({**RESULT, "status": {}}),
+        line({**RESULT, "status": []}),
+        line({**RESULT, "v": 1.0}),
+        b'{"v":1,"engine":"EV-TST-01","status":"passed","metrics":{"a":' + b"9" * 5000 + b"}}\n",  # int digit limit
+        line({**RESULT, "metrics": {"a": 2**53}}),
+        line({**RESULT, "metrics": {"a": -(2**53)}}),
         line([RESULT]),
         b"\xff\xfe\n",
         b"not json\n",
@@ -264,3 +284,139 @@ def test_seccomp_profile_starts_from_docker_default_and_denies_more():
     # glibc falls back from clone3 to clone only when clone3 returns ENOSYS.
     assert any(r["names"] == ["clone3"] and r["action"] == "SCMP_ACT_ERRNO" and r.get("errnoRet") == 38 for r in profile["syscalls"])
     assert {"read", "write", "mmap", "futex", "execve", "clone", "exit_group"} <= allowed
+
+
+# SandboxLauncher against a fake docker CLI: the host checks, the reaper and the outcome and
+# cleanup mapping of run(), with no Docker daemon. Each subcommand reads its behaviour from a file
+# next to the script, because the launcher hands the CLI only DOCKER_HOST and PATH.
+
+FAKE_DOCKER = r"""#!/bin/sh
+d=$(dirname "$0")
+echo "$*" >> "$d/calls"
+case $1 in
+  info) [ -f "$d/info.sh" ] && . "$d/info.sh"; cat "$d/info.json" ;;
+  ps) cat "$d/ps" ;;
+  rm) [ -f "$d/rm.sh" ] && . "$d/rm.sh"; : > "$d/ps" ;;
+  inspect) cat "$d/oom" 2>/dev/null || echo false ;;
+  run) . "$d/run.sh" ;;
+esac
+"""
+INFO = {
+    "MemoryLimit": True, "SwapLimit": True, "PidsLimit": True, "CpuCfsQuota": True, "CgroupVersion": "2",
+    "SecurityOptions": ["name=seccomp,profile=builtin", "name=rootless", "name=cgroupns"],
+}
+ORPHAN = "c" * 64
+
+
+@pytest.fixture
+def fake(tmp_path):
+    cli = tmp_path / "docker"
+    cli.write_text(FAKE_DOCKER)
+    cli.chmod(0o755)
+    (tmp_path / "info.json").write_text(json.dumps(INFO))
+    (tmp_path / "ps").write_text("")
+
+    def calls():
+        path = tmp_path / "calls"
+        return path.read_text().splitlines() if path.exists() else []
+
+    return SimpleNamespace(
+        dir=tmp_path,
+        write=lambda name, text: (tmp_path / name).write_text(text),
+        calls=calls,
+        launcher=lambda **o: SandboxLauncher(config(docker_cli=str(cli), **o)),
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"SecurityOptions": ["name=seccomp,profile=builtin", "name=cgroupns"]},  # rootful
+        {"SecurityOptions": ["name=rootless"]},  # no seccomp
+        {"CgroupVersion": "1"},
+        {"SwapLimit": False},
+        {"PidsLimit": None},
+        {"MemoryLimit": "true"},
+    ],
+)
+def test_start_refuses_an_unsafe_daemon_and_run_stays_refused(fake, change):
+    fake.write("info.json", json.dumps({**INFO, **change}))
+    fake.write("run.sh", "exit 0\n")
+    launcher = fake.launcher()
+    with pytest.raises(SandboxUnavailable):
+        launcher.start()
+    with pytest.raises(SandboxUnavailable):
+        launcher.run(DIGEST, {}, b"")
+    assert not any(c.startswith("run ") for c in fake.calls())
+
+
+@pytest.mark.parametrize("info_sh, info_json", [("exit 1\n", "{}"), ("", "not json"), ("", "[]")])
+def test_start_refuses_an_unreachable_or_garbled_daemon(fake, info_sh, info_json):
+    fake.write("info.sh", info_sh)
+    fake.write("info.json", info_json)
+    with pytest.raises(SandboxUnavailable):
+        fake.launcher().start()
+
+
+def test_a_rootful_daemon_passes_only_when_rootless_is_not_required(fake):
+    fake.write("info.json", json.dumps({**INFO, "SecurityOptions": ["name=seccomp,profile=builtin"]}))
+    assert fake.launcher(require_rootless=False).start() == 0
+
+
+def test_run_refuses_until_start_has_succeeded(fake):
+    fake.write("run.sh", "exit 0\n")
+    with pytest.raises(SandboxUnavailable):
+        fake.launcher().run(DIGEST, {}, b"")
+    assert fake.calls() == []
+
+
+def test_reaper_counts_removals_and_refuses_when_one_survives(fake):
+    fake.write("ps", ORPHAN + "\n")
+    assert fake.launcher().start() == 1
+    fake.write("ps", ORPHAN + "\n")
+    fake.write("rm.sh", "exit 1\n")
+    with pytest.raises(SandboxUnavailable):
+        fake.launcher().start()
+
+
+@pytest.mark.parametrize(
+    "script, oom, outcome",
+    [
+        (f"cat >/dev/null; printf '%s\\n' '{json.dumps(RESULT)}'\n", "false", "completed"),
+        ("cat >/dev/null; exit 1\n", "false", "crashed"),
+        ("exit 137\n", "true", "oom"),
+        ("printf '%s\\n' '{\"v\":1,\"error\":[]}'\n", "false", "output_invalid"),
+        ("printf '%s\\n' '{\"v\":1,\"engine\":\"EV-TST-01\",\"status\":{},\"metrics\":{}}'\n", "false", "output_invalid"),
+        ("exec yes\n", "false", "output_invalid"),  # unbounded stdout stops at the cap, not the wall clock
+        ("exec sleep 30\n", "false", "timeout"),
+    ],
+)
+def test_run_maps_every_ending_to_an_outcome_and_removes_the_container(fake, script, oom, outcome):
+    fake.write("run.sh", script)
+    fake.write("oom", oom)
+    launcher = fake.launcher()
+    launcher.start()
+    started = time.monotonic()
+    result = launcher.run(DIGEST, {"maxDurationSeconds": 2, "maxOutputBytes": 1024}, b"payload")
+    assert result.outcome == outcome
+    assert time.monotonic() - started < 10
+    assert (result.output is not None) == (outcome == "completed")
+    assert len([c for c in fake.calls() if c.startswith("rm --force fm-sbx-")]) == 1
+
+
+def test_cleanup_kills_the_client_when_rm_hangs_and_the_next_run_refuses(fake, monkeypatch):
+    monkeypatch.setattr(launcher_module, "_DOCKER_TIMEOUT", 0.5)
+    fake.write("run.sh", 'echo $$ > "$d/run.pid"; exec sleep 30\n')
+    launcher = fake.launcher()
+    launcher.start()
+    fake.write("rm.sh", "exec sleep 5\n")
+    started = time.monotonic()
+    assert launcher.run(DIGEST, {"maxDurationSeconds": 1}, b"").outcome == "timeout"
+    assert time.monotonic() - started < 4
+    with pytest.raises(ProcessLookupError):
+        os.kill(int((fake.dir / "run.pid").read_text()), 0)
+    # The container that rm could not remove blocks the next launch until it is reaped.
+    fake.write("ps", ORPHAN + "\n")
+    with pytest.raises(SandboxUnavailable):
+        launcher.run(DIGEST, {}, b"")
+    assert len([c for c in fake.calls() if c.startswith("run ")]) == 1

@@ -219,9 +219,12 @@ def test_cpu_limit_kills_a_spinning_process(sandbox, monkeypatch):
 
 
 def test_oversize_output_is_rejected(sandbox, monkeypatch):
-    probe(monkeypatch, "import sys\nsys.stdout.write('x' * 100000)\n")
-    result = sandbox.run(digest(), {"maxOutputBytes": 1024}, b"")
+    # Unbounded output: without the launcher's cap this run would end as "timeout" (or grow the backend).
+    probe(monkeypatch, "import sys\nwhile True:\n    sys.stdout.write('x' * 65536)\n")
+    started = time.monotonic()
+    result = sandbox.run(digest(), {"maxOutputBytes": 1024, "maxDurationSeconds": 30}, b"")
     assert result.outcome == "output_invalid", result
+    assert time.monotonic() - started < 30
 
 
 def test_reaper_removes_labelled_orphans(config):
