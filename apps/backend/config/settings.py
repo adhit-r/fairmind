@@ -198,6 +198,23 @@ class Settings(BaseSettings):
     # Local development: LLM features may call the developer's signed-in grok CLI. Ignored unless environment is development.
     grok_cli_enabled: bool = False
 
+    # Evaluation sandbox launcher (src/infrastructure/sandbox). Worker host only, off by default;
+    # setup and the memory budget are in docs/operations/rootless-docker-sandbox.md.
+    sandbox_launcher_enabled: bool = False
+    sandbox_docker_cli: str = "/usr/bin/docker"
+    sandbox_docker_host: str = ""  # the rootless daemon, e.g. unix:///run/user/<uid>/docker.sock
+    sandbox_require_rootless: bool = True
+    sandbox_runner_repository: str = ""  # registry path of apps/eval-runner, without tag or digest
+    sandbox_runner_digests: str = ""  # comma-separated sha256:<hex> allowlist
+    sandbox_seccomp_profile: str = ""  # absolute path to apps/eval-runner/seccomp/sandbox.json
+    sandbox_cpus: float = 1.0
+    sandbox_max_memory_mib: int = 512
+    sandbox_max_processes: int = 64
+    sandbox_max_duration_seconds: int = 300
+    sandbox_max_disk_mib: int = 64
+    sandbox_max_input_bytes: int = 32 * 1024 * 1024
+    sandbox_max_output_bytes: int = 16 * 1024
+
     # Encryption Configuration
     compliance_encryption_key: Optional[str] = None
     encryption_algorithm: str = "AES-256"

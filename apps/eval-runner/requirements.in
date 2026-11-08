@@ -1,0 +1,14 @@
+# Only what EV-TST-01 imports, pinned to the versions in apps/backend/uv.lock so the
+# runner computes with the same libraries the backend tests. Regenerate with:
+#   uv pip compile requirements.in --generate-hashes --python-version 3.11 --python-platform linux -o requirements.txt
+numpy==2.4.6
+pandas==3.1.1
+scikit-learn==1.9.1
+scipy==1.17.1
+cloudpickle==3.1.2
+joblib==1.6.0
+narwhals==2.22.1
+python-dateutil==2.9.0.post0
+six==1.17.0
+threadpoolctl==3.6.0
+tzdata==2026.2
