@@ -371,23 +371,6 @@ export function useAIGovernance() {
     fetchFrameworks()
   }, [])
 
-  const registerModel = async (modelData: any) => {
-    try {
-      setLoading(true)
-      const response: ApiResponse<any> = await apiClient.post(
-        API_ENDPOINTS.aiGovernance.registerModel,
-        modelData
-      )
-      if (response.success && response.data) return response.data
-      throw new Error(response.error || 'Model registration failed')
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Model registration failed'))
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const getSystemApproval = useCallback(async (systemId: string) => {
     setApprovalLoading(true)
     try {
@@ -447,7 +430,6 @@ export function useAIGovernance() {
     loading,
     approvalLoading,
     error,
-    registerModel,
     getSystemApproval,
     requestSystemApproval,
     decideApprovalRequest,

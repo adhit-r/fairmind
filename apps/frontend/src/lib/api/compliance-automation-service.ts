@@ -226,22 +226,6 @@ export const reportAPI = {
 
         return unwrap(api.get(`/api/v1/compliance/reports?${query}`))
     },
-
-    /**
-     * Get a specific report by ID
-     */
-    get: async (id: string): Promise<ComplianceReport> => {
-        return unwrap(api.get(`/api/v1/compliance/reports/${id}`))
-    },
-
-    /**
-     * Download a compliance report
-     */
-    download: async (id: string): Promise<Blob> => {
-        const response = await fetch(`/api/v1/compliance/reports/${id}/download`)
-        if (!response.ok) throw new Error('Failed to download report')
-        return response.blob()
-    },
 }
 
 // Remediation APIs
