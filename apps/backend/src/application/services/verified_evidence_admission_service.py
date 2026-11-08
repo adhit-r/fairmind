@@ -485,79 +485,106 @@ class VerifiedEvidenceAdmissionService:
 
         def admit(_mutation_now: datetime) -> MutationOutcome:
             del _mutation_now
-            try:
-                passport = parse_evidence_passport_v2(raw)
-            except EvidencePassportV2ValidationError:
-                raise _error(
-                    "evidence_passport_invalid",
-                    "The Evidence Passport is invalid.",
-                    status_code=422,
-                ) from None
-            signature = _mapping(
-                passport.get("signature"),
-                code="evidence_passport_invalid",
+            # Only signed worker completion may admit evidence for a worker job.
+            self._repository.refuse_worker_owned_suite(
+                organization_id=scope.organization_id,
+                run_id=scope.run_id,
+                suite_execution_id=scope.suite_execution_id,
             )
-            issuer_key = signature.get("issuerId")
-            signer_key_id = signature.get("keyId")
-            if not isinstance(issuer_key, str) or not isinstance(signer_key_id, str):
-                raise _error(
-                    "evidence_passport_invalid",
-                    "The Evidence Passport is invalid.",
-                    status_code=422,
-                )
-
-            initial = self._resolver.resolve(
-                scope=scope,
-                issuer_key=issuer_key,
-                signer_key_id=signer_key_id,
-            )
-            try:
-                candidate = self._authenticity.assess(
-                    passport,
-                    initial.expected_binding,
-                    initial.trusted_key,
-                    initial.database_now,
-                )
-            except EvidenceAuthenticityError:
-                raise _error(
-                    "evidence_authenticity_failed",
-                    "The Evidence Passport authenticity checks failed.",
-                    status_code=422,
-                ) from None
-            if candidate.issuer_id != issuer_key or candidate.key_id != signer_key_id:
-                raise _error(
-                    "evidence_authenticity_failed",
-                    "The Evidence Passport authenticity checks failed.",
-                    status_code=422,
-                )
-
-            evaluator = _evaluator_projection(passport)
-            _verify_evaluator_binding(initial, evaluator)
-            verified = self._resolver.resolve(
-                scope=scope,
-                issuer_key=issuer_key,
-                signer_key_id=signer_key_id,
-            )
-            _verify_stable_authority(initial, verified)
-            _verify_evaluator_binding(verified, evaluator)
-            verified_registration = _resolve_approved_evaluator_registration(
-                context=verified,
-                evaluator=evaluator,
-                signer_key_id=signer_key_id,
-                repository=self._repository,
-            )
-            return self._persist_verified(
+            return self.verify_and_persist_in_transaction(
                 scope=scope,
                 actor_id=actor_id,
-                passport=passport,
-                candidate=candidate,
-                evaluator=evaluator,
-                initial=initial,
-                verified=verified,
-                evaluator_registration=verified_registration,
+                raw_passport=raw,
             )
 
         return self._unit_of_work.mutate(command, admit)
+
+    def verify_and_persist_in_transaction(
+        self,
+        *,
+        scope: EvidenceAdmissionScope,
+        actor_id: str,
+        raw_passport: bytes,
+    ) -> MutationOutcome:
+        """Verify and persist one admission inside a caller-owned transaction.
+
+        The caller must already hold the scope locks and owns idempotency,
+        audit, and commit. Worker completion composes this with linking in one
+        job transaction; it is never a second transaction-owning service.
+        """
+
+        raw = bytes(raw_passport)
+        try:
+            passport = parse_evidence_passport_v2(raw)
+        except EvidencePassportV2ValidationError:
+            raise _error(
+                "evidence_passport_invalid",
+                "The Evidence Passport is invalid.",
+                status_code=422,
+            ) from None
+        signature = _mapping(
+            passport.get("signature"),
+            code="evidence_passport_invalid",
+        )
+        issuer_key = signature.get("issuerId")
+        signer_key_id = signature.get("keyId")
+        if not isinstance(issuer_key, str) or not isinstance(signer_key_id, str):
+            raise _error(
+                "evidence_passport_invalid",
+                "The Evidence Passport is invalid.",
+                status_code=422,
+            )
+
+        initial = self._resolver.resolve(
+            scope=scope,
+            issuer_key=issuer_key,
+            signer_key_id=signer_key_id,
+        )
+        try:
+            candidate = self._authenticity.assess(
+                passport,
+                initial.expected_binding,
+                initial.trusted_key,
+                initial.database_now,
+            )
+        except EvidenceAuthenticityError:
+            raise _error(
+                "evidence_authenticity_failed",
+                "The Evidence Passport authenticity checks failed.",
+                status_code=422,
+            ) from None
+        if candidate.issuer_id != issuer_key or candidate.key_id != signer_key_id:
+            raise _error(
+                "evidence_authenticity_failed",
+                "The Evidence Passport authenticity checks failed.",
+                status_code=422,
+            )
+
+        evaluator = _evaluator_projection(passport)
+        _verify_evaluator_binding(initial, evaluator)
+        verified = self._resolver.resolve(
+            scope=scope,
+            issuer_key=issuer_key,
+            signer_key_id=signer_key_id,
+        )
+        _verify_stable_authority(initial, verified)
+        _verify_evaluator_binding(verified, evaluator)
+        verified_registration = _resolve_approved_evaluator_registration(
+            context=verified,
+            evaluator=evaluator,
+            signer_key_id=signer_key_id,
+            repository=self._repository,
+        )
+        return self._persist_verified(
+            scope=scope,
+            actor_id=actor_id,
+            passport=passport,
+            candidate=candidate,
+            evaluator=evaluator,
+            initial=initial,
+            verified=verified,
+            evaluator_registration=verified_registration,
+        )
 
     def _persist_verified(
         self,

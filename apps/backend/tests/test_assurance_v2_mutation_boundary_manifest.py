@@ -24,6 +24,7 @@ from api.composition.evaluation_workbench import (
     build_evaluation_workbench_service,
     build_evaluation_workbench_services,
 )
+from api.composition.evaluation_worker_jobs import build_evaluation_cancellation_service
 from api.composition.evaluator_catalog import build_evaluator_catalog_service
 from api.composition.governance_decision import build_governance_decision_service
 from api.composition.imported_evidence import build_imported_evidence_service
@@ -50,6 +51,9 @@ from api.routes.evaluator_catalog import (
     evaluator_catalog_router,
 )
 from api.routes.trust_administration import trust_administration_router
+from src.application.services.evaluation_cancellation_service import (
+    EvaluationRunCancellationService,
+)
 from src.application.services.evaluation_workbench_service import EvaluationWorkbenchService
 from src.application.services.evaluation_catalog_versions_service import (
     EvaluationCatalogVersionsService,
@@ -185,6 +189,14 @@ MUTATION_MANIFEST = (
         "evaluation-v2.run.create",
         "workbench",
         operation_helper="_command",
+    ),
+    MutationRoute(
+        _RUN + "/cancellations",
+        "cancel_evaluation",
+        EvaluationRunCancellationService,
+        "request_cancellation",
+        "evaluation-v2.run.cancel",
+        "cancellation",
     ),
     MutationRoute(
         _CATALOG,
@@ -489,6 +501,8 @@ def _route_service_reference(item: MutationRoute) -> str:
         return "import_service"
     if item.service is TrustAdministrationService:
         return "service"
+    if item.service is EvaluationRunCancellationService:
+        return "cancellation_service"
     raise AssertionError(f"Unhandled assurance service: {item.service!r}")
 
 
@@ -596,8 +610,8 @@ def test_assurance_v2_mutation_manifest_is_the_exact_enabled_post_surface() -> N
         ("POST", item.path, item.endpoint) for item in MUTATION_MANIFEST
     }
 
-    assert len(MUTATION_MANIFEST) == 25
-    assert len({item.operation for item in MUTATION_MANIFEST}) == 25
+    assert len(MUTATION_MANIFEST) == 26
+    assert len({item.operation for item in MUTATION_MANIFEST}) == 26
     assert actual == expected
 
 
@@ -724,6 +738,11 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
                 "_unit_of_work",
                 SqlAlchemyEvaluationWorkbenchUnitOfWork,
             ),
+            "cancellation": (
+                build_evaluation_cancellation_service(session),
+                "unit_of_work",
+                SqlAlchemyEvaluationWorkbenchUnitOfWork,
+            ),
         }
         assert {item.composition for item in MUTATION_MANIFEST} == {
             "workbench",
@@ -731,6 +750,7 @@ def test_every_manifest_operation_reaches_a_shared_sqlalchemy_mutation_uow() -> 
             "trust",
             "import",
             "link",
+            "cancellation",
         }
         for service, attribute, expected_type in compositions.values():
             unit_of_work = getattr(service, attribute)

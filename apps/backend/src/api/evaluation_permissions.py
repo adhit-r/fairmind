@@ -22,6 +22,7 @@ from src.application.services.governance_assurance_service import OrgMembership
 EVALUATION_PLAN_WRITE_PERMISSION: Final = "evaluation:plan:write"
 EVALUATION_PLAN_ACTIVATE_PERMISSION: Final = "evaluation:plan:activate"
 EVALUATION_RUN_CREATE_PERMISSION: Final = "evaluation:run:create"
+EVALUATION_RUN_CANCEL_PERMISSION: Final = "evaluation:run:cancel"
 EVALUATION_EVIDENCE_SUBMIT_PERMISSION: Final = "evaluation:evidence:submit"
 EVALUATION_EVIDENCE_IMPORT_PERMISSION: Final = "evaluation:evidence:import"
 EVALUATION_EVIDENCE_LINK_PERMISSION: Final = "evaluation:evidence:link"
@@ -52,6 +53,10 @@ LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
     EVALUATION_RUN_CREATE_PERMISSION: (
         "evaluation_run_create_forbidden",
         "The evaluation:run:create permission is required.",
+    ),
+    EVALUATION_RUN_CANCEL_PERMISSION: (
+        "evaluation_run_cancel_forbidden",
+        "The evaluation:run:cancel permission is required.",
     ),
     EVALUATION_EVIDENCE_SUBMIT_PERMISSION: (
         "evaluation_evidence_submit_forbidden",
@@ -173,6 +178,7 @@ __all__ = [
     "EVALUATION_EVIDENCE_SUBMIT_PERMISSION",
     "EVALUATION_PLAN_ACTIVATE_PERMISSION",
     "EVALUATION_PLAN_WRITE_PERMISSION",
+    "EVALUATION_RUN_CANCEL_PERMISSION",
     "EVALUATION_RUN_CREATE_PERMISSION",
     "EVALUATION_SEPARATION_OVERRIDE_PERMISSION",
     "EVALUATION_TRUST_ADMIN_PERMISSION",

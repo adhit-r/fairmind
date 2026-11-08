@@ -359,6 +359,9 @@ class FakeRepository:
         self.catalog_registration = catalog_registration
         self.catalog_resolution_calls: list[dict[str, object]] = []
 
+    def refuse_worker_owned_suite(self, **scope):
+        self.worker_ownership_checks = [*getattr(self, "worker_ownership_checks", []), scope]
+
     def load_approved_evaluator_registration_for_update(self, **kwargs):
         self.catalog_resolution_calls.append(kwargs)
         return self.catalog_registration

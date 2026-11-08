@@ -678,6 +678,11 @@ class ImportedEvidenceService:
 
         def persist(_mutation_now: datetime) -> MutationOutcome:
             del _mutation_now
+            self._repository.refuse_worker_owned_suite(
+                organization_id=scope.organization_id,
+                run_id=scope.run_id,
+                suite_execution_id=scope.suite_execution_id,
+            )
             authority = self._repository.load_imported_evidence_authority_for_update(scope=scope)
             if authority is None:
                 raise _error(
