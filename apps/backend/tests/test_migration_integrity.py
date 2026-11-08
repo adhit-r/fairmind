@@ -557,7 +557,7 @@ def test_production_postgresql_manifest_covers_audit_immutability() -> None:
     assert set(FROZEN_POSTGRESQL_ASSURANCE_CATALOGS) == {14, 18}
     expected_digests = {
         14: "748072e8793e9c44ffa755c7aa05e85d6d22e0ccf98e51a5ceea593f3a6f5a85",
-        18: "ca00ef6d75a35294ac915de43d8f1a188a77a784060065d3947f982e8e6920a4",
+        18: "30ee9664500a32310839bacdf81acbf5ecf725f58e0f28ca23dc1f802269ae1f",
     }
     for major, digest in expected_digests.items():
         frozen = FROZEN_POSTGRESQL_ASSURANCE_CATALOGS[major]

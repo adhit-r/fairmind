@@ -16,19 +16,59 @@ jobs:
     permissions:
       contents: write   # attach files to the release
       id-token: write   # Sigstore keyless signing
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Version the packages from the release tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        shell: python
+        run: |
+          import os, re, pathlib
+          # v0.3.0-alpha -> 0.3.0a0, v0.4.0-beta.2 -> 0.4.0b2, v1.2.0-rc1 -> 1.2.0rc1 (PEP 440)
+          tag = os.environ["TAG"].lstrip("v")
+          v = re.sub(r"-(alpha|beta|rc)\.?(\d*)$", lambda m: {"alpha": "a", "beta": "b", "rc": "rc"}[m[1]] + (m[2] or "0"), tag)
+          files = {
+              "apps/sdk/pyproject.toml": r'^version = ".*"',
+              "apps/cli/pyproject.toml": r'^version = ".*"',
+              "apps/mcp/pyproject.toml": r'^version = ".*"',
+              "apps/sdk/src/fairmind/__init__.py": r'^__version__ = ".*"',
+              "apps/cli/fairmind_cli/__init__.py": r'^__version__ = ".*"',
+          }
+          for path, pattern in files.items():
+              f = pathlib.Path(path)
+              text, n = re.subn(pattern, pattern.split(" = ")[0].lstrip("^") + f' = "{v}"', f.read_text(), count=1, flags=re.M)
+              assert n == 1, f"no version line in {path}"
+              f.write_text(text)
+          print("packages versioned", v)
       - name: Build sdk, cli and mcp
         run: |
           for pkg in sdk cli mcp; do
             uv build "apps/$pkg" --out-dir dist
           done
+      - name: Hash the packages for provenance
+        id: hash
+        run: echo "hashes=$(cd dist && sha256sum * | base64 -w0)" >> "$GITHUB_OUTPUT"
       - name: Sign with Sigstore and attach to the release
         uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
         with:
           inputs: ./dist/*.tar.gz ./dist/*.whl
           release-signing-artifacts: true
+
+  # SLSA build provenance for the packages, attached to the release as an .intoto.jsonl file.
+  # A reusable workflow must be referenced by tag; slsa-github-generator verifies its own ref.
+  provenance:
+    needs: python-packages
+    permissions:
+      actions: read     # read the workflow run
+      id-token: write   # sign the provenance
+      contents: write   # attach it to the release
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.python-packages.outputs.hashes }}
+      upload-assets: true
 
   backend-image:
     runs-on: ubuntu-latest
