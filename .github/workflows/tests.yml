@@ -75,6 +75,8 @@ jobs:
         run: tooling/check_backend_layer_boundaries.sh
       - name: Archive import isolation
         run: tooling/check_no_archive_imports.sh
+      - name: Frontend design rules
+        run: tooling/check_frontend_design_rules.sh
 
   packages:
     name: ${{ matrix.package }}

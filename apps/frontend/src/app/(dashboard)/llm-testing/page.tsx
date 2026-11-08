@@ -221,7 +221,7 @@ export default function LLMTestingPage() {
                 key={method.id}
                 onClick={() => setActiveMethod(method.id)}
                 className={`
-                  p-4 border-2 rounded-none text-left transition-all
+                  p-4 border rounded-[14px] text-left transition-all
                   ${isActive 
                     ? 'bg-[var(--fm-ink)] text-white border-[var(--fm-line)]' 
                     : 'bg-white border-[var(--fm-line)] hover:bg-[var(--fm-bg)]'
@@ -249,7 +249,7 @@ export default function LLMTestingPage() {
 
       {/* Error Display */}
       {error && (
-        <Alert className="border-2 border-red-500 bg-red-50">
+        <Alert className="border border-red-500 bg-red-50">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
