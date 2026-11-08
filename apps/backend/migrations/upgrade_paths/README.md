@@ -144,3 +144,16 @@ data), then `013k_to_013l` and `013l_to_013m`. It also revokes PUBLIC's grants o
 the schema and drops an index 013e retired, so the catalog matches a clean
 install. The catalog fingerprint compares live-column order, so the attnum gap
 the dropped column leaves does not count.
+
+## Worker execution foundation 013m to evaluation input artifact store 013n
+
+Run `013m_to_013n_evaluation_artifact_input_store.sql` after the exact 013m
+ledger row is present. It is one transaction under an advisory lock and stops
+if `governance_evaluation_artifacts` already holds rows: those rows carry no
+scan policy and cannot be classified after the fact. It adds the NOT NULL
+`scan_policy` column, limits rejection reasons to fixed codes, binds
+`storage_key` to `sha256/<digest>`, and adds an `ENABLE ALWAYS` trigger that
+requires every new row to start `quarantined` and keeps `scan_policy`
+immutable. Replay is a no-op once the ledger row exists. After applying it on
+Neon, re-measure the PostgreSQL 18 catalog digest there before setting
+`assurance_v2_enabled`.
