@@ -134,17 +134,23 @@ uploaded model files are inspected but never loaded or executed.
 
 # Research impact statement
 
-FairMind is early, and its evidence of impact is readiness rather than
-adoption. Release v0.3.0-alpha is archived on Zenodo with a DOI and on
-Software Heritage, and is listed in the OECD.AI Catalogue of Tools & Metrics
-for Trustworthy AI and in the Awesome AI Regulation, Principles & Guidelines
-list. The repository includes the materials for a study built on the
-platform (FairMind-E, on environmental evidence for AI systems): a
-measurement harness, hand-labelled fixtures run against the production
-gate, and the hypothesis analyses. The backend has over 3,000 tests that run
-against PostgreSQL in CI, the fairness metric computations are fuzzed on
-every pull request, and releases are signed with Sigstore and carry SLSA
-provenance, so results can be reproduced from a verified build.
+FairMind is early: the evidence of its impact is research use by its
+developers and readiness for others, not yet outside adoption. The
+developers use it as the instrument of an ongoing study of environmental
+evidence for AI systems (FairMind-E, manuscript in preparation), whose
+materials are in `research/fairmind-e`. The study runs FairMind's
+production environmental assessment engine on a hand-labelled set of gate
+cases and compares its decisions with baselines, generates the assessment
+profiles for an expert-panel study from the same engine, and measures four
+workloads with a harness that records the provenance of each estimate.
+
+Release v0.3.0-alpha is archived on Zenodo with a DOI and on Software
+Heritage, and is listed in the OECD.AI Catalogue of Tools & Metrics for
+Trustworthy AI and in the Awesome AI Regulation, Principles & Guidelines
+list. The backend has over 3,000 tests that run against PostgreSQL in CI,
+the fairness metric computations are fuzzed on every pull request, and
+releases are signed with Sigstore and carry SLSA provenance, so results can
+be reproduced from a verified build.
 
 # Limitations
 
@@ -158,14 +164,26 @@ a conformity assessment.
 
 # AI usage disclosure
 
-Generative AI (Claude, by Anthropic, through Claude Code) was used to write
-and revise parts of the software, tests and documentation, and to draft this
-paper. The author directed the work, reviewed every change before merging,
-and verified it through the automated test suite, CodeQL static analysis
-and fuzzing, all of which are required checks on the main branch. For the
+Tools and versions: Claude models by Anthropic, used through Claude Code
+(Claude Opus 4.6, Opus 4.8, Opus 5.5, Sonnet 4.6, Haiku 4.5 and Fable 5.1,
+as recorded in commit trailers); OpenAI Codex; GitHub Copilot; and Grok by
+xAI, used through the Grok CLI. Versions of Codex, Copilot and Grok were not
+recorded.
+
+Nature and scope: Claude Code generated and refactored code, wrote tests,
+drafted documentation and drafted this paper. Codex generated code and
+reviewed pull requests automatically. Copilot suggested code in two
+commits. Grok ran FairMind's language-model features locally during
+development.
+
+Review: the author framed the problem and made the core design decisions,
+including the workflow model with human gates, the shared control layer and
+the ledger design. The author reviewed every AI-assisted change before
+merging, and each change passed the automated test suite, CodeQL static
+analysis and fuzzing, which are required checks on the main branch. For the
 paper, the author checked every count against the released code and every
-reference against its original source, and takes responsibility for the
-content.
+reference against its original source, and takes responsibility for all
+submitted material.
 
 # Acknowledgements
 
