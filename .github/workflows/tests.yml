@@ -43,6 +43,46 @@ jobs:
         working-directory: research/fairmind-e
         run: uv run --frozen --project ../../apps/backend python -m unittest discover -s tests
 
+  sandbox:
+    # Builds apps/eval-runner and checks the launcher's confinement against it. Hosted runners give
+    # the default (rootful) Docker daemon, not rootless; docs/operations/rootless-docker-sandbox.md
+    # has the same test for the rootless host.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:14  # tests/conftest.py requires a disposable server; these tests do not use it
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+      registry:
+        image: registry:2  # throwaway, so the image has a digest to run by; nothing is published
+        ports:
+          - 5000:5000
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      UV_PYTHON: "3.11"
+      FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Build the runner image and push it to the job's registry
+        working-directory: .
+        run: |
+          docker build --build-context engines=apps/backend/src/application/services/eval_engines \
+            -t localhost:5000/fairmind-eval-runner:ci apps/eval-runner
+          docker push localhost:5000/fairmind-eval-runner:ci
+          image=$(docker inspect --format '{{index .RepoDigests 0}}' localhost:5000/fairmind-eval-runner:ci)
+          [[ "$image" == localhost:5000/fairmind-eval-runner@sha256:* ]]
+          echo "FAIRMIND_SANDBOX_IT_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Sandbox confinement
+        run: uv run --frozen --extra test pytest -q -rfEs tests/test_sandbox_docker.py tests/test_sandbox_launcher.py tests/test_eval_runner.py
+      - name: No sandbox containers left
+        run: test -z "$(docker ps --all --quiet --filter label=io.fairmind.sandbox=1)"
+
   frontend:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
