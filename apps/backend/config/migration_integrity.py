@@ -98,6 +98,8 @@ _FROZEN_013L_CHECKSUM = "2dd029773f4dbe7b79cbc8db69ebe2bcdf444d82d8c9316a7f23b90
 FROZEN_013L_OPERATOR_CHECKSUM = "b8942f7baf21bc21cfabea04f33ab020c1aa55f531be3effee571e1eb2a7eda1"
 _FROZEN_013M_CHECKSUM = "ddd4818d6e8390a7be2c69540e13951098f9853d7794985005645a6bc9695312"
 FROZEN_013M_OPERATOR_CHECKSUM = "1f7b0f7e56a27b8469638b3ccb5292cbe6d29d6e402d2f16f53dffb334e0dcfd"
+_FROZEN_013N_CHECKSUM = "159dc53245b277f9d7e649b353dfc60af0ddf2ff188cfd232eb4e3747e62dd6c"
+FROZEN_013N_OPERATOR_CHECKSUM = "a42aebbebcc70303003a26320024d45bb8bedc7562fcda9fde2d9da03ece6e52"
 
 FROZEN_ASSURANCE_MIGRATIONS = (
     FrozenMigration(
@@ -169,6 +171,11 @@ FROZEN_ASSURANCE_MIGRATIONS = (
         "013l-to-013m-worker-execution-foundation-v1",
         _FROZEN_013M_CHECKSUM,
         _MIGRATIONS / "013m_worker_execution_foundation.sql",
+    ),
+    FrozenMigration(
+        "013m-to-013n-evaluation-artifact-input-store-v1",
+        _FROZEN_013N_CHECKSUM,
+        _MIGRATIONS / "013n_evaluation_artifact_input_store.sql",
     ),
 )
 
@@ -263,6 +270,7 @@ POSTGRESQL_ASSURANCE_FUNCTIONS = frozenset(
         "guard_governance_evaluation_worker_identity_013m",
         "guard_governance_evaluation_suite_attempt_013m",
         "guard_governance_evaluation_artifact_013m",
+        "guard_governance_evaluation_artifact_013n",
         "fairmind_validate_separation_override_grant_audit_013l",
         "fairmind_validate_delegated_decision_audit_013l",
         "fairmind_initial_layer_verdicts_v1_for_run",
@@ -392,6 +400,7 @@ POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS = frozenset(
         "governance_evaluation_attempt_artifacts_no_delete_013m",
         "governance_evaluation_cancellations_no_update_013m",
         "governance_evaluation_cancellations_no_delete_013m",
+        "governance_evaluation_artifacts_guard_013n",
     }
 )
 
@@ -401,7 +410,7 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
     required_triggers=POSTGRESQL_ASSURANCE_REQUIRED_TRIGGERS,
 )
 
-# Measured from two independent full operator-chain installations through 013m on
+# Measured from two independent full operator-chain installations through 013n on
 # PostgreSQL 14 and cross-checked against a direct-payload installation. The
 # PostgreSQL major is part of the canonical catalog payload because PostgreSQL
 # deparser output can change across major versions.
@@ -417,14 +426,14 @@ POSTGRESQL_ASSURANCE_CATALOG_SPEC = PostgreSQLCatalogSpec(
 #
 # The PostgreSQL 18 digest below is still the 013j measurement. It includes the
 # Neon role graph, so it cannot be reproduced on a local PostgreSQL 18. After
-# 013k, 013l and 013m are applied to Neon, re-measure it there before setting
+# 013k, 013l, 013m and 013n are applied to Neon, re-measure it there before setting
 # assurance_v2_enabled; until then startup with assurance on fails closed.
 FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
     {
         14: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
             postgresql_major=14,
-            digest=("748072e8793e9c44ffa755c7aa05e85d6d22e0ccf98e51a5ceea593f3a6f5a85"),
+            digest=("dbfbd6391e5deac1ae98b3bbbf9f3e1a3c72f0e59e7b2540aa767749674811a0"),
         ),
         18: FrozenPostgreSQLCatalog(
             spec=POSTGRESQL_ASSURANCE_CATALOG_SPEC,
