@@ -15,6 +15,7 @@
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
 [![Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/adhit-r/fairmind/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/adhit-r/fairmind)
 [![OECD.AI Catalogue](https://img.shields.io/badge/OECD.AI-Catalogue%20of%20Tools%20%26%20Metrics-1f4e79)](https://oecd.ai/en/catalogue/tools/adhit-rfairmind)
+[![Mentioned in Awesome AI Regulation, Principles & Guidelines](https://awesome.re/mentioned-badge.svg)](https://github.com/EthicalML/awesome-artificial-intelligence-regulation#interactive-and-practical-tools)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](#current-status)
 [![Good first issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
@@ -211,9 +212,11 @@ Backend tests need a throwaway PostgreSQL 14 server; each test gets its own temp
 
 ---
 
-## OECD.AI Catalogue
+## Listings
 
 FairMind is listed in the [OECD.AI Catalogue of Tools & Metrics for Trustworthy AI](https://oecd.ai/en/catalogue/tools/adhit-rfairmind) as an open-source technical toolkit for governance, compliance and risk management, covering design, validation, deployment and monitoring. The catalogue lists tools from their authors; the OECD does not vet or endorse them.
+
+It is also listed in [Awesome AI Regulation, Principles & Guidelines](https://github.com/EthicalML/awesome-artificial-intelligence-regulation#interactive-and-practical-tools), the Institute for Ethical AI & Machine Learning's curated list of AI guidelines, principles and tools, under "Interactive and Practical Tools".
 
 ## Contributing
 
