@@ -2,6 +2,13 @@ cff-version: 1.2.0
 message: "If you use FairMind, please cite it using the metadata below."
 type: software
 doi: 10.5281/zenodo.23982915
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23982915
+    description: Zenodo concept DOI (all versions)
+  - type: swh
+    value: "swh:1:snp:36e20ffd273fa17c8af39cd469e2929b6df580e4"
+    description: Software Heritage archive snapshot, 2026-11-08
 title: FairMind
 abstract: >-
   Open-source AI assurance workbench for models and agents: map governance

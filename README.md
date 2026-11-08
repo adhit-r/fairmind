@@ -13,6 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
+[![Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/adhit-r/fairmind/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/adhit-r/fairmind)
 [![OECD.AI Catalogue](https://img.shields.io/badge/OECD.AI-Catalogue%20of%20Tools%20%26%20Metrics-1f4e79)](https://oecd.ai/en/catalogue/tools/adhit-rfairmind)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](#current-status)
 [![Good first issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
