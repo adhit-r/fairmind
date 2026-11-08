@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from api.composition.evaluation_artifacts import build_evaluation_artifact_service
 from api.routes.evaluation_workbench import (
@@ -114,14 +115,18 @@ async def upload_evaluation_artifact(
         _missing("organization")
     media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     data = await _bounded_body(request, settings.evaluation_artifact_max_bytes)
-    try:
-        service = build_service()
-        result = service.upload(
+
+    def upload():
+        return build_service().upload(
             organization_id=membership.org_id,
             actor_id=membership.user_id,
             media_type=media_type,
             data=data,
         )
+
+    try:
+        # Hashing, scanning, PostgreSQL and S3 calls all block: keep them off the loop.
+        result = await run_in_threadpool(upload)
     except ArtifactStoreError:
         raise _error("artifact_store_unavailable") from None
     except ArtifactUploadError as error:

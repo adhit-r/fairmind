@@ -3,6 +3,11 @@
 Only PutObject (conditional, with a SHA-256 checksum) and GetObject are used,
 so the dedicated IAM user needs s3:PutObject and s3:GetObject on the prefix and
 nothing else. There is no delete and no list.
+
+Without s3:ListBucket, S3 answers GetObject on an absent key with 403
+AccessDenied rather than 404, so a missing object surfaces here as
+store_unavailable. The service treats both the same way: the row stays
+quarantined and a replay re-writes the object before promoting.
 """
 
 from __future__ import annotations
@@ -21,7 +26,10 @@ from src.application.ports.evaluation_artifacts import (
 )
 
 
-_ALREADY_EXISTS = frozenset({"PreconditionFailed", "ConditionalRequestConflict"})
+# Only 412 means the key exists. 409 ConditionalRequestConflict means another
+# operation on the key is in flight; the object may never exist, so it is an
+# unavailable store and the caller retries.
+_ALREADY_EXISTS = frozenset({"PreconditionFailed"})
 _MISSING = frozenset({"NoSuchKey", "404", "NotFound"})
 
 

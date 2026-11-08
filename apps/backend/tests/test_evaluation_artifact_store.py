@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from threading import Barrier
+
+from botocore.exceptions import ClientError
 
 import boto3
 import pytest
@@ -112,16 +115,58 @@ def _objects(s3) -> list[str]:
     return [item["Key"] for item in s3.list_objects_v2(Bucket=BUCKET).get("Contents", [])]
 
 
+CSV, JSON = "text/csv", "application/json"
+
+
 def test_scan_input_uses_fixed_reason_codes() -> None:
-    assert scan_input(CLEAN_CSV) is None
-    assert scan_input(b"id,key\n1,AKIAABCDEFGHIJKLMNOP\n") == "credential_detected"
-    assert scan_input(b'{"api_key": "abcd1234efgh5678"}') == "credential_detected"
-    assert scan_input(b"-----BEGIN PRIVATE KEY-----\nMIIE\n") == "private_key_detected"
-    assert scan_input(b"-----BEGIN EC PRIVATE KEY-----\n") == "private_key_detected"
-    assert scan_input(b"id,text\n1,<think>step one</think>\n") == "chain_of_thought_detected"
-    assert scan_input(b'{"reasoning_content": "x"}') == "chain_of_thought_detected"
-    assert scan_input(b"\xff\xfe") == "undecodable_content"
-    assert scan_input(b"a\x00b") == "undecodable_content"
+    assert scan_input(CLEAN_CSV, CSV) is None
+    assert scan_input(b'{"rows": [{"id": 1, "label": "a", "prompt_tokens": 12}]}', JSON) is None
+    assert scan_input(b"id,key\n1,AKIAABCDEFGHIJKLMNOP\n", CSV) == "credential_detected"
+    assert scan_input(b'{"api_key": "abcd1234efgh5678"}', JSON) == "credential_detected"
+    assert scan_input(b"-----BEGIN PRIVATE KEY-----\nMIIE\n", CSV) == "private_key_detected"
+    assert scan_input(b"-----BEGIN EC PRIVATE KEY-----\n", CSV) == "private_key_detected"
+    assert scan_input(b"id,text\n1,<think>step one</think>\n", CSV) == "chain_of_thought_detected"
+    assert scan_input(b'{"reasoning_content": "x"}', JSON) == "chain_of_thought_detected"
+    assert scan_input(b"\xff\xfe", CSV) == "undecodable_content"
+    assert scan_input(b"a\x00b", CSV) == "undecodable_content"
+    assert scan_input(b'{"id": 1', JSON) == "undecodable_content"
+
+
+@pytest.mark.parametrize(
+    ("data", "media_type", "reason"),
+    [
+        # JSON string escapes are decoded before the patterns run.
+        (
+            b'{"k": "\\u002d\\u002d\\u002d\\u002d\\u002dBEGIN RSA PRIVATE KEY-----\\nMIIE"}',
+            JSON,
+            "private_key_detected",
+        ),
+        (b'{"k": "\\u0041KIAABCDEFGHIJKLMNOP"}', JSON, "credential_detected"),
+        (b'{"password": "hunter2hunter2"}', JSON, "credential_detected"),
+        (b'{"pass\\u0077ord": "hunter2"}', JSON, "credential_detected"),
+        (
+            b'{"aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}',
+            JSON,
+            "credential_detected",
+        ),
+        (b'{"clientConfig": {"apiKey": "abc"}}', JSON, "credential_detected"),
+        (b'[{"id": 1}, {"id": 2, "access_token": "abc"}]', JSON, "credential_detected"),
+        # A duplicate key cannot hide the first value.
+        (b'{"secret": "abc", "secret": ""}', JSON, "credential_detected"),
+        # A credential-named CSV column with values, in any position.
+        (b"user,password\nalice,Tr0ub4dor&3xyz\n", CSV, "credential_detected"),
+        (b"id,AWS Secret Access Key,label\n1,abc,0\n", CSV, "credential_detected"),
+        (b'id,note\n1,"-----BEGIN OPENSSH PRIVATE KEY-----"\n', CSV, "private_key_detected"),
+    ],
+)
+def test_scan_input_decodes_before_matching(data: bytes, media_type: str, reason: str) -> None:
+    assert scan_input(data, media_type) == reason
+
+
+def test_scan_input_allows_empty_credential_columns_and_plain_names() -> None:
+    assert scan_input(b"user,password\nalice,\nbob, \n", CSV) is None
+    assert scan_input(b'{"password": "", "tokens": ["a", "b"], "label": 1}', JSON) is None
+    assert scan_input(b"id,keyword,label\n1,secretary,0\n", CSV) is None
 
 
 def test_moto_round_trip_promotes_and_replays(factory, store, s3) -> None:
@@ -166,6 +211,82 @@ def test_store_refuses_overwrite_and_checksum_mismatch_on_read_fails(store, s3) 
     assert not hasattr(store, "delete") and not hasattr(store, "list")
 
 
+class _LeastPrivilegeClient:
+    """moto does not enforce IAM. Without s3:ListBucket, real S3 answers GetObject
+    on an absent key with 403 AccessDenied, and a conditional write can see 409."""
+
+    def __init__(self, inner, put_error: str | None = None) -> None:
+        self._inner = inner
+        self.put_error = put_error
+
+    def put_object(self, **kwargs):
+        if self.put_error is not None:
+            raise ClientError({"Error": {"Code": self.put_error}}, "PutObject")
+        return self._inner.put_object(**kwargs)
+
+    def get_object(self, **kwargs):
+        try:
+            return self._inner.get_object(**kwargs)
+        except ClientError as error:
+            if error.response["Error"]["Code"] == "NoSuchKey":
+                raise ClientError(
+                    {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}}, "GetObject"
+                ) from None
+            raise
+
+
+def test_conditional_write_conflict_is_unavailable_not_existing(factory, s3) -> None:
+    client = _LeastPrivilegeClient(s3, put_error="ConditionalRequestConflict")
+    store = S3ArtifactStore(client, bucket=BUCKET, prefix=PREFIX, max_bytes=MAX_BYTES)
+    digest = hashlib.sha256(CLEAN_CSV).hexdigest()
+    with pytest.raises(ArtifactStoreError) as conflict:
+        store.put_if_absent(digest, CLEAN_CSV, "text/csv")
+    assert conflict.value.code == "store_unavailable"
+
+    org = str(uuid.uuid4())
+    with pytest.raises(ArtifactUploadError) as unavailable:
+        _upload(factory, store, org, CLEAN_CSV)
+    assert unavailable.value.code == "artifact_store_unavailable"
+    assert _rows(factory, org) == [] and _objects(s3) == []
+
+    # Once the conflicting operation is over, the same bytes upload normally.
+    client.put_error = None
+    assert _upload(factory, store, org, CLEAN_CSV).record.state == "available"
+
+
+def test_missing_object_under_least_privilege_stays_quarantined_until_replay(
+    factory, s3
+) -> None:
+    store = S3ArtifactStore(
+        _LeastPrivilegeClient(s3), bucket=BUCKET, prefix=PREFIX, max_bytes=MAX_BYTES
+    )
+    org = str(uuid.uuid4())
+    data = b"id,score\n1,0.25\n"
+    digest = hashlib.sha256(data).hexdigest()
+    with pytest.raises(ArtifactStoreError) as denied:
+        store.get_verified(digest)
+    assert denied.value.code == "store_unavailable"
+
+    with factory() as session:
+        row = SqlAlchemyEvaluationArtifactRepository(session).insert_quarantined(
+            organization_id=org, sha256=digest, media_type="text/csv",
+            size_bytes=len(data), scan_policy="fairmind-input-scan-v1",
+        )
+        session.commit()
+    with factory() as session, pytest.raises(ArtifactUploadError) as unavailable:
+        _service(session, store).promote(
+            organization_id=org, artifact_id=row.artifact_id, actor_id=str(uuid.uuid4())
+        )
+    assert unavailable.value.code == "artifact_store_unavailable"
+    assert [r["state"] for r in _rows(factory, org)] == ["quarantined"]
+
+    replay = _upload(factory, store, org, data)
+    assert replay.created is False
+    assert replay.record.artifact_id == row.artifact_id
+    assert replay.record.state == "available"
+    assert _objects(s3) == [f"{PREFIX}sha256/{digest}"]
+
+
 def test_promotion_re_verifies_the_stored_object(factory, store, s3) -> None:
     org = str(uuid.uuid4())
     digest = hashlib.sha256(CLEAN_CSV).hexdigest()
@@ -179,7 +300,7 @@ def test_promotion_re_verifies_the_stored_object(factory, store, s3) -> None:
     assert events[-1]["action"] == "evaluation_artifact.promotion_rejected"
     assert json.loads(events[-1]["details_json"])["reasonCode"] == "stored_digest_mismatch"
 
-    # A row stuck in quarantine whose object vanished is rejected on the next replay.
+    # A row stuck in quarantine whose object never landed: the replay re-writes it.
     other_org = str(uuid.uuid4())
     other = b"id,score\n1,0.5\n"
     with factory() as session:
@@ -194,8 +315,8 @@ def test_promotion_re_verifies_the_stored_object(factory, store, s3) -> None:
         session.commit()
     replay = _upload(factory, store, other_org, other)
     assert replay.created is False
-    assert replay.record.state == "rejected"
-    assert replay.record.rejection_reason == "stored_object_missing"
+    assert replay.record.state == "available"
+    assert store.get_verified(hashlib.sha256(other).hexdigest()) == other
 
 
 def test_concurrent_uploads_of_one_digest_yield_one_row_and_one_object(
@@ -217,6 +338,42 @@ def test_concurrent_uploads_of_one_digest_yield_one_row_and_one_object(
     assert {result.record.state for result in results} == {"available"}
     assert len(_rows(factory, org)) == 1
     assert _objects(s3) == [f"{PREFIX}sha256/{hashlib.sha256(CLEAN_CSV).hexdigest()}"]
+
+
+def test_promotion_serializes_on_the_quarantined_row_lock(factory, store, s3) -> None:
+    """A second promoter blocks on the row lock and, once the first commits,
+    sees no quarantined row: no second transition and no second audit event."""
+
+    org = str(uuid.uuid4())
+    digest = hashlib.sha256(CLEAN_CSV).hexdigest()
+    assert store.put_if_absent(digest, CLEAN_CSV, "text/csv") is True
+    with factory() as session:
+        row = SqlAlchemyEvaluationArtifactRepository(session).insert_quarantined(
+            organization_id=org, sha256=digest, media_type="text/csv",
+            size_bytes=len(CLEAN_CSV), scan_policy="fairmind-input-scan-v1",
+        )
+        session.commit()
+
+    def promote_in_other_session():
+        with factory() as session:
+            return _service(session, store).promote(
+                organization_id=org, artifact_id=row.artifact_id, actor_id=str(uuid.uuid4())
+            )
+
+    with factory() as holder, ThreadPoolExecutor(max_workers=1) as pool:
+        repository = SqlAlchemyEvaluationArtifactRepository(holder)
+        assert repository.lock_quarantined(
+            organization_id=org, artifact_id=row.artifact_id
+        ) is not None
+        pending = pool.submit(promote_in_other_session)
+        time.sleep(0.5)
+        repository.mark_available(organization_id=org, artifact_id=row.artifact_id)
+        repository.commit()
+        result = pending.result(timeout=30)
+
+    assert result.artifact_id == row.artifact_id and result.state == "available"
+    assert [r["state"] for r in _rows(factory, org)] == ["available"]
+    assert [e["action"] for e in _audit(factory, org)] == []
 
 
 def test_csv_with_a_secret_leaves_no_object_and_no_row(factory, store, s3) -> None:
@@ -251,9 +408,14 @@ def test_013n_guards_reject_unsafe_rows(factory) -> None:
         "state": "quarantined", "policy": "fairmind-input-scan-v1",
         "available_at": None, "rejected_at": None, "reason": None,
     }
-    now = datetime.now(timezone.utc).isoformat()
+    # available_at from the canonical clock satisfies the 013m state CHECK, so
+    # only the 013n BEFORE INSERT trigger can refuse this row.
+    available = base.replace(":available_at", "fairmind_canonical_clock_utc_013f()")
+    with factory() as session, pytest.raises(
+        DBAPIError, match="artifact must be inserted quarantined"
+    ):
+        session.execute(text(available), {**good, "state": "available", "id": str(uuid.uuid4())})
     for bad in (
-        {"state": "available", "available_at": now},
         {"key": "sha256/other"},
         {"policy": "none"},
         {"media": "application/octet-stream"},
@@ -264,13 +426,21 @@ def test_013n_guards_reject_unsafe_rows(factory) -> None:
     with factory() as session:
         session.execute(text(base), {**good, "id": artifact_id})
         session.commit()
-    for statement in (
-        "UPDATE governance_evaluation_artifacts SET state='rejected', "
-        "rejected_at=fairmind_canonical_clock_utc_013f(), rejection_reason='free text' WHERE id=:id",
-        "UPDATE governance_evaluation_artifacts SET scan_policy='other' WHERE id=:id",
-        "DELETE FROM governance_evaluation_artifacts WHERE id=:id",
+    for statement, message in (
+        (
+            "UPDATE governance_evaluation_artifacts SET state='rejected', "
+            "rejected_at=fairmind_canonical_clock_utc_013f(), rejection_reason='free text' "
+            "WHERE id=:id",
+            None,
+        ),
+        # BEFORE triggers run ahead of CHECK constraints, so the message names the trigger.
+        (
+            "UPDATE governance_evaluation_artifacts SET scan_policy='other' WHERE id=:id",
+            "artifact scan policy is immutable",
+        ),
+        ("DELETE FROM governance_evaluation_artifacts WHERE id=:id", None),
     ):
-        with factory() as session, pytest.raises(DBAPIError):
+        with factory() as session, pytest.raises(DBAPIError, match=message):
             session.execute(text(statement), {"id": artifact_id})
 
 
@@ -428,3 +598,36 @@ def test_route_fails_closed_when_the_store_is_not_configured(route, monkeypatch)
     response = _post(client, ids["org"])
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == "artifact_store_unavailable"
+
+
+def test_route_refuses_oversized_and_empty_bodies(route, factory, s3, monkeypatch) -> None:
+    client, _active, ids = route
+    monkeypatch.setattr(settings, "evaluation_artifact_max_bytes", 16)
+    too_large = b"id\n" + b"1\n" * 7  # 17 bytes
+    declared = _post(client, ids["org"], data=too_large)
+    assert declared.status_code == 413
+    assert declared.json()["detail"]["code"] == "artifact_too_large"
+    # No Content-Length: the streaming cap must stop the read.
+    streamed = client.post(
+        _url(ids["org"]), content=iter([too_large[:8], too_large[8:]]),
+        headers={"Content-Type": "text/csv"},
+    )
+    assert streamed.status_code == 413
+    empty = _post(client, ids["org"], data=b"")
+    assert empty.status_code == 400
+    assert empty.json()["detail"]["code"] == "artifact_empty"
+    assert _rows(factory, ids["org"]) == [] and _objects(s3) == []
+    assert _post(client, ids["org"], data=too_large[:16]).status_code == 201
+
+
+def test_service_refuses_oversized_input_before_any_write(factory, store, s3) -> None:
+    org = str(uuid.uuid4())
+    with factory() as session, pytest.raises(ArtifactUploadError) as too_large:
+        EvaluationArtifactService(
+            SqlAlchemyEvaluationArtifactRepository(session), store, max_bytes=4
+        ).upload(
+            organization_id=org, actor_id=str(uuid.uuid4()), media_type="text/csv",
+            data=b"id\n12\n",
+        )
+    assert too_large.value.code == "artifact_too_large"
+    assert _rows(factory, org) == [] and _objects(s3) == []

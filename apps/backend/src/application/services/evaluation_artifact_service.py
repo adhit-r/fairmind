@@ -9,12 +9,15 @@ Order of operations for one upload:
    it, then mark the row available, or rejected with a fixed reason code.
 
 A replay of the same bytes returns the existing row and finishes a promotion
-that an earlier request left quarantined.
+that an earlier request left quarantined, re-writing the object first.
 """
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
+import json
 import re
 import uuid
 from dataclasses import dataclass
@@ -30,27 +33,91 @@ from src.application.services.eval_engines.detectors import SECRETS
 
 SCAN_POLICY = "fairmind-input-scan-v1"
 ALLOWED_MEDIA_TYPES = frozenset({"text/csv", "application/json"})
-STORED_OBJECT_REJECTIONS = frozenset(
-    {"stored_object_missing", "stored_digest_mismatch", "stored_size_mismatch"}
-)
+# A missing object is a store-side fault, not a verdict on the bytes: the row
+# stays quarantined (503) and a replay re-writes the object, then promotes.
+STORED_OBJECT_REJECTIONS = frozenset({"stored_digest_mismatch", "stored_size_mismatch"})
 
 # fairmind-input-scan-v1. A bounded pattern set: the shared secret detectors
-# from eval_engines.detectors, plus PEM private keys of any algorithm, JSON
-# credential members, and chain-of-thought markers. It is deliberately
+# from eval_engines.detectors, plus PEM private keys of any algorithm and
+# chain-of-thought markers, run on the raw text and again on every decoded JSON
+# key and string or CSV cell (so escapes and quoting cannot hide a match). A
+# JSON member or CSV column whose name holds a credential word (password,
+# secret, token, credential, api key, private key; compound names such as
+# aws_secret_access_key or apiKey included) with a non-empty string value is a
+# credential. Unparseable JSON or CSV is undecodable. It is deliberately
 # conservative: a match rejects the whole input, and the uploader removes it.
+# Not covered: secrets nested in a further encoding (base64, JSON inside a CSV
+# cell) that match none of the patterns.
 _PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----")
-_JSON_CREDENTIAL = re.compile(
-    r'(?i)"(?:password|passwd|secret|client[_-]?secret|api[_-]?key|'
-    r'access[_-]?token|refresh[_-]?token|private[_-]?key)"\s*:\s*"[^"]{8,}"'
-)
 _CHAIN_OF_THOUGHT = re.compile(
     r"(?i)<\s*/?\s*(?:think|thinking|reasoning|scratchpad)\s*>"
     r"|\bchain[\s_-]*of[\s_-]*thought\b"
     r"|\breasoning[_-](?:content|trace)s?\b"
 )
+_NAME_WORD = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
+_CREDENTIAL_WORDS = frozenset(
+    {
+        "password", "passwords", "passwd", "passphrase", "secret", "secrets",
+        "token", "credential", "credentials", "apikey", "privatekey",
+    }
+)
+_CREDENTIAL_PAIRS = frozenset({("api", "key"), ("private", "key")})
 
 
-def scan_input(data: bytes) -> str | None:
+def _is_credential_name(name: str) -> bool:
+    words = [word.lower() for word in _NAME_WORD.findall(name)]
+    return any(word in _CREDENTIAL_WORDS for word in words) or any(
+        pair in _CREDENTIAL_PAIRS for pair in zip(words, words[1:])
+    )
+
+
+def _pattern_reason(text: str) -> str | None:
+    if _PRIVATE_KEY.search(text):
+        return "private_key_detected"
+    if any(pattern.search(text) for _name, pattern, _valid in SECRETS):
+        return "credential_detected"
+    if _CHAIN_OF_THOUGHT.search(text):
+        return "chain_of_thought_detected"
+    return None
+
+
+class _JsonObject(list):
+    """Every (key, value) pair of one JSON object, duplicates included."""
+
+
+def _json_fields(text: str) -> tuple[list[str], bool]:
+    strings: list[str] = []
+    credential = False
+    stack: list[object] = [json.loads(text, object_pairs_hook=_JsonObject)]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, _JsonObject):
+            for key, value in node:
+                strings.append(key)
+                if isinstance(value, str) and value.strip() and _is_credential_name(key):
+                    credential = True
+                stack.append(value)
+        elif isinstance(node, list):
+            stack.extend(node)
+        elif isinstance(node, str):
+            strings.append(node)
+    return strings, credential
+
+
+def _csv_fields(text: str) -> tuple[list[str], bool]:
+    rows = csv.reader(io.StringIO(text, newline=""))
+    header = next(rows, [])
+    flagged = [index for index, name in enumerate(header) if _is_credential_name(name)]
+    strings = list(header)
+    credential = False
+    for row in rows:
+        strings.extend(row)
+        if not credential and any(index < len(row) and row[index].strip() for index in flagged):
+            credential = True
+    return strings, credential
+
+
+def scan_input(data: bytes, media_type: str) -> str | None:
     """Return a fixed rejection code for unsafe input, or None when it is clean."""
 
     try:
@@ -59,15 +126,22 @@ def scan_input(data: bytes) -> str | None:
         return "undecodable_content"
     if "\x00" in text:
         return "undecodable_content"
-    if _PRIVATE_KEY.search(text):
-        return "private_key_detected"
-    if _JSON_CREDENTIAL.search(text) or any(
-        pattern.search(text) for _name, pattern, _valid in SECRETS
-    ):
-        return "credential_detected"
-    if _CHAIN_OF_THOUGHT.search(text):
-        return "chain_of_thought_detected"
-    return None
+    reason = _pattern_reason(text)
+    if reason is not None:
+        return reason
+    try:
+        if media_type == "application/json":
+            strings, credential = _json_fields(text)
+        elif media_type == "text/csv":
+            strings, credential = _csv_fields(text)
+        else:
+            return "undecodable_content"
+    except (ValueError, RecursionError, csv.Error):
+        return "undecodable_content"
+    reason = _pattern_reason("\n".join(strings))
+    if reason is not None:
+        return reason
+    return "credential_detected" if credential else None
 
 
 class ArtifactUploadError(Exception):
@@ -115,9 +189,16 @@ class EvaluationArtifactService:
 
         existing = self._repository.find(organization_id=organization_id, sha256=digest)
         if existing is not None:
+            if (
+                existing.state == "quarantined"
+                and scan_input(data, existing.media_type) is None
+            ):
+                # Same digest, same bytes: re-write an object an earlier request
+                # never landed (a no-op when it exists), then promote.
+                self._put(digest, data, existing.media_type)
             return ArtifactUploadResult(self._finish(existing, actor_id), created=False)
 
-        reason = scan_input(data)
+        reason = scan_input(data, media_type)
         if reason is not None:
             # No digest in the audit: for a short input it would confirm a guessed secret.
             self._repository.audit(
@@ -138,10 +219,7 @@ class EvaluationArtifactService:
             self._repository.commit()
             raise ArtifactUploadError("artifact_rejected", reason)
 
-        try:
-            self._store.put_if_absent(digest, data, media_type)
-        except ArtifactStoreError:
-            raise ArtifactUploadError("artifact_store_unavailable") from None
+        self._put(digest, data, media_type)
 
         inserted = self._repository.insert_quarantined(
             organization_id=organization_id,
@@ -174,6 +252,12 @@ class EvaluationArtifactService:
         )
         self._repository.commit()
         return ArtifactUploadResult(self._finish(inserted, actor_id), created=True)
+
+    def _put(self, digest: str, data: bytes, media_type: str) -> None:
+        try:
+            self._store.put_if_absent(digest, data, media_type)
+        except ArtifactStoreError:
+            raise ArtifactUploadError("artifact_store_unavailable") from None
 
     def _finish(self, record: ArtifactRecord, actor_id: str) -> ArtifactRecord:
         if record.state != "quarantined":
@@ -211,7 +295,7 @@ class EvaluationArtifactService:
             reason = (
                 "stored_size_mismatch"
                 if len(stored) != locked.size_bytes
-                else scan_input(stored)
+                else scan_input(stored, locked.media_type)
             )
 
         if reason is None:
