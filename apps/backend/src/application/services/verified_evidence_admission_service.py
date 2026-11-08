@@ -485,6 +485,12 @@ class VerifiedEvidenceAdmissionService:
 
         def admit(_mutation_now: datetime) -> MutationOutcome:
             del _mutation_now
+            # Only signed worker completion may admit evidence for a worker job.
+            self._repository.refuse_worker_owned_suite(
+                organization_id=scope.organization_id,
+                run_id=scope.run_id,
+                suite_execution_id=scope.suite_execution_id,
+            )
             return self.verify_and_persist_in_transaction(
                 scope=scope,
                 actor_id=actor_id,

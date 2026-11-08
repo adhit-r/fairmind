@@ -97,6 +97,16 @@ class VerifiedEvidenceLinkRecord:
 
 
 class EvidenceLinkRepository(Protocol):
+    def refuse_worker_owned_suite(
+        self,
+        *,
+        organization_id: str,
+        run_id: str,
+        suite_execution_id: str,
+    ) -> None:
+        """Take the run arbiter; raise if only worker completion may finalize the suite."""
+        ...
+
     def load_verified_evidence_link_authority_for_update(
         self,
         *,

@@ -117,6 +117,9 @@ class FakeRepository:
         self.loaded = []
         self.persisted = []
 
+    def refuse_worker_owned_suite(self, **scope):
+        self.refusal_checks = [*getattr(self, "refusal_checks", []), scope]
+
     def load_verified_evidence_link_authority_for_update(self, *, scope):
         self.loaded.append(scope)
         return self.authority

@@ -6,7 +6,7 @@ import base64
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 from threading import Barrier
 import time
 
@@ -18,6 +18,7 @@ from api.composition.evaluation_worker_jobs import (
     build_evaluation_worker_queue,
 )
 from src.application.ports.evaluation_cancellation import CancellationScope
+from src.application.ports.evidence_admission import EvidenceAdmissionScope
 from src.application.ports.evaluation_workbench import EvaluationWorkbenchError
 from src.application.ports.evaluation_worker_queue import (
     CANCELLED_FAILURE_CODE,
@@ -26,9 +27,22 @@ from src.application.ports.evaluation_worker_queue import (
     WorkerQueueError,
     WorkerQueuePrincipal,
 )
+from src.application.services.evidence_authenticity_service import (
+    EvidenceAuthenticityService,
+)
+from src.application.services.worker_completion_evidence import (
+    admit_worker_completion_evidence,
+)
 from src.infrastructure.db.repositories.evaluation_audit_chain import (
     verify_evaluation_audit_chain,
 )
+from src.infrastructure.db.repositories.evaluation_workbench_repository import (
+    SqlAlchemyEvaluationWorkbenchUnitOfWork,
+)
+from src.infrastructure.db.repositories.evaluation_worker_queue_repository import (
+    PostgresEvaluationWorkerQueue,
+)
+from src.infrastructure.security import Ed25519EvidenceVerifier
 from tests.test_evaluation_worker_queue_postgres import (
     _cancel,
     _database_now,
@@ -41,9 +55,12 @@ from tests.test_evaluation_worker_queue_postgres import (
 )
 from tests.test_verified_evidence_admission_postgres import (
     _graph_counts,
+    _link,
     _resign,
+    _scope,
     _set_path,
     _signed_passport,
+    _verified_service,
     postgres_013k_session_factory,
     postgres_session_factory,
 )
@@ -64,6 +81,8 @@ ARBITER = (
     "|| length(:org_id)::text || ':' || :org_id "
     "|| '|' || length(:run_id)::text || ':' || :run_id, 0))"
 )
+TRY_ARBITER = ARBITER.replace("pg_advisory_xact_lock", "pg_try_advisory_xact_lock")
+ORG_LOCK = "SELECT pg_advisory_xact_lock(hashtextextended(:org_id, 0))"
 EMPTY_GRAPH = {
     "evidence_runs": 0,
     "revisions": 0,
@@ -102,10 +121,13 @@ def _running(factory, **kwargs):
     return scenario, worker_id, queue, principal, lease
 
 
-def _passport(factory, scenario, suite_execution_id, *, binding=None, result=None) -> bytes:
+def _passport(factory, scenario, suite_execution_id, *, binding=None, result=None,
+              artifacts=False) -> bytes:
     ordinal = next(index for index, row in enumerate(scenario.suite_executions)
                    if str(row["id"]) == suite_execution_id)
     payload, _ = _signed_passport(scenario, suite_ordinal=ordinal, result=result)
+    if not artifacts:
+        payload["artifacts"] = []
     now = _database_now(factory)
     payload["capturedAt"] = _iso(now)
     payload["signature"]["signedAt"] = _iso(now)
@@ -155,7 +177,7 @@ def _cancellation_rows(factory, scenario) -> int:
 
 
 def _cancel_request(session, scenario, *, scope_kind="run", suite_id=None, key=None,
-                    reason="Stop this evaluation", org_id=None, run_id=None):
+                    reason="Stop this evaluation", org_id=None, run_id=None, actor_id=None):
     return build_evaluation_cancellation_service(session).request_cancellation(
         scope=CancellationScope(
             organization_id=org_id or scenario.org_id,
@@ -163,7 +185,7 @@ def _cancel_request(session, scenario, *, scope_kind="run", suite_id=None, key=N
             system_id=scenario.system_id,
             run_id=run_id or scenario.run_id,
         ),
-        actor_id=scenario.actor_id,
+        actor_id=actor_id or scenario.actor_id,
         idempotency_key=key or f"cancel-{uuid.uuid4()}",
         payload={"scopeKind": scope_kind, "suiteExecutionId": suite_id, "reason": reason},
     )
@@ -305,6 +327,17 @@ def test_running_expiry_times_out_and_leased_expiry_requeues(factory) -> None:
         "failure_code"] is None
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="needs migration 013n: the frozen 013b run guard requires every suite link "
+    "for a non-pending outcome, so an unlinked failed suite cannot terminalize its run",
+)
+def test_explicit_failure_of_the_only_suite_terminalizes_the_run(factory) -> None:
+    _scenario, _, queue, principal, lease = _running(factory)
+    queue.fail(principal, lease.credential, "worker_execution_failed")
+    assert _states(factory, lease.credential.attempt_id) == ("failed",) * 3
+
+
 # ---------------------------------------------------------- illegal transitions
 
 
@@ -401,6 +434,185 @@ def test_stale_prior_attempt_token_and_passport_cannot_complete_a_retry(factory)
 
     queue.complete(principal, retry.credential, _passport(factory, scenario, suite_id))
     assert _states(factory, retry.credential.attempt_id)[:2] == ("succeeded", "succeeded")
+
+
+def _wait_until_blocked(probe_session, pid: int, future, what: str) -> None:
+    deadline = time.monotonic() + 5
+    while not probe_session.scalar(
+        text("SELECT cardinality(pg_blocking_pids(:pid)) > 0"), {"pid": pid}
+    ):
+        assert not future.done(), f"{what} never waited"
+        assert time.monotonic() < deadline, f"{what} never waited"
+        time.sleep(0.01)
+
+
+def _project_leased_run(factory, scenario) -> None:
+    """The run projection a real claim makes; _insert_attempt only moves the suite."""
+
+    with factory.begin() as session:
+        session.execute(
+            text("UPDATE governance_evaluation_runs SET technical_status='leased', "
+                 "updated_at=:now WHERE id=:run_id"),
+            {"run_id": scenario.run_id, "now": _iso(_database_now(factory))},
+        )
+
+
+def test_lease_expiring_during_verification_rejects_completion(factory) -> None:
+    scenario, worker_id, _, principal = _job(factory)
+    suite_id = str(scenario.suite_executions[0]["id"])
+    attempt_id = _insert_attempt(factory, scenario=scenario, worker_id=worker_id,
+                                 suite_execution_id=suite_id, attempt_number=1,
+                                 max_attempts=3, expires_in_seconds=3)
+    _project_leased_run(factory, scenario)
+    credential = LeaseCredential(attempt_id, "A" * 43)
+    authenticity = EvidenceAuthenticityService(Ed25519EvidenceVerifier())
+
+    def slow_admitter(session, **arguments):
+        evidence = admit_worker_completion_evidence(
+            SqlAlchemyEvaluationWorkbenchUnitOfWork(session), authenticity, **arguments)
+        session.execute(
+            text("SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM CAST(lease_expires_at AS "
+                 "TIMESTAMPTZ) - clock_timestamp())) + 0.05) "
+                 "FROM governance_evaluation_suite_attempts WHERE id=:id"),
+            {"id": attempt_id},
+        )
+        return evidence
+
+    queue = PostgresEvaluationWorkerQueue(factory, evidence_admitter=slow_admitter)
+    queue.start(principal, credential)
+    with pytest.raises(WorkerQueueError) as caught:
+        queue.complete(principal, credential, _passport(factory, scenario, suite_id))
+
+    assert caught.value.code == "lease_lost", caught.value.__cause__
+    assert _states(factory, attempt_id)[:2] == ("running", "running")
+    assert _graph_counts(factory, scenario) == EMPTY_GRAPH
+
+
+def test_completion_takes_the_org_lock_before_the_run_arbiter(factory) -> None:
+    scenario, _, queue, principal, lease = _running(factory)
+    raw = _passport(factory, scenario, lease.suite_execution_id)
+    holder, probe = factory(), factory()
+    worker_connection = factory.kw["bind"].connect()
+    try:
+        worker_pid = worker_connection.scalar(text("SELECT pg_backend_pid()"))
+        worker_connection.rollback()
+        holder.execute(text(ORG_LOCK), {"org_id": scenario.org_id})
+        blocked_queue = build_evaluation_worker_queue(lambda: factory(bind=worker_connection))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(blocked_queue.complete, principal, lease.credential, raw)
+            _wait_until_blocked(holder, worker_pid, future, "complete")
+            # Waiting on the org lock, completion must not already hold the arbiter.
+            arbiter_free = probe.scalar(
+                text(TRY_ARBITER), {"org_id": scenario.org_id, "run_id": scenario.run_id})
+            probe.rollback()
+            holder.rollback()
+            receipt = future.result(timeout=10)
+    finally:
+        holder.close()
+        probe.close()
+        worker_connection.close()
+    assert arbiter_free is True
+    assert receipt.suite_execution_id == lease.suite_execution_id
+    assert _states(factory, lease.credential.attempt_id) == ("succeeded",) * 3
+
+
+def test_completion_rejects_passport_artifact_references(factory) -> None:
+    scenario, _, queue, principal, lease = _running(factory)
+    raw = _passport(factory, scenario, lease.suite_execution_id, artifacts=True)
+    with pytest.raises(WorkerQueueError) as caught:
+        queue.complete(principal, lease.credential, raw)
+    assert caught.value.code == "evidence_rejected"
+    assert caught.value.__cause__.code == "worker_completion_artifacts_unsupported"
+    assert _states(factory, lease.credential.attempt_id) == ("running",) * 3
+    assert _graph_counts(factory, scenario) == EMPTY_GRAPH
+
+
+# ------------------------------------------------- ordinary evidence side door
+
+
+def _ordinary_admission(factory, scenario, suite_id: str, raw: bytes):
+    session = factory()
+    try:
+        return _verified_service(session).submit_verified_passport_v2(
+            scope=_scope(scenario, suite_execution_id=suite_id),
+            actor_id=scenario.actor_id,
+            idempotency_key=f"ordinary-{uuid.uuid4()}",
+            raw_passport=raw,
+        )
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("stage", ["queued", "leased", "running", "failed", "cancelled"])
+def test_ordinary_admission_and_link_cannot_finalize_a_worker_job(factory, stage) -> None:
+    scenario, _, queue, principal = _job(factory, suite_count=2)
+    lease = queue.claim(principal) if stage != "queued" else None
+    suite_id = lease.suite_execution_id if lease else str(scenario.suite_executions[0]["id"])
+    if stage in {"running", "failed"}:
+        queue.start(principal, lease.credential)
+    if stage == "failed":
+        queue.fail(principal, lease.credential, "worker_execution_failed")
+    if stage == "cancelled":
+        _cancel_now(factory, scenario, scope_kind="suite", suite_id=suite_id)
+    raw = _passport(factory, scenario, suite_id)
+    before = _graph_counts(factory, scenario)
+
+    with pytest.raises(EvaluationWorkbenchError) as admission:
+        _ordinary_admission(factory, scenario, suite_id, raw)
+    assert admission.value.code == "evidence_worker_job_owned"
+    assert _graph_counts(factory, scenario) == before
+
+    # An admission stored without a link still cannot be linked by the ordinary route.
+    with factory.begin() as session:
+        stored = _verified_service(session).verify_and_persist_in_transaction(
+            scope=_scope(scenario, suite_execution_id=suite_id),
+            actor_id=scenario.actor_id,
+            raw_passport=raw,
+        ).body.to_dict()
+    session = factory()
+    try:
+        with pytest.raises(EvaluationWorkbenchError) as link:
+            _link(session, scenario, submission=type("Stored", (), {"body": stored}),
+                  idempotency_key=f"ordinary-link-{uuid.uuid4()}", actor_id=scenario.actor_id)
+    finally:
+        session.close()
+    assert link.value.code == "evidence_worker_job_owned"
+    assert _graph_counts(factory, scenario)["suite_links"] == before["suite_links"]
+    if stage in {"leased", "running"}:
+        assert _states(factory, lease.credential.attempt_id)[:2] == (stage, stage)
+
+
+def test_expiry_closes_an_orphaned_attempt_without_wedging_the_org(factory) -> None:
+    scenario, worker_id, queue, principal = _job(factory, suite_count=2)
+    orphan_suite, sibling = (str(row["id"]) for row in scenario.suite_executions)
+    attempt_id = _insert_attempt(factory, scenario=scenario, worker_id=worker_id,
+                                 suite_execution_id=orphan_suite, attempt_number=1,
+                                 max_attempts=3, expires_in_seconds=2)
+    _project_leased_run(factory, scenario)
+    queue.start(principal, LeaseCredential(attempt_id, "A" * 43))
+    started_at = _row(factory, "governance_evaluation_suite_attempts", attempt_id)["started_at"]
+    # Reproduce a suite finalized outside its lease by the pre-guard ordinary path.
+    with factory.begin() as session:
+        admit_worker_completion_evidence(
+            SqlAlchemyEvaluationWorkbenchUnitOfWork(session),
+            EvidenceAuthenticityService(Ed25519EvidenceVerifier()),
+            scope=EvidenceAdmissionScope(scenario.org_id, scenario.system_id,
+                                         scenario.run_id, orphan_suite),
+            actor_id=scenario.actor_id,
+            raw_passport=_passport(factory, scenario, orphan_suite),
+            not_before=datetime.fromisoformat(started_at.replace("Z", "+00:00")),
+        )
+    assert _states(factory, attempt_id)[:2] == ("running", "succeeded")
+    _sleep_past_expiry(factory, attempt_id)
+
+    assert queue.recover_expired(scenario.org_id) == 1
+
+    attempt = _row(factory, "governance_evaluation_suite_attempts", attempt_id)
+    assert (attempt["technical_status"], attempt["failure_code"]) == (
+        "timed_out", "worker_lease_expired")
+    assert _states(factory, attempt_id)[1] == "succeeded"
+    lease = queue.claim(principal)
+    assert lease is not None and lease.suite_execution_id == sibling
 
 
 # -------------------------------------------------------- Passport v2 binding
@@ -627,6 +839,8 @@ def test_cancellation_committed_while_a_worker_waits_on_the_arbiter_wins(factory
     try:
         worker_pid = worker_connection.scalar(text("SELECT pg_backend_pid()"))
         worker_connection.rollback()
+        # The real cancellation order: org lock, then the run arbiter.
+        lock_session.execute(text(ORG_LOCK), {"org_id": scenario.org_id})
         lock_session.execute(text(ARBITER), {"org_id": scenario.org_id, "run_id": scenario.run_id})
         blocked_queue = build_evaluation_worker_queue(lambda: factory(bind=worker_connection))
         with ThreadPoolExecutor(max_workers=1) as executor:
@@ -734,13 +948,19 @@ def test_request_finalizes_a_recorded_cancellation_without_duplicating_it(factor
     lease = queue.claim(principal)
     with factory.begin() as session:
         _cancel(session, scenario, None)
-        recorded_id = session.scalar(
-            text("SELECT id FROM governance_evaluation_cancellations WHERE run_id=:run_id"),
+        recorded = session.execute(
+            text("SELECT id, requested_by, requested_at FROM governance_evaluation_cancellations "
+                 "WHERE run_id=:run_id"),
             {"run_id": scenario.run_id},
-        )
+        ).one()
 
-    result = _cancel_now(factory, scenario)
+    result = _cancel_now(factory, scenario, actor_id="user:later-caller")
 
-    assert result.body["cancellationId"] == recorded_id
+    assert result.body["cancellationId"] == recorded[0]
+    assert result.body["requestedBy"] == recorded[1] != "user:later-caller"
+    assert datetime.fromisoformat(result.body["requestedAt"]) == datetime.fromisoformat(
+        recorded[2].replace("Z", "+00:00"))
     assert _cancellation_rows(factory, scenario) == 1
+    assert _audits(factory, scenario.org_id, "evaluation_v2.worker.cancellation_requested") == 0
+    assert _audits(factory, scenario.org_id, "evaluation_v2.worker.cancellation_finalized") == 1
     assert _states(factory, lease.credential.attempt_id) == ("cancelled",) * 3

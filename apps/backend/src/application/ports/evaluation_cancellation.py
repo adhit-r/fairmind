@@ -37,6 +37,8 @@ class CancellationRecord:
     run_technical_status: str
     suite_statuses: tuple[tuple[str, str], ...]
     cancelled_attempt_ids: tuple[str, ...]
+    # True when an already-recorded request was finalized instead of appended.
+    finalized_existing: bool = False
 
 
 class EvaluationCancellationRepository(Protocol):

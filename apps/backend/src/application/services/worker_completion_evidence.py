@@ -17,7 +17,10 @@ from src.application.services.verified_evidence_admission_service import (
 from src.application.services.verified_evidence_link_service import (
     VerifiedEvidenceLinkService,
 )
-from src.domain.assurance.evidence_passport_v2 import parse_evidence_passport_v2
+from src.domain.assurance.evidence_passport_v2 import (
+    EvidencePassportV2ValidationError,
+    parse_evidence_passport_v2,
+)
 
 
 def _rejected(code: str, message: str) -> EvaluationWorkbenchError:
@@ -39,6 +42,16 @@ def admit_worker_completion_evidence(
     error raised here must roll back the caller's whole job transaction.
     """
 
+    try:
+        artifacts = parse_evidence_passport_v2(bytes(raw_passport)).get("artifacts")
+    except EvidencePassportV2ValidationError:
+        artifacts = None  # admission below answers with its own invalid-Passport error
+    if artifacts:
+        # No finalized, attempt-bound artifact storage authority exists yet.
+        raise _rejected(
+            "worker_completion_artifacts_unsupported",
+            "Worker completion Passports must not reference artifacts.",
+        )
     admission = VerifiedEvidenceAdmissionService(unit_of_work, authenticity)
     submitted = admission.verify_and_persist_in_transaction(
         scope=scope,

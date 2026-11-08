@@ -1,6 +1,8 @@
 """PostgreSQL 14 leased queue and job-state authority for isolated evaluation workers.
 
-Every job mutation serializes on the canonical run arbiter (a run-scoped
+Completion, whose evidence reads take the shared organization lock, takes that
+lock first, as every audited org mutation does. Every job mutation then
+serializes on the canonical run arbiter (a run-scoped
 advisory transaction lock), then locks the system, run, and sibling suites in
 ``(ordinal, id)`` order, then the attempt, worker, and cancellation rows. The
 database clock is sampled only after those waits. Cancellation terminalizes
@@ -150,7 +152,7 @@ _ARBITER_KEY = (
 )
 
 
-def _lock_run_arbiter(session: Session, org_id: str, run_id: str, *, wait: bool = True) -> bool:
+def lock_run_arbiter(session: Session, org_id: str, run_id: str, *, wait: bool = True) -> bool:
     """Acquire the canonical run arbiter; ``wait=False`` never blocks."""
 
     function = "pg_advisory_xact_lock" if wait else "pg_try_advisory_xact_lock"
@@ -159,6 +161,15 @@ def _lock_run_arbiter(session: Session, org_id: str, run_id: str, *, wait: bool 
         {"org_id": org_id, "run_id": run_id},
     )
     return wait or acquired is True
+
+
+def _lock_organization(session: Session, org_id: str) -> None:
+    """The shared mutation unit of work's org lock; always taken before the arbiter."""
+
+    session.execute(
+        text("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(:org_id, 0))"),
+        {"org_id": org_id},
+    )
 
 
 def _lock_siblings(session: Session, scope: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -508,7 +519,7 @@ class PostgresEvaluationWorkerQueue:
     ) -> WorkerLease | None:
         org_id = principal.organization_id
         # A busy run is skipped rather than waited on; one advisory lock per transaction.
-        if not _lock_run_arbiter(session, org_id, run_id, wait=False):
+        if not lock_run_arbiter(session, org_id, run_id, wait=False):
             return None
         worker = self._active_worker(session, principal)
         run = session.execute(
@@ -640,7 +651,7 @@ class PostgresEvaluationWorkerQueue:
         scope = dict(locator)
         scope["attempt_id"] = credential.attempt_id
         scope["principal_subject"] = principal.principal_subject
-        _lock_run_arbiter(session, scope["org_id"], scope["run_id"])
+        lock_run_arbiter(session, scope["org_id"], scope["run_id"])
         # FOR UPDATE matches the evidence-admission lock on the same system row.
         system_id = session.scalar(
             text("SELECT id FROM governance_ai_systems WHERE id=:system_id "
@@ -866,6 +877,9 @@ class PostgresEvaluationWorkerQueue:
         raw = bytes(raw_passport)
 
         def operation(session: Session) -> CompletionReceipt:
+            # Evidence admission and link reads take the org lock; taking it
+            # before the arbiter keeps one lock order with every org mutation.
+            _lock_organization(session, principal.organization_id)
             row, _now = self._locked_live_attempt(
                 session, principal, credential, frozenset({"running"})
             )
@@ -983,7 +997,7 @@ class PostgresEvaluationWorkerQueue:
 
     @staticmethod
     def _recover_run(session: Session, org_id: str, run_id: str) -> int:
-        if not _lock_run_arbiter(session, org_id, run_id, wait=False):
+        if not lock_run_arbiter(session, org_id, run_id, wait=False):
             return 0
         run = session.execute(
             text(
@@ -1010,6 +1024,19 @@ class PostgresEvaluationWorkerQueue:
         ).mappings().all()
         for attempt in attempts:
             suite = siblings.get(attempt["suite_execution_id"])
+            if suite is not None and suite["technical_status"] in _TERMINAL:
+                # A suite finalized outside its lease (pre-guard ordinary link)
+                # keeps its terminal facts; only the orphaned attempt is closed,
+                # so one such row can never wedge recovery and claim org-wide.
+                _update_attempt(
+                    session,
+                    attempt_id=attempt["id"],
+                    org_id=org_id,
+                    status="timed_out",
+                    now=now,
+                    failure=(_LEASE_EXPIRED_CODE, LEASE_EXPIRED_PROJECTION[1]),
+                )
+                continue
             if (
                 suite is None
                 or suite["technical_status"] not in {"leased", "running"}
@@ -1090,7 +1117,7 @@ class PostgresEvaluationCancellationRepository:
             "The evaluation run was not found in this scope.",
             404,
         )
-        _lock_run_arbiter(session, scope["org_id"], scope["run_id"])
+        lock_run_arbiter(session, scope["org_id"], scope["run_id"])
         system_id = session.scalar(
             text("SELECT id FROM governance_ai_systems WHERE id=:system_id "
                  "AND org_id=:org_id AND workspace_id=:workspace_id FOR UPDATE"), scope,
@@ -1127,16 +1154,21 @@ class PostgresEvaluationCancellationRepository:
             else command.suite_execution_id in cancelled_suites
         )
         cancellation_id = command.cancellation_id
+        requested_by, requested_at = command.actor_id, now
         if existing:
-            # A recorded but unfinalized request is completed, never duplicated.
-            cancellation_id = session.scalar(
+            # A recorded but unfinalized request is completed, never duplicated;
+            # it keeps its stored requester and database timestamp.
+            stored = session.execute(
                 text(
-                    "SELECT id FROM governance_evaluation_cancellations "
+                    "SELECT id, requested_by, requested_at "
+                    "FROM governance_evaluation_cancellations "
                     "WHERE org_id=:org_id AND run_id=:run_id "
                     "AND suite_execution_id IS NOT DISTINCT FROM :suite_execution_id"
                 ),
                 {**scope, "suite_execution_id": command.suite_execution_id},
-            )
+            ).one()
+            cancellation_id, requested_by = stored[0], str(stored[1])
+            requested_at = _stored_datetime(stored[2])
         else:
             try:
                 with session.begin_nested():
@@ -1185,11 +1217,12 @@ class PostgresEvaluationCancellationRepository:
             cancellation_id=str(cancellation_id),
             scope_kind=command.scope_kind,
             suite_execution_id=command.suite_execution_id,
-            requested_by=command.actor_id,
-            requested_at=now,
+            requested_by=requested_by,
+            requested_at=requested_at,
             run_technical_status=run_status,
             suite_statuses=tuple((str(row[0]), str(row[1])) for row in statuses),
             cancelled_attempt_ids=cancelled_attempts,
+            finalized_existing=existing,
         )
 
 
@@ -1197,4 +1230,5 @@ __all__ = [
     "EvidenceAdmitter",
     "PostgresEvaluationCancellationRepository",
     "PostgresEvaluationWorkerQueue",
+    "lock_run_arbiter",
 ]

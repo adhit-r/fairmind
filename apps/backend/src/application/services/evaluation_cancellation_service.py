@@ -29,6 +29,7 @@ from src.domain.assurance.evaluation_v2 import (
 
 _OPERATION = "evaluation-v2.run.cancel"
 _AUDIT_ACTION = "evaluation_v2.worker.cancellation_requested"
+_FINALIZED_AUDIT_ACTION = "evaluation_v2.worker.cancellation_finalized"
 _AUDIT_SCHEMA = "evaluation-v2.cancellation-request/v1"
 
 
@@ -154,7 +155,9 @@ class EvaluationRunCancellationService:
                 status=201,
                 resource_type="evaluation_cancellation",
                 resource_id=record.cancellation_id,
-                audit_action=_AUDIT_ACTION,
+                audit_action=(
+                    _FINALIZED_AUDIT_ACTION if record.finalized_existing else _AUDIT_ACTION
+                ),
                 audit_details=FrozenJsonObject.from_mapping(
                     {
                         "schemaVersion": _AUDIT_SCHEMA,
