@@ -1,0 +1,68 @@
+---
+title: CLI
+description: The release gate, fairness tests, monitoring snapshots and offline pack verification from a terminal or a CI job.
+---
+
+<Status state="shipped" />
+
+<Steps>
+<Step>
+### Install
+
+```bash
+pipx install fairmind-cli
+```
+
+From a checkout of the repository: `pipx install ./apps/cli`.
+</Step>
+
+<Step>
+### Set the environment
+
+```bash
+export FAIRMIND_API_URL=https://app.fairmind.xyz
+export FAIRMIND_API_KEY=...        # minted at POST /api/v1/auth/api-keys, valid 365 days
+```
+
+Or pass `--api` on any command. The default is `http://localhost:8010`.
+</Step>
+</Steps>
+
+## Commands
+
+```bash
+fairmind systems                                  # the AI systems your key can see
+fairmind gate --system <id>                       # exit 0 go, 2 conditional go, 1 no go
+fairmind gate --system <id> --allow-conditional   # exit 0 on conditional go
+fairmind gate --system <id> --require-approval    # exit 1 unless the release decision is approved
+fairmind test --system <id> --file predictions.csv \
+    --outcome repaid --prediction approved --attributes gender,region
+fairmind test ... --gate                          # exit by the gate's verdict after the run
+fairmind monitor ...                              # record a monitoring snapshot; exit 1 on drift or disparity
+fairmind verify pack.json                         # offline: exit 0 when the pack is intact, 1 when not
+```
+
+Add `--json` to any command for the raw response.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | `go`, or the check you asked for passed |
+| 1 | `no_go`, drift, or a pack that failed verification |
+| 2 | `conditional_go` (without `--allow-conditional`) |
+| 3 | The command itself failed: no network, no key, a wrong system id, a column missing from the file |
+
+## `test`
+
+Uploads the CSV and runs disparate impact, demographic parity, equal opportunity, equalized odds and calibration per attribute, with bootstrap intervals. The result is stored as measured evidence on the system.
+
+## `gate`
+
+Reads the five checks (each proven, attested or open), the confidence, the verdict and the latest release decision (`approvalStatus`: not requested, pending, approved or rejected). A rejected decision makes the verdict `no_go` until a reviewer approves a new request. With `--require-approval`, an approval with conditions counts as approved.
+
+## `verify`
+
+Recomputes an inspection pack's hash and chain heads with no network access, so an auditor can check a pack without trusting the server that produced it.
+
+## In CI
+
+The GitHub Action wraps `test` and `gate`. See [Release gate in CI](/docs/build/release-gate-in-ci).

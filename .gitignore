@@ -178,6 +178,8 @@ credentials*
 *.json
 # fumadocs section indexes order the docs navigation; they are source, not data.
 !apps/docs/content/**/meta.json
+# The docs "Build with FairMind" section is source, not build output.
+!apps/docs/content/docs/build/
 !package.json
 !package-lock.json
 # The MCP Registry entry, read by the release workflow.
