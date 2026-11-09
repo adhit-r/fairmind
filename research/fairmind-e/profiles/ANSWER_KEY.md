@@ -10,18 +10,18 @@ and `tests/test_profiles.py`.
 
 | ID | Matrix cell | Provenance | Confidence | Band | Tier | Recommendation | Blocking |
 | --- | --- | --- | ---: | --- | --- | --- | --- |
-| P01 | low+measured | measured | 0.92 | measured | low | go | false |
-| P02 | low+estimated | tool_estimated | 0.66 | estimated | low | go | false |
+| P01 | low+measured | measured | 0.93 | measured | low | go | false |
+| P02 | low+estimated | vendor_reported | 0.50 | estimated | low | go | false |
 | P03 | low+unknown | manual | 0.30 | unknown | low | conditional_go | true |
-| P04 | medium+measured | measured | 0.90 | measured | medium | conditional_go | false |
-| P05 | medium+estimated | vendor_reported | 0.60 | estimated | medium | conditional_go | false |
-| P06 | medium+unknown | manual | 0.28 | unknown | medium | no_go | true |
-| P07 | high+measured | measured | 0.95 | measured | high | conditional_go | false |
-| P08 | high+estimated | tool_estimated | 0.64 | estimated | high | no_go | true |
+| P04 | medium+measured | measured | 0.93 | measured | medium | conditional_go | false |
+| P05 | medium+estimated | vendor_reported | 0.50 | estimated | medium | conditional_go | false |
+| P06 | medium+unknown | manual | 0.30 | unknown | medium | no_go | true |
+| P07 | high+measured | measured | 0.93 | measured | high | conditional_go | false |
+| P08 | high+estimated | vendor_reported | 0.50 | estimated | high | no_go | true |
 | P09 | high+unknown | unknown | 0.00 | unknown | high | no_go | true |
-| P10 | low+unknown | manual | 0.32 | unknown | low | conditional_go | false |
-| P11 | high+measured | measured | 0.88 | measured | high | conditional_go | false |
-| P12 | medium+estimated | tool_estimated | 0.62 | estimated | medium | conditional_go | true |
+| P10 | low+unknown | manual | 0.30 | unknown | low | conditional_go | false |
+| P11 | high+measured | measured | 0.93 | measured | high | conditional_go | false |
+| P12 | medium+estimated | vendor_reported | 0.50 | estimated | medium | conditional_go | true |
 
 Matrix coverage: all nine impact x confidence cells appear once; the
 conditional_go boundary cells adjacent to no_go (low+unknown via P03/P10 and
@@ -35,7 +35,7 @@ not.
 - Matrix cell: low+measured
 - Expected recommendation: go
 - Expected risk tier: low
-- Expected confidence: 0.92 (measured band, provenance measured)
+- Expected confidence: 0.93 (measured band, provenance measured)
 - Expected approval blocking: false
 - Dated mitigation: false
 - Owned exception: false
@@ -43,14 +43,14 @@ not.
 - Coverage rate: 0.8333
 - Mitigation design: Go cell: no mitigation required; approval is not blocking.
 
-Metered PDU and RAPL evidence yields a 0.92 confidence score in the measured band, and 38.3 kgCO2e for a classical training run sits well inside the low tier. The (low, measured) cell resolves to go with nothing to block approval. ENV-4 is missing only because a per-request efficiency figure does not apply to a training-run functional unit.
+Metered PDU and RAPL evidence scores 0.93, the measured class midpoint, in the measured band, and 38.3 kgCO2e for a classical training run sits well inside the low tier. The (low, measured) cell resolves to go with nothing to block approval. ENV-4 is missing only because a per-request efficiency figure does not apply to a training-run functional unit.
 
 ## P02: LexRetrieve statute and case-law RAG search
 
 - Matrix cell: low+estimated
 - Expected recommendation: go
 - Expected risk tier: low
-- Expected confidence: 0.66 (estimated band, provenance tool_estimated)
+- Expected confidence: 0.50 (estimated band, provenance vendor_reported)
 - Expected approval blocking: false
 - Dated mitigation: false
 - Owned exception: false
@@ -58,7 +58,7 @@ Metered PDU and RAPL evidence yields a 0.92 confidence score in the measured ban
 - Coverage rate: 1
 - Mitigation design: Go cell: no mitigation required; approval is not blocking.
 
-CodeCarbon tool estimation supports a 0.66 score in the estimated band, and 0.0004 kgCO2e per 1000 requests is comfortably low impact. The (low, estimated) cell resolves to go, and the profile carries full ENV-1..6 coverage.
+Provider-reported figures score 0.50, the vendor_reported class midpoint, in the estimated band, and 0.0004 kgCO2e per 1000 requests is comfortably low impact. The (low, estimated) cell resolves to go, and the profile carries full ENV-1..6 coverage.
 
 ## P03: TalentSift resume screening ranker
 
@@ -80,7 +80,7 @@ A manual FLOP worksheet caps evidence at 0.30, inside the unknown band, while im
 - Matrix cell: medium+measured
 - Expected recommendation: conditional_go
 - Expected risk tier: medium
-- Expected confidence: 0.90 (measured band, provenance measured)
+- Expected confidence: 0.93 (measured band, provenance measured)
 - Expected approval blocking: false
 - Dated mitigation: true
 - Owned exception: false
@@ -88,14 +88,14 @@ A manual FLOP worksheet caps evidence at 0.30, inside the unknown band, while im
 - Coverage rate: 0.8333
 - Mitigation design: Dated mitigation documented: approval_blocking is false.
 
-Metered fine-tune evidence scores 0.90 in the measured band and 1350 kgCO2e sits mid-range in the medium tier, so the (medium, measured) cell returns conditional_go. The dated solar-PPA migration plan documents mitigation, so the conditional release is not approval-blocking.
+Metered fine-tune evidence scores 0.93 in the measured band and 1350 kgCO2e sits mid-range in the medium tier, so the (medium, measured) cell returns conditional_go. The dated solar-PPA migration plan documents mitigation, so the conditional release is not approval-blocking.
 
 ## P05: UPI fraud scoring service
 
 - Matrix cell: medium+estimated
 - Expected recommendation: conditional_go
 - Expected risk tier: medium
-- Expected confidence: 0.60 (estimated band, provenance vendor_reported)
+- Expected confidence: 0.50 (estimated band, provenance vendor_reported)
 - Expected approval blocking: false
 - Dated mitigation: true
 - Owned exception: false
@@ -103,14 +103,14 @@ Metered fine-tune evidence scores 0.90 in the measured band and 1350 kgCO2e sits
 - Coverage rate: 0.8333
 - Mitigation design: Dated mitigation documented: approval_blocking is false (contrast with P12).
 
-The claimed 0.88 confidence is capped at 0.60 because vendor-reported dashboard evidence can never exceed the vendor cap, landing in the estimated band, while 0.0038 kgCO2e per 1000 requests is medium impact. The (medium, estimated) cell returns conditional_go and the dated hydro-region migration keeps it from blocking approval. The undisclosed kilowatt-hours leave ENV-2 uncovered.
+The claimed 0.88 confidence is recorded but not used: vendor-reported dashboard evidence is scored at the 0.50 class midpoint, landing in the estimated band, while 0.0038 kgCO2e per 1000 requests is medium impact. The (medium, estimated) cell returns conditional_go and the dated hydro-region migration keeps it from blocking approval. The undisclosed kilowatt-hours leave ENV-2 uncovered.
 
 ## P06: Workspace chat assistant serving
 
 - Matrix cell: medium+unknown
 - Expected recommendation: no_go
 - Expected risk tier: medium
-- Expected confidence: 0.28 (unknown band, provenance manual)
+- Expected confidence: 0.30 (unknown band, provenance manual)
 - Expected approval blocking: true
 - Dated mitigation: false
 - Owned exception: false
@@ -118,14 +118,14 @@ The claimed 0.88 confidence is capped at 0.60 because vendor-reported dashboard 
 - Coverage rate: 1
 - Mitigation design: No_go cell: approval_blocking is true regardless of mitigation.
 
-The manual estimate scores 0.28, in the unknown band, while 4.6 kgCO2e per million tokens is medium impact, so the (medium, unknown) cell returns no_go. Full ENV-1..6 coverage cannot rescue evidence that is too weak for a medium-impact release, and a no_go always blocks approval.
+The manual estimate scores 0.30, in the unknown band, while 4.6 kgCO2e per million tokens is medium impact, so the (medium, unknown) cell returns no_go. Full ENV-1..6 coverage cannot rescue evidence that is too weak for a medium-impact release, and a no_go always blocks approval.
 
 ## P07: Biomedical domain LLM pretraining run
 
 - Matrix cell: high+measured
 - Expected recommendation: conditional_go
 - Expected risk tier: high
-- Expected confidence: 0.95 (measured band, provenance measured)
+- Expected confidence: 0.93 (measured band, provenance measured)
 - Expected approval blocking: false
 - Dated mitigation: true
 - Owned exception: false
@@ -133,14 +133,14 @@ The manual estimate scores 0.28, in the unknown band, while 4.6 kgCO2e per milli
 - Coverage rate: 0.8333
 - Mitigation design: Dated mitigation documented: approval_blocking is false (contrast with the P11 exception path in the same cell).
 
-IPMI-metered training evidence scores 0.95 in the measured band and 62,320 kgCO2e is high impact, so the (high, measured) cell returns conditional_go. The dated scheduling and energy-budget plan documents mitigation, so approval is not blocked.
+IPMI-metered training evidence scores 0.93 in the measured band and 62,320 kgCO2e is high impact, so the (high, measured) cell returns conditional_go. The dated scheduling and energy-budget plan documents mitigation, so approval is not blocked.
 
 ## P08: Indic multilingual LLM continued pretraining
 
 - Matrix cell: high+estimated
 - Expected recommendation: no_go
 - Expected risk tier: high
-- Expected confidence: 0.64 (estimated band, provenance tool_estimated)
+- Expected confidence: 0.50 (estimated band, provenance vendor_reported)
 - Expected approval blocking: true
 - Dated mitigation: false
 - Owned exception: false
@@ -148,7 +148,7 @@ IPMI-metered training evidence scores 0.95 in the measured band and 62,320 kgCO2
 - Coverage rate: 0.8333
 - Mitigation design: No_go cell: approval_blocking is true; disclosed offsets deliberately do not rescue the gate.
 
-The tool-reconstructed estimate scores 0.64 in the estimated band and 28,623 kgCO2e is high impact, so the (high, estimated) cell returns no_go. Retired carbon units are disclosed but never improve confidence, tier, or the gate, and the absence of a dated mitigation is moot for a no_go, which always blocks approval.
+The provider-reported statement scores 0.50, the vendor_reported class midpoint, in the estimated band and 28,623 kgCO2e is high impact, so the (high, estimated) cell returns no_go. Retired carbon units are disclosed but never improve confidence, tier, or the gate, and the absence of a dated mitigation is moot for a no_go, which always blocks approval.
 
 ## P09: Third-party document-intelligence API
 
@@ -170,7 +170,7 @@ The vendor discloses nothing, so provenance is unknown and confidence is forced 
 - Matrix cell: low+unknown
 - Expected recommendation: conditional_go
 - Expected risk tier: low
-- Expected confidence: 0.32 (unknown band, provenance manual)
+- Expected confidence: 0.30 (unknown band, provenance manual)
 - Expected approval blocking: false
 - Dated mitigation: true
 - Owned exception: false
@@ -178,14 +178,14 @@ The vendor discloses nothing, so provenance is unknown and confidence is forced 
 - Coverage rate: 1
 - Mitigation design: Dated evidence-improvement mitigation documented: approval_blocking is false (contrast with P03).
 
-A documented manual worksheet scores 0.32, in the unknown band, with low impact, so the (low, unknown) cell returns conditional_go. Unlike P03, the dated CodeCarbon instrumentation commitment documents mitigation, so the conditional release is not approval-blocking.
+A documented manual worksheet scores 0.30, in the unknown band, with low impact, so the (low, unknown) cell returns conditional_go. Unlike P03, the dated CodeCarbon instrumentation commitment documents mitigation, so the conditional release is not approval-blocking.
 
 ## P11: Marketplace search re-ranking LLM serving
 
 - Matrix cell: high+measured
 - Expected recommendation: conditional_go
 - Expected risk tier: high
-- Expected confidence: 0.88 (measured band, provenance measured)
+- Expected confidence: 0.93 (measured band, provenance measured)
 - Expected approval blocking: false
 - Dated mitigation: false
 - Owned exception: true
@@ -193,14 +193,14 @@ A documented manual worksheet scores 0.32, in the unknown band, with low impact,
 - Coverage rate: 1
 - Mitigation design: Owned exception instead of a dated mitigation: approval_blocking is false via the exception path (contrast with P07).
 
-Fully metered serving evidence scores 0.88 in the measured band and 14.5 kgCO2e per million tokens is high impact, so the (high, measured) cell returns conditional_go. There is no dated mitigation, but the signed exception with owner, expiry, and rationale satisfies the gate, so approval is not blocked.
+Fully metered serving evidence scores 0.93 in the measured band and 14.5 kgCO2e per million tokens is high impact, so the (high, measured) cell returns conditional_go. There is no dated mitigation, but the signed exception with owner, expiry, and rationale satisfies the gate, so approval is not blocked.
 
 ## P12: Enterprise semantic embedding pipeline
 
 - Matrix cell: medium+estimated
 - Expected recommendation: conditional_go
 - Expected risk tier: medium
-- Expected confidence: 0.62 (estimated band, provenance tool_estimated)
+- Expected confidence: 0.50 (estimated band, provenance vendor_reported)
 - Expected approval blocking: true
 - Dated mitigation: false
 - Owned exception: false
@@ -208,4 +208,4 @@ Fully metered serving evidence scores 0.88 in the measured band and 14.5 kgCO2e 
 - Coverage rate: 0.8333
 - Mitigation design: Conditional_go with undated intentions only: approval_blocking is true (contrast with P05).
 
-Gateway tool estimation scores 0.62 in the estimated band and 0.004 kgCO2e per 1000 requests is medium impact, so the (medium, estimated) cell returns conditional_go. The batching and distillation ideas carry no owner or date and no exception was requested, so the release is approval-blocking, unlike P05.
+Provider-reported figures score 0.50, the vendor_reported class midpoint, in the estimated band and 0.004 kgCO2e per 1000 requests is medium impact, so the (medium, estimated) cell returns conditional_go. The batching and distillation ideas carry no owner or date and no exception was requested, so the release is approval-blocking, unlike P05.

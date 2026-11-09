@@ -418,7 +418,7 @@ class ProfilesTest(unittest.TestCase):
         mapping, _ = HYP.load_profiles(PROFILES_JSON)
         self.assertEqual(len(mapping), 12)
         self.assertEqual(mapping["P01"]["expected_recommendation"], "go")
-        self.assertAlmostEqual(mapping["P01"]["confidence_score"], 0.92, places=6)
+        self.assertAlmostEqual(mapping["P01"]["confidence_score"], 0.93, places=6)
 
     def test_tolerant_top_level_list_layout(self):
         handle = tempfile.NamedTemporaryFile(
