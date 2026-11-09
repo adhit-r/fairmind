@@ -112,6 +112,7 @@ export const API_ENDPOINTS = {
     systemApplicabilityAcceptOverride: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/applicability/accept-override`,
     generateReport: '/api/v1/ai-governance/reports/generate',
     listReports: '/api/v1/ai-governance/reports',
+    exportReport: (id: string, format: 'pdf' | 'docx') => `/api/v1/reports/snapshots/${encodeURIComponent(id)}/${format}`,
     assessRisks: '/api/v1/ai-governance/risks/assess',
     riskDashboard: '/api/v1/ai-governance/dashboard/risk',
     status: '/api/v1/ai-governance/status',
