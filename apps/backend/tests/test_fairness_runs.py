@@ -587,3 +587,24 @@ def test_sustained_drift_opens_exactly_one_finding():
     passing = snapshot(False, 5)
     assert passing["watch"]["consecutiveDrifting"] == 0 and passing["watch"]["findingId"] == third["watch"]["findingId"]
     assert len(watch_findings()) == 1
+
+
+def _known_answer_csv(copies):
+    # Group A: TPR 4/5, FPR 2/5, selection 6/10. Group B: TPR 2/5, FPR 1/5, selection 3/10.
+    rows = ["label,prediction,gender"]
+    for _ in range(copies):
+        for group, tp, fp in (("A", 4, 2), ("B", 2, 1)):
+            rows += [f"1,{int(i < tp)},{group}" for i in range(5)] + [f"0,{int(i < fp)},{group}" for i in range(5)]
+    return "\n".join(rows).encode()
+
+
+def test_fairness_metrics_match_the_hand_calculation():
+    small, large = (run_fairness(_known_answer_csv(n), outcome="label", prediction="prediction", attributes=["gender"])["attributes"][0] for n in (1, 10))
+    for a in (small, large):
+        assert a["selection_rates"] == {"A": 0.6, "B": 0.3}
+        assert a["disparate_impact_ratio"] == pytest.approx(0.5)  # 0.3 / 0.6
+        assert a["equal_opportunity"]["value"] == pytest.approx(0.4)  # |0.8 - 0.4|
+        assert a["equalized_odds"]["value"] == pytest.approx(0.4)  # max(|0.8 - 0.4|, |0.4 - 0.2|)
+    # Ten rows per group cannot show the gap is real; two hundred rows can.
+    assert all(small["checks"].values())
+    assert not any(large["checks"].values())

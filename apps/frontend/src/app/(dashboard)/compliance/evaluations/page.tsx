@@ -7,7 +7,7 @@ import { Crumbs, EnginePill, Empty, ErrorNote, Heading, Loading, MUTED, Pill, Re
 
 const ENGINES: Array<{ value: EngineStatus; label: string }> = [
   { value: 'Engine exists', label: 'Engine exists' },
-  { value: 'Partial', label: 'Partial' },
+  { value: 'Partial', label: 'Related code' },
   { value: 'Not found', label: 'Not built yet' },
 ]
 const FIELD = 'h-10 rounded-full border border-[#15171a24] bg-white px-4 text-[13px] font-semibold'
