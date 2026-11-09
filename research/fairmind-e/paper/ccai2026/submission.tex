@@ -129,7 +129,10 @@ auditable rather than informal. Six controls (ENV-1 to ENV-6: boundary, energy
 accounting, dual location and market carbon, per-functional-unit efficiency,
 evidence confidence with disclosed uncertainty, and mitigation or exception)
 define coverage. Disclosed offsets are recorded but never subtracted from
-emissions and never improve any gate output.
+emissions and never improve any gate output. The asymmetry is deliberate:
+\emph{vendor\_reported} evidence tops out in \emph{moderate}, so a
+medium-impact workload assessed only from provider figures never receives an
+unconditional \emph{go}.
 
 \section{Implementation}
 
@@ -256,15 +259,13 @@ were gated and since closed in the released engine: provenance was keyed on
 tool identity, so the degraded tracker kept \emph{tool\_estimated} (0.72) when
 a load model is \emph{manual} in kind; and a caller-supplied score could move
 within a class across the 0.35 band boundary. Under the current policy both
-methods here land in one column, \emph{conditional\_go}, which is the honest
-outcome for two uncalibrated estimates. These are
+methods here land in one column, \emph{conditional\_go}. These are
 benchmark workloads, so only the low-impact row is exercised and the
 provisional thresholds cannot be recalibrated here; the FLOP model uses a
 placeholder 4.0 GFLOP/s per watt, so the size of the disagreement is partly an
 artifact of that constant. The mitigation reruns are single executions. A
-two-arm expert panel (12 engine-validated profiles, 15 reviewers) is
-instrumented but not run and is future work, not a result. Artifacts are
-withheld for anonymity.
+two-arm expert panel is instrumented but not run; it is future work, not a
+result. Artifacts are withheld for anonymity.
 
 
 \begin{ack}

@@ -575,6 +575,13 @@ def main(argv: list[str] | None = None) -> int:
         "batching, time_shift) and write a companion CSV",
     )
     parser.add_argument(
+        "--mitigation-iterations",
+        type=int,
+        default=1,
+        help="repeat the mitigation suite this many times (with --mitigations) "
+        "so each physical rerun has variance, not a single execution",
+    )
+    parser.add_argument(
         "--gap-seconds",
         type=float,
         default=0.0,
@@ -596,6 +603,8 @@ def main(argv: list[str] | None = None) -> int:
         args.iterations = 1 if args.dry_run else 5
     if args.iterations < 1:
         parser.error("--iterations must be >= 1")
+    if args.mitigation_iterations < 1:
+        parser.error("--mitigation-iterations must be >= 1")
     run_label = "dryrun" if args.dry_run else "real"
     if args.output is None:
         args.output = DEFAULT_OUTPUT_DIR / f"{run_label}_runs.csv"
@@ -609,15 +618,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.mitigations:
         from measurement import mitigations as mitigations_module
 
-        mitigation_rows = mitigations_module.run_mitigation_suite(
-            workload=args.workload,
-            dry_run=args.dry_run,
-            seed=args.seed,
-            region=args.region,
-            gflops_per_watt=args.gflops_per_watt,
-            pue=args.pue,
-            config_overrides_path=args.config_overrides,
-        )
+        mitigation_rows = []
+        for iteration in range(1, args.mitigation_iterations + 1):
+            mitigation_rows.extend(mitigations_module.run_mitigation_suite(
+                workload=args.workload,
+                dry_run=args.dry_run,
+                seed=args.seed,
+                region=args.region,
+                gflops_per_watt=args.gflops_per_watt,
+                pue=args.pue,
+                config_overrides_path=args.config_overrides,
+                iteration=iteration,
+            ))
         mitigation_path = args.output.parent / (
             args.output.stem + "_mitigations.csv"
         )

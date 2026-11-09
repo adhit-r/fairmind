@@ -545,5 +545,21 @@ class DegradedTrackerTest(unittest.TestCase):
         )
 
 
+class MitigationIterationsTest(unittest.TestCase):
+    def test_repeated_suite_keeps_run_ids_unique(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = pathlib.Path(tmpdir) / "runs.csv"
+            exit_code, _ = run_harness([
+                "--workload", "w4", "--dry-run", "--mitigations",
+                "--mitigation-iterations", "2", "--output", str(output),
+            ])
+            self.assertEqual(exit_code, 0)
+            rows = read_rows(pathlib.Path(tmpdir) / "runs_mitigations.csv")
+            ids = [r["run_id"] for r in rows]
+            self.assertEqual(len(ids), len(set(ids)))
+            self.assertEqual(len(rows) % 2, 0)
+            self.assertTrue(any(i.startswith("dryrun-i02-m") for i in ids))
+
+
 if __name__ == "__main__":
     unittest.main()
