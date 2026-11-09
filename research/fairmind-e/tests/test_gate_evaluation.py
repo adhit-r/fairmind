@@ -72,7 +72,7 @@ class GateEvaluationTest(unittest.TestCase):
             by_id = {row["case_id"]: row for row in rows}
             self.assertEqual(
                 by_id["vendor_claimed_high_confidence_capped"]["actual_confidence_score"],
-                "0.60",
+                "0.50",  # vendor_reported midpoint; the claimed 0.99 never enters the gate
             )
             self.assertEqual(
                 by_id["offsets_do_not_rescue_unknown"]["actual_recommendation"],
@@ -99,15 +99,15 @@ class GateEvaluationTest(unittest.TestCase):
             )
             self.assertEqual(
                 sum(1 for row in by_baseline["carbon_only_gate"] if row["exact_match"] == "true"),
-                7,
-            )
-            self.assertEqual(
-                sum(1 for row in by_baseline["generic_sustainability_score"] if row["exact_match"] == "true"),
                 6,
             )
             self.assertEqual(
+                sum(1 for row in by_baseline["generic_sustainability_score"] if row["exact_match"] == "true"),
+                5,
+            )
+            self.assertEqual(
                 sum(1 for row in by_baseline["no_mitigation_review_gate"] if row["exact_match"] == "true"),
-                11,
+                10,
             )
             self.assertEqual(
                 sum(1 for row in by_baseline["no_exception_path"] if row["exact_match"] == "true"),
@@ -122,7 +122,7 @@ class GateEvaluationTest(unittest.TestCase):
             self.assertIn("Exact label accuracy: 14/14 (100.0%)", summary)
             self.assertIn("| fairmind_e | 14/14 | 100.0% | 14/14 | 14/14 |", summary)
             self.assertIn("| no_environmental_gate | 3/14 | 21.4% | 3/14 | 6/14 |", summary)
-            self.assertIn("| no_mitigation_review_gate | 11/14 | 78.6% | 14/14 | 11/14 |", summary)
+            self.assertIn("| no_mitigation_review_gate | 10/14 | 71.4% | 14/14 | 10/14 |", summary)
             self.assertIn("| no_exception_path | 13/14 | 92.9% | 14/14 | 13/14 |", summary)
             self.assertIn("| offset_credit_gate | 13/14 | 92.9% | 13/14 | 13/14 |", summary)
             self.assertIn("None.", summary)

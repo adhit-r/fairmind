@@ -9,7 +9,7 @@
         "recommendation": "go",
         "approval_blocking": false,
         "impact_tier": "low",
-        "confidence_score": 0.92
+        "confidence_score": 0.93
       },
       "assessment": {
         "boundary_json": {"scope": "training", "region": "us-east-1"},
@@ -36,7 +36,7 @@
         "recommendation": "conditional_go",
         "approval_blocking": true,
         "impact_tier": "medium",
-        "confidence_score": 0.9
+        "confidence_score": 0.93
       },
       "assessment": {
         "boundary_json": {"scope": "training", "region": "us-east-1"},
@@ -62,7 +62,7 @@
         "recommendation": "conditional_go",
         "approval_blocking": false,
         "impact_tier": "high",
-        "confidence_score": 0.94
+        "confidence_score": 0.93
       },
       "assessment": {
         "boundary_json": {"scope": "training", "region": "us-east-1"},
@@ -89,7 +89,7 @@
         "recommendation": "conditional_go",
         "approval_blocking": true,
         "impact_tier": "high",
-        "confidence_score": 0.94
+        "confidence_score": 0.93
       },
       "assessment": {
         "boundary_json": {"scope": "training", "region": "us-east-1"},
@@ -115,7 +115,7 @@
         "recommendation": "go",
         "approval_blocking": false,
         "impact_tier": "low",
-        "confidence_score": 0.6
+        "confidence_score": 0.5
       },
       "assessment": {
         "boundary_json": {"scope": "inference", "region": "us-west-2"},
@@ -142,7 +142,7 @@
         "recommendation": "conditional_go",
         "approval_blocking": true,
         "impact_tier": "medium",
-        "confidence_score": 0.6
+        "confidence_score": 0.5
       },
       "assessment": {
         "boundary_json": {"scope": "inference", "region": "us-west-2"},
@@ -163,13 +163,13 @@
       }
     },
     {
-      "id": "tool_high_llm_no_go",
-      "description": "Tool-estimated high-impact LLM inference is blocked when confidence is estimated.",
+      "id": "tool_high_llm_conditional_blocked",
+      "description": "Tool-estimated high-impact LLM inference resolves to conditional_go (high confidence band) and stays blocked until the planned mitigation is documented.",
       "expected": {
-        "recommendation": "no_go",
+        "recommendation": "conditional_go",
         "approval_blocking": true,
         "impact_tier": "high",
-        "confidence_score": 0.65
+        "confidence_score": 0.72
       },
       "assessment": {
         "boundary_json": {"scope": "llm_inference", "region": "eu-central-1"},
@@ -196,7 +196,7 @@
         "recommendation": "no_go",
         "approval_blocking": true,
         "impact_tier": "medium",
-        "confidence_score": 0.25
+        "confidence_score": 0.3
       },
       "assessment": {
         "boundary_json": {"scope": "training", "region": "ap-south-1"},
@@ -249,7 +249,7 @@
         "recommendation": "conditional_go",
         "approval_blocking": false,
         "impact_tier": "medium",
-        "confidence_score": 0.92
+        "confidence_score": 0.93
       },
       "assessment": {
         "boundary_json": {"scope": "inference", "region": "us-east-1"},
@@ -332,7 +332,7 @@
         "recommendation": "conditional_go",
         "approval_blocking": false,
         "impact_tier": "high",
-        "confidence_score": 0.91
+        "confidence_score": 0.93
       },
       "assessment": {
         "boundary_json": {"scope": "training", "region": "us-east-1"},
@@ -363,7 +363,7 @@
         "recommendation": "no_go",
         "approval_blocking": true,
         "impact_tier": "high",
-        "confidence_score": 0.6
+        "confidence_score": 0.5
       },
       "assessment": {
         "boundary_json": {"scope": "fine_tune", "region": "us-west-1"},
