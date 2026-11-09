@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { checkCell } from '@/components/ui/matrix'
 import { VERDICT_LABEL, VERDICT_TONE, VerdictExplainer, tierOverride } from './VerdictExplainer'
 import { TargetPanel } from './TargetPanel'
+import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { cn } from '@/lib/utils'
 
 type JourneyKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'decision' | 'operate'
@@ -363,6 +364,7 @@ function SystemFileBody({ id }: { id: string }) {
             />
             <FairnessRunPanel inspect={inspectCsv} run={runFairness} />
             {id && <TargetPanel systemId={id} />}
+            {id && <StoredAnalyses systemId={id} sources={['judge', 'advanced']} />}
           </Stage>
 
           <Stage step={JOURNEY[2]} {...stage('govern')} pill={<Action small onClick={() => open(`/systems/${encodeURIComponent(id)}/plan`)}>Open plan</Action>} primary={<Action onClick={() => open(`/systems/${encodeURIComponent(id)}/plan`)}>Open plan</Action>} actions={<>
