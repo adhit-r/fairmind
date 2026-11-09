@@ -110,7 +110,7 @@ export function ReqPill({ status }: { status: ReqStatus }) {
 
 const ENGINE: Record<EngineStatus, { label: string; tone: Tone }> = {
   'Engine exists': { label: 'Engine exists', tone: 'done' },
-  Partial: { label: 'Partial', tone: 'warn' },
+  Partial: { label: 'Related code', tone: 'warn' },
   'Not found': { label: 'Not built yet', tone: 'plain' },
 }
 

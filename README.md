@@ -12,6 +12,7 @@
 
 [![License: AGPL-3.0 / Apache-2.0](https://img.shields.io/badge/license-AGPL--3.0%20%2F%20Apache--2.0-blue.svg)](LICENSING.md)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16369/badge)](https://www.bestpractices.dev/projects/16369)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
 [![PyPI](https://img.shields.io/pypi/v/fairmind-mcp?label=PyPI)](https://pypi.org/project/fairmind-mcp/)
 [![Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/adhit-r/fairmind/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/adhit-r/fairmind)

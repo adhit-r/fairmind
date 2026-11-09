@@ -185,6 +185,16 @@ def test_catalogue_counts(tmp_database):
     assert len(packs) == 21 and FOUNDATION in {p["id"] for p in packs}
 
 
+def test_catalogue_engine_status_matches_the_code():
+    """'Engine exists' means runnable; rerun scripts/export_pack_catalogue.py when an engine is added."""
+    from src.api.routers.evaluation_results import RULES
+    from src.application.services.eval_engines import REGISTRY
+
+    catalogue = json.loads((Path(__file__).resolve().parents[1] / "src/api/routers/pack_catalogue_data/catalogue.json").read_text())
+    exists = {e["id"] for e in catalogue["evaluations"] if e["engine"] == "Engine exists"}
+    assert exists == set(REGISTRY) | set(RULES)
+
+
 def test_install_and_uninstall_toggle(tmp_database):
     _, client = _org(tmp_database)
     assert client.post(f"{PACKS}/{FOUNDATION}/install").json()["installed"] is True
@@ -256,7 +266,7 @@ def test_evaluations_filter_by_pillar_and_engine(tmp_database):
     everything = client.get(f"{PACKS}/evaluations").json()
     assert len(everything) == 109
     secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Partial"}).json()
-    assert len(secure) == 6 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
+    assert len(secure) == 2 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
     drift = client.get(f"{PACKS}/evaluations", params={"q": "data drift"}).json()
     assert [e["id"] for e in drift] == ["EV-DAT-01"] and drift[0]["tests"] and drift[0]["installed"] is False
     assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["pack"]["id"] == drift[0]["pack"]["id"]

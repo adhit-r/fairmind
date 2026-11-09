@@ -10,14 +10,16 @@ on:
     types: [opened, synchronize, reopened, closed]
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
-  statuses: write
+  contents: read
 
 jobs:
   cla:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write        # re-run the check after a contributor signs
+      contents: write       # store signatures on the cla-signatures branch
+      pull-requests: write  # comment on the pull request
+      statuses: write       # set the CLA status check
     if: >-
       github.event_name == 'pull_request_target' ||
       (github.event.issue.pull_request &&

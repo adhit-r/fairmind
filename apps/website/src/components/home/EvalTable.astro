@@ -1,7 +1,7 @@
 ---
 import { evaluations, evalGroups, evalFilters, engineCounts, frameworkLabel } from '../../lib/catalogue';
 
-const engineLabel = { exists: 'Engine in FairMind', partial: 'Partial engine', none: 'Specified, not built yet' };
+const engineLabel = { exists: 'Engine in FairMind', partial: 'Related code, no engine yet', none: 'Specified, not built yet' };
 const featured = evaluations.findIndex((e) => e.id === 'EV-FAI-01');
 const data = evaluations.map((e) => ({
   ...e,

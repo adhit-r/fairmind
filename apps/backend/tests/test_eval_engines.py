@@ -56,3 +56,12 @@ def test_data_drift_needs_enough_rows_and_shared_columns():
     assert small["status"] == "insufficient"
     with pytest.raises(EngineError):
         _run("EV-DAT-01", {"features": "missing"}, reference=_csv(_tabular(50)), current=_csv(_tabular(50)))
+
+
+def test_data_drift_psi_matches_the_hand_calculation():
+    # Reference 50/50, current 80/20: PSI = 0.3 ln(0.8/0.5) + 0.3 ln(0.5/0.2) = 0.4159.
+    out = _run("EV-DAT-01", reference=_csv(pd.DataFrame({"plan": ["a"] * 50 + ["b"] * 50})),
+               current=_csv(pd.DataFrame({"plan": ["a"] * 80 + ["b"] * 20})))
+    row = next(r for r in out["detail"] if r.get("feature") == "plan")
+    assert row["psi"] == pytest.approx(0.4159, abs=1e-4) and row["drifted"] is True
+    assert out["status"] == "failed"
