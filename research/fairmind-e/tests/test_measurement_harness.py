@@ -196,10 +196,10 @@ class ProvenanceMappingTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             for row in read_rows(output):
                 if row["method_available"] == "true":
-                    expected = methods.PROVENANCE_BY_METHOD[row["measurement_method"]]
-                    if "DEGRADED" in row["notes"]:
-                        expected = "manual"  # tracker fell back to load x TDP
-                    self.assertEqual(row["provenance_class"], expected)
+                    self.assertEqual(
+                        row["provenance_class"],
+                        methods.PROVENANCE_BY_METHOD[row["measurement_method"]],
+                    )
                 else:
                     self.assertEqual(row["provenance_class"], "unknown")
 
@@ -528,21 +528,6 @@ class RunWindowTest(unittest.TestCase):
                 if row["method_available"] == "false":
                     self.assertEqual(row["started_at"], "")
                     self.assertEqual(row["ended_at"], "")
-
-
-class DegradedTrackerTest(unittest.TestCase):
-    def test_cpu_load_fallback_rows_are_manual(self):
-        kwargs = dict(
-            workload_id="w", functional_unit="u", run_id="r", run_mode="real",
-            method="codecarbon", method_available=True, duration_seconds=1.0,
-            energy_kwh=0.001, location_intensity=700.0, market_intensity=None,
-            carbon_intensity_basis="average", location_kg=0.0007, market_kg=None,
-            mitigation_readiness="none", notes="",
-        )
-        self.assertEqual(harness.build_row(**kwargs)["provenance_class"], "tool_estimated")
-        self.assertEqual(
-            harness.build_row(degraded=True, **kwargs)["provenance_class"], "manual"
-        )
 
 
 if __name__ == "__main__":

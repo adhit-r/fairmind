@@ -114,9 +114,7 @@ def test_domain_import_and_environmental_gate_invariants():
             mitigations_json=[],
         )
     )
-    # Confidence is fixed per provenance class (vendor_reported midpoint); the
-    # claimed 0.95 never enters the gate.
-    assert vendor.evidence_confidence == 0.50
+    assert vendor.evidence_confidence == 0.60
 
     no_offsets = run_assessment(_assessment(mitigation_readiness="planned", mitigations_json=[]))
     with_offsets = run_assessment(

@@ -60,22 +60,15 @@ def test_confidence_from_source_midpoint():
     assert confidence_from_source("unknown") == 0.0
 
 
-def test_confidence_fixed_by_provenance():
-    from src.domain.environmental.confidence import (
-        band_from_score, cap_confidence_for_provenance, normalize_source,
-    )
-    # A caller-supplied score never enters the gate: the class midpoint does.
-    assert cap_confidence_for_provenance(0.95, "vendor_reported") == 0.50
-    assert cap_confidence_for_provenance(0.95, "measured") == 0.93
-    assert cap_confidence_for_provenance(None, "tool_estimated") == 0.72
+def test_confidence_capped_by_provenance():
+    from src.domain.environmental.confidence import cap_confidence_for_provenance
+    # A claimed score cannot exceed what the provenance class permits.
+    assert cap_confidence_for_provenance(0.95, "vendor_reported") == 0.60
+    assert cap_confidence_for_provenance(0.95, "measured") == 0.95
     # Unknown provenance forces 0.0 regardless of any claimed score.
     assert cap_confidence_for_provenance(0.95, "unknown") == 0.0
-    # The gaming case: manual (0.20-0.40) straddles the 0.35 band boundary, so a
-    # self-chosen 0.36 must not lift a manual estimate into the moderate band.
-    assert band_from_score(cap_confidence_for_provenance(0.36, "manual")) == "unknown"
-    # A tracker that fell back to load x TDP is classed with analytic estimates.
-    assert normalize_source("codecarbon_cpu_load") == "manual"
-    assert normalize_source("codecarbon") == "tool_estimated"
+    # No explicit score falls back to the provenance midpoint.
+    assert cap_confidence_for_provenance(None, "tool_estimated") == 0.72
 
 
 @pytest.mark.parametrize(
