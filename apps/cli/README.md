@@ -3,7 +3,7 @@
 The release gate and fairness tests from a terminal or a CI job. One dependency, `httpx`.
 
 ```bash
-pipx install "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/cli"
+pipx install fairmind-cli
 # from a checkout of this repository: pipx install ./apps/cli
 export FAIRMIND_API_URL=https://fairmind.example.com
 export FAIRMIND_API_KEY=...        # minted at POST /api/v1/auth/api-keys, valid 365 days

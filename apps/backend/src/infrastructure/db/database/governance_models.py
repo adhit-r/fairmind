@@ -1569,6 +1569,8 @@ class GovernanceEvaluationArtifact(Base):
     available_at = Column(String, nullable=True)
     rejected_at = Column(String, nullable=True)
     rejection_reason = Column(Text, nullable=True)
+    # 013n: the scan policy that admitted these bytes; fixed per row.
+    scan_policy = Column(String, nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -1615,6 +1617,23 @@ class GovernanceEvaluationArtifact(Base):
             f"({_canonical_utc_timestamp('available_at')}) AND "
             f"({_canonical_utc_timestamp('rejected_at')})",
             name="ck_governance_evaluation_artifact_timestamps",
+        ),
+        CheckConstraint(
+            "scan_policy = 'fairmind-input-scan-v1' "
+            "AND media_type IN ('text/csv', 'application/json')",
+            name="ck_governance_evaluation_artifact_scan_policy_013n",
+        ),
+        CheckConstraint(
+            "rejection_reason IS NULL OR rejection_reason IN ("
+            "'credential_detected', 'private_key_detected', "
+            "'chain_of_thought_detected', 'undecodable_content', "
+            "'stored_object_missing', 'stored_digest_mismatch', "
+            "'stored_size_mismatch')",
+            name="ck_governance_evaluation_artifact_rejection_reason_013n",
+        ),
+        CheckConstraint(
+            "storage_key = 'sha256/' || sha256",
+            name="ck_governance_evaluation_artifact_content_address_013n",
         ),
     )
 

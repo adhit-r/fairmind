@@ -133,6 +133,9 @@ from src.infrastructure.db.repositories.evaluation_audit_chain import (
     append_evaluation_audit_event,
     verify_evaluation_audit_chain,
 )
+from src.infrastructure.db.repositories.evaluation_worker_queue_repository import (
+    lock_run_arbiter,
+)
 
 _BINDING_INTEGRITY_MESSAGE = "Stored assurance bindings failed integrity verification."
 _AUDIT_CHAIN_INTEGRITY_MESSAGE = "Stored evaluation audit chain failed integrity verification."
@@ -693,6 +696,71 @@ class SqlAlchemyEvaluationWorkbenchRepository:
         if not isinstance(value, str):
             raise TypeError("database UTC timestamp required")
         return _parse_timestamp(value).astimezone(timezone.utc)
+
+    def refuse_worker_owned_suite(
+        self,
+        *,
+        organization_id: str,
+        run_id: str,
+        suite_execution_id: str,
+    ) -> None:
+        """Hold the run arbiter and refuse ordinary evidence for a worker job.
+
+        Only signed worker completion may finalize a queued, leased, running,
+        attempted, cancelled, or ``fairmind_worker`` suite. It runs before the
+        authority loaders, so the lock order stays org, arbiter, system, run.
+        An unknown scope is left to the loader's own not-found answer.
+        """
+
+        postgres = self.db.get_bind().dialect.name == "postgresql"
+        if postgres:
+            lock_run_arbiter(self.db, organization_id, run_id)
+        # Pre-013m schemas have no attempts or cancellations to consult.
+        worker_tables = postgres and self.db.scalar(
+            text("SELECT to_regclass('governance_evaluation_cancellations') IS NOT NULL")
+        )
+        worker_owned = (
+            "execution.attempt_count > 0 OR EXISTS ("
+            "SELECT 1 FROM governance_evaluation_cancellations AS cancellation "
+            "WHERE cancellation.org_id=execution.org_id "
+            "AND cancellation.run_id=execution.run_id "
+            "AND (cancellation.suite_execution_id IS NULL "
+            "OR cancellation.suite_execution_id=execution.id))"
+            if worker_tables
+            else "false"
+        )
+        row = (
+            self.db.execute(
+                text(
+                    "SELECT execution.technical_status, plan.delivery_mode, "
+                    f"({worker_owned}) AS worker_owned "
+                    "FROM governance_evaluation_run_suite_executions AS execution "
+                    "JOIN governance_evaluation_runs AS run "
+                    "ON run.id=execution.run_id AND run.org_id=execution.org_id "
+                    "JOIN governance_evaluation_plans AS plan "
+                    "ON plan.id=run.plan_id AND plan.org_id=run.org_id "
+                    "WHERE execution.id=:suite_execution_id "
+                    "AND execution.run_id=:run_id AND execution.org_id=:org_id"
+                ),
+                {
+                    "suite_execution_id": suite_execution_id,
+                    "run_id": run_id,
+                    "org_id": organization_id,
+                },
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is not None and (
+            row["worker_owned"]
+            or row["delivery_mode"] == "fairmind_worker"
+            or row["technical_status"] in {"queued", "leased", "running"}
+        ):
+            raise self._error(
+                "evidence_worker_job_owned",
+                "Only worker completion may finalize this evaluation job.",
+                409,
+            )
 
     def _require_postgres_freshness_authority(self) -> None:
         if self.db.get_bind().dialect.name != "postgresql":

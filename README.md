@@ -13,8 +13,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
+[![PyPI](https://img.shields.io/pypi/v/fairmind-mcp?label=PyPI)](https://pypi.org/project/fairmind-mcp/)
 [![Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/adhit-r/fairmind/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/adhit-r/fairmind)
 [![OECD.AI Catalogue](https://img.shields.io/badge/OECD.AI-Catalogue%20of%20Tools%20%26%20Metrics-1f4e79)](https://oecd.ai/en/catalogue/tools/adhit-rfairmind)
+[![Mentioned in Awesome AI Regulation, Principles & Guidelines](https://awesome.re/mentioned-badge.svg)](https://github.com/EthicalML/awesome-artificial-intelligence-regulation#interactive-and-practical-tools)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](#current-status)
 [![Good first issues](https://img.shields.io/github/issues/adhit-r/fairmind/good%20first%20issue)](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
@@ -132,7 +134,7 @@ A framework mapping organises evidence. It is not legal advice or a conformity d
 Mint an API key at `POST /api/v1/auth/api-keys`.
 
 ```bash
-pipx install ./apps/cli
+pipx install fairmind-cli
 export FAIRMIND_API_URL=https://your-fairmind-host
 export FAIRMIND_API_KEY=...
 
@@ -150,7 +152,7 @@ fairmind verify pack.json        # offline, no network
     api-key: ${{ secrets.FAIRMIND_API_KEY }}
 ```
 
-The [Python SDK](apps/sdk/README.md) wraps the same calls, and the [MCP server](apps/mcp/README.md) gives Claude Code and other MCP clients nine tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
+The [Python SDK](apps/sdk/README.md) (`pip install fairmind`) wraps the same calls, and the [MCP server](apps/mcp/README.md) (`pip install fairmind-mcp`, listed in the official MCP Registry as `io.github.adhit-r/fairmind`) gives Claude Code and other MCP clients nine tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
 
 ---
 
@@ -211,9 +213,11 @@ Backend tests need a throwaway PostgreSQL 14 server; each test gets its own temp
 
 ---
 
-## OECD.AI Catalogue
+## Listings
 
 FairMind is listed in the [OECD.AI Catalogue of Tools & Metrics for Trustworthy AI](https://oecd.ai/en/catalogue/tools/adhit-rfairmind) as an open-source technical toolkit for governance, compliance and risk management, covering design, validation, deployment and monitoring. The catalogue lists tools from their authors; the OECD does not vet or endorse them.
+
+It is also listed in [Awesome AI Regulation, Principles & Guidelines](https://github.com/EthicalML/awesome-artificial-intelligence-regulation#interactive-and-practical-tools), the Institute for Ethical AI & Machine Learning's curated list of AI guidelines, principles and tools, under "Interactive and Practical Tools".
 
 ## Contributing
 

@@ -1,5 +1,7 @@
 # fairmind-mcp
 
+<!-- mcp-name: io.github.adhit-r/fairmind -->
+
 An MCP server that lets a coding agent ask FairMind whether an AI system may ship, and run fairness tests on CSVs from your machine. It is a thin layer over the [`fairmind` Python SDK](../sdk/README.md) and talks to the server over stdio.
 
 ## Tools
@@ -21,12 +23,10 @@ Each tool returns a compact text summary and the full API response as structured
 ## Install
 
 ```bash
-# from a checkout, with uv (the SDK is resolved from ../sdk)
-cd apps/mcp && uv sync
-
-# or with pip: SDK first, then this package
-pip install -e apps/sdk -e apps/mcp
+pip install fairmind-mcp        # or run it without installing: uvx fairmind-mcp
 ```
+
+It is listed in the official MCP Registry as `io.github.adhit-r/fairmind`. To work on it from a checkout, run `uv sync` in `apps/mcp` (the SDK is resolved from `../sdk`).
 
 The server targets the `mcp` 1.x `FastMCP` API (`mcp>=1.10,<2`); in `mcp` 2.x it was renamed `MCPServer`.
 
@@ -42,7 +42,7 @@ export FAIRMIND_API_KEY=...
 ### Claude Code
 
 ```bash
-claude mcp add fairmind -- uv run --project /path/to/fairmind/apps/mcp fairmind-mcp
+claude mcp add fairmind -- uvx fairmind-mcp
 ```
 
 The server inherits `FAIRMIND_API_URL` and `FAIRMIND_API_KEY` from the shell that starts Claude Code. To scope it to a repository, commit a `.mcp.json` that expands the variables from each developer's environment:
@@ -51,8 +51,8 @@ The server inherits `FAIRMIND_API_URL` and `FAIRMIND_API_KEY` from the shell tha
 {
   "mcpServers": {
     "fairmind": {
-      "command": "uv",
-      "args": ["run", "--project", "/path/to/fairmind/apps/mcp", "fairmind-mcp"],
+      "command": "uvx",
+      "args": ["fairmind-mcp"],
       "env": {
         "FAIRMIND_API_URL": "${FAIRMIND_API_URL}",
         "FAIRMIND_API_KEY": "${FAIRMIND_API_KEY}"
@@ -71,7 +71,7 @@ Desktop does not expand variables, so launch through a shell that reads them fro
   "mcpServers": {
     "fairmind": {
       "command": "/bin/sh",
-      "args": ["-c", "exec uv run --project /path/to/fairmind/apps/mcp fairmind-mcp"]
+      "args": ["-c", "exec uvx fairmind-mcp"]
     }
   }
 }

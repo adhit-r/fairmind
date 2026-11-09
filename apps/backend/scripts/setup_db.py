@@ -62,6 +62,7 @@ OPERATORS = (
     "013j_to_013k_verified_evidence_link_integrity.sql",
     "013k_to_013l_delegated_separation_override_grant_integrity.sql",
     "013l_to_013m_worker_execution_foundation.sql",
+    "013m_to_013n_evaluation_artifact_input_store.sql",
 )
 # PostgreSQL 18's frozen assurance catalog is measured with this between 010 and 011.
 PG18_RECONCILIATION = "upgrade_paths/010_to_011_drift_reconciliation.sql"

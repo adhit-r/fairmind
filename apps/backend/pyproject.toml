@@ -110,6 +110,7 @@ test = [
     "faker>=19.0.0",
     "pytest-playwright>=0.4.0",
     "playwright>=1.40.0",
+    "moto[s3]>=5.1",
 ]
 # FairMind-E measurement harness (research/fairmind-e/measurement); optional at runtime.
 research = [

@@ -515,6 +515,16 @@ if settings.assurance_v2_enabled:
         )
     else:
         logger.info("Trust administration route is disabled")
+    if settings.assurance_v2_artifact_upload_enabled:
+        _include_router(
+            "api.routes.evaluation_artifacts",
+            prefix="/api/v1/ai-governance",
+            tags=["evaluation-workbench-v2-artifacts"],
+            attr="evaluation_artifacts_router",
+            required=True,
+        )
+    else:
+        logger.info("Evaluation artifact upload route is disabled")
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)

@@ -96,6 +96,16 @@ class ImportedEvidenceRecord:
 class ImportedEvidenceRepository(Protocol):
     def read_fresh_utc_now(self) -> datetime: ...
 
+    def refuse_worker_owned_suite(
+        self,
+        *,
+        organization_id: str,
+        run_id: str,
+        suite_execution_id: str,
+    ) -> None:
+        """Take the run arbiter; raise if only worker completion may finalize the suite."""
+        ...
+
     def load_imported_evidence_authority_for_update(
         self,
         *,

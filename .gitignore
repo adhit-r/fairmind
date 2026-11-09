@@ -180,10 +180,13 @@ credentials*
 !apps/docs/content/**/meta.json
 !package.json
 !package-lock.json
+# The MCP Registry entry, read by the release workflow.
+!apps/mcp/server.json
 !research/aibom-fairness-evidence/**/*.json
 !apps/backend/src/domain/assurance/evidence-passport-v2.schema.json
 !apps/backend/src/api/routers/pack_catalogue_data/*.json
 !apps/backend/reference_data/frameworks/*.json
+!apps/eval-runner/seccomp/sandbox.json
 !tsconfig.json
 !next.config.js
 !tailwind.config.ts

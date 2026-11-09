@@ -15,7 +15,6 @@ export function useModels() {
   const fetchModels = async () => {
     try {
       setLoading(true)
-      // Use core.models endpoint which returns mock data when no DB records
       const response: ApiResponse<{ data: Model[], count: number }> = await apiClient.get(
         API_ENDPOINTS.core.models
       )

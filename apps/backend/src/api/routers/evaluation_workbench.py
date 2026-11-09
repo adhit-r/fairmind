@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from api.composition.evaluation_workbench import build_evaluation_workbench_services
+from api.composition.evaluation_worker_jobs import build_evaluation_cancellation_service
 from api.composition.governance_decision import build_governance_decision_service
 from api.composition.verified_evidence_admission import (
     build_verified_evidence_admission_service,
@@ -32,6 +33,7 @@ from src.api.evaluation_permissions import (
     EVALUATION_EVIDENCE_SUBMIT_PERMISSION,
     EVALUATION_PLAN_ACTIVATE_PERMISSION,
     EVALUATION_PLAN_WRITE_PERMISSION,
+    EVALUATION_RUN_CANCEL_PERMISSION,
     EVALUATION_RUN_CREATE_PERMISSION,
     require_assurance_v2_enabled,
     require_evaluation_permission,
@@ -39,12 +41,16 @@ from src.api.evaluation_permissions import (
 from src.api.routers.governance_assurance import (
     organization_membership,
 )
+from src.application.ports.evaluation_cancellation import CancellationScope
 from src.application.ports.evidence_admission import EvidenceAdmissionScope
 from src.application.ports.evidence_link import EvidenceLinkScope
 from src.application.ports.evidence_review import EvidenceReviewScope
 from src.application.ports.governance_decision import GovernanceDecisionScope
 from src.application.services.evaluation_catalog_versions_service import (
     EvaluationCatalogVersionsService,
+)
+from src.application.services.evaluation_cancellation_service import (
+    EvaluationRunCancellationService,
 )
 from src.application.services.evaluation_plan_service import EvaluationPlanService
 from src.application.services.evaluation_run_service import EvaluationRunService
@@ -477,6 +483,34 @@ class EvidenceLinkResponse(StrictModel):
     linked_at: str = Field(alias="linkedAt")
 
 
+class EvaluationCancellationCreate(StrictModel):
+    """Strict human cancellation request; the reason is stored, never echoed."""
+
+    scope_kind: Literal["run", "suite"] = Field(alias="scopeKind")
+    suite_execution_id: str | None = Field(
+        default=None, alias="suiteExecutionId", min_length=1, max_length=200
+    )
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class EvaluationCancellationSuiteStatus(StrictModel):
+    id: str
+    technical_status: TechnicalStatus = Field(alias="technicalStatus")
+
+
+class EvaluationCancellationResponse(StrictModel):
+    cancellation_id: str = Field(alias="cancellationId")
+    run_id: str = Field(alias="runId")
+    scope_kind: Literal["run", "suite"] = Field(alias="scopeKind")
+    suite_execution_id: str | None = Field(alias="suiteExecutionId")
+    requested_by: str = Field(alias="requestedBy")
+    requested_at: str = Field(alias="requestedAt")
+    run_technical_status: TechnicalStatus = Field(alias="runTechnicalStatus")
+    suite_executions: list[EvaluationCancellationSuiteStatus] = Field(
+        alias="suiteExecutions", max_length=32
+    )
+
+
 class EvidenceReviewRequest(StrictModel):
     """One explicit reviewer outcome for a scope-bound admitted Passport V2."""
 
@@ -769,6 +803,14 @@ def get_verified_evidence_link_service(
     """Resolve independently scoped verified-evidence linking."""
 
     return build_verified_evidence_link_service(db)
+
+
+def get_evaluation_cancellation_service(
+    db: Session = Depends(get_db),
+) -> EvaluationRunCancellationService:
+    """Compose cancellation on the shared audited mutation unit of work."""
+
+    return build_evaluation_cancellation_service(db)
 
 
 def get_verified_evidence_review_service(
@@ -1413,6 +1455,47 @@ def get_run(
     if result is None:
         _missing("run")
     return result
+
+
+@runs_router.post(
+    "/workspaces/{workspace_id}/systems/{system_id}/evaluation-v2/runs/{run_id}/cancellations",
+    status_code=201,
+    response_model=EvaluationCancellationResponse,
+    openapi_extra=_request_body_schema(EvaluationCancellationCreate),
+)
+async def cancel_evaluation(
+    org_id: str,
+    workspace_id: str,
+    system_id: str,
+    run_id: str,
+    request: Request,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    membership: OrgMembership = Depends(organization_membership),
+    cancellation_service: EvaluationRunCancellationService = Depends(
+        get_evaluation_cancellation_service
+    ),
+):
+    """Cancel a run or one suite job; cancellation wins every serialized race."""
+
+    require_evaluation_permission(membership, EVALUATION_RUN_CANCEL_PERMISSION)
+    if membership.org_id != org_id:
+        _missing("evaluation_run")
+    payload = await _payload(request, EvaluationCancellationCreate)
+    try:
+        result = cancellation_service.request_cancellation(
+            scope=CancellationScope(
+                organization_id=membership.org_id,
+                workspace_id=workspace_id,
+                system_id=system_id,
+                run_id=run_id,
+            ),
+            actor_id=membership.user_id,
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+        return _respond(result, EvaluationCancellationResponse)
+    except EvaluationWorkbenchError as error:
+        _raise(error)
 
 
 for capability_router in (

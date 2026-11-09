@@ -24,6 +24,7 @@ Every Assurance V2 route is behind `ASSURANCE_V2_ENABLED` plus its own child gat
 | Accept or reject evidence | `evaluation:evidence:review` |
 | Record a governance decision, create or use an override grant | `evaluation:decision` |
 | Manage issuers, signing keys, and trust policies | `evaluation:trust:admin` |
+| Upload an evaluation input artifact (CSV or JSON) | `evaluation:artifact:upload` |
 
 A missing permission returns `403` with a route-specific code such as `evaluation_plan_write_forbidden`. A disabled gate leaves the route unmounted, so it returns `404`. Neither response is something to work around.
 

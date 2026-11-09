@@ -22,12 +22,14 @@ from src.application.services.governance_assurance_service import OrgMembership
 EVALUATION_PLAN_WRITE_PERMISSION: Final = "evaluation:plan:write"
 EVALUATION_PLAN_ACTIVATE_PERMISSION: Final = "evaluation:plan:activate"
 EVALUATION_RUN_CREATE_PERMISSION: Final = "evaluation:run:create"
+EVALUATION_RUN_CANCEL_PERMISSION: Final = "evaluation:run:cancel"
 EVALUATION_EVIDENCE_SUBMIT_PERMISSION: Final = "evaluation:evidence:submit"
 EVALUATION_EVIDENCE_IMPORT_PERMISSION: Final = "evaluation:evidence:import"
 EVALUATION_EVIDENCE_LINK_PERMISSION: Final = "evaluation:evidence:link"
 EVALUATION_EVIDENCE_REVIEW_PERMISSION: Final = "evaluation:evidence:review"
 EVALUATION_DECISION_PERMISSION: Final = "evaluation:decision"
 EVALUATION_CATALOG_ADMIN_PERMISSION: Final = "evaluation:catalog:admin"
+EVALUATION_ARTIFACT_UPLOAD_PERMISSION: Final = "evaluation:artifact:upload"
 
 EVALUATION_TRUST_ADMIN_PERMISSION: Final = "evaluation:trust:admin"
 # Reserved vocabulary. These constants do not authorize an ordinary human route.
@@ -52,6 +54,10 @@ LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
         "evaluation_run_create_forbidden",
         "The evaluation:run:create permission is required.",
     ),
+    EVALUATION_RUN_CANCEL_PERMISSION: (
+        "evaluation_run_cancel_forbidden",
+        "The evaluation:run:cancel permission is required.",
+    ),
     EVALUATION_EVIDENCE_SUBMIT_PERMISSION: (
         "evaluation_evidence_submit_forbidden",
         "The evaluation:evidence:submit permission is required.",
@@ -75,6 +81,10 @@ LIVE_HUMAN_PERMISSION_ERRORS: Final[dict[str, tuple[str, str]]] = {
     EVALUATION_CATALOG_ADMIN_PERMISSION: (
         "evaluation_catalog_admin_forbidden",
         "The evaluation:catalog:admin permission is required.",
+    ),
+    EVALUATION_ARTIFACT_UPLOAD_PERMISSION: (
+        "evaluation_artifact_upload_forbidden",
+        "The evaluation:artifact:upload permission is required.",
     ),
     EVALUATION_TRUST_ADMIN_PERMISSION: (
         "evaluation_trust_admin_forbidden",
@@ -159,6 +169,7 @@ def require_evaluation_permission(
 
 
 __all__ = [
+    "EVALUATION_ARTIFACT_UPLOAD_PERMISSION",
     "EVALUATION_CATALOG_ADMIN_PERMISSION",
     "EVALUATION_DECISION_PERMISSION",
     "EVALUATION_EVIDENCE_LINK_PERMISSION",
@@ -167,6 +178,7 @@ __all__ = [
     "EVALUATION_EVIDENCE_SUBMIT_PERMISSION",
     "EVALUATION_PLAN_ACTIVATE_PERMISSION",
     "EVALUATION_PLAN_WRITE_PERMISSION",
+    "EVALUATION_RUN_CANCEL_PERMISSION",
     "EVALUATION_RUN_CREATE_PERMISSION",
     "EVALUATION_SEPARATION_OVERRIDE_PERMISSION",
     "EVALUATION_TRUST_ADMIN_PERMISSION",

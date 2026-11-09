@@ -49,7 +49,7 @@ The gate also reports the system's latest release decision as `approvalStatus`: 
 ## From a terminal
 
 ```bash
-pipx install "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/cli"
+pipx install fairmind-cli
 export FAIRMIND_API_URL=https://fairmind.example.com FAIRMIND_API_KEY=...
 fairmind test --system <id> --file predictions.csv --outcome repaid --prediction approved --attributes gender,region
 fairmind gate --system <id>

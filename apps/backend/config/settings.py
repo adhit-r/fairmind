@@ -11,7 +11,7 @@ try:
     validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
-from pydantic import Field
+from pydantic import Field, SecretStr
 from functools import lru_cache
 
 
@@ -91,6 +91,19 @@ class Settings(BaseSettings):
     # Issuer, public-key, and trust-policy administration remains independently
     # hidden until PostgreSQL 013f and the literal trust-admin permission release.
     assurance_v2_trust_administration_enabled: bool = False
+    # Human upload of evaluation input artifacts to the write-once S3 store.
+    # Hidden until enabled with the master switch and the store settings below.
+    assurance_v2_artifact_upload_enabled: bool = False
+    # A dedicated least-privilege IAM user (s3:PutObject and s3:GetObject on the
+    # prefix only), separate from aws_access_key_id. No defaults: the store
+    # refuses to build until every value is set.
+    evaluation_artifact_s3_bucket: Optional[str] = None
+    evaluation_artifact_s3_prefix: Optional[str] = None
+    evaluation_artifact_s3_region: Optional[str] = None
+    evaluation_artifact_s3_endpoint_url: Optional[str] = None
+    evaluation_artifact_aws_access_key_id: Optional[str] = None
+    evaluation_artifact_aws_secret_access_key: Optional[SecretStr] = None
+    evaluation_artifact_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1, le=1073741824)
     # Generic Evidence Hub URLs and direct entity links are untrusted until a
     # reviewed deployment explicitly enables this compatibility capability.
     untrusted_external_evidence_linking_enabled: bool = False
@@ -184,6 +197,23 @@ class Settings(BaseSettings):
     llm_model: str = "gemini-3.8-flash"
     # Local development: LLM features may call the developer's signed-in grok CLI. Ignored unless environment is development.
     grok_cli_enabled: bool = False
+
+    # Evaluation sandbox launcher (src/infrastructure/sandbox). Worker host only, off by default;
+    # setup and the memory budget are in docs/operations/rootless-docker-sandbox.md.
+    sandbox_launcher_enabled: bool = False
+    sandbox_docker_cli: str = "/usr/bin/docker"
+    sandbox_docker_host: str = ""  # the rootless daemon, e.g. unix:///run/user/<uid>/docker.sock
+    sandbox_require_rootless: bool = True
+    sandbox_runner_repository: str = ""  # registry path of apps/eval-runner, without tag or digest
+    sandbox_runner_digests: str = ""  # comma-separated sha256:<hex> allowlist
+    sandbox_seccomp_profile: str = ""  # absolute path to apps/eval-runner/seccomp/sandbox.json
+    sandbox_cpus: float = 1.0
+    sandbox_max_memory_mib: int = 512
+    sandbox_max_processes: int = 64
+    sandbox_max_duration_seconds: int = 300
+    sandbox_max_disk_mib: int = 64
+    sandbox_max_input_bytes: int = 32 * 1024 * 1024
+    sandbox_max_output_bytes: int = 16 * 1024
 
     # Encryption Configuration
     compliance_encryption_key: Optional[str] = None
