@@ -286,6 +286,9 @@ class FairMind:
     def system(self, system_id: str) -> System:
         return self._call("GET", f"{GOV}/systems/{system_id}")
 
+    def workspaces(self) -> List[Dict[str, Any]]:
+        return self._call("GET", f"{GOV}/workspaces")
+
     def create_workspace(self, name: str, owner: Optional[str] = None) -> Dict[str, Any]:
         return self._call("POST", f"{GOV}/workspaces", json={"name": name, **({"owner": owner} if owner else {})})
 

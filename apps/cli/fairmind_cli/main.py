@@ -8,6 +8,8 @@
     fairmind systems
     fairmind verify pack.json                   offline: recompute the pack hash and chain heads; exit 0 intact, 1 not
     fairmind verify "<share link>" [--api URL]  fetch the pack behind an auditor link, then verify it locally
+    fairmind clause-map --system <id> [--frameworks EUAIA,ISO42001]   the gate read per framework clause
+    fairmind system get <id> | create --name N [--risk-tier T --stage S --workspace W --owner O]
     fairmind pack create|list|show|download|share|revoke   inspection packs
     fairmind finding add|list                   risk findings
     fairmind remediation add|list|update        remediation tasks
@@ -414,6 +416,41 @@ def cmd_report(args: argparse.Namespace, factory: ClientFactory, out: Callable[[
         return _show(out, args, _call(client, "GET", f"{GOV}/reports", params=params), lambda rs: "\n".join(f"{r['id']}  {r['reportType']:<11}{r['createdAt']}  {r['title']}" for r in rs) or "No reports.")
 
 
+def cmd_clause_map(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    with _client(args, factory) as client:
+        cmap = _call(client, "GET", f"{GOV}/systems/{args.system}/clause-map")
+    if args.frameworks:
+        wanted = {f.upper() for f in _csv_list(args.frameworks)}
+        cmap["frameworks"] = [f for f in cmap["frameworks"] if f["key"].upper() in wanted]
+
+    def text(c: Dict[str, Any]) -> str:
+        lines = [f"Gate {VERDICT_WORD.get(c['verdict'], c['verdict'])}, confidence {c['confidence']:.2f}"]
+        for fw in c["frameworks"]:
+            n = fw["counts"]
+            lines.append(f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n['attested']} attested, {n['open']} open of {n['total']} clauses")
+            open_clauses = [cl["control"] for cl in fw["clauses"] if cl["state"] == "open"]
+            if open_clauses:
+                lines.append(f"  open: {', '.join(open_clauses)}")
+        return "\n".join(lines)
+
+    return _show(out, args, cmap, text)
+
+
+def cmd_system(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    line = lambda s: f"{s.get('name', '')}  tier {s.get('riskTier', '')}  stage {s.get('lifecycleStage', '')}  id {s.get('id', '')}"  # noqa: E731
+    with _client(args, factory) as client:
+        if args.action == "get":
+            return _show(out, args, _call(client, "GET", f"{GOV}/systems/{args.id}"), line)
+        workspace = args.workspace
+        if not workspace:  # the organisation's first workspace, else a new one named "Default"
+            existing = _call(client, "GET", f"{GOV}/workspaces")
+            workspace = existing[-1]["id"] if existing else _call(client, "POST", f"{GOV}/workspaces", json={"name": "Default"})["id"]
+        body: Dict[str, Any] = {"workspace_id": workspace, "name": args.name, "risk_tier": args.risk_tier, "lifecycle_stage": args.stage, "metadata": {}}
+        if args.owner:
+            body["owner"] = args.owner
+        return _show(out, args, _call(client, "POST", f"{GOV}/systems", json=body), line)
+
+
 def _render_eval_run(run: Dict[str, Any]) -> str:
     lines = [f"{run.get('evaluationId')}: {str(run.get('status', '')).upper()}  evidence {run.get('id')}"]
     if run.get("summary"):
@@ -518,6 +555,19 @@ def build_parser() -> argparse.ArgumentParser:
             made[action] = inner.add_parser(action, parents=[common], help=text)
             made[action].set_defaults(func=func)
         return made
+
+    cmap = sub.add_parser("clause-map", parents=[common], help="the release gate read per framework clause")
+    cmap.add_argument("--system", required=True)
+    cmap.add_argument("--frameworks", help="comma-separated catalogue keys, e.g. EUAIA,ISO42001")
+    cmap.set_defaults(func=cmd_clause_map)
+
+    sysg = group("system", "one AI system", {"get": "show a system", "create": "register a system"}, cmd_system)
+    sysg["get"].add_argument("id", help="system id")
+    sysg["create"].add_argument("--name", required=True)
+    sysg["create"].add_argument("--risk-tier", default="medium", choices=["low", "medium", "high", "critical"])
+    sysg["create"].add_argument("--stage", default="assess", choices=["onboard", "assess", "govern", "remediate", "operate"])
+    sysg["create"].add_argument("--workspace", help="workspace id (default: the organisation's first, or a new Default)")
+    sysg["create"].add_argument("--owner")
 
     pack = group("pack", "inspection packs", {"create": "build a pack", "list": "list packs", "show": "pack summary", "download": "save pack.json", "share": "mint an auditor link token", "revoke": "revoke the link"}, cmd_pack)
     pack["create"].add_argument("--title", required=True)

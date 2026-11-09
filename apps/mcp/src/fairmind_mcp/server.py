@@ -158,6 +158,30 @@ def create_server(client: Optional[FairMind] = None) -> FastMCP:
 
     @server.tool()
     @guarded
+    def get_system(system_id: str) -> CallToolResult:
+        """One AI system: name, owner, risk tier, lifecycle stage and metadata."""
+        s = fm().system(system_id)
+        return _result(f"{s.get('name', '')}  tier {s.get('riskTier', '')}  stage {s.get('lifecycleStage', '')}  id {s.get('id', '')}", dict(s))
+
+    @server.tool()
+    @guarded
+    def register_system(
+        name: str,
+        risk_tier: Literal["low", "medium", "high", "critical"] = "medium",
+        lifecycle_stage: Literal["onboard", "assess", "govern", "remediate", "operate"] = "assess",
+        owner: Optional[str] = None,
+        workspace_id: Optional[str] = None,
+    ) -> CallToolResult:
+        """Register an AI system. Without `workspace_id` it goes into the organisation's first workspace, or a new one named Default when there is none. Use the risk tier the user states; do not guess one."""
+        client = fm()
+        if not workspace_id:
+            existing = client.workspaces()
+            workspace_id = existing[-1]["id"] if existing else client.create_workspace("Default")["id"]
+        s = client.create_system(workspace_id, name, risk_tier=risk_tier, lifecycle_stage=lifecycle_stage, owner=owner)
+        return _result(f"Registered {s.get('name', '')}  tier {s.get('riskTier', '')}  id {s.get('id', '')}", dict(s))
+
+    @server.tool()
+    @guarded
     def release_gate(system_id: str) -> CallToolResult:
         """May this AI system ship? Returns the verdict (go, conditional_go, no_go), confidence, the five checks (each proven, attested or open), the reasons and the release decision status (not_requested, pending, approved, rejected). A release that needs sign-off may ship only when that status is approved."""
         gate = fm().gate(system_id)
