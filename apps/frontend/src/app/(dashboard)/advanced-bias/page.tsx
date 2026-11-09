@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { advancedBiasSchema, type AdvancedBiasFormData } from '@/lib/validations/schemas'
@@ -37,6 +39,8 @@ export default function AdvancedBiasPage() {
   } = useAdvancedBias()
   const { datasets, loading: datasetsLoading } = useDatasets()
   const { toast } = useToast()
+  const { selectedSystem } = useSystemContext()
+  const systemId = selectedSystem.metadata?.source === 'fallback' || !selectedSystem.id ? undefined : selectedSystem.id
   const [results, setResults] = useState<any>(null)
   const [activeTab, setActiveTab] = useState('causal')
   const [selectedDataset, setSelectedDataset] = useState('')
@@ -65,7 +69,7 @@ export default function AdvancedBiasPage() {
 
     try {
       let result
-      const analysisParams = { modelId: data.modelId, datasetId: selectedDataset, ...data.parameters }
+      const analysisParams = { modelId: data.modelId, datasetId: selectedDataset, ...data.parameters, system_id: systemId }
       switch (data.analysisType) {
         case 'causal':
           result = await runCausalAnalysis(analysisParams)
@@ -241,6 +245,8 @@ export default function AdvancedBiasPage() {
           )}
         </Card>
       </div>
+
+      {systemId && <StoredAnalyses systemId={systemId} sources={['advanced']} refreshKey={results?.stored_id ?? 0} />}
 
       {/* Analysis Types Info */}
       <Card className="p-6 fm-card">
