@@ -99,3 +99,18 @@ def test_production_is_never_also_development(env):
     assert isinstance(settings, ProductionSettings)
     assert settings.is_production is True
     assert settings.is_development is False
+
+
+@pytest.mark.parametrize("missing", ["SECRET_KEY", "JWT_SECRET"])
+def test_production_refuses_to_start_without_explicit_secrets(env, monkeypatch, missing):
+    env(environment="production")
+    monkeypatch.delenv(missing)
+    with pytest.raises(ValueError, match=missing):
+        ProductionSettings(_env_file=None)
+
+
+def test_development_still_starts_without_secrets(env, monkeypatch):
+    env(environment="development")
+    monkeypatch.delenv("SECRET_KEY")
+    monkeypatch.delenv("JWT_SECRET")
+    assert DevelopmentSettings(_env_file=None).secret_key

@@ -579,6 +579,40 @@ def test_integrations_are_per_organisation_and_writes_need_mutation_permission(c
     assert len(client.get("/api/v1/integrations", headers=A).json()) == 1
 
 
+def test_integration_token_is_stored_encrypted_and_legacy_plaintext_still_syncs(client, db, monkeypatch):
+    from api.routes import integrations
+
+    engine = db[0]
+    seen = []
+
+    async def connector(config, token):
+        seen.append(token)
+        return []
+
+    monkeypatch.setitem(integrations._CONNECTORS, "github", connector)
+    body = {"kind": "github", "name": "models-repo", "config": {"repo": "acme/models"}, "token": "ghp_plain_secret"}
+    new_id = client.post("/api/v1/integrations", headers=A, json=body).json()["id"]
+    with engine.connect() as conn:
+        stored = conn.execute(text("SELECT token FROM governance_integrations WHERE id = :id"), {"id": new_id}).scalar()
+        assert stored and "ghp_plain_secret" not in stored
+        conn.execute(text("UPDATE governance_integrations SET token = 'ghp_legacy' WHERE id = :id"), {"id": new_id})
+        conn.commit()
+    assert client.post(f"/api/v1/integrations/{new_id}/sync", headers=A).status_code == 200
+    assert seen == ["ghp_legacy"]
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": stored, "id": new_id})
+    client.post(f"/api/v1/integrations/{new_id}/sync", headers=A)
+    assert seen[-1] == "ghp_plain_secret"
+
+
+def test_mlflow_tracking_uri_must_be_a_public_https_address(client):
+    for uri in ("http://example.com", "https://127.0.0.1", "https://169.254.169.254/latest"):
+        response = client.post(
+            "/api/v1/integrations", headers=A, json={"kind": "mlflow", "name": "m", "config": {"tracking_uri": uri}}
+        )
+        assert response.status_code == 400, uri
+
+
 # --------------------------------------------------------------------------- india_compliance
 
 
@@ -595,6 +629,27 @@ def test_india_compliance_checks_the_system_against_the_callers_organisation(cli
     assert client.post(
         "/api/v1/india/check", json={**body, "system_id": "never-registered"}, headers=A
     ).status_code == 404
+
+
+def test_india_check_runs_the_controls_over_the_stored_system(client, monkeypatch):
+    from api.routes import india_compliance as router
+
+    seen = {}
+    real = router.compliance_service.check_dpdp_compliance
+
+    async def spy(system_data, evidence):
+        seen["system"], seen["evidence"] = system_data, evidence
+        return await real(system_data, evidence)
+
+    monkeypatch.setattr(router.compliance_service, "check_dpdp_compliance", spy)
+    response = client.post(
+        "/api/v1/india/check", json={"system_id": "system-a", "frameworks": ["dpdp_act_2023"]}, headers=A
+    )
+    assert response.status_code == 200, response.text
+    assert seen["system"]["name"] == "System A" and seen["system"]["org_id"] == ORG_A
+    # Every control of the India registry ran; one that needs configuration the system lacks fails.
+    assert set(seen["evidence"]) == set(router.evidence_collection_service.get_control_registry())
+    assert str(seen["evidence"]["GM_001"]["status"]).lower().endswith("failed")
 
 
 def test_india_compliance_roles_come_from_the_membership(client):

@@ -20,6 +20,7 @@ from enum import Enum
 import hashlib
 import json
 import logging
+import uuid
 
 from .compliance_reporting_service import ComplianceReportingService, ComplianceStatus
 from ..schemas.india_compliance import (
@@ -53,6 +54,15 @@ class IndiaComplianceService(ComplianceReportingService):
     # ========================================================================
     # Main Compliance Checking Methods (Task 3.1)
     # ========================================================================
+
+    @staticmethod
+    def _envelope(system_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Identity and audit fields the ComplianceResult schema requires, taken from the system being checked."""
+        now = datetime.utcnow()
+        return {
+            "id": uuid.uuid4(), "system_id": system_data["system_id"], "user_id": str(system_data["user_id"]),
+            "created_at": now, "updated_at": now,
+        }
 
     async def check_dpdp_compliance(
         self,
@@ -128,6 +138,7 @@ class IndiaComplianceService(ComplianceReportingService):
         )
 
         compliance_result = ComplianceResult(
+            **self._envelope(system_data),
             framework=IndiaFramework.DPDP_ACT_2023,
             overall_score=overall_score,
             status=self._determine_compliance_status(overall_score),
@@ -216,6 +227,7 @@ class IndiaComplianceService(ComplianceReportingService):
         )
 
         compliance_result = ComplianceResult(
+            **self._envelope(system_data),
             framework=IndiaFramework.NITI_AAYOG_PRINCIPLES,
             overall_score=overall_score,
             status=self._determine_compliance_status(overall_score),
@@ -300,6 +312,7 @@ class IndiaComplianceService(ComplianceReportingService):
         )
 
         compliance_result = ComplianceResult(
+            **self._envelope(system_data),
             framework=IndiaFramework.MEITY_GUIDELINES,
             overall_score=overall_score,
             status=self._determine_compliance_status(overall_score),
@@ -343,6 +356,7 @@ class IndiaComplianceService(ComplianceReportingService):
         # Digital India Act framework is still evolving
         # For now, return a pending status with preliminary assessment
         compliance_result = ComplianceResult(
+            **self._envelope(system_data),
             framework=IndiaFramework.DIGITAL_INDIA_ACT,
             overall_score=0.0,
             status=ComplianceStatus.PENDING,
@@ -712,7 +726,7 @@ class IndiaComplianceService(ComplianceReportingService):
             return 0.0
         
         # Check how many key requirements are addressed in evidence
-        evidence_text = json.dumps(evidence_data).lower()
+        evidence_text = json.dumps(evidence_data, default=str).lower()
         matched_requirements = sum(
             1 for req in key_requirements
             if req.lower() in evidence_text
@@ -727,7 +741,7 @@ class IndiaComplianceService(ComplianceReportingService):
         key_requirements: List[str],
     ) -> List[str]:
         """Identify which key requirements are not met by evidence"""
-        evidence_text = json.dumps(evidence_data).lower()
+        evidence_text = json.dumps(evidence_data, default=str).lower()
         failed = [
             req for req in key_requirements
             if req.lower() not in evidence_text

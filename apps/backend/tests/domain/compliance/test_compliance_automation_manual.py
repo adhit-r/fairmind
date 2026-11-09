@@ -64,6 +64,8 @@ async def test_generate_automated_report(service, mock_db_session):
     mock_db_session.query.return_value.filter.return_value.first.return_value = schedule
     # Models are scoped to the schedule's organisation: query(...).filter(...).all().
     mock_db_session.query.return_value.filter.return_value.all.return_value = [model]
+    # No governance system of this name: every requirement must come out Not assessed.
+    mock_db_session.execute.return_value.fetchone.return_value = None
     
     # Mock report generator
     service.report_generator.generate_compliance_certificate.return_value = "/tmp/report.pdf"
@@ -79,3 +81,44 @@ async def test_generate_automated_report(service, mock_db_session):
         # Verify
         service.report_generator.generate_compliance_certificate.assert_called_once()
         assert schedule.last_run is not None
+        compliance_data = service.report_generator.generate_compliance_certificate.call_args.kwargs["compliance_data"]
+        assert compliance_data["status"] == "Not assessed"
+        assert all(r["status"] == "Not assessed" and r["evidence"] is False for r in compliance_data["requirements"])
+
+
+def _evidence_db(records):
+    db = MagicMock()
+    db.execute.return_value.fetchone.return_value = ("sys-1", "high")
+    db.execute.return_value.fetchall.return_value = records
+    return db
+
+
+def test_requirements_pass_only_on_proven_evidence(service):
+    schedule = ComplianceSchedule(id="s", org_id="org-a", framework="EU_AI_ACT")
+    now = datetime.utcnow().isoformat()
+    fairness = ("e1", "fairness_test", '{"all_checks_pass": true, "rows": 10, "attributes": []}', 0.9, '{"provenance_class": "measured"}', now)
+    policy = ("e2", "policy", "{}", 0.9, '{"provenance_class": "manual"}', now)
+    out = service._compliance_from_evidence(_evidence_db([fairness, policy]), schedule, "m")
+    by_name = {r["name"]: r for r in out["requirements"]}
+    assert by_name["Fairness measured"] == {"name": "Fairness measured", "status": "Pass", "evidence": True}
+    assert by_name["Human oversight"]["status"] == "Attested"
+    assert by_name["Data governance"] == {"name": "Data governance", "status": "Not assessed", "evidence": False}
+    assert out["status"] == "Not assessed"
+
+
+def test_failed_fairness_is_non_compliant(service):
+    schedule = ComplianceSchedule(id="s", org_id="org-a", framework="EU_AI_ACT")
+    fairness = ("e1", "fairness_test", '{"all_checks_pass": false}', 0.9, '{"provenance_class": "measured"}', datetime.utcnow().isoformat())
+    out = service._compliance_from_evidence(_evidence_db([fairness]), schedule, "m")
+    assert out["status"] == "Non-Compliant"
+
+
+def test_reload_schedules_is_idempotent(service, mock_db_session):
+    rows = [SimpleNamespace(id="a", frequency="weekly"), SimpleNamespace(id="b", frequency="daily")]
+    mock_db_session.query.return_value.filter.return_value.all.return_value = rows
+    service.scheduler = MagicMock()
+    with patch('domain.compliance.services.compliance_automation_service.db_manager.get_session') as gs:
+        gs.return_value.__enter__.return_value = mock_db_session
+        assert service.reload_schedules() == 2
+    assert [c.kwargs["id"] for c in service.scheduler.add_job.call_args_list] == ["a", "b"]
+    assert all(c.kwargs["replace_existing"] is True for c in service.scheduler.add_job.call_args_list)
