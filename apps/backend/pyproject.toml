@@ -34,6 +34,7 @@ keywords = [
     "llm-bias"
 ]
 dependencies = [
+    "bandit>=1.7.0",  # EV-DEV-03 code scan runs it at request time
     "fastapi>=0.137.2",
     "uvicorn[standard]>=0.42.0",
     "pydantic>=2.12.4",
@@ -92,7 +93,6 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.5.0",
     "pre-commit>=3.4.0",
-    "bandit>=1.7.0",
     "pylint>=2.17.0",
     "autopep8>=2.0.0",
     "coverage>=7.3.0",

@@ -1338,6 +1338,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "apscheduler" },
     { name = "asyncpg" },
+    { name = "bandit" },
     { name = "bcrypt" },
     { name = "boto3" },
     { name = "cryptography" },
@@ -1378,7 +1379,6 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "autopep8" },
-    { name = "bandit" },
     { name = "black" },
     { name = "coverage" },
     { name = "factory-boy" },
@@ -1422,7 +1422,7 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.10.4" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "autopep8", marker = "extra == 'dev'", specifier = ">=2.0.0" },
-    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.0" },
+    { name = "bandit", specifier = ">=1.7.0" },
     { name = "bcrypt", specifier = ">=5.0.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "boto3", specifier = ">=1.42.0" },
