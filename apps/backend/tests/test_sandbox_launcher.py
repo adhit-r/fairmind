@@ -404,6 +404,30 @@ def test_run_maps_every_ending_to_an_outcome_and_removes_the_container(fake, scr
     assert len([c for c in fake.calls() if c.startswith("rm --force fm-sbx-")]) == 1
 
 
+@pytest.mark.parametrize(
+    "vmstat, script, outcome",
+    [
+        # containerd lost the TaskOOM event (Docker says OOMKilled=false) but the kernel counted the kill.
+        ("pgfault 9\noom_kill 3\n", "printf 'oom_kill 4\\n' > \"$d/vmstat\"; exit 137\n", "oom"),
+        # A SIGKILL the OOM killer did not send, such as RLIMIT_CPU's.
+        ("oom_kill 3\n", "exit 137\n", "crashed"),
+        # An OOM kill elsewhere on the host while the sandbox fails on its own.
+        ("oom_kill 3\n", "printf 'oom_kill 4\\n' > \"$d/vmstat\"; exit 1\n", "crashed"),
+        # No readable counter: only Docker's flag decides.
+        (None, "exit 137\n", "crashed"),
+    ],
+)
+def test_run_reads_an_oom_kill_docker_missed_from_the_kernel_counter(fake, monkeypatch, vmstat, script, outcome):
+    monkeypatch.setattr(launcher_module, "_VMSTAT", str(fake.dir / "vmstat"))
+    if vmstat is not None:
+        fake.write("vmstat", vmstat)
+    fake.write("run.sh", script)
+    fake.write("oom", "false")
+    launcher = fake.launcher()
+    launcher.start()
+    assert launcher.run(DIGEST, {"maxDurationSeconds": 5}, b"").outcome == outcome
+
+
 def test_cleanup_kills_the_client_when_rm_hangs_and_the_next_run_refuses(fake, monkeypatch):
     monkeypatch.setattr(launcher_module, "_DOCKER_TIMEOUT", 0.5)
     fake.write("run.sh", 'echo $$ > "$d/run.pid"; exec sleep 30\n')
