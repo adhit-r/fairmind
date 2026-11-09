@@ -102,7 +102,7 @@ def engine_status(evaluations):
     from src.application.services.eval_engines import VALIDATED
 
     where = {}
-    for m in (eval_engines.data, eval_engines.model, eval_engines.ops, eval_engines.platform, eval_engines.behaviour):
+    for m in (eval_engines.data, eval_engines.model, eval_engines.ops, eval_engines.platform, eval_engines.behaviour, eval_engines.suites, eval_engines.assess):
         for e in m.ENGINES:
             where.setdefault(e.id, f"src/application/services/eval_engines/{m.__name__.rsplit('.', 1)[1]}.py")
     for i in RULES:

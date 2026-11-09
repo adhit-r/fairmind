@@ -11,12 +11,12 @@ from dataclasses import replace
 from typing import Dict, List
 
 from .common import Engine, EngineError, Judge, Param, Slot
-from . import behaviour, data, model, ops, platform
+from . import assess, behaviour, data, model, ops, platform, suites
 
 REGISTRY: Dict[str, Engine] = {}
 # A behaviour test for an evaluation that also has a file engine is its second way to run (live mode).
 ALTERNATES: Dict[str, Engine] = {}
-for _module in (data, model, ops, platform, behaviour):
+for _module in (data, model, ops, platform, behaviour, suites, assess):
     for _engine in _module.ENGINES:
         if _engine.id in REGISTRY:
             if not (_engine.live and not REGISTRY[_engine.id].live and _engine.id not in ALTERNATES):
