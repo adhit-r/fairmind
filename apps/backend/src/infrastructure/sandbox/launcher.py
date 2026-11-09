@@ -31,7 +31,6 @@ LABEL_FILTER = "label=io.fairmind.sandbox=1"
 NAME_PREFIX = "fm-sbx-"
 HARD_OUTPUT_CAP = 64 * 1024
 _DOCKER_TIMEOUT = 30  # seconds for info, inspect, rm and ps calls
-_OOM_EVENT_GRACE = 2.0  # seconds to wait for OOMKilled after a SIGKILL exit
 _MAX_INT = 2**53  # metrics stay exact as JSON numbers and as floats downstream
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
@@ -396,7 +395,7 @@ class SandboxLauncher:
                 code = process.wait(timeout=max(0.1, deadline - time.monotonic()))
             except subprocess.TimeoutExpired:
                 return SandboxResult("timeout")
-            if self._oom_killed(name, killed=code == 137):
+            if self._oom_killed(name):
                 return SandboxResult("oom")
             if code != 0:
                 return SandboxResult("crashed")
@@ -412,17 +411,9 @@ class SandboxLauncher:
             process.wait()
             self._docker("rm", "--force", name)
 
-    def _oom_killed(self, name: str, killed: bool = False) -> bool:
-        # The daemon handles containerd's exit and OOM events separately, so `docker run` can return
-        # before OOMKilled is set. After a SIGKILL (exit 137) give the OOM event a moment to land.
-        deadline = time.monotonic() + (_OOM_EVENT_GRACE if killed else 0)
-        while True:
-            inspected = self._docker("inspect", "--format", "{{.State.OOMKilled}}", name)
-            if inspected.returncode == 0 and inspected.stdout.strip() == "true":
-                return True
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.1)
+    def _oom_killed(self, name: str) -> bool:
+        inspected = self._docker("inspect", "--format", "{{.State.OOMKilled}}", name)
+        return inspected.returncode == 0 and inspected.stdout.strip() == "true"
 
 
 def _feed(process: subprocess.Popen[bytes], payload: bytes) -> None:

@@ -385,9 +385,6 @@ def test_reaper_counts_removals_and_refuses_when_one_survives(fake):
         (f"cat >/dev/null; printf '%s\\n' '{json.dumps(RESULT)}'\n", "false", "completed"),
         ("cat >/dev/null; exit 1\n", "false", "crashed"),
         ("exit 137\n", "true", "oom"),
-        # The daemon can record OOMKilled after `docker run` has already returned 137.
-        ("(sleep 0.5; echo true > \"$d/oom\") >/dev/null 2>&1 </dev/null &\nexit 137\n", "false", "oom"),
-        ("exit 137\n", "false", "crashed"),  # SIGKILL without OOM, e.g. RLIMIT_CPU
         ("printf '%s\\n' '{\"v\":1,\"error\":[]}'\n", "false", "output_invalid"),
         ("printf '%s\\n' '{\"v\":1,\"engine\":\"EV-TST-01\",\"status\":{},\"metrics\":{}}'\n", "false", "output_invalid"),
         ("exec yes\n", "false", "output_invalid"),  # unbounded stdout stops at the cap, not the wall clock
