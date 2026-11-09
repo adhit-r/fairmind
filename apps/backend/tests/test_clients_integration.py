@@ -68,6 +68,7 @@ def test_sdk_core_journey(fm, tmp_path):
     sid = system["id"]
     assert fm.system(sid)["name"] == "Loan model"
     assert sid in [s["id"] for s in fm.systems()]
+    assert fm.workspaces()[0]["id"] == ws["id"]
 
     run = fm.run_fairness(sid, _csv(tmp_path / "d.csv"), outcome="label", attributes="gender", prediction="prediction")
     assert run["evidenceId"] and run["gate"]["verdict"] in ("go", "conditional_go", "no_go")
@@ -140,6 +141,10 @@ def test_cli_gate_and_verify(api, fm, cli, tmp_path):
     sid = fm.create_system(ws["id"], "CLI model", risk_tier="low", lifecycle_stage="govern")["id"]
     code, text = run(*_with_api(["test", "--system", sid, "--file", str(_csv(tmp_path / "d.csv")), "--outcome", "label", "--attributes", "gender", "--prediction", "prediction"], key))
     assert code in (0, 1), text
+    created = json.loads(run(*_with_api(["system", "create", "--name", "Made by CLI", "--json"], key))[1])
+    assert json.loads(run(*_with_api(["system", "get", created["id"], "--json"], key))[1])["name"] == "Made by CLI"
+    code, text = run(*_with_api(["clause-map", "--system", sid, "--frameworks", "EUAIA"], key))
+    assert code == 0 and "EUAIA" in text
     code, text = run(*_with_api(["gate", "--system", sid, "--json"], key))
     verdict = json.loads(text)["verdict"]
     assert code == {"go": 0, "conditional_go": 2, "no_go": 1}[verdict]
@@ -187,6 +192,8 @@ def test_mcp_gate_verify_and_pack_tools(api, fm, tmp_path):
                 assert not result.isError, result.content
                 return result.structuredContent
 
+            made_system = await call("register_system", {"name": "Via MCP", "risk_tier": "low"})
+            assert (await call("get_system", {"system_id": made_system["id"]}))["name"] == "Via MCP"
             gate = await call("release_gate", {"system_id": sid})
             assert gate["verdict"] in ("go", "conditional_go", "no_go")
             made = await call("create_evidence_pack", {"title": "MCP pack", "frameworks": ["EUAIA"], "system_ids": [sid], "share": True})
