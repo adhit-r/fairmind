@@ -63,7 +63,10 @@ function AuditorView() {
         </p>
         <pre className="mt-3 overflow-x-auto rounded-[10px] bg-[var(--fm-bg)] p-3 font-mono text-xs text-[var(--fm-ink)]">{`# from a checkout of the FairMind repository
 pipx install ./apps/cli
-fairmind verify pack.json`}</pre>
+fairmind verify pack.json
+
+# or let the CLI fetch this pack from its link, then check it locally
+fairmind verify "<this page's address>" --api <FairMind API address>`}</pre>
         <p className="mt-3 text-sm text-[var(--fm-ink2)]">
           The command recomputes the SHA-256 of the canonical manifest and each system&apos;s evidence chain head, prints what it found, and exits 0 only when both match.
         </p>

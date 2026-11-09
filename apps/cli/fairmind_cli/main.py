@@ -7,6 +7,13 @@
     fairmind monitor --system <id> --file decisions.csv --attributes gender [--prediction approved] [--score score]
     fairmind systems
     fairmind verify pack.json                   offline: recompute the pack hash and chain heads; exit 0 intact, 1 not
+    fairmind verify "<share link>" [--api URL]  fetch the pack behind an auditor link, then verify it locally
+    fairmind pack create|list|show|download|share|revoke   inspection packs
+    fairmind finding add|list                   risk findings
+    fairmind remediation add|list|update        remediation tasks
+    fairmind approval request|status|decide     release decisions
+    fairmind report generate|list               audit report snapshots
+    fairmind eval list|show|run|result          evaluation catalogue and runs
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
 http://localhost:8010) and FAIRMIND_API_KEY, a key minted at POST /api/v1/auth/api-keys.
@@ -21,8 +28,10 @@ import hmac
 import json
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
@@ -275,14 +284,28 @@ def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
     return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "intact": hash_ok and all(s["intact"] for s in systems)}
 
 
+def _fetch_shared(link: str, args: argparse.Namespace, factory: ClientFactory) -> Dict[str, Any]:
+    parts = urlparse(link)
+    token = (parse_qs(parts.query).get("t") or [""])[0]
+    pack_id = parts.path.rstrip("/").rsplit("/", 1)[-1]
+    if not token or not pack_id:
+        raise CliError("Not a share link: expected .../verify/<pack id>?t=<token>")
+    with _client(args, factory) as client:
+        shared = _call(client, "GET", f"/api/v1/public/packs/{pack_id}", params={"t": token})
+    return {"manifest": shared["manifest"], "manifestHash": shared["manifestHash"]}
+
+
 def cmd_verify(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
-    path = Path(args.pack)
-    if not path.is_file():
-        raise CliError(f"No such file: {path}")
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError as exc:
-        raise CliError(f"{path} is not valid JSON: {exc}") from exc
+    if args.pack.startswith(("http://", "https://")):
+        document = _fetch_shared(args.pack, args, factory)
+    else:
+        path = Path(args.pack)
+        if not path.is_file():
+            raise CliError(f"No such file: {path}")
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise CliError(f"{path} is not valid JSON: {exc}") from exc
     result = verify_pack(document)
     if args.json:
         out(json.dumps(result, indent=2))
@@ -297,6 +320,152 @@ def cmd_verify(args: argparse.Namespace, factory: ClientFactory, out: Callable[[
         out("Pack intact" if result["intact"] else "Pack does NOT verify: it was changed after it was built")
     return EXIT_GO if result["intact"] else EXIT_NO_GO
 
+
+# ---------------------------------------------------------------------------
+# packs, findings, remediation, approvals, reports, evaluations
+# ---------------------------------------------------------------------------
+
+def _show(out: Callable[[str], None], args: argparse.Namespace, data: Any, summary: Callable[[Any], str]) -> int:
+    out(json.dumps(data, indent=2) if args.json else summary(data))
+    return EXIT_GO
+
+
+def _org(client: httpx.Client) -> str:
+    org = os.environ.get("FAIRMIND_ORG_ID")
+    if org:
+        return org
+    orgs = _call(client, "GET", "/api/v1/organizations").get("organizations") or []
+    if not orgs:
+        raise CliError("This key belongs to no organisation")
+    return orgs[0]["id"]
+
+
+def _csv_list(value: str) -> List[str]:
+    return [x.strip() for x in value.split(",") if x.strip()]
+
+
+def cmd_pack(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    with _client(args, factory) as client:
+        pid = f"{GOV}/packs/{getattr(args, 'id', '')}"
+        if args.action == "create":
+            pack = _call(client, "POST", f"{GOV}/packs", json={"title": args.title, "frameworks": _csv_list(args.frameworks), "system_ids": _csv_list(args.systems)})
+            return _show(out, args, pack, lambda p: f"Pack {p['id']}  {p['title']}\n  hash {p['manifestHash']}")
+        if args.action == "list":
+            return _show(out, args, _call(client, "GET", f"{GOV}/packs"), lambda ps: "\n".join(f"{p['id']}  {p['title']}  {'shared' if p['share']['shared'] else 'private'}" for p in ps) or "No packs yet.")
+        if args.action == "show":
+            return _show(out, args, _call(client, "GET", pid), lambda p: f"{p['id']}  {p['title']}\n  hash {p['manifestHash']}  frameworks {', '.join(p['frameworks'])}")
+        if args.action == "download":
+            document = _call(client, "GET", f"{pid}/download")
+            target = Path(args.output or f"pack-{args.id}.json")
+            target.write_text(json.dumps(document, indent=2, ensure_ascii=False), encoding="utf-8")
+            out(f"Saved {target}; check it with: fairmind verify {target}")
+            return EXIT_GO
+        if args.action == "share":
+            return _show(out, args, _call(client, "POST", f"{pid}/share"), lambda s: f"Auditor token (shown once): {s['token']}\n  expires {s['expiresAt']}\n  link: <FairMind site>/verify/{s['packId']}?t={s['token']}")
+        return _show(out, args, _call(client, "DELETE", f"{pid}/share"), lambda s: f"Share link for {s['packId']} revoked")
+
+
+def cmd_finding(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    with _client(args, factory) as client:
+        if args.action == "add":
+            body = {"systemId": args.system, "riskType": args.type, "severity": args.severity, "description": args.description}
+            return _show(out, args, _call(client, "POST", f"{GOV}/risks/assess", json=body), lambda f: f"Finding {f['id']}: {f['title']}, {f['severity']}, {f['status']}")
+        found = _call(client, "GET", f"{GOV}/dashboard/risk", params={"system_id": args.system} if args.system else {})
+        return _show(out, args, found, lambda f: "\n".join(f"{r['id']}  {r['severity']:<9}{r['status']:<9}{r['title']}" for r in f["risks"]) or "No findings recorded.")
+
+
+def cmd_remediation(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    with _client(args, factory) as client:
+        if args.action == "add":
+            body: Dict[str, Any] = {
+                "system_id": args.system, "title": args.title, "description": args.description, "source_type": "risk",
+                "source_id": args.finding or args.system, "linked_risk_ids": [args.finding] if args.finding else [], "priority": args.priority,
+            }
+            if args.owner:
+                body["owner"] = args.owner
+            return _show(out, args, _call(client, "POST", f"{GOV}/remediation", json=body), lambda t: f"Task {t['id']}: {t['title']}, {t['priority']}, {t['status']}")
+        if args.action == "list":
+            return _show(out, args, _call(client, "GET", f"{GOV}/remediation", params={"system_id": args.system}), lambda r: "\n".join(f"{t['id']}  {t['priority']:<9}{t['status']:<17}{t['title']}" for t in r["tasks"]) or "No tasks.")
+        body = {k: v for k, v in (("status", args.status), ("notes", args.notes)) if v is not None}
+        return _show(out, args, _call(client, "PATCH", f"{GOV}/remediation/{args.task}", json=body), lambda t: f"Task {t['id']}: {t['status']}")
+
+
+def cmd_approval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    summary = lambda s: f"Release decision: {s['request']['status'] if s['request'] else 'not requested'}" + (f"  request {s['request']['id']}" if s["request"] else "")  # noqa: E731
+    with _client(args, factory) as client:
+        if args.action == "request":
+            return _show(out, args, _call(client, "POST", f"{GOV}/approval/system/{args.system}/request", json={}), summary)
+        if args.action == "status":
+            return _show(out, args, _call(client, "GET", f"{GOV}/approval/system/{args.system}"), summary)
+        body = {"decision": args.decision, "notes": args.notes or ""}
+        return _show(out, args, _call(client, "POST", f"{GOV}/approval-requests/{args.request}/decision", json=body), lambda d: f"Decision recorded: {args.decision}")
+
+
+def cmd_report(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    with _client(args, factory) as client:
+        if args.action == "generate":
+            body: Dict[str, Any] = {"system_id": args.system, "report_type": args.type}
+            if args.title:
+                body["title"] = args.title
+            if args.frameworks:
+                body["frameworks"] = _csv_list(args.frameworks)
+            return _show(out, args, _call(client, "POST", f"{GOV}/reports/generate", json=body), lambda r: f"Report {r['id']}: {r['title']}")
+        params = {"system_id": args.system, **({"report_type": args.type} if args.type else {})}
+        return _show(out, args, _call(client, "GET", f"{GOV}/reports", params=params), lambda rs: "\n".join(f"{r['id']}  {r['reportType']:<11}{r['createdAt']}  {r['title']}" for r in rs) or "No reports.")
+
+
+def _render_eval_run(run: Dict[str, Any]) -> str:
+    lines = [f"{run.get('evaluationId')}: {str(run.get('status', '')).upper()}  evidence {run.get('id')}"]
+    if run.get("summary"):
+        lines.append(f"  {run['summary']}")
+    lines += [f"  {k}: {v:.3f}" if isinstance(v, float) else f"  {k}: {v}" for k, v in (run.get("metrics") or {}).items()]
+    return "\n".join(lines)
+
+
+def cmd_eval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    with _client(args, factory) as client:
+        packs = lambda path, **kw: _call(client, kw.pop("method", "GET"), f"/api/v1/packs{path}", **{**kw, "params": {**kw.get("params", {}), "org_id": _org(client)}})  # noqa: E731
+        if args.action == "list":
+            params = {k: v for k, v in (("q", args.query), ("pillar", args.pillar)) if v}
+            return _show(out, args, packs("/evaluations", params=params), lambda es: "\n".join(f"{e['id']}  {'runnable' if e.get('runnable') else 'evidence only'}  {e['name']}" for e in es) or "No evaluation matches.")
+        if args.action == "show":
+            return _show(out, args, packs(f"/evaluations/{args.id}/engine"), lambda e: "\n".join([f"method: {e['method']}"] + [f"  file {s['name']}{'' if s['required'] else ' (optional)'}: {s['help']}" for s in e["slots"]] + [f"  param {p['name']}{' (required)' if p['required'] else ''}: {p['help']}" for p in e["params"]]))
+        if args.action == "result":
+            return _show(out, args, packs(f"/evaluation-runs/{args.id}"), _render_eval_run)
+        files, params = {}, {}
+        for item in args.file or []:
+            slot, _, path = item.partition("=")
+            if not path or not Path(path).is_file():
+                raise CliError(f"--file expects slot=path to an existing file, got {item!r}")
+            files[slot] = Path(path)
+        for item in args.param or []:
+            key, _, value = item.partition("=")
+            try:
+                params[key] = json.loads(value)
+            except ValueError:
+                params[key] = value
+        data = {"system_id": args.system, "params": json.dumps(params), "source": "connection" if args.use_connection else "upload"}
+        if args.live:
+            data["mode"] = "live"
+        handles = {slot: (p.name, p.open("rb")) for slot, p in files.items()}
+        try:
+            result = packs(f"/evaluations/{args.id}/runs", method="POST", data=data, files=handles or None)
+        finally:
+            for _, handle in handles.values():
+                handle.close()
+        job = result.get("job") if isinstance(result, dict) else None
+        if job:
+            deadline = time.monotonic() + args.timeout
+            while job["status"] not in ("done", "failed"):
+                if time.monotonic() > deadline:
+                    raise CliError(f"Evaluation job {job['id']} is still running after {args.timeout:.0f}s; check it later")
+                time.sleep(3)
+                job = packs(f"/evaluation-jobs/{job['id']}")
+            if job["status"] == "failed":
+                raise CliError(f"Evaluation {args.id} failed: {job.get('error') or 'no reason given'}")
+            result = packs(f"/evaluation-runs/{job['evidenceId']}")
+        _show(out, args, result, _render_eval_run)
+        return EXIT_GO if result.get("status") == "passed" else EXIT_NO_GO
 
 # ---------------------------------------------------------------------------
 # entry point
@@ -341,9 +510,72 @@ def build_parser() -> argparse.ArgumentParser:
     systems = sub.add_parser("systems", parents=[common], help="list the AI systems your key can see")
     systems.set_defaults(func=cmd_systems)
 
-    verify = sub.add_parser("verify", help="verify a downloaded inspection pack offline (no network); exit 0 intact, 1 not", description=CANONICAL_FORM)
-    verify.add_argument("pack", help="pack JSON downloaded from FairMind or an auditor link")
-    verify.add_argument("--json", action="store_true", help="print the result as JSON")
+    def group(name: str, help: str, actions: Dict[str, str], func: Callable[..., int]) -> Dict[str, argparse.ArgumentParser]:
+        parent = sub.add_parser(name, help=help)
+        inner = parent.add_subparsers(dest="action", required=True)
+        made = {}
+        for action, text in actions.items():
+            made[action] = inner.add_parser(action, parents=[common], help=text)
+            made[action].set_defaults(func=func)
+        return made
+
+    pack = group("pack", "inspection packs", {"create": "build a pack", "list": "list packs", "show": "pack summary", "download": "save pack.json", "share": "mint an auditor link token", "revoke": "revoke the link"}, cmd_pack)
+    pack["create"].add_argument("--title", required=True)
+    pack["create"].add_argument("--frameworks", required=True, help="comma-separated catalogue keys, e.g. EUAIA,ISO42001")
+    pack["create"].add_argument("--systems", required=True, help="comma-separated system ids")
+    for a in ("show", "download", "share", "revoke"):
+        pack[a].add_argument("id", help="pack id")
+    pack["download"].add_argument("-o", "--output", help="file to write (default pack-<id>.json)")
+
+    finding = group("finding", "risk findings", {"add": "record a finding", "list": "list findings"}, cmd_finding)
+    finding["add"].add_argument("--system", required=True)
+    finding["add"].add_argument("--type", required=True, help="risk type, e.g. bias or privacy")
+    finding["add"].add_argument("--severity", required=True, choices=["low", "medium", "high", "critical"])
+    finding["add"].add_argument("--description", required=True)
+    finding["list"].add_argument("--system", help="limit to one system")
+
+    rem = group("remediation", "remediation tasks", {"add": "open a task", "list": "list a system's tasks", "update": "change status or notes"}, cmd_remediation)
+    rem["add"].add_argument("--system", required=True)
+    rem["add"].add_argument("--title", required=True)
+    rem["add"].add_argument("--description", required=True)
+    rem["add"].add_argument("--finding", help="finding id this task fixes")
+    rem["add"].add_argument("--priority", default="medium", choices=["low", "medium", "high", "critical"])
+    rem["add"].add_argument("--owner")
+    rem["list"].add_argument("--system", required=True)
+    rem["update"].add_argument("task", help="task id")
+    rem["update"].add_argument("--status", choices=["open", "in_progress", "blocked", "ready_for_retest", "resolved", "closed"])
+    rem["update"].add_argument("--notes")
+
+    appr = group("approval", "release decisions", {"request": "ask for a decision", "status": "read the latest decision", "decide": "approve or reject a request"}, cmd_approval)
+    for a in ("request", "status"):
+        appr[a].add_argument("--system", required=True)
+    appr["decide"].add_argument("request", help="approval request id")
+    appr["decide"].add_argument("--decision", required=True, choices=["approved", "rejected"])
+    appr["decide"].add_argument("--notes")
+
+    rep = group("report", "audit report snapshots", {"generate": "generate and store a snapshot", "list": "list stored snapshots"}, cmd_report)
+    rep["generate"].add_argument("--system", required=True)
+    rep["generate"].add_argument("--type", required=True, choices=["compliance", "bias", "governance"])
+    rep["generate"].add_argument("--title")
+    rep["generate"].add_argument("--frameworks", help="comma-separated")
+    rep["list"].add_argument("--system", required=True)
+    rep["list"].add_argument("--type", choices=["compliance", "bias", "governance"])
+
+    ev = group("eval", "evaluation catalogue and runs", {"list": "search the catalogue", "show": "files and params an evaluation takes", "run": "run an evaluation and wait for the result", "result": "read a stored run"}, cmd_eval)
+    ev["list"].add_argument("-q", "--query")
+    ev["list"].add_argument("--pillar")
+    ev["show"].add_argument("id", help="evaluation id")
+    ev["result"].add_argument("id", help="run (evidence) id")
+    ev["run"].add_argument("id", help="evaluation id")
+    ev["run"].add_argument("--system", required=True)
+    ev["run"].add_argument("--file", action="append", help="slot=path, repeatable")
+    ev["run"].add_argument("--param", action="append", help="name=value, repeatable")
+    ev["run"].add_argument("--live", action="store_true", help="behaviour test against the system's connected endpoint")
+    ev["run"].add_argument("--use-connection", action="store_true", help="read the organisation's agent platform instead of files")
+    ev["run"].add_argument("--timeout", type=float, default=900.0)
+
+    verify = sub.add_parser("verify", parents=[common], help="verify an inspection pack (a downloaded pack.json is checked with no network; a share link is fetched first); exit 0 intact, 1 not", description=CANONICAL_FORM)
+    verify.add_argument("pack", help="pack JSON downloaded from FairMind, or an auditor share link (.../verify/<id>?t=<token>)")
     verify.set_defaults(func=cmd_verify)
     return parser
 
