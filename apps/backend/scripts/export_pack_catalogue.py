@@ -90,6 +90,29 @@ def export_sheets(wb, out):
     print({"workbook sheets": len(sheets), "rows": sum(len(r) for r in sheets.values())})
 
 
+def engine_status(evaluations):
+    """Set engine and codeLocation from the code: 'Engine exists' only where FairMind can run the evaluation.
+
+    Runnable means an engine in eval_engines.REGISTRY or a result rule in evaluation_results.RULES.
+    For the rest, the workbook's code search survives only as a hint: 'Partial' where it found related code.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.api.routers.evaluation_results import RULES
+    from src.application.services import eval_engines
+
+    where = {}
+    for m in (eval_engines.data, eval_engines.model, eval_engines.ops, eval_engines.platform, eval_engines.behaviour):
+        for e in m.ENGINES:
+            where.setdefault(e.id, f"src/application/services/eval_engines/{m.__name__.rsplit('.', 1)[1]}.py")
+    for i in RULES:
+        where.setdefault(i, "src/api/routers/evaluation_results.py")
+    for e in evaluations:
+        if e["id"] in where:
+            e["engine"], e["codeLocation"] = "Engine exists", where[e["id"]]
+        else:
+            e["engine"] = "Partial" if e["engine"] in ("Engine exists", "Partial") else "Not found"
+
+
 def main(src, out):
     wb = load_workbook(src, data_only=True)
     pillars = [{"id": r["Pillar"], "name": r["Name"], "description": r["What it covers"]} for r in rows(wb, "Pillars")]
@@ -140,6 +163,7 @@ def main(src, out):
          "codeLocation": text(e["Code location on main"]), "tests": ev_tests.get(e["Evaluation ID"], [])}
         for e in rows(wb, "Evaluations") if str(e["Evaluation ID"]).startswith("EV-")
     ]
+    engine_status(evaluations)
     patterns = [{"id": p["Pattern"], "pillar": p["Pillar"], "name": p["Pattern name"], "objective": p["Objective"], "agentic": p["Agentic"] == "Yes",
                  "pack": p["In pack"], "workflows": split_list(p["Workflows"]), "evaluations": split_list(p["Evaluations"])} for p in rows(wb, "Patterns")]
     packs = [{"id": k["Pack"], "name": k["Pack name"], "pillar": k["Pillar"], "description": k["What it is for"], "patterns": split_list(k["Patterns"])}
