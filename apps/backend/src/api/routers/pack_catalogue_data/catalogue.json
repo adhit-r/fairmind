@@ -34960,7 +34960,8 @@
     "NISTRMF|MEASURE 2.4",
     "ISO42001|A.6.2.6",
     "UKAICOP|P12"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-02",
@@ -34981,7 +34982,8 @@
     "OWASPLLM|LLM04",
     "ATLAS|Persistence",
     "EUAIA|Art 15"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-03",
@@ -35002,7 +35004,8 @@
     "ISO42001|A.7.4",
     "NISTRMF|MEASURE 2.11",
     "AIVERIFY|P8"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-04",
@@ -35022,7 +35025,8 @@
     "EUAIA|Art 10",
     "ISO42001|A.7.4",
     "AIVERIFY|P8"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-05",
@@ -35041,7 +35045,8 @@
    "tests": [
     "ISO42001|A.7.4",
     "NISTRMF|MEASURE 2.1"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-06",
@@ -35062,7 +35067,8 @@
     "NIST600|Data privacy",
     "NISTRMF|MEASURE 2.10",
     "ISO42001|A.7.2"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-07",
@@ -35083,7 +35089,8 @@
     "OWASPLLM|LLM04",
     "OWASPAG|ASI06",
     "NISTADV|Indirect PI"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-01",
@@ -35105,7 +35112,8 @@
     "NISTRMF|MEASURE 2.10",
     "NISTADV|Privacy",
     "OWASPMCP|MCP10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-02",
@@ -35124,7 +35132,8 @@
    "tests": [
     "NISTADV|Privacy",
     "NISTRMF|MEASURE 2.10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-03",
@@ -35142,7 +35151,8 @@
    "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "CSAAICM|DSP"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-01",
@@ -35163,7 +35173,8 @@
     "NISTRMF|MEASURE 2.3",
     "EUAIA|Art 15",
     "ISO42001|A.6.2.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-02",
@@ -35182,7 +35193,8 @@
    "tests": [
     "NISTRMF|MEASURE 2.5",
     "AIVERIFY|P3"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-03",
@@ -35202,7 +35214,8 @@
     "NIST600|Confabulation",
     "OWASPLLM|LLM09",
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-04",
@@ -35223,7 +35236,8 @@
     "AIVERIFY|P6",
     "NISTRMF|MEASURE 2.5",
     "NISTADV|Evasion"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-05",
@@ -35279,7 +35293,8 @@
    "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-01",
@@ -35301,7 +35316,8 @@
     "AIVERIFY|P7",
     "INDAI|Sutra 4",
     "EUAIA|Art 10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-02",
@@ -35320,7 +35336,8 @@
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "AIVERIFY|P7"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-03",
@@ -35339,7 +35356,8 @@
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "INDAI|Sutra 4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-04",
@@ -35358,7 +35376,8 @@
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "NIST600|Harmful bias"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-05",
@@ -35377,7 +35396,8 @@
    "tests": [
     "NIST600|Harmful bias",
     "NISTRMF|MEASURE 2.11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-06",
@@ -35396,7 +35416,8 @@
    "tests": [
     "INDAI|Sutra 4",
     "NISTRMF|MEASURE 2.11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-01",
@@ -35417,7 +35438,8 @@
     "OWASPMCP|MCP02",
     "OWASPLLM|LLM06",
     "CSAAICM|IAM"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-02",
@@ -35457,7 +35479,8 @@
     "OWASPMCP|MCP09",
     "OWASPMCP|MCP02",
     "OWASPAG|ASI04"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-04",
@@ -35476,7 +35499,8 @@
    "tests": [
     "OWASPAG|ASI02",
     "ATLAS|Exfiltration"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-01",
@@ -35498,7 +35522,8 @@
     "OWASPAG|ASI01",
     "ATLAS|Initial Access",
     "ATLAS|Execution"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-02",
@@ -35519,7 +35544,8 @@
     "NISTADV|Indirect PI",
     "OWASPMCP|MCP06",
     "OWASPAG|ASI01"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-03",
@@ -35539,7 +35565,8 @@
     "OWASPLLM|LLM01",
     "NISTADV|Misuse",
     "ATLAS|Defense Evasion"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-04",
@@ -35558,7 +35585,8 @@
    "tests": [
     "OWASPLLM|LLM07",
     "ATLAS|Discovery"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-05",
@@ -35578,7 +35606,8 @@
     "OWASPLLM|LLM07",
     "OWASPMCP|MCP10",
     "ATLAS|Discovery"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-06",
@@ -35597,7 +35626,8 @@
    "tests": [
     "OWASPLLM|LLM06",
     "OWASPAG|ASI02"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-07",
@@ -35617,7 +35647,8 @@
     "NIST600|Violent-Hateful",
     "NIST600|Obscene-Abusive",
     "NISTRMF|MEASURE 2.6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DEV-01",
@@ -35635,7 +35666,8 @@
    "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "UKAICOP|P2"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DEV-02",
@@ -35654,7 +35686,8 @@
    "tests": [
     "OWASPMCP|MCP01",
     "CSAAICM|CEK"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DEV-03",
@@ -35694,7 +35727,8 @@
     "NISTRMF|MEASURE 4.3",
     "EUAIA|Art 72",
     "UKAICOP|P12"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-02",
@@ -35732,7 +35766,8 @@
    "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPLLM|LLM10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-04",
@@ -35754,7 +35789,8 @@
     "OWASPMCP|MCP08",
     "ISO42001|A.6.2.8",
     "CSAAICM|LOG"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-RSK-01",
@@ -35772,7 +35808,8 @@
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NISTRMF|MEASURE 2.6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-RSK-02",
@@ -35810,7 +35847,8 @@
    "tests": [
     "NISTADV|Misuse",
     "NISTRMF|MEASURE 2.6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TRN-01",
@@ -35981,7 +36019,8 @@
    "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NIST600|IP"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-ENV-01",
@@ -36001,7 +36040,8 @@
     "NISTRMF|MEASURE 2.12",
     "NIST600|Environmental",
     "AIVERIFY|P11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SLF-01",
@@ -36019,7 +36059,8 @@
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPAG|ASI01"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SLF-02",
@@ -36108,7 +36149,8 @@
    "pillar": "EVALUATE",
    "engine": "Engine exists",
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
-   "tests": []
+   "tests": [],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-04",
@@ -36124,7 +36166,8 @@
    "pillar": "EVALUATE",
    "engine": "Engine exists",
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
-   "tests": []
+   "tests": [],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-08",
@@ -36267,7 +36310,8 @@
     "NISTADV|Supply chain",
     "ATLAS|Initial Access",
     "CSAAICM|STA"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-15",
@@ -36306,7 +36350,8 @@
    "tests": [
     "OWASPMCP|MCP01",
     "ATLAS|Credential Access"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-17",
@@ -36326,7 +36371,8 @@
     "OWASPMCP|MCP03",
     "OWASPMCP|MCP06",
     "OWASPAG|ASI02"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-18",
@@ -36345,7 +36391,8 @@
    "tests": [
     "OWASPMCP|MCP09",
     "OWASPAG|ASI10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-19",
@@ -36365,7 +36412,8 @@
     "OWASPMCP|MCP07",
     "OWASPAG|ASI03",
     "CSAAICM|IAM"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-20",
@@ -36386,7 +36434,8 @@
     "OWASPMCP|MCP05",
     "ATLAS|Execution",
     "ATLAS|Privilege Escalation"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-21",
@@ -36405,7 +36454,8 @@
    "tests": [
     "OWASPAG|ASI06",
     "OWASPLLM|LLM04"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-22",
@@ -36521,7 +36571,8 @@
     "ATLAS|Collection",
     "ATLAS|Command and Control",
     "OWASPLLM|LLM02"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-28",
@@ -36541,7 +36592,8 @@
     "OWASPLLM|LLM09",
     "NIST600|Confabulation",
     "NIST600|Info integrity"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-01",
@@ -36654,7 +36706,8 @@
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Violent-Hateful"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-07",
@@ -36692,7 +36745,8 @@
    "tests": [
     "NIST600|Human-AI config",
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-08",
@@ -36711,7 +36765,8 @@
    "tests": [
     "AIVERIFY|P6",
     "EUAIA|Art 15"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-09",
@@ -36749,7 +36804,8 @@
    "tests": [
     "INDAI|Sutra 4",
     "NISTRMF|MEASURE 2.11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-11",
@@ -36768,7 +36824,8 @@
    "tests": [
     "NIST600|Confabulation",
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-07",
@@ -36788,7 +36845,8 @@
     "NISTRMF|MEASURE 2.11",
     "NISTRMF|MEASURE 4.3",
     "AIVERIFY|P7"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-08",
@@ -36864,7 +36922,8 @@
    "tests": [
     "EUAIA|Art 10",
     "ISO42001|A.7.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-09",
@@ -36920,7 +36979,8 @@
    "tests": [
     "OWASPLLM|LLM02",
     "NIST600|Data privacy"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-05",
@@ -36958,7 +37018,8 @@
    "tests": [
     "OWASPAG|ASI08",
     "OWASPLLM|LLM10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-05",

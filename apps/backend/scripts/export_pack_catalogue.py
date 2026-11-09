@@ -99,6 +99,7 @@ def engine_status(evaluations):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from src.api.routers.evaluation_results import RULES
     from src.application.services import eval_engines
+    from src.application.services.eval_engines import VALIDATED
 
     where = {}
     for m in (eval_engines.data, eval_engines.model, eval_engines.ops, eval_engines.platform, eval_engines.behaviour):
@@ -109,6 +110,7 @@ def engine_status(evaluations):
     for e in evaluations:
         if e["id"] in where:
             e["engine"], e["codeLocation"] = "Engine exists", where[e["id"]]
+            e["maturity"] = "L4" if e["id"] in VALIDATED else "L1"  # L2 and above are not derivable from the code alone
         else:
             e["engine"] = "Partial" if e["engine"] in ("Engine exists", "Partial") else "Not found"
 
