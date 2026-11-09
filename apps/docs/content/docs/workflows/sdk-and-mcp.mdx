@@ -19,10 +19,10 @@ Never put the key in a config file or a repository. `FAIRMIND_API_URL` defaults 
 
 ## Python SDK
 
-Install from a checkout of the repository:
+Install from PyPI (from a checkout: `pip install ./apps/sdk`):
 
 ```bash
-pip install ./apps/sdk
+pip install fairmind
 ```
 
 ```python
@@ -63,7 +63,7 @@ Every failure raises `FairMindError` with the HTTP `status_code` (`None` when th
 Add it to Claude Code from a checkout:
 
 ```bash
-claude mcp add fairmind -- uv run --project /path/to/fairmind/apps/mcp fairmind-mcp
+claude mcp add fairmind -- uvx fairmind-mcp
 ```
 
 The server inherits `FAIRMIND_API_URL` and `FAIRMIND_API_KEY` from the shell. The `apps/mcp` README has the `.mcp.json` and Claude Desktop configurations, which also pass the environment through without containing a key.
