@@ -45,6 +45,8 @@ def test_tools_are_registered(client):
     assert asyncio.run(go()) == {
         "list_systems", "release_gate", "clause_map", "run_fairness_test", "record_monitoring_snapshot", "attest_check",
         "list_evaluations", "describe_evaluation", "run_evaluation",
+        "create_evidence_pack", "verify_evidence_pack", "record_finding", "list_findings", "create_remediation_task",
+        "update_remediation_task", "request_release_approval", "generate_report",
     }
 
 

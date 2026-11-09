@@ -23,7 +23,10 @@ INSTRUCTIONS = (
     "record_monitoring_snapshot with a CSV on this machine to add measured evidence, and attest_check "
     "only for a statement the user has confirmed. For the wider catalogue (drift, leakage, prompt injection, "
     "jailbreaks, counterfactual flip rate, agent configuration and more), call list_evaluations, then "
-    "describe_evaluation for the files and params one takes, then run_evaluation."
+    "describe_evaluation for the files and params one takes, then run_evaluation. "
+    "To hand work to an auditor, create_evidence_pack (share=true mints a link) and verify_evidence_pack checks a pack offline. "
+    "record_finding and create_remediation_task track issues, request_release_approval asks a person to decide "
+    "(this server never approves a release itself), and generate_report stores an audit snapshot."
 )
 
 
@@ -238,6 +241,95 @@ def create_server(client: Optional[FairMind] = None) -> FastMCP:
         """Run a catalogue evaluation and store the result as measured evidence. `files` maps the file names from describe_evaluation to paths on this machine. `live=true` runs its behaviour test against the system's connected endpoint, judged by the organisation's model (this can take minutes). `use_connection=true` reads the organisation's connected agent platform instead of files. Returns passed, failed or insufficient with the metrics."""
         run = fm().run_evaluation(system_id, evaluation_id, files, params, live=live, source="connection" if use_connection else "upload")
         return _result(render_evaluation_run(run), dict(run))
+
+    @server.tool()
+    @guarded
+    def create_evidence_pack(title: str, frameworks: List[str], system_ids: List[str], share: bool = False) -> CallToolResult:
+        """Build a hashed inspection pack of the chosen systems' evidence and clause maps. `frameworks` are catalogue keys such as EUAIA or ISO42001. `share=true` also mints a read-only auditor token (shown once; the link is /verify/<pack id>?t=<token> on the FairMind site)."""
+        pack = fm().create_pack(title, frameworks, system_ids)
+        out = dict(pack)
+        lines = [f"Pack {pack['id']}  {pack['title']}  hash {pack['manifestHash']}"]
+        if share:
+            shared = fm().share_pack(pack["id"])
+            out["share"] = shared
+            lines.append(f"Auditor token (shown once): {shared['token']}  expires {shared['expiresAt']}")
+        return _result("\n".join(lines), out)
+
+    @server.tool()
+    @guarded
+    def verify_evidence_pack(path: Optional[str] = None, link: Optional[str] = None, pack_id: Optional[str] = None) -> CallToolResult:
+        """Check an inspection pack: recompute its manifest hash and each system's evidence chain head and say whether it is intact. Give one of `path` (a downloaded pack.json on this machine, checked offline), `link` (an auditor share link, fetched then checked locally) or `pack_id` (a pack of the signed-in organisation)."""
+        if sum(bool(x) for x in (path, link, pack_id)) != 1:
+            raise ToolError("Give exactly one of path, link or pack_id")
+        client = fm()
+        result = client.verify_pack(path) if path else client.verify_share_link(link) if link else client.verify_pack(client.download_pack(pack_id))
+        lines = [f"{result['title']}: {'INTACT' if result['intact'] else 'DOES NOT VERIFY'}", f"  manifest hash {'ok' if result['hashOk'] else 'MISMATCH'} {result['actual']}"]
+        lines += [f"  {'ok' if s['intact'] else 'BROKEN'} {s['name']}: {s['evidence']} evidence records" for s in result["systems"]]
+        return _result("\n".join(lines), result)
+
+    @server.tool()
+    @guarded
+    def record_finding(system_id: str, risk_type: str, severity: Literal["low", "medium", "high", "critical"], description: str) -> CallToolResult:
+        """Record a risk finding against a system (for example risk_type "bias" or "privacy"). Use what was actually observed; never invent one."""
+        finding = fm().add_finding(system_id, risk_type, severity, description)
+        return _result(f"Finding {finding['id']}: {finding['title']}, {finding['severity']}, {finding['status']}", dict(finding))
+
+    @server.tool()
+    @guarded
+    def list_findings(system_id: Optional[str] = None) -> CallToolResult:
+        """Recorded findings (risks) with counts by severity, and, when `system_id` is given, that system's remediation tasks."""
+        found = fm().findings(system_id)
+        out: Dict[str, Any] = dict(found)
+        lines = [f"{r['id']}  {r['severity']}  {r['status']}  {r['title']}" for r in found["risks"]] or ["No findings recorded."]
+        if system_id:
+            tasks = fm().remediation_tasks(system_id)
+            out["remediation"] = tasks
+            lines += [f"task {t['id']}  {t['priority']}  {t['status']}  {t['title']}" for t in tasks["tasks"]]
+        return _result("\n".join(lines), out)
+
+    @server.tool()
+    @guarded
+    def create_remediation_task(
+        system_id: str,
+        title: str,
+        description: str,
+        finding_id: Optional[str] = None,
+        priority: Literal["low", "medium", "high", "critical"] = "medium",
+        owner: Optional[str] = None,
+    ) -> CallToolResult:
+        """Open a remediation task for a system, optionally tied to a finding id from record_finding or list_findings."""
+        task = fm().create_remediation(system_id, title, description, finding_id=finding_id, priority=priority, owner=owner)
+        return _result(f"Task {task['id']}: {task['title']}, {task['priority']}, {task['status']}", dict(task))
+
+    @server.tool()
+    @guarded
+    def update_remediation_task(
+        task_id: str,
+        status: Optional[Literal["open", "in_progress", "blocked", "ready_for_retest", "resolved", "closed"]] = None,
+        notes: Optional[str] = None,
+    ) -> CallToolResult:
+        """Move a remediation task to a new status and/or add notes."""
+        task = fm().update_remediation(task_id, status, notes)
+        return _result(f"Task {task['id']}: {task['status']}", dict(task))
+
+    @server.tool()
+    @guarded
+    def request_release_approval(system_id: str) -> CallToolResult:
+        """Ask for a release decision on a system, or read where the latest request stands. A person approves or rejects it in FairMind; this server cannot."""
+        client = fm()
+        client.request_approval(system_id)
+        status = client.approval_status(system_id)
+        req = status["request"]
+        return _result(f"Release decision: {req['status']}, request {req['id']}", dict(status))
+
+    @server.tool()
+    @guarded
+    def generate_report(system_id: str, report_type: Literal["compliance", "bias", "governance"], title: Optional[str] = None) -> CallToolResult:
+        """Generate and store an audit report snapshot (risks, evidence, approvals) for a system, and list the earlier ones."""
+        client = fm()
+        report = client.generate_report(system_id, report_type, title=title)
+        earlier = client.reports(system_id, report_type)
+        return _result(f"Report {report['id']}: {report['title']} ({len(earlier)} stored {report_type} reports)", {"report": report, "reports": earlier})
 
     return server
 
