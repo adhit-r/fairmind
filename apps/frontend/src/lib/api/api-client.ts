@@ -149,6 +149,8 @@ interface RequestOptions extends RequestInit {
   timeout?: number
   cacheKey?: string
   useCache?: boolean
+  /** Return the body as a Blob instead of parsing JSON (file downloads). */
+  responseType?: 'blob'
 }
 
 type ErrorPayload = {
@@ -387,6 +389,7 @@ export class ApiClient {
       timeout = 10000,
       cacheKey,
       useCache = false,
+      responseType,
       ...fetchOptions
     } = options
     const requestEpoch = this.sessionEpoch
@@ -480,6 +483,8 @@ export class ApiClient {
           const errorData = await response.json().catch(() => ({})) as unknown
           return decodeFailure(errorData, apiError) as ApiResponse<T>
         }
+
+        if (responseType === 'blob') return { success: true, data: (await response.blob()) as T }
 
         const jsonData = await response.json()
 

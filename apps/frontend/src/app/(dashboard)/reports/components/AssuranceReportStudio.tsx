@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/api/api-client'
 import { API_ENDPOINTS } from '@/lib/api/endpoints'
 import { ReportHistoryTable, type SavedReport } from '../../audit-reports/components/ReportHistoryTable'
 import { ReportPreview } from '../../audit-reports/components/ReportPreview'
-import { buildAssurancePdfLines, reportMatchesAssuranceScope, textValue, type AssurancePdfContext, type PdfRecord } from './assurancePdf'
+import { reportMatchesAssuranceScope } from './assurancePdf'
 
 type ReportSystem = {
   id: string
@@ -27,47 +27,26 @@ function downloadJson(report: SavedReport) {
   URL.revokeObjectURL(url)
 }
 
-async function downloadPdf(report: SavedReport, context: AssurancePdfContext) {
-  const { jsPDF } = await import('jspdf')
-  const document = new jsPDF({ unit: 'pt', format: 'a4' })
-  const pageWidth = document.internal.pageSize.getWidth()
-  const pageHeight = document.internal.pageSize.getHeight()
-  const margin = 40
-  const contentWidth = pageWidth - margin * 2
-  let y = margin
-
-  const currentContext = { ...context, assuranceAsOf: new Date().toISOString() }
-  for (const rawLine of buildAssurancePdfLines(report, currentContext)) {
-    if (!rawLine) {
-      y += 6
-      continue
-    }
-    const heading = rawLine.startsWith('## ')
-    const line = heading ? rawLine.slice(3) : rawLine
-    document.setFont('helvetica', heading || y === margin ? 'bold' : 'normal')
-    document.setFontSize(heading ? 13 : y === margin ? 18 : 9)
-    const wrapped = document.splitTextToSize(line, contentWidth) as string[]
-    const lineHeight = heading ? 16 : 12
-    if (y + wrapped.length * lineHeight > pageHeight - margin) {
-      document.addPage()
-      y = margin
-    }
-    document.text(wrapped, margin, y)
-    y += wrapped.length * lineHeight + (heading ? 4 : 0)
-  }
-  const systemName = textValue((report.data.system || {}) as PdfRecord, ['name'], report.systemId)
-  document.save(`Current_Assurance_${systemName.replace(/\s+/g, '_')}.pdf`)
+async function downloadExport(report: SavedReport, format: 'pdf' | 'docx'): Promise<string | null> {
+  // The server renders the stored snapshot; nothing here is typeset from client state.
+  const response = await apiClient.get<Blob>(API_ENDPOINTS.aiGovernance.exportReport(report.id, format), { responseType: 'blob' })
+  if (!response.success || !response.data) return response.error || `Could not export the ${format.toUpperCase()}`
+  const url = URL.createObjectURL(response.data)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `${report.title.replace(/\s+/g, '_')}.${format}`
+  anchor.click()
+  URL.revokeObjectURL(url)
+  return null
 }
 
 export function AssuranceReportStudio({
   system,
   frameworkLabel,
-  assurance,
   readOnly,
 }: {
   system: ReportSystem
   frameworkLabel: string
-  assurance: AssurancePdfContext
   readOnly: boolean
 }) {
   const scopeKey = `${system.id}:${frameworkLabel}`
@@ -127,6 +106,11 @@ export function AssuranceReportStudio({
     void loadHistory()
   }, [loadHistory])
 
+  const exportReport = async (report: SavedReport, format: 'pdf' | 'docx') => {
+    const failure = await downloadExport(report, format)
+    if (failure) setHistorySnapshot((current) => ({ ...current, error: failure }))
+  }
+
   const generate = async () => {
     const targetScope = scopeKey
     const requestId = ++generationRequestIdRef.current
@@ -170,7 +154,7 @@ export function AssuranceReportStudio({
         <div>
           <h2 className="text-[15px] font-semibold">Assurance Report Studio</h2>
           <p className={`mt-1 max-w-[640px] text-[12.5px] ${MUTED}`}>
-            Saved snapshots of the risks, evidence, remediation and decisions recorded for {system.name}, ready to export as PDF or JSON. A snapshot does not change the assurance summary above.
+            Saved snapshots of the risks, evidence, remediation and decisions recorded for {system.name}, ready to export as PDF, DOCX or JSON. A snapshot does not change the assurance summary above.
           </p>
         </div>
         <button type="button" disabled={historyLoading} onClick={() => void loadHistory()} className={BTN}>
@@ -217,7 +201,8 @@ export function AssuranceReportStudio({
           loading={historyLoading}
           onPreview={(report) => setPreviewSnapshot({ scopeKey, report })}
           onDownloadJson={downloadJson}
-          onDownloadPdf={(report) => void downloadPdf(report, assurance)}
+          onDownloadPdf={(report) => void exportReport(report, 'pdf')}
+          onDownloadDocx={(report) => void exportReport(report, 'docx')}
         />
       )}
     </section>
