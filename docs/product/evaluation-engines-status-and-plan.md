@@ -25,13 +25,13 @@ So 40 evaluations marked "Not found" and 11 marked "Partial" already have engine
 | Check | Result |
 |---|---|
 | Engine, run API, behaviour, sandbox launcher packs and fairness-run tests on a disposable PostgreSQL 18 | 319 passed, including one API run per engine kind (file, live, platform) stored as evidence |
-| Known-answer tests (hand-calculated values) | FAI-01, FAI-02 (impact ratio, equal opportunity, equalized odds), DAT-01 (PSI), FAI-05 (WEAT effect size and exact p), SEC-01 (attack success rate) |
+| Known-answer tests (hand-derived values, a threshold boundary case and a failing case each) | All 61 runnable evaluations: 56 engines (file, live and platform forms; `tests/test_known_answer_{data,model,ops,platform,behaviour}.py`) and the 5 older-flow rules (`tests/test_known_answer_rules.py`). Recorded as `maturity: "L4"` in the catalogue from `eval_engines.VALIDATED`, which a test keeps equal to the tests' coverage |
 | Run API | `POST /evaluations/{id}/runs`, `GET /evaluations/{id}/engine`, `GET /evaluation-jobs/{job_id}`, `GET /evaluation-runs/{evidence_id}` |
 | UI | `/compliance/evaluations/[evaluationId]` calls the run API |
 | Worker and sandbox (P1) | Not on main. S1 worker API is WIP (`task/p1-s1-worker-api`), S2, S4 and job lifecycle are unmerged branches; S3 input broker and S5 supervisor/signer not started |
 
 Each engine is therefore at most "runs in the API process from an upload or a live probe". None runs unattended in an
-isolated worker, and none has been checked against a known-answer dataset.
+isolated worker, and each is validated against a hand-derived known-answer fixture (L4). Public benchmarks are still open.
 
 ### Maturity ladder used below
 
@@ -42,7 +42,7 @@ isolated worker, and none has been checked against a known-answer dataset.
 - **L4** validated: known-answer fixture or public benchmark reproduces the expected verdict
 - **L5** runs in the P1 worker sandbox, signed result
 
-Today: 61 at L1, assumed L2/L3 but unverified in this session; 0 at L4 or L5.
+Today: 61 at L4 (all runnable evaluations; L2/L3 unverified in this session); 0 at L5. The 61 are the 56 registry engines and the 5 rules.
 
 ## 3. Plan
 
