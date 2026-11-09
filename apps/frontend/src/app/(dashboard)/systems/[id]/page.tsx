@@ -265,7 +265,7 @@ function SystemFileBody({ id }: { id: string }) {
             <>
               <div className="flex h-2 overflow-hidden rounded-full bg-[var(--fm-line)]" aria-hidden="true">
                 <span className="bg-[var(--fm-ink)]" style={{ width: `${(gate.proven / total) * 100}%` }} />
-                <span style={{ width: `${(gate.attested / total) * 100}%`, background: 'repeating-linear-gradient(135deg, var(--fm-ink) 0 1px, transparent 1px 3px)' }} />
+                <span className="fm-tex" style={{ width: `${(gate.attested / total) * 100}%` }} />
               </div>
               <div className="flex flex-wrap gap-x-4 text-[12px] tabular-nums text-[var(--fm-ink2)]">
                 <span className="flex items-center gap-1.5"><i aria-hidden className="fm-cel proven" />{gate.proven} proven</span>

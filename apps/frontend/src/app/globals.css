@@ -111,7 +111,7 @@ body {
 .fm-strip::-webkit-scrollbar { display: none; }
 /* On phones the strips scroll sideways; the right-edge fade says there is more. */
 @media (max-width: 767.98px) {
-  .fm-strip { padding-right: 24px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+  .fm-strip { padding-right: 24px; scrollbar-width: thin; }
 }
 /* .pk-card is the packs pages' name for the same card. */
 .fm-card,
@@ -145,10 +145,13 @@ button.fm-cel { cursor: pointer; }
 button.fm-cel:focus-visible { outline: 2px solid var(--fm-ink); outline-offset: 2px; }
 .fm-cel.proven,
 .fm-cel.r3 { background: var(--fm-ink); }
-.fm-cel.estimated { background: radial-gradient(circle at 1.5px 1.5px, var(--fm-ink) 0.8px, transparent 1px) 0 0 / 3px 3px, #fff; }
-.fm-cel.attested { background: repeating-linear-gradient(135deg, var(--fm-ink) 0 1px, transparent 1px 3px); box-shadow: inset 0 0 0 1px var(--fm-ink); }
+.fm-cel.estimated, .fm-cel.attested, .fm-tex { position: relative; }
+/* Textures are drawn as an ink layer masked by a tiny SVG tile, so the colour stays a token and no gradient is used. */
+.fm-cel.estimated::before, .fm-cel.attested::before, .fm-tex::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--fm-ink); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Cpath d='M-1 1l2-2M0 3l3-3M2 4l2-2' stroke='black' stroke-width='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Cpath d='M-1 1l2-2M0 3l3-3M2 4l2-2' stroke='black' stroke-width='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; }
+.fm-cel.estimated::before { -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; }
+.fm-cel.attested { box-shadow: inset 0 0 0 1px var(--fm-ink); }
 /* Partially satisfies is half filled, not hatched: hatch means attested, and grids can show both legends. */
-.fm-cel.r2 { background: linear-gradient(to top, var(--fm-ink) 50%, transparent 50%); box-shadow: inset 0 0 0 1px var(--fm-ink); }
+.fm-cel.r2 { box-shadow: inset 0 -6px 0 var(--fm-ink), inset 0 0 0 1px var(--fm-ink); }
 .fm-cel.planned,
 .fm-cel.r1 { box-shadow: inset 0 0 0 1px var(--fm-ink); }
 .fm-cel.open { box-shadow: inset 0 0 0 1.5px var(--fm-brand); }
