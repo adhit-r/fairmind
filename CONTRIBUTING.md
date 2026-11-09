@@ -119,4 +119,4 @@ docs/          Architecture notes, ADRs, audits and plans
 
 Ask in [GitHub Discussions](https://github.com/adhit-r/fairmind/discussions) or comment on the issue you are working on.
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE) and that you will follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+On your first pull request, a bot asks you to accept the [Contributor License Agreement](CLA.md) by posting a comment; you keep the copyright in your work. Your contributions are distributed under the licenses in [LICENSING.md](LICENSING.md): Apache-2.0 for `apps/sdk`, `apps/cli` and `apps/mcp`, AGPL-3.0 for everything else. Please also follow the [Code of Conduct](CODE_OF_CONDUCT.md).
