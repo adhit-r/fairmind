@@ -7,7 +7,7 @@ name = "fairmind-backend"
 version = "0.1.0"
 description = "AI Governance Platform Backend"
 authors = [{name = "Fairmind Team", email = "support@fairmind.xyz"}]
-license = {text = "MIT"}
+license = {text = "AGPL-3.0-only"}
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [

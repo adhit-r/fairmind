@@ -22,7 +22,9 @@ authors:
     orcid: "https://orcid.org/0009-0004-1682-7958"
 repository-code: "https://github.com/adhit-r/fairmind"
 url: "https://www.fairmind.xyz"
-license: MIT
+license:
+  - AGPL-3.0-only
+  - Apache-2.0
 keywords:
   - ai-governance
   - ai-assurance

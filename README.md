@@ -10,7 +10,7 @@
 
 **Open-source agentic AI governance. Agents do the governance work; a person decides at every gate.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0 / Apache-2.0](https://img.shields.io/badge/license-AGPL--3.0%20%2F%20Apache--2.0-blue.svg)](LICENSING.md)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
 [![PyPI](https://img.shields.io/pypi/v/fairmind-mcp?label=PyPI)](https://pypi.org/project/fairmind-mcp/)
@@ -233,4 +233,4 @@ Metadata is in [CITATION.cff](CITATION.cff). Concept DOI: [10.5281/zenodo.239829
 
 ## License
 
-Created and maintained by [Axonome](https://www.fairmind.xyz/about). MIT licence; see [LICENSE](LICENSE).
+Created and maintained by [Axonome](https://www.fairmind.xyz/about). The platform is under the [AGPL-3.0](LICENSE); the Python SDK, CLI and MCP server are under [Apache-2.0](apps/sdk/LICENSE). A commercial license is available. See [LICENSING.md](LICENSING.md). Releases up to `v0.3.1-alpha` were MIT.
