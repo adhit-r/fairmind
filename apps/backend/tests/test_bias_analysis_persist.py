@@ -119,3 +119,28 @@ def test_advanced_analysis_is_stored_listed_and_scoped(tmp_database):
     # A judge id is not readable through the advanced route.
     assert client.get(f"{JUDGE}/analyses/{stored}").status_code == 404
 
+
+
+def _rows():
+    return [
+        {"gender": g, "region": r, "month": f"2026-{1 + i % 6:02d}-01", "approved": int((g == "M") ^ (i % 5 == 0)), "score": 0.3 + 0.4 * (g == "M") + 0.01 * (i % 7)}
+        for i, (g, r) in enumerate([(g, r) for g in ("M", "F") for r in ("n", "s") for _ in range(30)])
+    ]
+
+
+METHOD_BODIES = {  # the shapes the advanced-bias page builds from a CSV
+    "causal-analysis": lambda rows: {"data": rows, "treatment_variable": "score", "outcome_variable": "approved", "protected_attributes": ["gender"]},
+    "counterfactual-analysis": lambda rows: {"model_predictions": [{**r, "prediction": r["approved"]} for r in rows], "protected_attributes": ["gender"]},
+    "adversarial-testing": lambda rows: {"model_predictions": [{**r, "prediction": r["approved"]} for r in rows], "attack_vectors": ["attribute_perturbation"], "protected_attributes": ["gender"]},
+    "temporal-analysis": lambda rows: {"time_series_data": rows, "time_column": "month", "outcome_variable": "approved", "protected_attributes": ["gender"]},
+    "contextual-analysis": lambda rows: {"data": rows, "context_features": ["region"], "protected_attributes": ["gender"], "outcome_variable": "approved"},
+}
+
+
+@pytest.mark.parametrize("route", sorted(METHOD_BODIES))
+def test_each_method_accepts_the_csv_shape_and_stores(tmp_database, route):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    res = client.post(f"{ADV}/{route}", json={**METHOD_BODIES[route](_rows()), "system_id": system})
+    assert res.status_code == 200, res.text
+    assert client.get(f"{ADV}/systems/{system}/analyses").json()[0]["id"] == res.json()["stored_id"]
