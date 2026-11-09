@@ -1,7 +1,10 @@
 import { notFound } from 'next/navigation';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/page';
 import type { Metadata } from 'next';
+import { Status } from '../../../components/status';
 import { source } from '../../../lib/source';
 
 type PageProps = {
@@ -22,17 +25,16 @@ export default async function Page({ params }: PageProps) {
         owner: 'adhit-r',
         repo: 'fairmind',
         sha: 'main',
-        path: `apps/docs/content/docs/${slug?.length ? slug.join('/') : 'index'}.mdx`,
+        path: `apps/docs/content/docs/${page.file.path}`,
       }}
     >
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
-      <div className="evidence-rule" aria-label="Documentation evidence policy">
-        <strong>Claim boundary</strong>
-        <span>Product behavior is described from active code. Preview, fixture, metadata-only, and research states are labeled in the page.</span>
-      </div>
+      <a className="doc-md-link" href={`${page.url === '/docs' ? '/docs/index' : page.url}.mdx`}>
+        View as Markdown
+      </a>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents }} />
+        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Status }} />
       </DocsBody>
     </DocsPage>
   );

@@ -1,0 +1,112 @@
+---
+title: Govern your first agent
+description: Connect your agent platform, test the agent's behaviour and configuration, and read the release gate clause by clause.
+---
+
+<Status state="shipped">Works today for agents on Claude Managed Agents and for any agent FairMind can call over HTTP.</Status>
+
+By the end you have measured evidence on an agent's behaviour and its platform configuration, a release verdict, and the same verdict read against the EU AI Act.
+
+FairMind tests an agent two ways. **Behaviour tests** send it adversarial inputs and have your organisation's model judge the answers. **Configuration audits** read the platform the agent runs on, read-only, and check tool permissions, memory and sandboxing.
+
+<Steps>
+<Step>
+### Register the agent
+
+In **Onboard**, register the agent as an AI system: name, owner, risk tier and the frameworks that apply. The risk tier sets how much evidence a `go` needs. See [Register a system](/docs/journeys/register-system).
+</Step>
+
+<Step>
+### Set up the judge
+
+Behaviour tests need a model to judge the agent's answers. In **Organisation settings > AI provider**, choose one of the supported providers and enter its key. The key is encrypted at rest and never shown again.
+</Step>
+
+<Step>
+### Tell FairMind how to call the agent
+
+On the system's page, set **how FairMind calls this AI system**: its endpoint and any auth value. Behaviour tests send their inputs there.
+</Step>
+
+<Step>
+### Connect the agent platform
+
+For configuration audits, open **Organisation settings > Agent platform connections** and connect **Claude Managed Agents** with a platform key. FairMind reads agents, environments, vaults, memory stores, deployments and recent sessions with read-only calls. Vault credential values are write-only on the platform, so FairMind never sees them. Only owners and admins can change this setting.
+</Step>
+
+<Step>
+### Run the evaluations
+
+From the app, open the evaluation in the catalogue and run it. From code:
+
+<Tabs groupId="client" items={['Python SDK', 'MCP (in your coding agent)']} persist>
+<Tab value="Python SDK">
+```python title="govern_agent.py"
+from fairmind import FairMind
+
+fm = FairMind()
+agent = "<system id>"   # from fm.systems()
+
+# Behaviour tests: background jobs, the SDK waits for each one
+for evaluation in ["EV-SEC-01", "EV-SEC-02", "EV-SEC-04"]:   # direct and indirect injection, system prompt leakage
+    run = fm.run_evaluation(agent, evaluation)
+    print(evaluation, run["status"], run["summary"])
+
+# Configuration audit of the connected platform
+run = fm.run_evaluation(agent, "EV-SEC-27", source="connection")   # data exfiltration through agent tools
+print(run["status"], run["summary"])
+```
+</Tab>
+<Tab value="MCP (in your coding agent)">
+Ask in plain language once the [MCP server](/docs/build/mcp-server) is set up:
+
+> Run the prompt injection and system prompt leakage tests on the support agent, then audit its platform configuration for data exfiltration through tools.
+
+The agent calls `list_evaluations`, `describe_evaluation` and `run_evaluation` (with `use_connection` for the audit), and reports each result.
+</Tab>
+</Tabs>
+
+Each run is stored as **measured** evidence on the system with its method, inputs and the judge used. `passed`, `failed` and `insufficient` are all kept; an insufficient run says what was missing.
+</Step>
+
+<Step>
+### Read the gate
+
+```python
+gate = fm.gate(agent)
+print(gate["verdict"], gate["confidence"])
+
+eu = fm.clause_map(agent, frameworks=["EUAIA"])   # the same gate, read per EU AI Act clause
+```
+
+The verdict is `go`, `conditional_go` or `no_go`. The clause map shows, for each clause, which checks and evidence bear on it and how strongly. A mapping means the evidence is relevant to the clause, not that the clause is satisfied.
+</Step>
+
+<Step>
+### Decide
+
+Open the system's page, review the evidence and findings, and request a release decision. A reviewer approves or rejects it. Approval is refused while critical findings are open; fix them first with [Fix and retest](/docs/journeys/remediation-retest).
+</Step>
+</Steps>
+
+## What you have now
+
+- Measured evidence for each behaviour test and configuration audit, with its provenance.
+- A release verdict and confidence, and the same verdict read against the EU AI Act.
+- A decision record a reviewer signed off, or the findings that block one.
+
+## Find more evaluations
+
+There are 10 configuration audits and over 20 behaviour tests. List them with:
+
+```python
+for e in fm.evaluations(query="agent"):
+    print(e["id"], "runnable" if e["runnable"] else "evidence only", e["name"])
+```
+
+## Next
+
+<Cards>
+  <Card title="Block a risky release" href="/docs/build/release-gate-in-ci" description="Run the same tests and gate from CI." />
+  <Card title="Prepare for an audit" href="/docs/journeys/reports-approvals" description="Export a pack an auditor can verify offline." />
+</Cards>

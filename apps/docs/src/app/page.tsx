@@ -29,7 +29,7 @@ export default function HomePage() {
           FairMind connects AI systems, evaluations, evidence, controls, remediation, and human decisions without turning a test result into a compliance claim.
         </p>
         <div className="hero-actions">
-          <Link className="button button-primary" href="/docs/quickstart">Start the quickstart</Link>
+          <Link className="button button-primary" href="/docs/get-started/quickstart">Start the quickstart</Link>
           <Link className="button button-secondary" href="/docs">Understand the model</Link>
         </div>
       </section>
@@ -50,7 +50,7 @@ export default function HomePage() {
           <p>
             Every evaluator is described by its actual evidence boundary: validated, metadata-only, external-provider, interface-only, unavailable, or research-only.
           </p>
-          <Link className="text-link" href="/docs/concepts/capability-truth">Read the capability model</Link>
+          <Link className="text-link" href="/docs/get-started/status-and-limits">Read the capability model</Link>
         </div>
         <div className="capability-ledger">
           {CAPABILITIES.map(([name, status]) => (
@@ -66,7 +66,7 @@ export default function HomePage() {
         <p className="eyebrow">First useful outcome</p>
         <h2>Register one system. Record one defensible artifact.</h2>
         <p>The quickstart takes you from local setup to an evidence record with an explicit reviewer boundary.</p>
-        <Link className="button button-primary" href="/docs/quickstart">Open quickstart</Link>
+        <Link className="button button-primary" href="/docs/get-started/quickstart">Open quickstart</Link>
       </section>
     </main>
   );

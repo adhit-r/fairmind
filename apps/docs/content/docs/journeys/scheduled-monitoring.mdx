@@ -9,7 +9,7 @@ Your side pushes the snapshots. A scheduled job in your own infrastructure runs 
 
 ## Set it up
 
-1. Create an API key as in [Release gate in CI](/docs/workflows/release-gate-in-ci) and store it as the repository secret `FAIRMIND_API_KEY`. Store the API address as the variable `FAIRMIND_API_URL`.
+1. Create an API key as in [Release gate in CI](/docs/build/release-gate-in-ci) and store it as the repository secret `FAIRMIND_API_KEY`. Store the API address as the variable `FAIRMIND_API_URL`.
 2. Open the system file, go to the Operate stage and choose the expected cadence: daily, weekly or monthly. The default is weekly.
 3. Copy the workflow from **Schedule it**. It already contains the system id and a cron expression that matches the cadence.
 4. Set the variable `FAIRMIND_PREDICTION_COLUMN` (and `FAIRMIND_ATTRIBUTES` if the system has no snapshot yet) and provide a step that exports recent decisions to `artifacts/decisions.csv`.
