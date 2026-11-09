@@ -35668,8 +35668,8 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-SEC-03",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "SSDF218A|PW",
     "OWASPAG|ASI05"
@@ -35708,8 +35708,8 @@
    "commonControl": "FMC-MON-01",
    "pattern": "FP-EVA-07",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "OWASPAG|ASI10",
     "UKAICOP|P12",
@@ -35786,8 +35786,8 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-10",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "EUAIA|Art 5(1)(a)",
     "EUAIA|Art 5(1)(b)"
@@ -35824,8 +35824,8 @@
    "commonControl": "FMC-TRN-01",
    "pattern": "FP-COM-03",
    "pillar": "COMPLY",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "EUAIA|Art 50",
     "AIVERIFY|P1"
@@ -35918,8 +35918,8 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-COM-05",
    "pillar": "COMPLY",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/generative_ai_explainability.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Art 86",
     "NISTRMF|MEASURE 2.9",
@@ -35939,8 +35939,8 @@
    "commonControl": "FMC-REL-01",
    "pattern": "FP-GOV-06",
    "pillar": "GOVERN",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/benchmark_suite_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "NISTRMF|MEASURE 2.13",
     "ISO42001|A.6.2.4"
@@ -35958,8 +35958,8 @@
    "commonControl": "FMC-INC-01",
    "pattern": "FP-SEC-12",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Art 20",
     "UKAICOP|P11"
@@ -36051,8 +36051,8 @@
    "commonControl": "FMC-SLF-01",
    "pattern": "FP-SEC-13",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/evidence_authenticity_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "OWASPMCP|MCP08",
     "EUAIA|Art 12"
@@ -36070,8 +36070,8 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.4"
    ]
@@ -36088,8 +36088,8 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.5"
    ]
@@ -36138,8 +36138,8 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM05",
     "OWASPMCP|MCP05",
@@ -36159,8 +36159,8 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "OWASPLLM|LLM08",
     "OWASPMCP|MCP10"
@@ -36494,8 +36494,8 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-09",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "ATLAS|Reconnaissance",
     "ATLAS|Discovery",
@@ -36668,8 +36668,8 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Info integrity",
     "NISTADV|Misuse"
@@ -36725,8 +36725,8 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/benchmark_suite_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "AIVERIFY|P3",
     "NISTRMF|MEASURE 2.1"
@@ -36802,8 +36802,8 @@
    "commonControl": "FMC-RSK-02",
    "pattern": "FP-COM-05",
    "pillar": "COMPLY",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "EUAIA|Art 16",
     "AIVERIFY|P11"
@@ -36821,8 +36821,8 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-EVA-05",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/generative_ai_explainability.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "AIVERIFY|P2",
     "EUAIA|Art 86",
@@ -36878,8 +36878,8 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/model_provenance_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "ISO42001|A.7.5",
     "UKAICOP|P8"
@@ -36897,8 +36897,8 @@
    "commonControl": "FMC-LEG-01",
    "pattern": "FP-GOV-11",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "NIST600|IP"
    ]
@@ -36934,8 +36934,8 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-GOV-09",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "UKAICOP|P13",
     "NIST600|Data privacy"
@@ -37009,8 +37009,8 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.5"
    ]
@@ -37027,8 +37027,8 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.3"
    ]
@@ -37045,8 +37045,8 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.5"
    ]

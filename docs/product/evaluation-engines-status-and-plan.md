@@ -10,12 +10,12 @@ The code says otherwise:
 
 | Source of a result | Count | Where |
 |---|---|---|
-| Engine in the registry, file upload | 28 | `src/application/services/eval_engines/{data,model,ops}.py` |
-| Engine in the registry, live probe of the AI system with a judge | 18 | `eval_engines/behaviour.py` |
+| Engine in the registry, file upload (including sector suites and results read from stored runs) | 47 | `src/application/services/eval_engines/{data,model,ops,suites,assess}.py` |
+| Engine in the registry, live probe of the AI system with a judge | 22 | `eval_engines/behaviour.py` |
 | Engine in the registry, agent platform configuration audit | 10 | `eval_engines/platform.py` |
 | Result rule over an older flow (fairness run, monitoring run, environmental assessment) | 5 | `src/api/routers/evaluation_results.py` `RULES`: FAI-01, FAI-02, FAI-06, FAI-07, ENV-01 |
-| **Runnable today** | **61** | |
-| Not built | 48 | listed in section 4 |
+| **Runnable today** | **84** | |
+| Not built | 25 | listed in section 4 |
 
 So 40 evaluations marked "Not found" and 11 marked "Partial" already have engines, while several marked "Engine exists"
 (OVS-04 Explanation quality) have service code that no evaluation run calls.
@@ -42,7 +42,7 @@ isolated worker, and none has been checked against a known-answer dataset.
 - **L4** validated: known-answer fixture or public benchmark reproduces the expected verdict
 - **L5** runs in the P1 worker sandbox, signed result
 
-Today: 61 at L1, assumed L2/L3 but unverified in this session; 0 at L4 or L5.
+Today: 84 at L1, assumed L2/L3 but unverified in this session; 0 at L4 or L5.
 
 ## 3. Plan
 
@@ -50,12 +50,12 @@ Today: 61 at L1, assumed L2/L3 but unverified in this session; 0 at L4 or L5.
 
 Status: `scripts/export_pack_catalogue.py` now writes `engine` and `codeLocation` from the code, and
 `test_catalogue_engine_status_matches_the_code` fails when they drift. "Partial" now means related code with no runnable
-engine (13); the website reads 61 / 13 / 35. Still open: a UI run on a non-production stack (L3) and reproducing a
+engine (13); the website read 61 / 13 / 35 before phases 1 and 2 and now reads 84 / 2 / 23. Still open: a UI run on a non-production stack (L3) and reproducing a
 published benchmark result (L4 beyond hand calculations).
 
 1. Stop hand-maintaining `engine` in `catalogue.json`. Add a small script (or a step in the existing catalogue build)
    that writes `engine` from `REGISTRY` plus `evaluation_results.RULES`, and a test that fails when they disagree.
-   The website then shows 61 / 48 automatically.
+   The website then shows the runnable count automatically.
 2. Run the 24 DB-backed tests against a disposable local Postgres (never the Neon URL in `.env`).
 3. Per engine kind, one end-to-end run on the dev stack: upload or probe, evidence stored, verdict shown in the UI.
    Record the level per evaluation (L1 to L3) in the same generated field, so "partial" means something checkable.
@@ -105,9 +105,11 @@ Detectors, simulation platforms or restricted probe sets FairMind should not hos
 
 | Phase | Evaluations |
 |---|---|
-| 1 | USE-01, USE-02, USE-05, USE-07, USE-08, USE-09, REL-01, TST-09, INC-01, SLF-03, DAT-09, OVS-04, OVS-05 |
-| 2 | DEV-03, MON-02, TRN-01, DAT-10, PRV-05, FAI-08, SEC-09, RSK-02, SEC-08, OFF-07, SEC-26 |
+| 1 | USE-05 (needs OVS-03, an agent scenario from phase 3) |
+| 2 | none |
 | 3 | SEC-11, SEC-12, SEC-13, SEC-15, TST-05, TST-06, AGT-02, OVS-01, OVS-02, OVS-03, SEC-10, SLF-02, OVS-06, SEC-25, SEC-22, SEC-23, SEC-24, USE-06 |
 | 4 | OFF-01, OFF-02, OFF-03, TRN-02, OFF-04, OFF-05 |
 
-Total 48. After phases 1 and 2 the catalogue reaches 85 of 109 runnable without the worker.
+Total 25. Phases 1 and 2 are built (23 evaluations): 84 of 109 are runnable without the worker. USE-05 waits for OVS-03.
+
+Phase 1 and 2 notes: EV-OVS-04 and EV-OVS-05 read per-case measurements from the model (outputs with the top and bottom-ranked features removed; attributions of paired inputs) instead of calling `generative_ai_explainability.py`, which holds no data to score. The sector suites run their file-based components; behaviour tests that call the system (EV-TST-04, EV-RSK-01, EV-PRV-04) run on their own. EV-REL-01 is the one engine that reads FairMind's stored results (`Engine.collect`).
