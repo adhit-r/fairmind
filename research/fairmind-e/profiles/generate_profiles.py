@@ -114,7 +114,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "measured",
             "measurement_source": "rack PDU meters and per-socket RAPL counters",
-            "confidence_score": 0.93,
+            "confidence_score": 0.92,
             "uncertainty_pct": 6.0,
             "intensity_vs_baseline": 0.94,
             "evidence_refs_json": [
@@ -143,8 +143,8 @@ PROFILES: list[dict[str, Any]] = [
             "coverage_rate": 0.8333,
         },
         "rationale": (
-            "Metered PDU and RAPL evidence yields a 0.93 confidence score in the "
-            "measured band, and 38.3 kgCO2e for a classical training run sits well "
+            "Metered PDU and RAPL evidence scores 0.93, the measured class midpoint, "
+            "in the measured band, and 38.3 kgCO2e for a classical training run sits well "
             "inside the low tier. The (low, measured) cell resolves to go with nothing "
             "to block approval. ENV-4 is missing only because a per-request efficiency "
             "figure does not apply to a training-run functional unit."
@@ -163,12 +163,12 @@ PROFILES: list[dict[str, Any]] = [
             "the user question with a compact bi-encoder, retrieves candidate passages "
             "from a statute and case-law index, and returns re-ranked citations. Roughly "
             "twelve million queries were served in the June 2026 window.",
-            "The cloud provider's carbon footprint report for the retrieval node pool "
-            "supplies the energy figure, with Irish grid intensity for the location "
-            "figure and the provider's green-tariff residual mix for the market figure. "
-            "Provider figures were cross-checked against pod CPU-seconds; the residual "
-            "uncertainty is dominated by the provider's allocation method and "
-            "shared-node attribution.",
+            "Energy and carbon figures come from the cloud provider's carbon footprint "
+            "export for the tagged retrieval pods, which reports kilowatt-hours with Irish "
+            "grid intensity for the location figure and the provider's green-tariff "
+            "residual mix for the market figure. Engineering cross-checked the export "
+            "against pod CPU-seconds; the residual uncertainty is dominated by the "
+            "provider's shared-node allocation, which customers cannot audit.",
             "The declared boundary covers embedding, index search, and re-ranking for "
             "production queries. The nightly index rebuild is assessed separately and is "
             "excluded here.",
@@ -195,18 +195,18 @@ PROFILES: list[dict[str, Any]] = [
                 "pue": 1.2,
             },
             "provenance_class": "vendor_reported",
-            "measurement_source": "cloud provider carbon footprint report for the retrieval node pool",
-            "confidence_score": 0.5,
+            "measurement_source": "cloud provider carbon footprint export for the retrieval pods",
+            "confidence_score": 0.55,
             "uncertainty_pct": 22.0,
             "intensity_vs_baseline": 0.88,
             "evidence_refs_json": [
-                "provider-carbon-report-2026-06.csv",
+                "provider-carbon-export-2026-06.csv",
                 "green-tariff-residual-mix-2026.pdf",
             ],
         },
         "expected": {
             "provenance_class": "vendor_reported",
-            "confidence_score": 0.5,
+            "confidence_score": 0.50,
             "confidence_band": "estimated",
             "risk_tier": "low",
             "recommendation": "go",
@@ -224,9 +224,9 @@ PROFILES: list[dict[str, Any]] = [
             "coverage_rate": 1.0,
         },
         "rationale": (
-            "Provider-reported figures sit in the vendor_reported class, 0.50 in the "
-            "estimated band, and 0.0004 kgCO2e per 1000 requests is comfortably low "
-            "impact. The "
+            "Provider-reported figures score 0.50, the vendor_reported class midpoint, "
+            "in the estimated band, "
+            "and 0.0004 kgCO2e per 1000 requests is comfortably low impact. The "
             "(low, estimated) cell resolves to go, and the profile carries full "
             "ENV-1..6 coverage."
         ),
@@ -270,7 +270,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "manual",
             "measurement_source": "engineering FLOP worksheet",
-            "confidence_score": 0.3,
+            "confidence_score": 0.30,
             "uncertainty_pct": 45.0,
             "intensity_vs_baseline": 1.05,
             "mitigation_readiness": "missing",
@@ -278,7 +278,7 @@ PROFILES: list[dict[str, Any]] = [
         },
         "expected": {
             "provenance_class": "manual",
-            "confidence_score": 0.3,
+            "confidence_score": 0.30,
             "confidence_band": "unknown",
             "risk_tier": "low",
             "recommendation": "conditional_go",
@@ -347,7 +347,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "measured",
             "measurement_source": "rack PDU energy logs",
-            "confidence_score": 0.93,
+            "confidence_score": 0.90,
             "uncertainty_pct": 8.0,
             "intensity_vs_baseline": 1.10,
             "mitigations_json": [
@@ -431,7 +431,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "vendor_reported",
             "measurement_source": "cloud provider sustainability dashboard",
-            "confidence_score": 0.5,
+            "confidence_score": 0.88,
             "uncertainty_pct": 30.0,
             "intensity_vs_baseline": 1.02,
             "mitigations_json": [
@@ -450,7 +450,7 @@ PROFILES: list[dict[str, Any]] = [
         },
         "expected": {
             "provenance_class": "vendor_reported",
-            "confidence_score": 0.5,
+            "confidence_score": 0.50,
             "confidence_band": "estimated",
             "risk_tier": "medium",
             "recommendation": "conditional_go",
@@ -468,8 +468,8 @@ PROFILES: list[dict[str, Any]] = [
             "coverage_rate": 0.8333,
         },
         "rationale": (
-            "Vendor-reported dashboard evidence is fixed at 0.50, the vendor_reported "
-            "midpoint, whatever score the submitter attaches, landing in the "
+            "The claimed 0.88 confidence is recorded but not used: vendor-reported "
+            "dashboard evidence is scored at the 0.50 class midpoint, landing in the "
             "estimated band, while 0.0038 kgCO2e per 1000 requests is medium impact. "
             "The (medium, estimated) cell returns conditional_go and the dated "
             "hydro-region migration keeps it from blocking approval. The undisclosed "
@@ -520,14 +520,14 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "manual",
             "measurement_source": "sustainability-team estimate from published per-token figures",
-            "confidence_score": 0.3,
+            "confidence_score": 0.28,
             "uncertainty_pct": 40.0,
             "intensity_vs_baseline": 1.18,
             "evidence_refs_json": ["assistant-footprint-estimate-2026-06.xlsx"],
         },
         "expected": {
             "provenance_class": "manual",
-            "confidence_score": 0.3,
+            "confidence_score": 0.30,
             "confidence_band": "unknown",
             "risk_tier": "medium",
             "recommendation": "no_go",
@@ -594,7 +594,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "measured",
             "measurement_source": "node IPMI power telemetry",
-            "confidence_score": 0.93,
+            "confidence_score": 0.95,
             "uncertainty_pct": 5.0,
             "intensity_vs_baseline": 1.12,
             "mitigations_json": [
@@ -653,10 +653,11 @@ PROFILES: list[dict[str, Any]] = [
             "multilingual model across ten Indic languages, positioning it for "
             "government-service chat and voice interfaces. The five-week run used a "
             "rented GPU cluster located in a coal-heavy grid region.",
-            "Energy was not metered by the team. The figure comes from the cluster "
-            "provider's monthly carbon statement, which allocates facility energy to "
-            "tenants by scheduler GPU-hours against card TDP at an assumed 65 percent "
-            "utilisation, with national grid factors applied. The startup discloses retired verified carbon units covering "
+            "The startup did not meter energy. Its figures come from the GPU rental "
+            "provider's monthly sustainability statement, which reports energy and "
+            "emissions per tenant from the provider's own facility metering; the "
+            "method and meter data are not open to audit. The "
+            "startup discloses retired verified carbon units covering "
             "roughly the estimated footprint and treats that purchase as its primary "
             "environmental answer. Mitigation for the next run is described as planned, "
             "but no owner or target date has been documented.",
@@ -671,7 +672,7 @@ PROFILES: list[dict[str, Any]] = [
                 "description": "Continued pretraining of the 7B multilingual model across ten Indic languages on a rented GPU cluster.",
                 "includes": ["continued pretraining"],
                 "excludes": ["base checkpoint training", "instruction tuning", "serving"],
-                "assumptions": "Provider allocation by scheduler GPU-hours and card TDP; utilisation assumed at 65 percent.",
+                "assumptions": "Energy and emissions as stated in the provider's tenant sustainability statement; provider method not open to audit.",
             },
             "metrics": {
                 "total_kwh": 40600.0,
@@ -682,21 +683,21 @@ PROFILES: list[dict[str, Any]] = [
                 "carbon_intensity_basis": "average",
             },
             "provenance_class": "vendor_reported",
-            "measurement_source": "cluster provider monthly carbon statement, allocated by GPU-hours",
-            "confidence_score": 0.5,
+            "measurement_source": "GPU rental provider monthly sustainability statement",
+            "confidence_score": 0.52,
             "uncertainty_pct": 24.0,
             "intensity_vs_baseline": 1.20,
             "mitigation_readiness": "planned",
             "offsets_json": {"retired_kg_co2e": 30000.0},
             "evidence_refs_json": [
                 "scheduler-gpu-hours-2026-05.csv",
-                "provider-carbon-statement-2026-05.pdf",
+                "provider-sustainability-statement-2026-05.pdf",
                 "vcu-retirement-certificate.pdf",
             ],
         },
         "expected": {
             "provenance_class": "vendor_reported",
-            "confidence_score": 0.5,
+            "confidence_score": 0.50,
             "confidence_band": "estimated",
             "risk_tier": "high",
             "recommendation": "no_go",
@@ -714,7 +715,8 @@ PROFILES: list[dict[str, Any]] = [
             "coverage_rate": 0.8333,
         },
         "rationale": (
-            "The provider-reported figure is vendor_reported, 0.50 in the estimated band, and "
+            "The provider-reported statement scores 0.50, the vendor_reported class "
+            "midpoint, in the estimated band and "
             "28,623 kgCO2e is high impact, so the (high, estimated) cell returns "
             "no_go. Retired carbon units are disclosed but never improve confidence, "
             "tier, or the gate, and the absence of a dated mitigation is moot for a "
@@ -831,7 +833,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "manual",
             "measurement_source": "container CPU allocation worksheet",
-            "confidence_score": 0.3,
+            "confidence_score": 0.32,
             "uncertainty_pct": 42.0,
             "intensity_vs_baseline": 0.96,
             "mitigations_json": [
@@ -849,7 +851,7 @@ PROFILES: list[dict[str, Any]] = [
         },
         "expected": {
             "provenance_class": "manual",
-            "confidence_score": 0.3,
+            "confidence_score": 0.30,
             "confidence_band": "unknown",
             "risk_tier": "low",
             "recommendation": "conditional_go",
@@ -917,7 +919,7 @@ PROFILES: list[dict[str, Any]] = [
             },
             "provenance_class": "measured",
             "measurement_source": "smart-PDU telemetry per model endpoint",
-            "confidence_score": 0.93,
+            "confidence_score": 0.88,
             "uncertainty_pct": 7.0,
             "intensity_vs_baseline": 1.22,
             "exception": {
@@ -974,9 +976,9 @@ PROFILES: list[dict[str, Any]] = [
             "350-million-parameter encoder, processing about 38 million embedding "
             "requests in June 2026 across two regions, many of them long multi-page "
             "documents.",
-            "The hosted inference provider publishes per-request energy and carbon "
-            "figures for the encoder endpoint, which the gateway records together with "
-            "the provider's documented assumptions. "
+            "Energy and carbon figures come from the cloud provider's per-service carbon "
+            "report for the embedding gateway, which allocates the provider's figures to "
+            "the tagged service with assumptions customers cannot audit. "
             "Off-peak batching and a distilled encoder are both under discussion as "
             "reduction options, but neither has an owner or a target date, and no "
             "exception has been requested from the review board.",
@@ -1003,19 +1005,19 @@ PROFILES: list[dict[str, Any]] = [
                 "pue": 1.25,
             },
             "provenance_class": "vendor_reported",
-            "measurement_source": "hosted inference provider per-request carbon figures, recorded at the gateway",
-            "confidence_score": 0.5,
+            "measurement_source": "cloud provider per-service carbon report",
+            "confidence_score": 0.48,
             "uncertainty_pct": 20.0,
             "intensity_vs_baseline": 1.08,
             "mitigation_readiness": "planned",
             "evidence_refs_json": [
-                "provider-per-request-carbon-export-2026-06.csv",
-                "provider-methodology-note.pdf",
+                "provider-carbon-report-2026-06.csv",
+                "provider-allocation-assumptions-2026.pdf",
             ],
         },
         "expected": {
             "provenance_class": "vendor_reported",
-            "confidence_score": 0.5,
+            "confidence_score": 0.50,
             "confidence_band": "estimated",
             "risk_tier": "medium",
             "recommendation": "conditional_go",
@@ -1033,7 +1035,8 @@ PROFILES: list[dict[str, Any]] = [
             "coverage_rate": 0.8333,
         },
         "rationale": (
-            "Provider-published per-request figures are vendor_reported, 0.50 in the estimated band, and 0.004 "
+            "Provider-reported figures score 0.50, the vendor_reported class midpoint, "
+            "in the estimated band and 0.004 "
             "kgCO2e per 1000 requests is medium impact, so the (medium, estimated) "
             "cell returns conditional_go. The batching and distillation ideas carry no "
             "owner or date and no exception was requested, so the release is "

@@ -24,6 +24,8 @@ export interface AISystemSummary {
   stage: "onboard" | "assess" | "govern" | "remediate" | "operate"
   workspaceId?: string
   metadata?: Record<string, unknown>
+  /** When the system was registered; absent on the empty-state placeholder. */
+  createdAt?: string
 }
 
 interface WorkspaceRecord {
@@ -45,6 +47,7 @@ interface AISystemRecord {
     readiness?: number
   }
   metadata?: Record<string, unknown>
+  createdAt?: string
 }
 
 interface SelectedSystemStatus {
@@ -139,6 +142,7 @@ function normalizeSystem(record: AISystemRecord): AISystemSummary {
     readiness,
     stage,
     workspaceId: record.workspaceId,
+    createdAt: record.createdAt,
     metadata: {
       ...(record.metadata || {}),
       lifecycleSummary,

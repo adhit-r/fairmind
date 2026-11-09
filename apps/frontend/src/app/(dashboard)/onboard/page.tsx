@@ -60,7 +60,7 @@ export default function OnboardPage() {
     try {
       // Without answers (suggestions could not load) the tier is confirmed later on the system file.
       if (draft.body) await confirmApplicability(id, draft.body)
-      router.push(`/systems/${id}`)
+      router.push(`/systems/${id}/plan`)
     } catch (err) {
       setError(`System registered. The tier and rules were not recorded: ${err instanceof Error ? err.message : 'request failed'}`)
       setBusy(false)

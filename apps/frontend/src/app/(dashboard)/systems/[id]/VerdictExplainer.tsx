@@ -129,7 +129,7 @@ const STEP_LINK: Record<Exclude<GatePathStep['action'], 'attest'>, { label: stri
   fairness_run: { label: 'Open the test', href: '#first-verdict' },
   monitoring_snapshot: { label: 'Open monitoring', href: '#operate' },
   environmental_assessment: { label: 'Open assessment', href: '/ai-governance' },
-  evidence_upload: { label: 'Record evidence', href: '/evidence' },
+  evidence_upload: { label: 'Record evidence', href: '/evidence?view=artifacts' },
 }
 
 function StepAction({ step, primary, onAttest, onOpen }: { step: GatePathStep; primary: boolean; onAttest?: (check: GateCheck['key']) => void; onOpen?: (href: string) => void }) {

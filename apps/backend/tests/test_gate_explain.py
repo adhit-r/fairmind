@@ -102,6 +102,13 @@ def test_go_is_not_promised_past_a_failing_measured_check():
     assert "Go is not reachable while a measured check fails; it needs a passing re-run." in path["notes"]
 
 
+def test_each_check_names_the_class_of_the_record_it_read():
+    manual = {"id": "ho", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T00:00:00+00:00"}
+    checks = {c["key"]: c for c in release_gate("medium", [PASSING_RUN, manual], environmental_assessed=True, now=NOW)["checks"]}
+    assert (checks["fairness"]["evidenceClass"], checks["human_oversight"]["evidenceClass"], checks["monitoring"]["evidenceClass"]) == ("measured", "manual", None)
+    assert checks["environmental"]["evidenceClass"] == "tool_estimated" and checks["environmental"]["evidenceId"] is None  # classed from its assessment
+
+
 def test_effective_tier_explain_and_reasons():
     lowered = {"suggestedTier": "high", "tier": "medium", "tierBelowSuggestion": True, "overrideAcceptedBy": None, "confirmedBy": "a@x.in", "confirmedAt": "2026-11-07T00:00:00Z", "reason": "Only used for internal triage.", "tierRules": [{"id": "T1"}]}
     assert effective_tier("medium", lowered) == "high"

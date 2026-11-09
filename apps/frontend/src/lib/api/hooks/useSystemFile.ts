@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
+import type { CellState } from '@/components/ui/matrix'
 
 const GOV = '/api/v1/ai-governance'
 
@@ -61,7 +62,7 @@ export interface ApprovalRequestRecord {
 export interface ApprovalStatus {
   systemId: string
   request: ApprovalRequestRecord | null
-  decisions: Array<{ id: string; decision: string; decidedBy?: string | null; notes?: string | null; createdAt?: string }>
+  decisions: Array<{ id: string; decision: string; decided_by?: string | null; notes?: string | null; createdAt?: string }>
 }
 
 export interface RemediationStatus {
@@ -89,6 +90,12 @@ export interface GateCheck {
   confidence: number
   evidenceId: string | null
   detail: { all_checks_pass?: boolean | null; rows?: number; attributes?: string[] } | null
+  /** The provenance class of the record the check read; null when nothing current is on file. Absent in payloads older than the field. */
+  evidenceClass?: string | null
+  /** The monitoring snapshot is older than its cadence allows; the check reads open. */
+  stale?: true
+  /** A measured or tool-estimated record that fails its own thresholds. */
+  fails?: true
 }
 
 export interface ReleaseGate {
@@ -100,6 +107,10 @@ export interface ReleaseGate {
   proven: number
   attested: number
   open: number
+  /** The latest approval request's status, or not_requested. */
+  approvalStatus?: string
+  systemId?: string
+  riskTier?: SystemRecord['riskTier']
   /** Published policy rules that fail for this system once released. */
   policy?: { blocking: PolicyRuleFailure[]; warnings: PolicyRuleFailure[] }
   /** How the verdict was reached: the tier it was computed on and that tier's row of the decision matrix. */
@@ -333,7 +344,9 @@ export interface ClauseMapFramework {
     title: string
     group: string | null
     state: 'proven' | 'attested' | 'open'
-    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string }>
+    /** The grid state derived on the server from the contributing checks' class, result and freshness. */
+    cell: CellState
+    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string; evidenceClass?: GateCheck['evidenceClass']; stale?: true; fails?: true }>
   }>
 }
 

@@ -684,7 +684,7 @@ def release_gate(
         if key == "environmental" and environmental_assessed and not matching:
             assessment = environmental_assessed if isinstance(environmental_assessed, dict) else {"provenance_class": "tool_estimated", "confidence": 0.85}
             matching = [{"evidenceType": "environmental", "confidence": assessment["confidence"], "metadata": {"provenance_class": assessment["provenance_class"]}}]
-        state, confidence, evidence_id, detail = "open", 0.0, None, None
+        state, confidence, evidence_id, detail, evidence_class = "open", 0.0, None, None, None
         stale_for = None
         if key == "monitoring" and monitoring_cadence_hours:
             times = [t for r in matching if _provenance(r) in PROVEN_CLASSES and float(r.get("confidence") or 0.0) >= 0.70 for t in [_record_time(r)] if t]
@@ -695,7 +695,7 @@ def release_gate(
                     reasons.append(f"Latest monitoring snapshot is {_span(age_hours)} old; the cadence is {_span(monitoring_cadence_hours)}")
         if matching and stale_for is None:
             record = max(matching, key=lambda r: (_record_time(r) or _NO_TIME, float(r.get("confidence") or 0.0)))
-            prov = _provenance(record)
+            prov = evidence_class = _provenance(record)
             raw = float(record.get("confidence") or 0.0)
             confidence = cap_confidence_for_provenance(raw, prov) if prov in PROVEN_CLASSES else min(cap_confidence_for_provenance(raw, "manual"), ATTESTATION_CONFIDENCE)
             state = "proven" if prov in PROVEN_CLASSES and confidence >= 0.70 else "attested"
@@ -705,7 +705,12 @@ def release_gate(
                 detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
                 if content.get("all_checks_pass") is False:
                     reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
-        checks.append({"key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "detail": detail, **({"stale": True} if stale_for is not None else {})})
+        checks.append({
+            "key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "evidenceClass": evidence_class, "detail": detail,
+            **({"stale": True} if stale_for is not None else {}),
+            # detail exists only for measured or tool-estimated fairness and monitoring records
+            **({"fails": True} if detail and detail["all_checks_pass"] is False else {}),
+        })
 
     overall = round(sum(c["confidence"] for c in checks) / len(checks), 2) if checks else 0.0
     verdict = get_recommendation(TIER_TO_IMPACT.get(str(risk_tier).lower(), "high"), overall)

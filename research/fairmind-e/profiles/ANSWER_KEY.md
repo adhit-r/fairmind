@@ -43,7 +43,7 @@ not.
 - Coverage rate: 0.8333
 - Mitigation design: Go cell: no mitigation required; approval is not blocking.
 
-Metered PDU and RAPL evidence yields a 0.93 confidence score in the measured band, and 38.3 kgCO2e for a classical training run sits well inside the low tier. The (low, measured) cell resolves to go with nothing to block approval. ENV-4 is missing only because a per-request efficiency figure does not apply to a training-run functional unit.
+Metered PDU and RAPL evidence scores 0.93, the measured class midpoint, in the measured band, and 38.3 kgCO2e for a classical training run sits well inside the low tier. The (low, measured) cell resolves to go with nothing to block approval. ENV-4 is missing only because a per-request efficiency figure does not apply to a training-run functional unit.
 
 ## P02: LexRetrieve statute and case-law RAG search
 
@@ -58,7 +58,7 @@ Metered PDU and RAPL evidence yields a 0.93 confidence score in the measured ban
 - Coverage rate: 1
 - Mitigation design: Go cell: no mitigation required; approval is not blocking.
 
-Provider-reported figures sit in the vendor_reported class, 0.50 in the estimated band, and 0.0004 kgCO2e per 1000 requests is comfortably low impact. The (low, estimated) cell resolves to go, and the profile carries full ENV-1..6 coverage.
+Provider-reported figures score 0.50, the vendor_reported class midpoint, in the estimated band, and 0.0004 kgCO2e per 1000 requests is comfortably low impact. The (low, estimated) cell resolves to go, and the profile carries full ENV-1..6 coverage.
 
 ## P03: TalentSift resume screening ranker
 
@@ -103,7 +103,7 @@ Metered fine-tune evidence scores 0.93 in the measured band and 1350 kgCO2e sits
 - Coverage rate: 0.8333
 - Mitigation design: Dated mitigation documented: approval_blocking is false (contrast with P12).
 
-Vendor-reported dashboard evidence is fixed at 0.50, the vendor_reported midpoint, whatever score the submitter attaches, landing in the estimated band, while 0.0038 kgCO2e per 1000 requests is medium impact. The (medium, estimated) cell returns conditional_go and the dated hydro-region migration keeps it from blocking approval. The undisclosed kilowatt-hours leave ENV-2 uncovered.
+The claimed 0.88 confidence is recorded but not used: vendor-reported dashboard evidence is scored at the 0.50 class midpoint, landing in the estimated band, while 0.0038 kgCO2e per 1000 requests is medium impact. The (medium, estimated) cell returns conditional_go and the dated hydro-region migration keeps it from blocking approval. The undisclosed kilowatt-hours leave ENV-2 uncovered.
 
 ## P06: Workspace chat assistant serving
 
@@ -148,7 +148,7 @@ IPMI-metered training evidence scores 0.93 in the measured band and 62,320 kgCO2
 - Coverage rate: 0.8333
 - Mitigation design: No_go cell: approval_blocking is true; disclosed offsets deliberately do not rescue the gate.
 
-The provider-reported figure is vendor_reported, 0.50 in the estimated band, and 28,623 kgCO2e is high impact, so the (high, estimated) cell returns no_go. Retired carbon units are disclosed but never improve confidence, tier, or the gate, and the absence of a dated mitigation is moot for a no_go, which always blocks approval.
+The provider-reported statement scores 0.50, the vendor_reported class midpoint, in the estimated band and 28,623 kgCO2e is high impact, so the (high, estimated) cell returns no_go. Retired carbon units are disclosed but never improve confidence, tier, or the gate, and the absence of a dated mitigation is moot for a no_go, which always blocks approval.
 
 ## P09: Third-party document-intelligence API
 
@@ -208,4 +208,4 @@ Fully metered serving evidence scores 0.93 in the measured band and 14.5 kgCO2e 
 - Coverage rate: 0.8333
 - Mitigation design: Conditional_go with undated intentions only: approval_blocking is true (contrast with P05).
 
-Provider-published per-request figures are vendor_reported, 0.50 in the estimated band, and 0.004 kgCO2e per 1000 requests is medium impact, so the (medium, estimated) cell returns conditional_go. The batching and distillation ideas carry no owner or date and no exception was requested, so the release is approval-blocking, unlike P05.
+Provider-reported figures score 0.50, the vendor_reported class midpoint, in the estimated band and 0.004 kgCO2e per 1000 requests is medium impact, so the (medium, estimated) cell returns conditional_go. The batching and distillation ideas carry no owner or date and no exception was requested, so the release is approval-blocking, unlike P05.

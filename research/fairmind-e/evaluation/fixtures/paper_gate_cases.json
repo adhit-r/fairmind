@@ -110,7 +110,7 @@
     },
     {
       "id": "vendor_low_inference_go",
-      "description": "Vendor-reported low-impact inference passes, with confidence capped.",
+      "description": "Vendor-reported low-impact inference passes at the vendor class midpoint confidence.",
       "expected": {
         "recommendation": "go",
         "approval_blocking": false,
@@ -163,13 +163,13 @@
       }
     },
     {
-      "id": "tool_high_llm_conditional_blocked",
-      "description": "Tool-estimated high-impact LLM inference resolves to conditional_go (high confidence band) and stays blocked until the planned mitigation is documented.",
+      "id": "vendor_high_llm_no_go",
+      "description": "Vendor-reported high-impact LLM inference is blocked when confidence is estimated.",
       "expected": {
-        "recommendation": "conditional_go",
+        "recommendation": "no_go",
         "approval_blocking": true,
         "impact_tier": "high",
-        "confidence_score": 0.72
+        "confidence_score": 0.5
       },
       "assessment": {
         "boundary_json": {"scope": "llm_inference", "region": "eu-central-1"},
@@ -182,11 +182,11 @@
           "total_kg_co2e_market": 710.0,
           "kg_co2e_per_1m_tokens": 12.5
         },
-        "provenance_class": "tool_estimated",
+        "provenance_class": "vendor_reported",
         "uncertainty_pct": 32.0,
         "confidence_score": 0.65,
         "mitigation_readiness": "planned",
-        "evidence_refs_json": ["evidence://ecologits/llm-high"]
+        "evidence_refs_json": ["evidence://cloud-billing/llm-high"]
       }
     },
     {
@@ -358,7 +358,7 @@
     },
     {
       "id": "vendor_claimed_high_confidence_capped",
-      "description": "Vendor high-impact fine-tune remains no-go despite claimed high confidence.",
+      "description": "Vendor high-impact fine-tune remains no-go; the claimed 0.99 confidence is recorded but ignored.",
       "expected": {
         "recommendation": "no_go",
         "approval_blocking": true,

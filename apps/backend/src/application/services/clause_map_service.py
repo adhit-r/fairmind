@@ -53,7 +53,40 @@ def _catalogue() -> Dict[str, Any]:
         req = requirements.get(entry["key"])
         if req and req.get("active", True):
             by_control.setdefault(entry["commonControl"], []).append({**entry, "requirement": req})
-    return {"frameworks": frameworks, "by_control": by_control}
+    # raw lists for GET /packs/controls
+    return {"frameworks": frameworks, "by_control": by_control, "commonControls": data["commonControls"], "crosswalk": data["crosswalk"]}
+
+
+# a clause cell is as good as its best-evidenced check, unless one of them fails
+CELL_RANK = ("proven", "estimated", "attested", "stale", "open")
+
+
+def cell_state(check: Dict[str, Any]) -> str:
+    """The grid cell for one gate check: fails, stale, open, attested, estimated or proven.
+
+    ``fails`` is set by release_gate when a measured or tool-estimated record reports all_checks_pass False.
+    """
+    cls = check.get("evidenceClass")
+    if check.get("fails"):
+        return "fails"
+    if check.get("stale"):
+        return "stale"
+    if check["state"] == "open":
+        return "open"
+    if cls == "manual":
+        return "attested"
+    if cls == "tool_estimated":
+        return "estimated"
+    if check["state"] == "proven" and cls == "measured":
+        return "proven"
+    return "estimated"
+
+
+def tracked_requirements(framework_key: str) -> List[str]:
+    """Keys of one framework's active requirements that the gate checks speak to, in clause order."""
+    cat = _catalogue()
+    reqs = {e["key"]: e["requirement"] for control in CHECK_CONTROLS.values() for e in cat["by_control"].get(control, []) if e["requirement"]["framework"] == framework_key}
+    return sorted(reqs, key=lambda k: _natural(reqs[k]["control"]))
 
 
 def framework_keys(requested: Optional[List[str]]) -> Optional[List[str]]:
@@ -78,7 +111,11 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
                 continue
             fw = per_framework.setdefault(fw_key, {"key": fw_key, "name": cat["frameworks"].get(fw_key, {}).get("name", fw_key), "clauses": {}})
             clause = fw["clauses"].setdefault(req["key"], {"key": req["key"], "control": req["control"], "title": req["title"], "group": req.get("group"), "checks": []})
-            clause["checks"].append({"check": check_key, "label": check.get("label"), "state": check["state"], "confidence": check.get("confidence", 0.0), "evidenceId": check.get("evidenceId"), "relation": entry["relation"]})
+            clause["checks"].append({
+                "check": check_key, "label": check.get("label"), "state": check["state"], "confidence": check.get("confidence", 0.0),
+                "evidenceId": check.get("evidenceId"), "evidenceClass": check.get("evidenceClass"), "relation": entry["relation"], "cell": cell_state(check),
+                **{flag: True for flag in ("stale", "fails") if check.get(flag)},
+            })
 
     out: List[Dict[str, Any]] = []
     for fw_key, fw in per_framework.items():
@@ -88,6 +125,8 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             states = {c["state"] for c in clause["checks"]}
             # a clause is as good as its best-evidenced check: proven beats attested beats open
             clause["state"] = "proven" if "proven" in states else "attested" if "attested" in states else "open"
+            cells = {c["cell"] for c in clause["checks"]}
+            clause["cell"] = "fails" if "fails" in cells else min(cells, key=CELL_RANK.index)
             clauses.append(clause)
         clauses.sort(key=lambda c: _natural(c["control"]))
         counts = {s: sum(1 for c in clauses if c["state"] == s) for s in ("proven", "attested", "open")}

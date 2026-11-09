@@ -169,6 +169,8 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/evidence/${evidenceId}/control-mappings`,
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
+    estateGates: '/api/v1/ai-governance/estate/gates',
+    frameworkSystems: (frameworkKey: string) => `/api/v1/ai-governance/frameworks/${encodeURIComponent(frameworkKey)}/systems`,
   },
 
   // Datasets
@@ -238,6 +240,7 @@ export const API_ENDPOINTS = {
     bundles: '/api/v1/packs/bundles',
     installBundle: (bundleId: string) => `/api/v1/packs/bundles/${encodeURIComponent(bundleId)}/install`,
     journeys: '/api/v1/packs/journeys',
+    controls: '/api/v1/packs/controls',
     journey: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}`,
     installFramework: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}/install`,
     evaluations: '/api/v1/packs/evaluations',

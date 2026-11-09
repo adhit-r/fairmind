@@ -14,25 +14,25 @@ Claim under test: FairMind-E makes environmental release decisions machine-check
 ## Expected Recommendations
 
 - `go`: 3
-- `conditional_go`: 7
-- `no_go`: 4
+- `conditional_go`: 6
+- `no_go`: 5
 
 ## Actual Recommendations
 
 - `go`: 3
-- `conditional_go`: 7
-- `no_go`: 4
+- `conditional_go`: 6
+- `no_go`: 5
 
 ## Baseline Comparison
 
 | Gate | Exact Matches | Exact Accuracy | Recommendation Matches | Approval-Blocking Matches |
 | --- | ---: | ---: | ---: | ---: |
-| carbon_only_gate | 6/14 | 42.9% | 7/14 | 10/14 |
+| carbon_only_gate | 7/14 | 50.0% | 8/14 | 10/14 |
 | fairmind_e | 14/14 | 100.0% | 14/14 | 14/14 |
-| generic_sustainability_score | 5/14 | 35.7% | 7/14 | 7/14 |
+| generic_sustainability_score | 6/14 | 42.9% | 8/14 | 7/14 |
 | no_environmental_gate | 3/14 | 21.4% | 3/14 | 6/14 |
 | no_exception_path | 13/14 | 92.9% | 14/14 | 13/14 |
-| no_mitigation_review_gate | 10/14 | 71.4% | 14/14 | 10/14 |
+| no_mitigation_review_gate | 11/14 | 78.6% | 14/14 | 11/14 |
 | offset_credit_gate | 13/14 | 92.9% | 13/14 | 13/14 |
 
 ## Failures
