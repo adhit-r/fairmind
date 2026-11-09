@@ -8,6 +8,8 @@ PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops coun
 POST /systems/{id}/attestations            a person states a check is satisfied; manual evidence
 GET  /systems/{id}/gate                    verdict, confidence, check states, the release decision status, why, and the path to the next verdict
 GET  /systems/{id}/clause-map              the gate per framework clause, scoped to the confirmed frameworks
+GET  /estate/gates                         the gate of every system in the caller's org, without explain and path
+GET  /frameworks/{key}/systems             per requirement, the cell of every system that confirmed the framework
 
 Mounted under /api/v1/ai-governance next to the governance router and sharing
 its org scoping and system access rules.
@@ -41,11 +43,12 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
-from src.application.services.clause_map_service import clause_map
+from src.application.services.clause_map_service import _catalogue, clause_map, tracked_requirements
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
+    TIERS,
     FairnessRunError,
     confirm_attributes,
     effective_tier,
@@ -415,6 +418,72 @@ async def get_release_gate(
     _require_system_access(db, system_id, current_user)
     system = _system_row(db, system_id)
     return _gate_payload(db, system_id, system.risk_tier)
+
+
+def _org_systems(db: Session, http: Request) -> List[Any]:
+    return db.execute(text("SELECT id, name, risk_tier FROM governance_ai_systems WHERE org_id = :org"), {"org": _caller_org(http)}).fetchall()
+
+
+@router.get("/estate/gates")
+async def get_estate_gates(
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The release gate of every system in the caller's org: verdict, confidence and checks, without explain and path."""
+    _ensure_tables(db)
+    out = []
+    # ponytail: N gate computations (~10 queries each); precompute on evidence write if estates pass ~100 systems.
+    for row in _org_systems(db, http):
+        gate = _gate_payload(db, row.id, row.risk_tier)
+        out.append({
+            "systemId": row.id, "verdict": gate["verdict"], "confidence": gate["confidence"], "band": gate["band"], "approvalStatus": gate["approvalStatus"],
+            "checks": [{k: v for k, v in c.items() if k != "detail"} for c in gate["checks"]],
+        })
+    return out
+
+
+@router.get("/frameworks/{framework_key}/systems")
+async def get_framework_systems(
+    framework_key: str,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Every requirement of one framework the gate speaks to, with one cell per system that confirmed the framework.
+
+    Systems run from the highest tier down; ``cells`` follows that order. Systems with no confirmed applicability
+    count as ``unconfirmed``, confirmed ones without this framework as ``notInScope``.
+    """
+    framework = _catalogue()["frameworks"].get(framework_key)
+    if not framework:
+        raise HTTPException(status_code=404, detail="Framework not found")
+    _ensure_tables(db)
+    systems, unconfirmed, not_in_scope = [], 0, 0
+    for row in _org_systems(db, http):
+        applicability, _ = _system_applicability(db, row.id)
+        if applicability is None:
+            unconfirmed += 1
+        elif any(isinstance(f, dict) and f.get("key") == framework_key for f in applicability.get("frameworks") or []):
+            systems.append(row)
+        else:
+            not_in_scope += 1
+    systems.sort(key=lambda r: (-TIERS.index(effective_tier(r.risk_tier, None)), r.name))
+    # ponytail: one gate computation per system, as /estate/gates.
+    clauses = []
+    for row in systems:
+        payload = clause_map(_gate_payload(db, row.id, row.risk_tier), frameworks=[framework_key])
+        clauses.append({c["key"]: c for fw in payload["frameworks"] for c in fw["clauses"]})
+    return {
+        "framework": {"key": framework_key, "name": framework.get("name") or framework_key},
+        "systems": [{"id": r.id, "name": r.name, "riskTier": r.risk_tier} for r in systems],
+        "unconfirmed": unconfirmed,
+        "notInScope": not_in_scope,
+        "requirements": [
+            {"key": key, "cells": [{"state": by_key[key]["cell"], "checks": by_key[key]["checks"]} if key in by_key else None for by_key in clauses]}
+            for key in tracked_requirements(framework_key)
+        ],
+    }
 
 
 def _insert_evidence(db: Session, http: Request, current_user: TokenData, system_id: str, *, evidence_type: str, title: str, source: str, content: Dict[str, Any], confidence: float, metadata: Dict[str, Any]) -> str:

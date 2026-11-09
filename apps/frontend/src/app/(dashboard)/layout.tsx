@@ -11,7 +11,8 @@ import { SystemBreadcrumb } from '@/components/layout/SystemBreadcrumb'
 // Pages rebuilt in the new shell carry their own context. Every other page is a
 // legacy tool page and gets a one-line breadcrumb back to the system file.
 const NEW_SHELL_PAGES = new Set(['/dashboard', '/onboard', '/integrations'])
-const inNewShell = (pathname: string) => NEW_SHELL_PAGES.has(pathname) || pathname.startsWith('/systems/')
+const inNewShell = (pathname: string) =>
+  NEW_SHELL_PAGES.has(pathname) || pathname.startsWith('/systems/') || pathname === '/frameworks' || pathname.startsWith('/frameworks/')
 
 export default function DashboardLayout({
   children,

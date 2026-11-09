@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { installGridFixtures } from './grid-fixtures'
 
 test.describe('Navigation', () => {
   test('should navigate to all main pages', async ({ page }) => {
@@ -62,3 +63,12 @@ test.describe('Navigation', () => {
   })
 })
 
+
+test.describe('Library links', () => {
+  test('Frameworks opens the frameworks grid, not the packs hub', async ({ page }) => {
+    await installGridFixtures(page)
+    await page.goto('/dashboard')
+    const link = page.locator('aside').getByRole('link', { name: 'Frameworks', exact: true })
+    await expect(link).toHaveAttribute('href', '/frameworks', { timeout: 30_000 })
+  })
+})
