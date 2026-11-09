@@ -109,6 +109,10 @@ body {
 }
 .fm-strip { scrollbar-width: none; }
 .fm-strip::-webkit-scrollbar { display: none; }
+/* On phones the strips scroll sideways; the right-edge fade says there is more. */
+@media (max-width: 767.98px) {
+  .fm-strip { padding-right: 24px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+}
 /* .pk-card is the packs pages' name for the same card. */
 .fm-card,
 .pk-card {

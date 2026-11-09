@@ -62,7 +62,7 @@ export interface ApprovalRequestRecord {
 export interface ApprovalStatus {
   systemId: string
   request: ApprovalRequestRecord | null
-  decisions: Array<{ id: string; decision: string; decidedBy?: string | null; notes?: string | null; createdAt?: string }>
+  decisions: Array<{ id: string; decision: string; decided_by?: string | null; notes?: string | null; createdAt?: string }>
 }
 
 export interface RemediationStatus {

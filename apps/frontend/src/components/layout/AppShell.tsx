@@ -48,7 +48,10 @@ function Spine() {
   const decisions = requests.length + waitingRuns.length
   const pathname = usePathname()
   const params = useSearchParams()
-  const activeStage = pathname === '/dashboard' ? params.get('stage') : null
+  // On a system page the station is that system's stage, or Decision while its release decision is pending.
+  const systemId = pathname.match(/^\/systems\/([^/]+)/)?.[1]
+  const viewed = systemId ? systems.find((s) => s.id === decodeURIComponent(systemId)) : undefined
+  const activeStage = pathname === '/dashboard' ? params.get('stage') : viewed ? (requests.some((r) => r.entity_id === viewed.id) ? 'decision' : viewed.stage) : null
   const counts = systems.reduce<Record<string, number>>((acc, s) => {
     acc[s.stage] = (acc[s.stage] ?? 0) + 1
     return acc
@@ -68,6 +71,7 @@ function Spine() {
           <Link
             key={s.key}
             href={'href' in s && s.href ? s.href : `/dashboard?stage=${s.key}`}
+            aria-current={on ? 'step' : undefined}
             className={cn(
               'relative flex h-[34px] items-center gap-3 pr-2.5 text-[13px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]',
               'max-md:h-8 max-md:flex-none max-md:gap-2 max-md:rounded-full max-md:border max-md:border-[var(--fm-line)] max-md:bg-white max-md:px-2.5',

@@ -33,6 +33,7 @@ test.describe('Navigation', () => {
   })
 
   test('should have sidebar navigation', async ({ page }) => {
+    await installGridFixtures(page)
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
     

@@ -213,14 +213,6 @@ function FrameworkGrid() {
                       </span>
                       <span className="text-[12px] text-[var(--fm-ink2)]">
                         {x.evidenceClass ? classLabel(x.evidenceClass) : 'Nothing current on file'} · <span className="font-mono">{x.confidence.toFixed(2)}</span>
-                        {x.evidenceId && (
-                          <>
-                            {' · '}
-                            <Link className={LINK} href={`/evidence?item=${encodeURIComponent(x.evidenceId)}`}>
-                              Open evidence
-                            </Link>
-                          </>
-                        )}
                       </span>
                     </div>
                   ))
