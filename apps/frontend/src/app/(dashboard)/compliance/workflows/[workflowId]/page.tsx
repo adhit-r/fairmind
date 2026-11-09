@@ -8,12 +8,14 @@ import 'reactflow/dist/style.css'
 import { needsPerson, usePackActions, useRun, useWorkflow, versionName } from '@/lib/api/hooks/usePacks'
 import { FitWhenReady, KIND_LABEL, KindIcon, flowGraph, nodeTypes, type NodeState } from '@/components/packs/flow'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, StatusPill, StagePill, cap, when } from '@/components/packs/parts'
+import { useSystemContext } from '@/components/workflow/SystemContext'
 import { cn } from '@/lib/utils'
 
 export default function WorkflowPage() {
   const { workflowId } = useParams<{ workflowId: string }>()
   const router = useRouter()
   const { startRun, createDraft } = usePackActions()
+  const { selectedSystem } = useSystemContext()
   const wf = useWorkflow(workflowId)
   const run = useRun(wf.data?.latestRun?.id)
   const [overlay, setOverlay] = useState(true)
@@ -38,7 +40,7 @@ export default function WorkflowPage() {
     if (!wf.data) return
     setStarting(true)
     setFailure(null)
-    const res = await startRun(wf.data.id)
+    const res = await startRun(wf.data.id, selectedSystem.id || undefined)
     setStarting(false)
     wf.reload()
     if (res.error || !res.data) setFailure(res.error ?? 'The run could not be started.')

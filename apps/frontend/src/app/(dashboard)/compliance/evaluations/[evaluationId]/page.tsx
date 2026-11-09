@@ -17,7 +17,7 @@ import {
   type EvaluationJob,
 } from '@/lib/api/hooks/usePacks'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
+import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
 
 const FIELD = 'w-full rounded-[10px] border border-[var(--fm-line)] bg-white px-3 py-2 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none'
 const ACCEPT: Record<string, string> = { csv: '.csv,text/csv', text: '.txt,.md,.env,.yaml,.yml,.json,.log,text/plain', json: '.json,application/json', binary: '' }
@@ -305,7 +305,7 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
         </select>
         {systems.length === 0 && (
           <span className={`text-xs ${MUTED}`}>
-            Register an AI system first: <Link href="/systems" className="font-semibold underline">AI systems</Link>
+            Register an AI system first: <Link href="/onboard" className="font-semibold underline">Register a system</Link>
           </span>
         )}
       </div>
@@ -502,6 +502,10 @@ export default function EvaluationPage() {
         <section className="rounded-2xl bg-white p-5">
           <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
           <RunResult run={shown} />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN_P}>Open the system file</Link>
+            <Link href={`/risks?system=${encodeURIComponent(shown.systemId)}`} className={BTN}>Open findings</Link>
+          </div>
         </section>
       )}
     </div>

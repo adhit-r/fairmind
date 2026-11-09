@@ -174,8 +174,11 @@ function SystemFileBody({ id }: { id: string }) {
   useEffect(() => reveal(window.location.hash), [])
 
   const open = (href: string) => {
-    if (id) setSelectedSystemId(id)
-    router.push(href)
+    if (!id) return router.push(href)
+    setSelectedSystemId(id)
+    // Carry the system in the URL so the link can be shared; SystemContext reads ?system=.
+    const [path, hash] = href.split('#')
+    router.push(`${path}${path.includes('?') ? '&' : '?'}system=${encodeURIComponent(id)}${hash ? `#${hash}` : ''}`)
   }
 
   const act = async (key: string, fn: () => Promise<void>) => {

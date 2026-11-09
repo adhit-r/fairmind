@@ -15,18 +15,23 @@ import {
   IconTrendingDown,
   IconRefresh,
   IconBell,
-  IconBellOff,
   IconAlertTriangle,
 } from '@tabler/icons-react'
+import Link from 'next/link'
 import { useState, useMemo } from 'react'
 import { useMonitoring } from '@/lib/api/hooks/useMonitoring'
 import { useAuditLogs } from '@/lib/api/hooks/useAuditLogs'
+import { usePolicyResource, type PolicyAlert } from '@/lib/api/hooks/usePolicies'
+import { useOrgId } from '@/lib/api/hooks/useOrgId'
+import { when } from '@/components/packs/parts'
 
 export default function MonitoringPage() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [notifications, setNotifications] = useState(true)
   const { metrics, loading, error, refetch } = useMonitoring()
   const { data: auditLogs } = useAuditLogs(24) // Last 24 hours
+  const policyAlerts = usePolicyResource<PolicyAlert[]>(useOrgId(), '/alerts')
+  const openAlerts = (policyAlerts.data ?? []).filter((a) => a.status === 'open')
 
   // Process audit logs for metrics chart (group by hour)
   const metricsData = useMemo(() => {
@@ -182,42 +187,33 @@ export default function MonitoringPage() {
         </Card>
       </div>
 
-      {/* Alerts */}
+      {/* Alerts: open policy alerts, the same records the Policies page lists */}
       <Card className="p-6 fm-card">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold">Recent Alerts</h3>
-          <Button variant="noShadow" size="sm">
-            View All
+          <Button asChild variant="noShadow" size="sm">
+            <Link href="/policies#alerts">View All</Link>
           </Button>
         </div>
-        <div className="space-y-3">
-          {[
-            { type: 'warning', message: 'High CPU usage detected on model-001', time: '2 minutes ago' },
-            { type: 'info', message: 'New model registered: model-042', time: '15 minutes ago' },
-            { type: 'success', message: 'Security scan completed successfully', time: '1 hour ago' },
-          ].map((alert, index) => (
-            <div
-              key={index}
-              className="p-3 border border-[var(--fm-line)] bg-white flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-2 border border-[var(--fm-line)] ${
-                  alert.type === 'warning' ? 'bg-yellow-400' :
-                  alert.type === 'info' ? 'bg-blue-400' :
-                  'bg-green-400'
-                }`}>
-                  {alert.type === 'warning' ? <IconBell className="h-4 w-4" /> :
-                   alert.type === 'info' ? <IconBell className="h-4 w-4" /> :
-                   <IconBellOff className="h-4 w-4" />}
-                </div>
-                <div>
-                  <p className="font-medium">{alert.message}</p>
-                  <p className="text-sm text-muted-foreground">{alert.time}</p>
+        {policyAlerts.loading ? (
+          <p className="text-sm text-muted-foreground">Loading alerts</p>
+        ) : policyAlerts.error ? (
+          <p role="alert" className="text-sm text-muted-foreground">Alerts could not be loaded. {policyAlerts.error}</p>
+        ) : openAlerts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No open alerts.</p>
+        ) : (
+          <div className="space-y-3">
+            {openAlerts.slice(0, 5).map((alert) => (
+              <div key={alert.id} className="flex items-center gap-3 rounded-[10px] border border-[var(--fm-line)] bg-white p-3">
+                <IconBell className="h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium">{alert.systemName}: {alert.ruleTitle}</p>
+                  <p className="text-sm text-muted-foreground">Failing since {when(alert.openedAt)}</p>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )

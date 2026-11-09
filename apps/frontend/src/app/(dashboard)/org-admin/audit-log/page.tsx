@@ -7,15 +7,14 @@ import { IconFilter } from '@tabler/icons-react';
 
 interface AuditLogEntry {
   id: string;
-  timestamp: string;
+  created_at: string | null;
   user_id: string;
-  user_email?: string;
   action: string;
   resource_type: string;
-  resource_id?: string;
-  description: string;
+  resource_id?: string | null;
+  changes: Record<string, unknown>;
   status: 'success' | 'failure';
-  ip_address?: string;
+  error_message?: string | null;
 }
 
 export default function OrgAuditLogPage() {
@@ -28,7 +27,7 @@ export default function OrgAuditLogPage() {
 
   useEffect(() => {
     fetchAuditLog();
-  }, [selectedOrg, filterAction, filterStatus]);
+  }, [selectedOrg, filterAction]);
 
   const fetchAuditLog = async () => {
     if (!selectedOrg) return;
@@ -36,15 +35,14 @@ export default function OrgAuditLogPage() {
       setIsLoading(true);
       setError(null);
 
-      let endpoint = `/api/v1/organizations/${selectedOrg.id}/audit-log`;
+      let endpoint = `/api/v1/organizations/${selectedOrg.id}/audit-logs`;
       const params = new URLSearchParams();
       if (filterAction) params.append('action', filterAction);
-      if (filterStatus) params.append('status', filterStatus);
       if (params.toString()) endpoint += `?${params.toString()}`;
 
-      const response = await api.get<{ entries: AuditLogEntry[] }>(endpoint);
+      const response = await api.get<{ logs: AuditLogEntry[]; total: number }>(endpoint);
       if (response.success && response.data) {
-        setEntries(response.data.entries);
+        setEntries(response.data.logs);
       } else {
         setError(response.error || 'Failed to fetch audit log');
       }
@@ -57,7 +55,8 @@ export default function OrgAuditLogPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleString();
   };
@@ -86,6 +85,9 @@ export default function OrgAuditLogPage() {
       ? 'bg-green-100 text-green-800 border-green-300'
       : 'bg-red-100 text-red-800 border-red-300';
   };
+
+  // Backend filters by action only; status is filtered client-side.
+  const visible = filterStatus ? entries.filter((e) => e.status === filterStatus) : entries;
 
   const uniqueActions = [
     ...new Set(
@@ -168,27 +170,24 @@ export default function OrgAuditLogPage() {
                 </tr>
               </thead>
               <tbody>
-                {entries.length === 0 ? (
+                {visible.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-gray-600">
                       No audit log entries found
                     </td>
                   </tr>
                 ) : (
-                  entries.map((entry) => (
+                  visible.map((entry) => (
                     <tr
                       key={entry.id}
                       className={`border-b border-gray-200 ${getStatusColor(entry.status)}`}
                     >
                       <td className="px-6 py-4 text-sm font-mono text-gray-600">
-                        {formatDate(entry.timestamp)}
+                        {formatDate(entry.created_at)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          <span className="font-semibold text-black">{entry.user_email || entry.user_id}</span>
-                          {entry.ip_address && (
-                            <span className="text-xs text-gray-500">{entry.ip_address}</span>
-                          )}
+                          <span className="font-semibold text-black">{entry.user_id}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -208,7 +207,7 @@ export default function OrgAuditLogPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">{entry.description}</td>
+                      <td className="px-6 py-4 text-gray-600">{entry.error_message || Object.keys(entry.changes).join(', ')}</td>
                       <td className="px-6 py-4">
                         <span
                           className={`inline-block rounded-lg border-2 px-3 py-1 text-sm font-bold ${getStatusBadge(

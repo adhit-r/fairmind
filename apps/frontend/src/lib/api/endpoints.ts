@@ -51,7 +51,6 @@ export const API_ENDPOINTS = {
 
   // Bias Detection
   biasDetection: {
-    detect: '/api/v1/bias/analyze/dataset',
     testWeat: '/api/v1/bias-detection/test/weat',
     testFairness: '/api/v1/bias-detection/test/fairness',
     testImage: '/api/v1/bias-detection/test/image',
@@ -280,7 +279,7 @@ export const API_ENDPOINTS = {
 
   // Invitations
   invitations: {
-    getDetails: (token: string) => `/api/v1/invitations/${token}`,
-    accept: (token: string) => `/api/v1/invitations/${token}/accept`,
+    getDetails: (token: string) => `/api/v1/organizations/invitations/${token}`,
+    accept: (token: string) => `/api/v1/organizations/invitations/${token}/accept`,
   },
 } as const

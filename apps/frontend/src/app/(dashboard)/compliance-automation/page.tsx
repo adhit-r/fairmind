@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api/api-client";
+import { useToast } from "@/hooks/use-toast";
 import { IconPlus, IconRefresh, IconCircleCheck, IconCircleX, IconDownload } from "@tabler/icons-react";
 
 interface SystemStatus {
@@ -212,6 +213,8 @@ function SchedulesSection() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [running, setRunning] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchSchedules();
@@ -225,6 +228,19 @@ function SchedulesSection() {
       console.error("Failed to fetch schedules:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const runNow = async (id: string) => {
+    setRunning(id);
+    try {
+      const response = await apiClient.post(`/api/v1/compliance/schedules/${id}/run`);
+      if (!response.success) throw new Error(response.error || "Failed to start the run");
+      toast({ title: "Run started", description: "The compliance check is running now." });
+    } catch (err) {
+      toast({ title: "Could not start the run", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setRunning(null);
     }
   };
 
@@ -269,11 +285,12 @@ function SchedulesSection() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-blue-600">
-                    Edit
-                  </button>
-                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-green-600">
-                    Run Now
+                  <button
+                    onClick={() => runNow(schedule.id)}
+                    disabled={running === schedule.id}
+                    className="rounded-full bg-[var(--fm-ink)] px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {running === schedule.id ? "Starting..." : "Run Now"}
                   </button>
                 </div>
               </div>
@@ -345,9 +362,6 @@ function ViolationsSection() {
                   {violation.framework} • {violation.status.toUpperCase()}
                 </p>
               </div>
-              <button className="rounded px-3 py-1 text-xs font-bold text-white bg-[var(--fm-ink)]">
-                View
-              </button>
             </div>
           </div>
         ))}

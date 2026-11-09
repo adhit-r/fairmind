@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from "react";
 import { apiClient as api } from "@/lib/api/api-client";
-import { IconDownload, IconFilter } from "@tabler/icons-react";
+import { IconDownload } from "@tabler/icons-react";
 
 interface AuditLog {
   id: string;
@@ -126,10 +126,6 @@ export default function AdminAuditLogPage() {
           >
             <IconDownload size={20} />
             Export as CSV
-          </button>
-          <button className="flex items-center gap-2 rounded-lg border border-[var(--fm-line)] bg-white px-4 py-2 font-bold text-black">
-            <IconFilter size={20} />
-            Filters
           </button>
         </div>
 
