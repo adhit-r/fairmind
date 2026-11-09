@@ -25,7 +25,7 @@ So 40 evaluations marked "Not found" and 11 marked "Partial" already have engine
 | Check | Result |
 |---|---|
 | Engine, run API, behaviour, sandbox launcher packs and fairness-run tests on a disposable PostgreSQL 18 | 319 passed, including one API run per engine kind (file, live, platform) stored as evidence |
-| Known-answer tests (hand-derived values, a threshold boundary case and a failing case each) | All 84 runnable evaluations: 79 engines (56 earlier ones and the 23 of phases 1 and 2 (file, live and platform forms; `tests/test_known_answer_{data,model,ops,platform,behaviour,phase1,phase2}.py`) and the 5 older-flow rules (`tests/test_known_answer_rules.py`). Recorded as `maturity: "L4"` in the catalogue from `eval_engines.VALIDATED`, which a test keeps equal to the tests' coverage |
+| Known-answer tests (hand-derived values, a threshold boundary case and a failing case each) | All 84 runnable evaluations: 79 engines (56 earlier ones and the 23 of phases 1 and 2; file, live and platform forms; `tests/test_known_answer_{data,model,ops,platform,behaviour,phase1,phase2}.py`) and the 5 older-flow rules (`tests/test_known_answer_rules.py`). Recorded as `maturity: "L4"` in the catalogue from `eval_engines.VALIDATED`, which a test keeps equal to the tests' coverage |
 | Run API | `POST /evaluations/{id}/runs`, `GET /evaluations/{id}/engine`, `GET /evaluation-jobs/{job_id}`, `GET /evaluation-runs/{evidence_id}` |
 | UI | `/compliance/evaluations/[evaluationId]` calls the run API |
 | Worker and sandbox (P1) | Not on main. S1 worker API is WIP (`task/p1-s1-worker-api`), S2, S4 and job lifecycle are unmerged branches; S3 input broker and S5 supervisor/signer not started |
