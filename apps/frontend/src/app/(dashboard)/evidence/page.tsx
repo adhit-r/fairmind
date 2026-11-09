@@ -26,6 +26,7 @@ import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
 import { EvaluationRunList } from './components/EvaluationRunList'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
+import { EvidenceGrid, EvidenceSeg } from './EvidenceGrid'
 
 const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
 const EVIDENCE_HUB_FEATURE_GATES = resolveEvidenceHubFeatureGates({
@@ -114,7 +115,20 @@ function Notice({ title, children, action }: { title: string; children: React.Re
   )
 }
 
+/** Grid by default; any ?view= opens the Library (gaps, evaluations, artifacts). */
 export default function EvidencePage() {
+  if (!useSearchParams().get('view')) return <EvidenceGrid />
+  return (
+    <div className="grid gap-4">
+      <div>
+        <EvidenceSeg grid={false} />
+      </div>
+      <EvidenceLibrary />
+    </div>
+  )
+}
+
+function EvidenceLibrary() {
   const searchParams = useSearchParams()
   const requestedView = searchParams.get('view')
   const activeView: 'gaps' | 'evaluations' | 'artifacts' = requestedView === 'evaluations' || requestedView === 'artifacts'

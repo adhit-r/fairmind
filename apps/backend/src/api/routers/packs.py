@@ -16,6 +16,7 @@ from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
+from src.application.services.clause_map_service import _catalogue
 from src.application.services.llm_runtime import grok_cli
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
@@ -394,6 +395,24 @@ async def get_catalogue(_m: OrgMembership = Depends(_member)):
         "requirements": len(REQUIREMENTS),
     }
     return {"version": cat.VERSION, "pillars": pillars, "counts": counts}
+
+
+@router.get("/controls")
+async def get_controls(_m: OrgMembership = Depends(_member)):
+    """The catalogue's common controls with the workflows that implement each, and the raw control-to-requirement crosswalk."""
+    data = _catalogue()
+    return {
+        "controls": [
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "objective": c.get("objective"),
+                "workflows": [{"id": w.id, "name": w.name, "approver": w.approver, "scope": w.scope} for w in WORKFLOWS.values() if w.commonControl == c["id"]],
+            }
+            for c in data["commonControls"]
+        ],
+        "crosswalk": data["crosswalk"],
+    }
 
 
 @router.get("")
