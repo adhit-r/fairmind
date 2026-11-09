@@ -5,7 +5,7 @@
     "role": "owner",
     "name": "Axonome",
     "email": "adhi.r@axonome.xyz",
-    "description": "Axonome builds and maintains FairMind, an open-source agentic AI governance platform. FairMind is developed in public under the MIT licence, with signed releases and an archived DOI for each release.",
+    "description": "Axonome builds and maintains FairMind, an open-source agentic AI governance platform. FairMind is developed in public: the platform under AGPL-3.0 and its SDK, CLI and MCP server under Apache-2.0, with signed releases and an archived DOI for each release.",
     "webpageUrl": {
       "url": "https://github.com/Axonome"
     }
@@ -22,8 +22,22 @@
       "repositoryUrl": {
         "url": "https://github.com/adhit-r/fairmind"
       },
-      "licenses": ["spdx:MIT"],
-      "tags": ["ai", "machine-learning", "governance", "compliance", "security", "fairness", "auditing", "llm", "agents", "python"]
+      "licenses": [
+        "spdx:AGPL-3.0-only",
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "ai",
+        "machine-learning",
+        "governance",
+        "compliance",
+        "security",
+        "fairness",
+        "auditing",
+        "llm",
+        "agents",
+        "python"
+      ]
     }
   ],
   "funding": {
@@ -43,7 +57,9 @@
         "amount": 25000,
         "currency": "USD",
         "frequency": "yearly",
-        "channels": ["axonome-bank"]
+        "channels": [
+          "axonome-bank"
+        ]
       },
       {
         "guid": "infrastructure-security",
@@ -53,7 +69,9 @@
         "amount": 25000,
         "currency": "USD",
         "frequency": "yearly",
-        "channels": ["axonome-bank"]
+        "channels": [
+          "axonome-bank"
+        ]
       }
     ]
   }
