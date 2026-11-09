@@ -14,7 +14,7 @@ Your side pushes the snapshots. A scheduled job in your own infrastructure runs 
 3. Copy the workflow from **Schedule it**. It already contains the system id and a cron expression that matches the cadence.
 4. Set the variable `FAIRMIND_PREDICTION_COLUMN` (and `FAIRMIND_ATTRIBUTES` if the system has no snapshot yet) and provide a step that exports recent decisions to `artifacts/decisions.csv`.
 
-The job installs the CLI (`pipx install "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/cli"`, or `pipx install ./apps/cli` inside the FairMind repository) and runs:
+The job installs the CLI (`pipx install fairmind-cli`, or `pipx install ./apps/cli` inside the FairMind repository) and runs:
 
 ```bash
 fairmind monitor --system <id> --file artifacts/decisions.csv --attributes gender,region --prediction approved
