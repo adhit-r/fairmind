@@ -42,7 +42,7 @@ isolated worker, and each is validated against a hand-derived known-answer fixtu
 - **L4** validated: known-answer fixture or public benchmark reproduces the expected verdict
 - **L5** runs in the P1 worker sandbox, signed result
 
-Today: 84 runnable. 61 at L4 (the 56 original registry engines and the 5 rules; L2/L3 unverified in this session); the 23 Phase 1 and 2 engines have hand-calculated tests but no exact-threshold cases yet, so they stay at L1 until they do; 0 at L5.
+Today: 84 runnable, all 84 at L4 (the 56 original registry engines, the 5 rules and the 23 Phase 1 and 2 engines, each with known-answer, exact-threshold and failing cases; L2/L3 unverified in this session); 0 at L5.
 
 ## 3. Plan
 
