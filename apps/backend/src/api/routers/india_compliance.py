@@ -279,7 +279,8 @@ async def check_compliance(
             "lifecycle_stage": row[4], "config": config, "timestamp": datetime.utcnow().isoformat(),
         }
         collected = await evidence_collection_service.execute_all_controls(request.system_id, config)
-        evidence = {e["control_id"]: e for e in collected if e.get("control_id")}
+        # A control that had nothing to assess is not evidence of anything.
+        evidence = {e["control_id"]: e for e in collected if e.get("control_id") and getattr(e.get("status"), "value", e.get("status")) != "not_assessed"}
 
         # Check compliance for each framework
         results = []

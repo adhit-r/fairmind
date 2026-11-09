@@ -604,6 +604,15 @@ def test_integration_token_is_stored_encrypted_and_legacy_plaintext_still_syncs(
     client.post(f"/api/v1/integrations/{new_id}/sync", headers=A)
     assert seen[-1] == "ghp_plain_secret"
 
+    # A legacy plaintext token is re-encrypted by a successful sync.
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE governance_integrations SET token = 'ghp_legacy' WHERE id = :id"), {"id": new_id})
+    assert client.post(f"/api/v1/integrations/{new_id}/sync", headers=A).status_code == 200
+    with engine.connect() as conn:
+        after = conn.execute(text("SELECT token FROM governance_integrations WHERE id = :id"), {"id": new_id}).scalar()
+    from api.routes.llm import decrypt
+    assert after != "ghp_legacy" and decrypt(after) == "ghp_legacy"
+
 
 def test_mlflow_tracking_uri_must_be_a_public_https_address(client):
     for uri in ("http://example.com", "https://127.0.0.1", "https://169.254.169.254/latest"):
@@ -647,9 +656,33 @@ def test_india_check_runs_the_controls_over_the_stored_system(client, monkeypatc
     )
     assert response.status_code == 200, response.text
     assert seen["system"]["name"] == "System A" and seen["system"]["org_id"] == ORG_A
-    # Every control of the India registry ran; one that needs configuration the system lacks fails.
-    assert set(seen["evidence"]) == set(router.evidence_collection_service.get_control_registry())
+    # Every control of the India registry ran; one that needs configuration the system lacks fails, and
+    # CBT_001, with no data flows to look at, is not assessed and so leaves no evidence.
+    assert set(seen["evidence"]) == set(router.evidence_collection_service.get_control_registry()) - {"CBT_001"}
     assert str(seen["evidence"]["GM_001"]["status"]).lower().endswith("failed")
+
+
+def test_india_check_digital_india_act_is_pending_not_an_error(client):
+    response = client.post(
+        "/api/v1/india/check", json={"system_id": "system-a", "frameworks": ["digital_india_act"]}, headers=A
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()["results"][0]
+    assert result["status"] == "pending" and result["total_requirements"] == 0
+
+
+def test_cross_border_control_without_data_flows_is_not_assessed():
+    import asyncio
+
+    from src.application.services.india_evidence_collection_service import (
+        ControlStatus,
+        IndiaEvidenceCollectionService,
+    )
+
+    service = IndiaEvidenceCollectionService()
+    assert asyncio.run(service.collect_cross_border_transfer_evidence("s", []))["status"] == ControlStatus.NOT_ASSESSED
+    ok = [{"destination_country": "US", "data_transfer_agreement": True}]
+    assert asyncio.run(service.collect_cross_border_transfer_evidence("s", ok))["status"] == ControlStatus.PASSED
 
 
 def test_india_compliance_roles_come_from_the_membership(client):

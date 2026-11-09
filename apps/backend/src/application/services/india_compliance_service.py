@@ -359,7 +359,7 @@ class IndiaComplianceService(ComplianceReportingService):
             **self._envelope(system_data),
             framework=IndiaFramework.DIGITAL_INDIA_ACT,
             overall_score=0.0,
-            status=ComplianceStatus.PENDING,
+            status="pending",  # the schema enum value; the reporting ComplianceStatus has no PENDING
             requirements_met=0,
             total_requirements=0,
             evidence_count=len(evidence),

@@ -38,6 +38,7 @@ class ControlStatus(str, Enum):
     FAILED = "failed"
     PARTIAL = "partial"
     NOT_APPLICABLE = "not_applicable"
+    NOT_ASSESSED = "not_assessed"  # nothing was supplied to assess; never a pass
 
 
 INDIA_TECHNICAL_CONTROLS = {
@@ -492,11 +493,10 @@ class IndiaEvidenceCollectionService:
             evidence_hash = self._generate_evidence_hash(evidence_data)
 
             # Status is passed if all external transfers are compliant
-            status = (
-                ControlStatus.PASSED
-                if non_compliant_transfers == 0
-                else ControlStatus.FAILED
-            )
+            if not external_transfers:
+                status = ControlStatus.NOT_ASSESSED
+            else:
+                status = ControlStatus.PASSED if non_compliant_transfers == 0 else ControlStatus.FAILED
 
             result = {
                 "id": evidence_id,

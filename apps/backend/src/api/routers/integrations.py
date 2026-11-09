@@ -452,6 +452,7 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
     # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
     kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
     now = _now()
+    legacy_plaintext = bool(row[5]) and decrypt(row[5]) is None
     try:
         found = await _CONNECTORS[kind](config, token)
     except HTTPException as exc:
@@ -461,6 +462,9 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
         )
         db.commit()
         raise
+
+    if legacy_plaintext:
+        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": integration_id})
 
     created = updated = 0
     for item in found:
