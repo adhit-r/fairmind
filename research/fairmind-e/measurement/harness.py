@@ -121,11 +121,16 @@ def build_row(
     notes: str,
     started_at: float | None = None,
     ended_at: float | None = None,
+    degraded: bool = False,
 ) -> dict[str, str]:
-    """Assemble one contract row. Empty strings mark absent real figures."""
+    """Assemble one contract row. Empty strings mark absent real figures.
+
+    ``degraded`` marks a tracker that fell back to a load x TDP model; its row
+    is classed ``manual`` because that is what the figure is in kind.
+    """
 
     if method_available:
-        provenance = methods.PROVENANCE_BY_METHOD[method]
+        provenance = "manual" if degraded else methods.PROVENANCE_BY_METHOD[method]
         uncertainty = methods.UNCERTAINTY_PCT_BY_METHOD[method]
         confidence = _SMOKE.confidence_score(provenance, float(uncertainty))
         gate_kg = market_kg if market_kg is not None else location_kg
@@ -230,7 +235,13 @@ def _codecarbon_row(
         f"{run_result.codecarbon_reason}; OfflineEmissionsTracker "
         f"country={region}; market-based figures not provided by the tool"
     )
+    if run_result.codecarbon_degraded:
+        notes += (
+            "; DEGRADED: codecarbon fell back to cpu_load mode (CPU load x TDP "
+            "constant, no hardware counters); provenance downgraded to manual"
+        )
     return build_row(
+        degraded=run_result.codecarbon_degraded,
         workload_id=module.WORKLOAD_ID,
         functional_unit=module.FUNCTIONAL_UNIT,
         run_id=run_id,
