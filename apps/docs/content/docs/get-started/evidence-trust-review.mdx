@@ -3,10 +3,10 @@ title: Evidence trust and review
 description: How Assurance V2 admits signed Evidence Passports, links them, reviews them, and tracks freshness.
 ---
 
-Assurance V2 is a separate, default-off evidence path alongside the [Evidence Workbench](/docs/workflows/evidence-review). Where Workbench records are mutable, Assurance V2 binds signed evidence to an exact run and keeps the record chain in PostgreSQL.
+Assurance V2 is a separate, default-off evidence path alongside the [Evidence Workbench](/docs/journeys/evidence-review). Where Workbench records are mutable, Assurance V2 binds signed evidence to an exact run and keeps the record chain in PostgreSQL.
 
 <Callout type="warn" title="Default off">
-Submission, import, linking, review, and decisions each have their own gate, and every gate defaults to `false`. A `404` from these routes is the expected default state. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
+Submission, import, linking, review, and decisions each have their own gate, and every gate defaults to `false`. A `404` from these routes is the expected default state. See [Configuration](/docs/self-host/configuration#assurance-v2-gates).
 </Callout>
 
 ## Record chain

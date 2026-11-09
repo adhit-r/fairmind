@@ -9,8 +9,8 @@ All paths below are under `/api/v1/ai-governance/organizations/{org_id}`. Every 
 
 ## Prerequisites
 
-- An approved deployment change turns on `ASSURANCE_V2_ENABLED` and only the child gates this run needs. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
-- The database is PostgreSQL with migrations `013` to `013m` applied, `ASSURANCE_MIGRATION_SCHEMA` is set, and the backend starts cleanly with the master switch on. Startup fails closed if the migration ledger or catalog fingerprint does not match; on Neon or PostgreSQL 18 this currently happens until the fingerprint is re-measured. See [Startup requirements](/docs/reference/configuration#startup-requirements).
+- An approved deployment change turns on `ASSURANCE_V2_ENABLED` and only the child gates this run needs. See [Configuration](/docs/self-host/configuration#assurance-v2-gates).
+- The database is PostgreSQL with migrations `013` to `013m` applied, `ASSURANCE_MIGRATION_SCHEMA` is set, and the backend starts cleanly with the master switch on. Startup fails closed if the migration ledger or catalog fingerprint does not match; on Neon or PostgreSQL 18 this currently happens until the fingerprint is re-measured. See [Startup requirements](/docs/self-host/configuration#startup-requirements).
 - The organization, workspace, system, memberships, and [permissions](/docs/reference/permissions-and-separation) exist for the test scope.
 - A trust policy, issuer, and signing key are active, and the evaluator registration is approved.
 - A reviewer and a decider exist who are each distinct from the run requester, the submitter, and the linker.

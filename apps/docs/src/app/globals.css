@@ -62,21 +62,34 @@ a {
   letter-spacing: 0;
 }
 
-.evidence-rule {
-  display: grid;
-  gap: 0.3rem;
-  margin: 1.5rem 0 2rem;
-  padding: 0.9rem 1rem;
-  border: 2px solid var(--fm-ink);
-  background: color-mix(in oklch, var(--fm-teal) 12%, var(--fm-paper));
-  box-shadow: 4px 4px 0 var(--fm-ink);
-  font-size: 0.88rem;
+.doc-status {
+  --tone: var(--fm-green);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--fm-muted);
 }
 
-.evidence-rule strong {
+.doc-status[data-state='partial'] { --tone: #b45309; }
+.doc-status[data-state='alpha'] { --tone: #6d28d9; }
+.doc-status[data-state='not-built'] { --tone: #b91c1c; }
+
+.doc-status strong {
+  padding: 0.1rem 0.6rem;
+  border: 1px solid color-mix(in oklch, var(--tone) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--tone) 10%, transparent);
+  color: var(--tone);
   font-size: 0.72rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.doc-md-link {
+  font-size: 0.8rem;
+  color: var(--fm-muted);
 }
 
 .product-capture {

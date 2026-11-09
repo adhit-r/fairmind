@@ -1,0 +1,117 @@
+---
+title: Python SDK
+description: A small typed client for the release gate, evaluations, fairness tests, monitoring and attestations. One dependency, httpx.
+---
+
+<Status state="shipped" />
+
+<Steps>
+<Step>
+### Install
+
+<Tabs groupId="pkg" items={['pip', 'uv']} persist>
+<Tab value="pip">
+```bash
+pip install "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/sdk"
+```
+</Tab>
+<Tab value="uv">
+```bash
+uv add "git+https://github.com/adhit-r/fairmind.git#subdirectory=apps/sdk"
+```
+</Tab>
+</Tabs>
+
+From a checkout of the repository: `pip install ./apps/sdk`.
+</Step>
+
+<Step>
+### Set the environment
+
+```bash
+export FAIRMIND_API_URL=https://app.fairmind.xyz
+export FAIRMIND_API_KEY=...        # minted at POST /api/v1/auth/api-keys, valid 365 days
+export FAIRMIND_ORG_ID=...         # optional: defaults to the key's first organisation
+```
+
+`FAIRMIND_API_URL` defaults to `http://localhost:8010`. Never put the key in a file you commit.
+</Step>
+
+<Step>
+### Create a client
+
+```python title="app.py"
+from fairmind import FairMind, FairMindError
+
+fm = FairMind()   # reads the environment
+
+try:
+    gate = fm.gate(fm.systems()[0]["id"])
+    print(gate["verdict"], gate["confidence"])
+except FairMindError as err:
+    print(err.status_code, err.message)   # status_code is None when the server was unreachable
+```
+</Step>
+</Steps>
+
+## Release gate
+
+| Method | Endpoint | Returns |
+| --- | --- | --- |
+| `systems()` | `GET /systems` | The AI systems your key can see |
+| `gate(system_id)` | `GET /systems/{id}/gate` | Verdict, confidence, the five checks and the reasons |
+| `clause_map(system_id, frameworks=None)` | `GET /systems/{id}/clause-map` | The gate per framework clause; filter with keys such as `["EUAIA", "ISO42001"]` |
+| `seals(system_id)` | `GET /systems/{id}/seals` | Decision seals, each verified against the evidence as it is now |
+
+## Evaluations
+
+| Method | Endpoint | Returns |
+| --- | --- | --- |
+| `evaluations(query=None, pillar=None)` | `GET /api/v1/packs/evaluations` | Catalogue entries; `runnable` is true for those FairMind computes |
+| `evaluation_engine(evaluation_id)` | `GET .../evaluations/{id}/engine` | The files and parameters it takes, and its live alternate if any |
+| `run_evaluation(system_id, evaluation_id, files=None, params=None, *, live=False, source="upload")` | `POST .../evaluations/{id}/runs` | The stored run: `status` (passed, failed or insufficient), `summary`, `metrics` |
+| `evaluation_runs(evaluation_id, system_id=None)` | `GET .../evaluations/{id}/runs` | Earlier runs |
+
+```python
+run = fm.run_evaluation(
+    system,
+    "EV-SEC-27",            # data exfiltration through agent tools
+    source="connection",    # read the connected agent platform instead of files
+)
+```
+
+- `files` maps the engine's slot names to local paths; each file is at most 25 MB.
+- `live=True` runs an evaluation's alternate behaviour test against the system's endpoint.
+- Behaviour tests run as background jobs. The SDK polls every 3 seconds and gives up after `timeout` seconds (default 900).
+
+## Fairness tests and monitoring
+
+| Method | Endpoint |
+| --- | --- |
+| `inspect_csv(system_id, path)` | `POST /systems/{id}/fairness-runs/inspect`: columns and a suggested mapping |
+| `run_fairness(system_id, path, *, outcome, attributes, prediction=None, score=None, favorable_label=None)` | `POST /systems/{id}/fairness-runs` |
+| `fairness_runs(system_id)` | `GET /systems/{id}/fairness-runs` |
+| `run_monitoring(system_id, path, *, attributes, prediction=None, score=None, favorable_label=None)` | `POST /systems/{id}/monitoring-runs` |
+| `monitoring_runs(system_id)` | `GET /systems/{id}/monitoring-runs` |
+
+```python
+run = fm.run_fairness(
+    system, "predictions.csv",
+    outcome="repaid", prediction="approved", attributes=["gender", "region"],
+)
+print(run["gate"]["verdict"])
+```
+
+`attributes` is a list or a comma-separated string. Pass `prediction` (a 0/1 column) or `score` (a 0 to 1 column).
+
+## Attestations
+
+```python
+fm.attest(system, "human_oversight", "Every declined application is reviewed by a credit officer.", reference="SOP-114")
+```
+
+`check` is one of `data_governance`, `human_oversight`, `monitoring` or `environmental`. An attestation is recorded under the key's user and counts for less than measured evidence: the gate shows the check as attested, never proven.
+
+## Types and errors
+
+Responses are plain dicts typed with `TypedDict`s (`Gate`, `GateCheck`, `ClauseMap`, `FairnessRun`, `MonitoringRun` and others). Every failure raises `FairMindError` with `status_code` and `message`, the server's `detail` when it sent one.

@@ -9,16 +9,31 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async rewrites() {
+    // Any page as raw MDX: /docs/get-started/quickstart.mdx
+    return [{ source: '/docs/:path*.mdx', destination: '/llms.mdx/:path*' }];
+  },
   async redirects() {
+    const limits = '/docs/get-started/status-and-limits';
+    // Order matters: the first match wins, so specific paths precede the folder patterns.
     return [
-      { source: '/docs/getting-started', destination: '/docs/quickstart', permanent: true },
-      { source: '/docs/bias-detection', destination: '/docs/concepts/capability-truth', permanent: true },
-      { source: '/docs/simulation', destination: '/docs/concepts/capability-truth', permanent: true },
-      { source: '/docs/monitoring', destination: '/docs/limitations', permanent: true },
-      { source: '/docs/model-provenance', destination: '/docs/concepts/evidence-model', permanent: true },
-      { source: '/docs/explainability', destination: '/docs/concepts/capability-truth', permanent: true },
-      { source: '/docs/security-compliance', destination: '/docs/reference/authentication-rbac', permanent: true },
-    ];
+      ['/docs/getting-started', '/docs/get-started/quickstart'],
+      ['/docs/quickstart', '/docs/get-started/quickstart'],
+      ['/docs/limitations', limits],
+      ['/docs/bias-detection', limits],
+      ['/docs/simulation', limits],
+      ['/docs/monitoring', limits],
+      ['/docs/explainability', limits],
+      ['/docs/model-provenance', '/docs/get-started/evidence-model'],
+      ['/docs/security-compliance', '/docs/self-host/authentication-rbac'],
+      ['/docs/concepts/capability-truth', limits],
+      ['/docs/concepts/:slug', '/docs/get-started/:slug'],
+      ['/docs/workflows/release-gate-in-ci', '/docs/build/release-gate-in-ci'],
+      ['/docs/workflows/sdk-and-mcp', '/docs/build/python-sdk'],
+      ['/docs/workflows/operator-runbook', '/docs/self-host/operator-runbook'],
+      ['/docs/workflows/:slug', '/docs/journeys/:slug'],
+      ['/docs/reference/:slug(deployment|configuration|authentication-rbac)', '/docs/self-host/:slug'],
+    ].map(([source, destination]) => ({ source, destination, permanent: true }));
   },
 };
 

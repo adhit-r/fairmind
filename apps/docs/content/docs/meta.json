@@ -2,10 +2,15 @@
   "title": "FairMind",
   "pages": [
     "index",
-    "quickstart",
-    "concepts",
-    "workflows",
-    "reference",
-    "limitations"
+    "---Start here---",
+    "...get-started",
+    "---Journeys---",
+    "...journeys",
+    "---Build with FairMind---",
+    "...build",
+    "---Self-host---",
+    "...self-host",
+    "---Reference---",
+    "...reference"
   ]
 }
