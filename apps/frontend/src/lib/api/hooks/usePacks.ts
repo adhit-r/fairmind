@@ -402,6 +402,15 @@ export interface AIProviderOption {
 }
 
 /** The organisation's saved provider. The key itself never comes back, only its last four characters. */
+export interface AskAnswer {
+  answer: string
+  systems: Array<{ id: string; name: string; reason: string }>
+  provider: string
+  model: string
+  systemsRead: number
+  runsRead: number
+}
+
 export interface AIProviderConfig {
   provider: string
   providerName: string
@@ -599,6 +608,8 @@ export function usePackActions() {
       testTarget: (systemId: string) =>
         send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p)),
       runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
+      // The model can take a while; the server gives it 75s (llm.TIMEOUT_S), the client's 10s default would cut it off.
+      ask: (question: string) => send<AskAnswer>(API_ENDPOINTS.packs.ask, (p) => apiClient.post(p, { question }, { timeout: 90_000 })),
       saveAIProvider: (body: AIProviderBody) =>
         send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
       deleteAIProvider: () => send<{ config: null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.delete(p)),
