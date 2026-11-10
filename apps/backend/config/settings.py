@@ -171,6 +171,8 @@ class Settings(BaseSettings):
     resend_from_email: str = "noreply@fairmind.ai"
     # How often published policy rules are re-checked for newly failing systems; 0 turns alerts off.
     policy_alert_interval_seconds: int = 900
+    # How often the release autopilot runs systems set to run; 0 turns the schedule off (Run now still works).
+    autopilot_interval_seconds: int = 3600
     admin_email: str = "admin@fairmind.ai"
     
     # Error Tracking

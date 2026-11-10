@@ -46,6 +46,19 @@ from src.application.services.governance_assurance_service import OrgMembership
 logger = get_logger("main")
 
 
+async def _autopilot_loop(interval: int) -> None:
+    """Run the release autopilot for every system set to run, on a timer."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.autopilot import sweep
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await sweep(orm_db_manager.SessionLocal)
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Autopilot sweep failed: {e}")
+
+
 async def _policy_alert_loop(interval: int) -> None:
     """Re-check published policy rules on a timer and email the owner when one starts failing."""
     from database.connection import db_manager as orm_db_manager
@@ -126,6 +139,9 @@ async def lifespan(app: FastAPI):
     policy_alerts = None
     if settings.policy_alert_interval_seconds > 0:
         policy_alerts = asyncio.create_task(_policy_alert_loop(settings.policy_alert_interval_seconds))
+    autopilot = None
+    if settings.autopilot_interval_seconds > 0:
+        autopilot = asyncio.create_task(_autopilot_loop(settings.autopilot_interval_seconds))
 
     logger.info("Application startup complete")
     
@@ -140,6 +156,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application shutdown")
     if policy_alerts:
         policy_alerts.cancel()
+    if autopilot:
+        autopilot.cancel()
     
     # Close database connections
     try:
@@ -390,6 +408,7 @@ _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags=["fairness"], required=False)
+_include_router("api.routes.autopilot", prefix="/api/v1/ai-governance", tags=["autopilot"], required=False)
 _include_router("api.routes.applicability", prefix="/api/v1/ai-governance", tags=["applicability"], required=False)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)

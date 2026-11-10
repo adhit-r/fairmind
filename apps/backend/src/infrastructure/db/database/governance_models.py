@@ -23,6 +23,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -4242,3 +4243,60 @@ class GovernanceEvidencePack(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     share_token_hash = Column(String, nullable=True)
     share_expires_at = Column(String, nullable=True)
+
+
+class SystemDataSource(Base):
+    """Data the release autopilot may re-run on: a kept upload or an https URL, one per system and purpose.
+
+    The columns and protected attributes come from a person-confirmed fairness run (``basis_evidence_id``),
+    so an agent run never chooses what to test.
+    """
+
+    __tablename__ = "system_data_sources"
+    __table_args__ = (UniqueConstraint("system_id", "purpose", name="uq_system_data_source_purpose"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    purpose = Column(String, nullable=False)  # fairness | monitoring
+    kind = Column(String, nullable=False)  # upload | url
+    url = Column(Text, nullable=True)
+    file_name = Column(String, nullable=True)
+    content = Column(LargeBinary, nullable=True)  # ponytail: kept uploads in Postgres (25 MB cap); move to the artifact store if they grow
+    sha256 = Column(String, nullable=True)
+    mapping_json = Column(Text, nullable=False, default="{}")
+    basis_evidence_id = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class SystemAutopilot(Base):
+    """Whether the release autopilot runs a system's measurable route steps: off, ask (a person runs each) or run."""
+
+    __tablename__ = "system_autopilot"
+
+    system_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    mode = Column(String, nullable=False, default="off")
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    last_run_at = Column(String, nullable=True)
+
+
+class AutopilotEvent(Base):
+    """One thing the autopilot did or could not do for a system: the trace shown beside its route."""
+
+    __tablename__ = "autopilot_events"
+    __table_args__ = (Index("ix_autopilot_events_system_created", "system_id", "created_at"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    check_key = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # done | failed
+    detail = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    actor = Column(String, nullable=False)  # who started it: "autopilot" on a schedule, else the person
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())

@@ -20,7 +20,8 @@ import { RecordTab } from './RecordTab'
 import { LeavesOpen } from './LeavesOpen'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { checkCell } from '@/components/ui/matrix'
-import { VERDICT_LABEL, VERDICT_TONE, VerdictExplainer, tierOverride } from './VerdictExplainer'
+import { STEP_LINK, VERDICT_LABEL, VERDICT_TONE, VerdictExplainer, tierOverride } from './VerdictExplainer'
+import { AutopilotCard } from './AutopilotCard'
 import { TargetPanel } from './TargetPanel'
 import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { cn } from '@/lib/utils'
@@ -280,6 +281,24 @@ function SystemFileBody({ id }: { id: string }) {
           )
         })()}
       </section>
+
+      {id && s && (
+        <AutopilotCard
+          systemId={id}
+          reloadKey={`${gate?.confidence ?? ''}-${evidence?.totalEvidence ?? 0}`}
+          onChanged={() => void refresh()}
+          onPersonStep={(step) => {
+            if (step.action === 'attest') return isAttestable(step.check) && setAttesting(step.check)
+            if (step.action === 'request_release') return void act('request', requestDecision)
+            const href = STEP_LINK[step.action].href
+            setTab('journey')
+            if (href.startsWith('#')) {
+              window.history.replaceState(null, '', href)
+              reveal(href)
+            } else open(href)
+          }}
+        />
+      )}
 
       <Tabs value={tab} onValueChange={setTab} className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <TabsList aria-label="System file" className={cn(TAB_LIST, 'justify-self-start')}>

@@ -9,6 +9,8 @@ import { BTN, BTN_P, ErrorNote, Loading, cap } from '@/components/packs/parts'
 import { CellDrawer, CellMeaning, classLabel, DrawerBlock, Matrix, checkCell, type MatrixGroup } from '@/components/ui/matrix'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useEstateGates } from '@/lib/api/hooks/useEstate'
+import { useEstateAutopilot } from '@/lib/api/hooks/useAutopilot'
+import { Route } from 'lucide-react'
 import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
 import { usePendingDecisions } from '@/lib/api/hooks/usePendingDecisions'
 import { cn } from '@/lib/utils'
@@ -149,6 +151,7 @@ function Overview() {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <CommandBar stage={next.stage} title={next.title} reason={next.reason} primary={next.primary} />
+      <AutopilotStrip />
 
       {since && lastVisit.at && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-[12.5px] text-[var(--fm-ink2)]">
@@ -304,5 +307,25 @@ export default function DashboardPage() {
     <Suspense fallback={null}>
       <Overview />
     </Suspense>
+  )
+}
+
+/** What the release autopilot is doing across the estate; hidden until a system is on it. */
+function AutopilotStrip() {
+  const ap = useEstateAutopilot()
+  if (!ap || ap.systems === 0) return null
+  return (
+    <div className="fm-card flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px]">
+      <Route className="h-4 w-4 text-[var(--fm-brand)]" aria-hidden />
+      <span>
+        <b className="font-semibold">Autopilot</b>{' '}
+        <span className="text-[var(--fm-ink2)]">
+          is on for {ap.systems} system{ap.systems === 1 ? '' : 's'}. {ap.doneThisWeek} step{ap.doneThisWeek === 1 ? '' : 's'} done this week.
+        </span>
+      </span>
+      {ap.needsPerson > 0 && (
+        <span className="ml-auto rounded-full bg-[var(--fm-brand)] px-2.5 py-0.5 text-[12px] font-semibold text-white">{ap.needsPerson} need a person</span>
+      )}
+    </div>
   )
 }

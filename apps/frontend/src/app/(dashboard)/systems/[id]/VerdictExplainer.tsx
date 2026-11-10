@@ -125,7 +125,7 @@ export function tierOverride(explain: GateExplain | undefined) {
     : { pending: true, text: `Tier set below the suggested ${suggested}. The gate uses ${suggested} until another person accepts the lower tier.` }
 }
 
-const STEP_LINK: Record<Exclude<GatePathStep['action'], 'attest'>, { label: string; href: string }> = {
+export const STEP_LINK: Record<Exclude<GatePathStep['action'], 'attest'>, { label: string; href: string }> = {
   fairness_run: { label: 'Open the test', href: '#first-verdict' },
   monitoring_snapshot: { label: 'Open monitoring', href: '#operate' },
   environmental_assessment: { label: 'Open assessment', href: '/ai-governance' },

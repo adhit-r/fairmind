@@ -137,6 +137,7 @@ export function FairnessRunPanel({
   const [result, setResult] = useState<FairnessRunResult | null>(null)
   const [busy, setBusy] = useState<'inspect' | 'run' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [keepForAgent, setKeepForAgent] = useState(false)
 
   const columns = inspection?.columns.map((c) => c.name) ?? []
   const suggested = inspection?.suggested.attributes ?? []
@@ -179,6 +180,7 @@ export function FairnessRunPanel({
       sha256: inspection.fileSha256,
       removalReason: removed.length ? removalReason.trim() : undefined,
       uncoveredReason: uncovered.length ? uncoveredReason.trim() : undefined,
+      keepForAgent,
     }
     try {
       const out = await run(file, { ...mapping, attributes, favorableLabel: favourable ? mapping.favorableLabel : undefined }, confirmation)
@@ -342,6 +344,10 @@ export function FairnessRunPanel({
             </div>
           )}
 
+          <label className="flex items-center gap-2 text-[12.5px] text-[var(--fm-ink2)]">
+            <input type="checkbox" checked={keepForAgent} onChange={(e) => setKeepForAgent(e.target.checked)} className="h-4 w-4 accent-[var(--fm-ink)]" />
+            Keep this file so the release autopilot can re-run it with these attributes
+          </label>
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" disabled={!canRun || busy !== null} onClick={() => void go()} className="h-9 rounded-full bg-[var(--fm-ink)] px-4 text-[12.5px] font-semibold text-white disabled:opacity-60">
               {busy === 'run' ? 'Running' : 'Confirm attributes and run'}

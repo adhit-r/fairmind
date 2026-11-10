@@ -223,6 +223,8 @@ export interface AttributeConfirmation {
   sha256: string
   removalReason?: string
   uncoveredReason?: string
+  /** Keep the file so the release autopilot can re-run it with these attributes. */
+  keepForAgent?: boolean
 }
 
 export interface FairnessMapping {
@@ -500,6 +502,7 @@ export function useSystemFile(systemId: string | undefined) {
       form.append('confirm_sha256', confirmation.sha256)
       if (confirmation.removalReason) form.append('removal_reason', confirmation.removalReason)
       if (confirmation.uncoveredReason) form.append('uncovered_reason', confirmation.uncoveredReason)
+      if (confirmation.keepForAgent) form.append('keep_for_agent', '1')
     }
     const res = await apiClient.post<FairnessRunResult>(`${GOV}/systems/${systemId}/fairness-runs`, form, { enableRetry: false, timeout: 120_000 })
     if (!res.success || !res.data) throw new Error(res.error || 'The run failed')
