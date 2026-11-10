@@ -27,6 +27,8 @@ import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
 import { EvaluationRunList } from './components/EvaluationRunList'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
 import { EvidenceGrid, EvidenceSeg } from './EvidenceGrid'
+import { EvidenceDemo } from '@/components/stageshow/EvidenceDemo'
+import { Illustration } from '@/components/stageshow/fm'
 
 const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
 const EVIDENCE_HUB_FEATURE_GATES = resolveEvidenceHubFeatureGates({
@@ -103,10 +105,11 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   )
 }
 
-function Notice({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+function Notice({ title, children, action, visual }: { title: string; children: React.ReactNode; action?: React.ReactNode; visual?: React.ReactNode }) {
   return (
     <section className="fm-card grid min-h-[300px] place-items-center p-9 text-center">
       <div className="max-w-md">
+        {visual && <div className="mb-7">{visual}</div>}
         <h2 className="m-0 text-[22px] font-semibold tracking-tight">{title}</h2>
         <p className={cn('mt-3 text-[14.5px] leading-[1.55]', MUTED)}>{children}</p>
         {action && <div className="mt-6 flex justify-center">{action}</div>}
@@ -249,6 +252,11 @@ function EvidenceLibrary() {
   ) : data.length === 0 ? (
     <Notice
       title="No evidence collected yet"
+      visual={
+        <Illustration label="A sealed evidence item: a measured fairness run mapped to an EU AI Act article, in front of the evidence list">
+          <EvidenceDemo />
+        </Illustration>
+      }
       action={canReview ? (
         <button type="button" className={BTN_P} onClick={() => setUploaderOpen(true)}>
           Add first evidence

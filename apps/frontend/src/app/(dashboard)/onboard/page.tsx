@@ -7,6 +7,8 @@ import { useSystemContext, type AISystemSummary } from '@/components/workflow/Sy
 import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
 import { confirmApplicability, type ApplicabilityDraft } from '@/lib/api/hooks/useApplicability'
 import { STAGES } from '@/components/layout/AppShell'
+import { PlanDemo } from '@/components/stageshow/PlanDemo'
+import { Illustration } from '@/components/stageshow/fm'
 
 const field =
   'h-10 w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[14px] outline-none focus:border-[var(--fm-ink)]'
@@ -68,7 +70,8 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[760px]">
+    <div className="mx-auto grid max-w-[760px] gap-8 xl:max-w-[1220px] xl:grid-cols-[760px_minmax(0,420px)]">
+      <div>
       <div className="text-[12.5px] font-medium text-[var(--fm-ink2)]">
         <Link href="/dashboard" className="hover:text-[var(--fm-ink)]">Today</Link> · Register a system
       </div>
@@ -155,6 +158,16 @@ export default function OnboardPage() {
           </button>
         </div>
       </form>
+      </div>
+
+      <aside className="hidden xl:block">
+        <div className="sticky top-6 mt-[112px]">
+          <div className="mb-3 text-[11px] font-semibold uppercase tracking-[.08em] text-[var(--fm-ink3)]">After you register</div>
+          <Illustration label="The agent recommends packs for the new system, each closing framework requirements, and the plan is accepted">
+            <PlanDemo />
+          </Illustration>
+        </div>
+      </aside>
     </div>
   )
 }

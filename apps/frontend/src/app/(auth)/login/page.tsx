@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/api/hooks/useAuth'
 import { useAuthentik } from '@/lib/api/hooks/useAuthentik'
 import { Card } from '@/components/ui/card'
+import { AuthSplit } from '../AuthSplit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,7 +50,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <AuthSplit>
       <Card className="w-full max-w-md p-8 fm-card">
         <div className="flex flex-col items-center mb-8">
           <OrangeLogo size="lg" />
@@ -144,6 +145,6 @@ export default function LoginPage() {
           </a>
         </div>
       </Card>
-    </div>
+    </AuthSplit>
   )
 }
