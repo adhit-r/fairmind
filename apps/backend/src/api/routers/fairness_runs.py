@@ -254,6 +254,7 @@ async def create_fairness_run(
     confirm_sha256: Optional[str] = Form(None),
     removal_reason: Optional[str] = Form(None),
     uncovered_reason: Optional[str] = Form(None),
+    keep_for_agent: Optional[str] = Form(None, description='"1" keeps this file so the release autopilot can re-run it'),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -317,9 +318,19 @@ async def create_fairness_run(
             "created_at": now,
         },
     )
+    kept = False
+    if keep_for_agent == "1" and confirmation["confirmed"]:
+        from api.routes.autopilot import keep_source  # autopilot imports this module
+
+        keep_source(
+            db, _caller_org(http), system_id, "fairness", kind="upload", file_name=file.filename, content=data,
+            actor=_authenticated_actor(current_user), basis={"evidenceId": evidence_id, "mapping": result["mapping"]},
+        )
+        kept = True
     db.commit()
     return {
         "runId": run_id,
+        "keptForAgent": kept,
         "evidenceId": evidence_id,
         "systemId": system_id,
         "title": title,
