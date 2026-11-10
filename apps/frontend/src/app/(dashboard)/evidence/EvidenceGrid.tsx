@@ -14,6 +14,8 @@ import { useJourney } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 import { confirmedFrameworks } from '../frameworks/[key]/grid'
 import { evidenceGrid } from './grid'
+import { EvidenceDemo } from '@/components/stageshow/EvidenceDemo'
+import { Illustration } from '@/components/stageshow/fm'
 
 const SEG = 'inline-flex rounded-full border border-[var(--fm-line)] bg-white p-0.5'
 const SEG_ITEM = 'inline-flex h-7 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'
@@ -117,6 +119,9 @@ export function EvidenceGrid() {
           </div>
         ) : grid && !n ? (
           <div className="px-[18px] pb-[18px]">
+            <Illustration className="mx-auto mb-4 max-w-[440px]" label="A sealed evidence item: a measured fairness run mapped to an EU AI Act article, in front of the evidence list">
+              <EvidenceDemo />
+            </Illustration>
             <Empty>
               No release check has read an evidence record yet.{' '}
               <Link className={LINK} href={LIBRARY_HREF}>

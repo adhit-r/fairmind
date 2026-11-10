@@ -14,6 +14,8 @@ import { usePendingDecisions } from '@/lib/api/hooks/usePendingDecisions'
 import { cn } from '@/lib/utils'
 import { VERDICT_LABEL, VERDICT_TONE } from '../systems/[id]/VerdictExplainer'
 import { CHECKS, CHECK_ACTION, estateGroups, estateNext, sinceLine, stations } from './estate'
+import { EstateDemo } from '@/components/stageshow/EstateDemo'
+import { Illustration } from '@/components/stageshow/fm'
 
 const LAST_VISIT = 'fairmind:last-visit'
 const LAPSED_SEEN = 'fairmind:lapsed-seen'
@@ -121,6 +123,9 @@ function Overview() {
     return (
       <section className="fm-card grid min-h-[420px] place-items-center p-9 text-center">
         <div className="max-w-md">
+          <Illustration className="mb-7" label="The Estate grid once sources are connected: each system's five release checks and its gate verdict">
+            <EstateDemo />
+          </Illustration>
           <h1 className="text-[28px] font-semibold tracking-tight">No AI systems under governance yet</h1>
           <p className="mt-3 text-[15px] text-[var(--fm-ink2)]">
             Register the first system to start the lifecycle. Evidence, decisions and framework coverage build from there.

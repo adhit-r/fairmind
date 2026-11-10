@@ -1,0 +1,40 @@
+/* Pinned, bottom bleed: inset a gutter left, right and top, off the bottom.
+   The source that filled it sits in the window's own toolbar. */
+.fe {
+  & .ss-stage { --gutter: 36px; }
+
+  .fe-window {
+    position: absolute;
+    top: var(--gutter);
+    left: var(--gutter);
+    right: var(--gutter);
+    height: 260px;
+    box-shadow: var(--ss-shadow-hero);
+  }
+  .fe-body { height: 100%; padding: 2px 16px 0; background: #fff; }
+
+  .fe-head,
+  .fe-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(5, 28px) 124px; align-items: center; }
+  .fe-head { align-items: end; height: 70px; padding-bottom: 8px; border-bottom: 1px solid var(--fm-line); }
+  .fe-vh { justify-self: center; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 10.5px; line-height: 1.3; color: var(--fm-ink2); white-space: nowrap; }
+  .fe-row { height: 36px; border-bottom: 1px solid var(--fm-line); }
+  .fe-cell { display: grid; place-items: center; }
+  .fe-gate { padding-left: 12px; }
+
+  .fe-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 12px 0 10px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid var(--fm-line);
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--fm-ink);
+    white-space: nowrap;
+  }
+  .fe-chip i { width: 6px; height: 6px; border-radius: 50%; background: #2f9e5b; }
+}
