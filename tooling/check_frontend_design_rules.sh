@@ -31,10 +31,7 @@ PINS=(
   'app/(dashboard)/admin/users/page.tsx:3'
   'app/(dashboard)/ai-bom/page.tsx:1'
   'app/(dashboard)/ai-governance/page.tsx:7'
-  'app/(dashboard)/alerts/page.tsx:1'
   'app/(dashboard)/assurance/evaluations/[runId]/page.tsx:2'
-  'app/(dashboard)/benchmarks/page.tsx:1'
-  'app/(dashboard)/bias/page.tsx:1'
   'app/(dashboard)/compliance-dashboard/components/ControlTracePanel.tsx:1'
   'app/(dashboard)/compliance-dashboard/components/FrameworkCatalog.tsx:1'
   'app/(dashboard)/compliance-dashboard/page.tsx:1'
@@ -67,8 +64,13 @@ PINS=(
   'components/workflow/SystemContext.tsx:1'
 )
 
+# components/stageshow/kit is the vendored Stageshow kit (third-party, MIT, see its LICENSE). It is kept
+# verbatim so it can be updated, and its gradients are mostly edge-fade masks. FairMind's own demo files
+# beside it (fm.css, *Demo.tsx, *-demo.css) are still checked.
+VENDORED='!**/components/stageshow/kit/**'
+
 rc=0
-raw=$(rg -c -i -e "$EMOJI" -e "$RETIRED" "$TARGET") || rc=$?
+raw=$(rg -c -i -e "$EMOJI" -e "$RETIRED" --glob "$VENDORED" "$TARGET") || rc=$?
 if [ "$rc" -ge 2 ]; then
   echo "Design check could not search $TARGET (rg exit $rc)."
   exit 1

@@ -187,7 +187,7 @@ def test_catalogue_counts(tmp_database):
 
 def test_catalogue_engine_status_matches_the_code():
     """'Engine exists' means runnable; rerun scripts/export_pack_catalogue.py when an engine is added."""
-    from src.api.routers.evaluation_results import RULES
+    from src.application.services.evaluation_results import RULES
     from src.application.services.eval_engines import REGISTRY
 
     catalogue = json.loads((Path(__file__).resolve().parents[1] / "src/api/routers/pack_catalogue_data/catalogue.json").read_text())

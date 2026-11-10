@@ -13,7 +13,7 @@ The code says otherwise:
 | Engine in the registry, file upload (including sector suites and results read from stored runs) | 47 | `src/application/services/eval_engines/{data,model,ops,suites,assess}.py` |
 | Engine in the registry, live probe of the AI system with a judge | 22 | `eval_engines/behaviour.py` |
 | Engine in the registry, agent platform configuration audit | 10 | `eval_engines/platform.py` |
-| Result rule over an older flow (fairness run, monitoring run, environmental assessment) | 5 | `src/api/routers/evaluation_results.py` `RULES`: FAI-01, FAI-02, FAI-06, FAI-07, ENV-01 |
+| Result rule over an older flow (fairness run, monitoring run, environmental assessment) | 5 | `src/application/services/evaluation_results.py` `RULES`: FAI-01, FAI-02, FAI-06, FAI-07, ENV-01 |
 | **Runnable today** | **84** | |
 | Not built | 25 | listed in section 4 |
 
