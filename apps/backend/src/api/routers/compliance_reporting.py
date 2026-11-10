@@ -243,27 +243,17 @@ async def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
         Dashboard data for stakeholders
     """
     try:
-        # First, we need to get compliance results
-        # In a real implementation, this would fetch from database
-        # For now, we'll return a sample structure
-        
-        sample_compliance_results = [
-            {
-                "framework": RegulatoryFramework.EU_AI_ACT,
-                "compliance_score": 85.0,
-                "overall_status": ComplianceStatus.COMPLIANT,
-                "total_requirements": 8,
-                "compliant_requirements": 7,
-                "recommendations": ["Address human oversight measures"],
-            }
-        ]
-        
-        dashboard_data = await compliance_service.generate_stakeholder_dashboard_data(
-            system_id=request.system_id,
-            compliance_results=sample_compliance_results,
-        )
-        
-        return dashboard_data
+        # Compliance checks are not persisted, so there are no stored results to build a dashboard from.
+        return {
+            "system_id": request.system_id,
+            "last_updated": datetime.utcnow().isoformat(),
+            "has_data": False,
+            "message": "No stored compliance results for this system",
+            "compliance_overview": {"overall_score": None, "frameworks": []},
+            "risk_indicators": {"high_priority_issues": 0, "open_recommendations": 0},
+            "trends": {"compliance_trend": None, "last_assessment_date": None},
+            "key_metrics": {"total_requirements": 0, "met_requirements": 0},
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

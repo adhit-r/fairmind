@@ -38,6 +38,8 @@ export interface BatchEvaluationResult {
   target_model: string
   judge_model: string
   results: Record<string, BiasEvaluationResult>
+  analysis_id?: string | null // set when stored against a system
+  finding_id?: string | null
 }
 
 export interface MultiJudgeResult {
@@ -244,7 +246,8 @@ export function useBatchEvaluate() {
       text: string,
       judgeModel: string,
       biasCategories: string[],
-      targetModel: string = 'unknown'
+      targetModel: string = 'unknown',
+      systemId?: string
     ): Promise<BatchEvaluationResult | null> => {
       setLoading(true)
       setError(null)
@@ -259,7 +262,8 @@ export function useBatchEvaluate() {
         })
 
         // Check cache
-        const cached = getCachedResult<BatchEvaluationResult>(cacheKey)
+        // A run against a system is stored, so it is never answered from the cache.
+        const cached = systemId ? null : getCachedResult<BatchEvaluationResult>(cacheKey)
         if (cached) {
           setResult(cached)
           return cached
@@ -271,6 +275,7 @@ export function useBatchEvaluate() {
           judge_model: judgeModel,
           bias_categories: biasCategories,
           target_model: targetModel,
+          system_id: systemId,
         })
         if (!response.success || !response.data) {
           throw new Error(response.error || 'Batch evaluation failed')

@@ -162,7 +162,8 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
         model_outputs: List[Dict[str, Any]],
         bias_category: BiasCategory,
         target_model: str = "unknown",
-        judge_model: Optional[JudgeModel] = None
+        judge_model: Optional[JudgeModel] = None,
+        complete=None,
     ) -> JudgeEvaluationResult:
         """
         Use LLM-as-Judge to evaluate bias in model outputs
@@ -200,7 +201,7 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
         
         # Call judge LLM
         try:
-            judge_response = await self._call_judge_llm(evaluation_prompt, judge)
+            judge_response = await (complete(evaluation_prompt) if complete else self._call_judge_llm(evaluation_prompt, judge))
             
             # Parse response
             result = self._parse_judge_response(
@@ -347,6 +348,7 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
         categories: List[BiasCategory],
         target_model: str = "unknown",
         judge_model: Optional[JudgeModel] = None,
+        complete=None,
     ) -> Dict[str, JudgeEvaluationResult]:
         """
         Evaluate bias across multiple categories
@@ -362,6 +364,7 @@ Format your response as JSON with keys: bias_score, confidence, detected_biases 
                 bias_category=category,
                 target_model=target_model,
                 judge_model=judge_model,
+                complete=complete,
             )
             results[category.value] = result
         

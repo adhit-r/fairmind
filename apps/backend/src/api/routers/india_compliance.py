@@ -9,10 +9,12 @@ Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime, timedelta
+import json
 import logging
 
 from ..schemas.india_compliance import (
@@ -265,15 +267,21 @@ async def check_compliance(
         
         logger.info(f"Starting compliance check for system {request.system_id} by user {user_context.user_id}")
         
-        # Collect evidence for the system
-        evidence = await evidence_collection_service.collect_all_evidence(request.system_id)
-        
-        # Get system data (in production, fetch from database)
+        # The system as registered (org access was checked above), then evidence from the India controls run
+        # over its stored configuration. A control the configuration cannot satisfy reports itself failed.
+        row = db.execute(
+            text("SELECT id, name, org_id, risk_tier, lifecycle_stage, metadata_json FROM governance_ai_systems WHERE id = :id"),
+            {"id": request.system_id},
+        ).fetchone()
+        config = row[5] if isinstance(row[5], dict) else (json.loads(row[5]) if row[5] else {})
         system_data = {
-            "system_id": request.system_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "system_id": row[0], "user_id": current_user.user_id, "name": row[1], "org_id": row[2], "risk_tier": row[3],
+            "lifecycle_stage": row[4], "config": config, "timestamp": datetime.utcnow().isoformat(),
         }
-        
+        collected = await evidence_collection_service.execute_all_controls(request.system_id, config)
+        # A control that had nothing to assess is not evidence of anything.
+        evidence = {e["control_id"]: e for e in collected if e.get("control_id") and getattr(e.get("status"), "value", e.get("status")) != "not_assessed"}
+
         # Check compliance for each framework
         results = []
         overall_score = 0.0

@@ -33,13 +33,6 @@ const SOTA_METHODS = [
     status: 'available'
   },
   { 
-    id: 'counterfactual', 
-    name: 'Counterfactual Fairness', 
-    description: 'Test consistency when demographic terms are swapped',
-    icon: IconTarget,
-    status: 'available'
-  },
-  { 
     id: 'red-teaming', 
     name: 'Red Teaming', 
     description: 'Adversarial testing to discover emergent bias',
@@ -75,12 +68,6 @@ export default function LLMTestingPage() {
     judgeModel: 'gpt-6.1-sol',
     biasCategory: 'gender',
     targetModel: '',
-    prompts: '',
-    responses: '',
-  })
-
-  // Counterfactual form state
-  const [counterfactualForm, setCounterfactualForm] = useState({
     prompts: '',
     responses: '',
   })
@@ -141,56 +128,6 @@ export default function LLMTestingPage() {
       setError(errorMsg)
       toast({
         title: "Evaluation Failed",
-        description: errorMsg,
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCounterfactual = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    try {
-      const prompts = counterfactualForm.prompts.split('\n').filter(p => p.trim())
-      const responses = counterfactualForm.responses.split('\n').filter(r => r.trim())
-
-      if (prompts.length !== responses.length) {
-        throw new Error('Number of prompts must match number of responses')
-      }
-
-      const response = await apiClient.post<any>('/api/v1/bias-detection-v2/detect-llm', {
-        dataset_id: null,
-        metrics: ['counterfactual_fairness'],
-        prompt_column: 'prompt',
-        response_column: 'response',
-        prompts: prompts,
-        responses: responses
-      })
-
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Counterfactual analysis failed')
-      }
-
-      const data = response.data
-      setResults({
-        method: 'counterfactual',
-        timestamp: new Date().toISOString(),
-        ...data
-      })
-
-      toast({
-        title: "Analysis Complete",
-        description: "Counterfactual fairness analysis completed",
-      })
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Analysis failed'
-      setError(errorMsg)
-      toast({
-        title: "Analysis Failed",
         description: errorMsg,
         variant: "destructive",
       })
@@ -354,53 +291,6 @@ export default function LLMTestingPage() {
         </Card>
       )}
 
-      {/* Counterfactual Fairness Form */}
-      {activeMethod === 'counterfactual' && (
-        <Card className="p-6 fm-card">
-          <div className="flex items-center gap-2 mb-4">
-            <IconTarget className="h-6 w-6" />
-            <h2 className="text-2xl font-bold">Counterfactual Fairness</h2>
-            <Badge className="ml-auto border border-[var(--fm-line)] bg-[var(--fm-ink)] text-white hover:bg-black">SOTA</Badge>
-          </div>
-          
-          <form onSubmit={handleCounterfactual} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="cf-prompts">Prompts (one per line)</Label>
-              <Textarea
-                id="cf-prompts"
-                value={counterfactualForm.prompts}
-                onChange={(e) => setCounterfactualForm({ ...counterfactualForm, prompts: e.target.value })}
-                placeholder="The doctor was&#10;The nurse was"
-                rows={4}
-                className="border border-[var(--fm-line)] font-mono"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cf-responses">Model Responses (one per line)</Label>
-              <Textarea
-                id="cf-responses"
-                value={counterfactualForm.responses}
-                onChange={(e) => setCounterfactualForm({ ...counterfactualForm, responses: e.target.value })}
-                placeholder="The doctor was skilled&#10;The nurse was caring"
-                rows={4}
-                className="border border-[var(--fm-line)] font-mono"
-                required
-              />
-            </div>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 border border-[var(--fm-line)] font-semibold transition-all bg-[var(--fm-ink)] text-white hover:bg-black"
-            >
-              {loading ? 'Analyzing...' : 'Run Counterfactual Analysis'}
-            </Button>
-          </form>
-        </Card>
-      )}
-
       {/* Results Display */}
       {results && (
         <Card className="p-6 fm-card">
@@ -490,7 +380,6 @@ export default function LLMTestingPage() {
         </p>
         <ul className="text-sm space-y-1 list-disc list-inside">
           <li><strong>LLM-as-Judge:</strong> Uses a judge LLM to evaluate bias with reasoning (2024-2025)</li>
-          <li><strong>Counterfactual Fairness:</strong> Tests consistency when demographic terms are swapped</li>
           <li><strong>Red Teaming:</strong> Adversarial testing to discover emergent bias patterns</li>
           <li><strong>WEAT/SEAT:</strong> Embedding-level bias detection</li>
           <li><strong>Minimal Pairs:</strong> Contextual bias detection through controlled comparisons</li>

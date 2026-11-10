@@ -1,270 +1,189 @@
 'use client'
 
 import { useState } from 'react'
-import { useAdvancedBias } from '@/lib/api/hooks/useAdvancedBias'
-import { useDatasets } from '@/lib/api/hooks/useDatasets'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { advancedBiasSchema, type AdvancedBiasFormData } from '@/lib/validations/schemas'
-import { useToast } from '@/hooks/use-toast'
-import { IconTarget, IconBrain, IconCheck, IconX, IconDatabase } from '@tabler/icons-react'
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
+import { apiClient } from '@/lib/api/api-client'
+import { API_ENDPOINTS } from '@/lib/api/endpoints'
+import { parseCsv } from '@/lib/csvRows'
 
-const ANALYSIS_TYPES = [
-  { value: 'causal', label: 'Causal Analysis' },
-  { value: 'counterfactual', label: 'Counterfactual Analysis' },
-  { value: 'intersectional', label: 'Intersectional Analysis' },
-  { value: 'adversarial', label: 'Adversarial Testing' },
-  { value: 'temporal', label: 'Temporal Analysis' },
-  { value: 'contextual', label: 'Contextual Analysis' },
+type Method = 'causal' | 'counterfactual' | 'intersectional' | 'adversarial' | 'temporal' | 'contextual'
+type Row = Record<string, string | number>
+
+const E = API_ENDPOINTS.advancedBiasDetection
+const METHODS: Array<{ value: Method; label: string; about: string; url: string; outcomeLabel: string }> = [
+  { value: 'causal', label: 'Causal analysis', about: 'Analyze causal relationships in bias', url: E.causalAnalysis, outcomeLabel: 'Outcome column' },
+  { value: 'counterfactual', label: 'Counterfactual analysis', about: 'Evaluate counterfactual fairness', url: E.counterfactualAnalysis, outcomeLabel: 'Prediction column' },
+  { value: 'intersectional', label: 'Intersectional analysis', about: 'Detect intersectional bias across the chosen attributes together', url: E.intersectionalAnalysis, outcomeLabel: 'Outcome column' },
+  { value: 'adversarial', label: 'Adversarial testing', about: 'Test adversarial robustness', url: E.adversarialTesting, outcomeLabel: 'Prediction column' },
+  { value: 'temporal', label: 'Temporal analysis', about: 'Analyze bias over time', url: E.temporalAnalysis, outcomeLabel: 'Outcome column' },
+  { value: 'contextual', label: 'Contextual analysis', about: 'Context-aware bias detection', url: E.contextualAnalysis, outcomeLabel: 'Outcome column' },
 ]
+// The service reads these as free-form labels; one perturbation of the protected attributes is what it runs.
+const ATTACK_VECTORS = ['attribute_perturbation']
 
-export default function AdvancedBiasPage() {
-  const {
-    runCausalAnalysis,
-    runCounterfactualAnalysis,
-    runIntersectionalAnalysis,
-    runAdversarialTesting,
-    loading,
-    error,
-  } = useAdvancedBias()
-  const { datasets, loading: datasetsLoading } = useDatasets()
-  const { toast } = useToast()
-  const [results, setResults] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState('causal')
-  const [selectedDataset, setSelectedDataset] = useState('')
+interface Stored {
+  stored_id?: string | null
+  finding_id?: string | null
+  bias_type: string
+  analysis_method: string
+  overall_bias_score: number
+  confidence_level: number
+  recommendations: string[]
+  risk_assessment: Record<string, unknown>
+}
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    watch,
-    reset,
-  } = useForm<AdvancedBiasFormData>({
-    resolver: zodResolver(advancedBiasSchema),
-  })
-
-  const analysisType = watch('analysisType')
-
-  const onSubmit = async (data: AdvancedBiasFormData) => {
-    if (!selectedDataset) {
-      toast({
-        title: "Dataset required",
-        description: "Please select a dataset for bias analysis",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      let result
-      const analysisParams = { modelId: data.modelId, datasetId: selectedDataset, ...data.parameters }
-      switch (data.analysisType) {
-        case 'causal':
-          result = await runCausalAnalysis(analysisParams)
-          break
-        case 'counterfactual':
-          result = await runCounterfactualAnalysis(analysisParams)
-          break
-        case 'intersectional':
-          result = await runIntersectionalAnalysis(analysisParams)
-          break
-        case 'adversarial':
-          result = await runAdversarialTesting(analysisParams)
-          break
-        default:
-          throw new Error('Unsupported analysis type')
-      }
-      setResults(result)
-      toast({
-        title: 'Analysis completed',
-        description: `${ANALYSIS_TYPES.find(t => t.value === data.analysisType)?.label} completed successfully.`,
-      })
-    } catch (err) {
-      toast({
-        title: 'Analysis failed',
-        description: err instanceof Error ? err.message : 'An error occurred',
-        variant: 'destructive',
-      })
-    }
-  }
-
+function ColumnSelect({ label, value, onChange, header }: { label: string; value: string; onChange: (v: string) => void; header: string[] }) {
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Advanced Bias Detection</h1>
-        <p className="text-muted-foreground mt-1">
-          Advanced bias analysis techniques for comprehensive evaluation
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Analysis Form */}
-        <Card className="p-6 fm-card">
-          <h2 className="text-2xl font-bold mb-4">Run Advanced Analysis</h2>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="modelId">Model ID</Label>
-              <Input
-                id="modelId"
-                {...register('modelId')}
-                className="border border-[var(--fm-line)]"
-                placeholder="Enter model ID"
-              />
-              {errors.modelId && (
-                <p className="text-sm text-red-600">{errors.modelId.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="datasetId">Dataset *</Label>
-              <Select
-                value={selectedDataset}
-                onValueChange={setSelectedDataset}
-                disabled={datasetsLoading}
-              >
-                <SelectTrigger className="border border-[var(--fm-line)]">
-                  <SelectValue placeholder={datasetsLoading ? "Loading datasets..." : "Select dataset"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {datasets.length === 0 ? (
-                    <SelectItem value="none" disabled>No datasets available</SelectItem>
-                  ) : (
-                    datasets.map((dataset) => (
-                      <SelectItem key={dataset.id} value={dataset.id}>
-                        {dataset.name} ({dataset.file_type.toUpperCase()})
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {datasets.length === 0 && !datasetsLoading && (
-                <p className="text-sm text-muted-foreground">
-                  <IconDatabase className="inline h-4 w-4 mr-1" />
-                  No datasets found. <a href="/datasets" className="underline">Upload a dataset</a> first.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="analysisType">Analysis Type</Label>
-              <Select
-                value={analysisType}
-                onValueChange={(value) => {
-                  register('analysisType').onChange({ target: { value } })
-                  setActiveTab(value)
-                }}
-              >
-                <SelectTrigger className="border border-[var(--fm-line)]">
-                  <SelectValue placeholder="Select analysis type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ANALYSIS_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.analysisType && (
-                <p className="text-sm text-red-600">{errors.analysisType.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="parameters">Parameters (JSON)</Label>
-              <Textarea
-                id="parameters"
-                {...register('parameters')}
-                className="border border-[var(--fm-line)] font-mono"
-                rows={6}
-                placeholder='{"sensitiveAttributes": ["gender", "race"], "threshold": 0.05}'
-              />
-              {errors.parameters && (
-                <p className="text-sm text-red-600">{String(errors.parameters.message)}</p>
-              )}
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Running analysis...' : 'Run Analysis'}
-            </Button>
-          </form>
-        </Card>
-
-        {/* Results */}
-        <Card className="p-6 fm-card">
-          <h2 className="text-2xl font-bold mb-4">Analysis Results</h2>
-
-          {results ? (
-            <div className="space-y-4">
-              <div className="p-4 border border-[var(--fm-line)] bg-white">
-                <p className="text-sm font-medium mb-2">Analysis ID</p>
-                <p className="font-mono text-sm">{results.id}</p>
-              </div>
-
-              <div className="p-4 border border-[var(--fm-line)] bg-white">
-                <p className="text-sm font-medium mb-2">Type</p>
-                <Badge variant="default" className="border border-[var(--fm-line)]">
-                  {results.type}
-                </Badge>
-              </div>
-
-              {results.results && (
-                <div className="p-4 border border-[var(--fm-line)] bg-white">
-                  <p className="text-sm font-medium mb-2">Results</p>
-                  <pre className="text-xs bg-gray-50 p-2 border border-[var(--fm-line)] overflow-auto max-h-64">
-                    {JSON.stringify(results.results, null, 2)}
-                  </pre>
-                </div>
-              )}
-
-              <div className="p-4 border border-[var(--fm-line)] bg-white">
-                <p className="text-sm font-medium mb-2">Timestamp</p>
-                <p className="text-sm">{new Date(results.timestamp).toLocaleString()}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <IconBrain className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No analysis results yet</p>
-              <p className="text-sm">Run an analysis to see results here</p>
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Analysis Types Info */}
-      <Card className="p-6 fm-card">
-        <h2 className="text-2xl font-bold mb-4">Analysis Types</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ANALYSIS_TYPES.map((type) => (
-            <div
-              key={type.value}
-              className="p-4 border border-[var(--fm-line)] bg-white"
-            >
-              <h3 className="font-bold mb-2">{type.label}</h3>
-              <p className="text-sm text-muted-foreground">
-                {type.value === 'causal' && 'Analyze causal relationships in bias'}
-                {type.value === 'counterfactual' && 'Evaluate counterfactual fairness'}
-                {type.value === 'intersectional' && 'Detect intersectional bias'}
-                {type.value === 'adversarial' && 'Test adversarial robustness'}
-                {type.value === 'temporal' && 'Analyze bias over time'}
-                {type.value === 'contextual' && 'Context-aware bias detection'}
-              </p>
-            </div>
-          ))}
-        </div>
-      </Card>
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="rounded-[10px] border border-[var(--fm-line)]"><SelectValue placeholder="Choose a column" /></SelectTrigger>
+        <SelectContent>{header.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}</SelectContent>
+      </Select>
     </div>
   )
 }
 
+function ColumnChecks({ label, values, onChange, header }: { label: string; values: string[]; onChange: (v: string[]) => void; header: string[] }) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex flex-wrap gap-2">
+        {header.map((h) => {
+          const on = values.includes(h)
+          return (
+            <button key={h} type="button" onClick={() => onChange(on ? values.filter((v) => v !== h) : [...values, h])}
+              className={`rounded-full border px-3 py-1 text-[12.5px] ${on ? 'border-[var(--fm-ink)] bg-[var(--fm-ink)] text-white' : 'border-[var(--fm-line)] bg-white text-[var(--fm-ink2)]'}`}>
+              {h}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export default function AdvancedBiasPage() {
+  const { selectedSystem } = useSystemContext()
+  const systemId = selectedSystem.metadata?.source === 'fallback' || !selectedSystem.id ? undefined : selectedSystem.id
+  const [method, setMethod] = useState<Method>('causal')
+  const [file, setFile] = useState<{ name: string; header: string[]; rows: Row[]; truncated: boolean } | null>(null)
+  const [outcome, setOutcome] = useState('')
+  const [attributes, setAttributes] = useState<string[]>([])
+  const [treatment, setTreatment] = useState('')
+  const [timeColumn, setTimeColumn] = useState('')
+  const [contexts, setContexts] = useState<string[]>([])
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<Stored | null>(null)
+
+  const spec = METHODS.find((m) => m.value === method)!
+  const header = file?.header ?? []
+
+  const missing = !file ? 'Choose a CSV file'
+    : !outcome ? `Choose the ${spec.outcomeLabel.toLowerCase()}`
+    : attributes.length === 0 ? 'Choose at least one protected attribute'
+    : method === 'causal' && !treatment ? 'Choose the treatment column'
+    : method === 'temporal' && !timeColumn ? 'Choose the time column'
+    : method === 'contextual' && contexts.length === 0 ? 'Choose at least one context column'
+    : method === 'intersectional' && attributes.length < 2 ? 'Choose at least two attributes to combine'
+    : null
+
+  const onFile = async (f: File | undefined) => {
+    setResult(null); setError(null)
+    if (!f) return setFile(null)
+    const parsed = parseCsv(await f.text())
+    setFile({ name: f.name, ...parsed })
+    setOutcome(''); setAttributes([]); setTreatment(''); setTimeColumn(''); setContexts([])
+  }
+
+  const body = () => {
+    const rows = file!.rows
+    // The counterfactual and adversarial models read the column named "prediction".
+    const predictions = rows.map((r) => ({ ...r, prediction: r[outcome] }))
+    switch (method) {
+      case 'causal': return { data: rows, treatment_variable: treatment, outcome_variable: outcome, protected_attributes: attributes }
+      case 'counterfactual': return { model_predictions: predictions, protected_attributes: attributes }
+      case 'intersectional': return { data: rows, intersection_groups: [attributes], outcome_variable: outcome }
+      case 'adversarial': return { model_predictions: predictions, attack_vectors: ATTACK_VECTORS, protected_attributes: attributes }
+      case 'temporal': return { time_series_data: rows, time_column: timeColumn, outcome_variable: outcome, protected_attributes: attributes }
+      case 'contextual': return { data: rows, context_features: contexts, protected_attributes: attributes, outcome_variable: outcome }
+    }
+  }
+
+  const run = async () => {
+    setRunning(true); setError(null); setResult(null)
+    const res = await apiClient.post<Stored>(spec.url, { ...body(), system_id: systemId })
+    if (res.success && res.data) setResult(res.data)
+    else setError(res.error || 'The analysis failed')
+    setRunning(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-[30px] font-semibold tracking-[-.03em]">Advanced Bias Detection</h1>
+        <p className="text-[var(--fm-ink2)] mt-1">Upload decisions as a CSV, choose the columns, and the result is stored against the selected system.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Run an analysis</h2>
+          <div className="space-y-2">
+            <Label>Method</Label>
+            <Select value={method} onValueChange={(v) => { setMethod(v as Method); setResult(null) }}>
+              <SelectTrigger className="rounded-[10px] border border-[var(--fm-line)]"><SelectValue /></SelectTrigger>
+              <SelectContent>{METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+            </Select>
+            <p className="text-[12.5px] text-[var(--fm-ink2)]">{spec.about}</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="csv">CSV file</Label>
+            <input id="csv" type="file" accept=".csv,text/csv" onChange={(e) => onFile(e.target.files?.[0])}
+              className="block w-full rounded-[10px] border border-[var(--fm-line)] bg-white p-2 text-[13px]" />
+            {file && <p className="text-[12.5px] text-[var(--fm-ink2)]">{file.name}: {file.rows.length} rows{file.truncated ? ' (the first 5000 are used)' : ''}</p>}
+          </div>
+          {file && (
+            <>
+              <ColumnSelect label={spec.outcomeLabel} value={outcome} onChange={setOutcome} header={header} />
+              {method === 'causal' && <ColumnSelect label="Treatment column" value={treatment} onChange={setTreatment} header={header} />}
+              {method === 'temporal' && <ColumnSelect label="Time column" value={timeColumn} onChange={setTimeColumn} header={header} />}
+              <ColumnChecks label="Protected attributes" values={attributes} onChange={setAttributes} header={header} />
+              {method === 'contextual' && <ColumnChecks label="Context columns" values={contexts} onChange={setContexts} header={header} />}
+            </>
+          )}
+          {!systemId && <p className="text-[12.5px] text-[var(--fm-ink2)]">No system is selected, so this result will not be stored.</p>}
+          {missing && file && <p className="text-[12.5px] text-[var(--fm-ink2)]">{missing}</p>}
+          {error && <p className="text-[13px] text-red-700">{error}</p>}
+          <Button className="rounded-full" onClick={run} disabled={running || !!missing}>{running ? 'Running analysis...' : 'Run analysis'}</Button>
+        </Card>
+
+        <Card className="p-6 space-y-3">
+          <h2 className="text-lg font-semibold">Result</h2>
+          {result ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{result.analysis_method}</Badge>
+                {typeof result.risk_assessment.risk_level === 'string' && <Badge variant="outline">risk {result.risk_assessment.risk_level}</Badge>}
+                {result.stored_id && <Badge variant="outline">stored</Badge>}
+                {result.finding_id && <Badge variant="outline">finding opened</Badge>}
+              </div>
+              <p className="text-[13px] text-[var(--fm-ink2)]">Bias score {result.overall_bias_score.toFixed(3)}, confidence {result.confidence_level.toFixed(2)}</p>
+              <ul className="list-disc pl-5 text-[13px] space-y-1">{result.recommendations.map((r) => <li key={r}>{r}</li>)}</ul>
+            </>
+          ) : (
+            <p className="text-[13px] text-[var(--fm-ink2)]">Run an analysis to see its result here.</p>
+          )}
+        </Card>
+      </div>
+
+      {systemId && <StoredAnalyses systemId={systemId} sources={['advanced']} refreshKey={result?.stored_id ?? 0} />}
+    </div>
+  )
+}

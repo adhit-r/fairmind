@@ -51,7 +51,6 @@ export const API_ENDPOINTS = {
 
   // Bias Detection
   biasDetection: {
-    detect: '/api/v1/bias/analyze/dataset',
     testWeat: '/api/v1/bias-detection/test/weat',
     testFairness: '/api/v1/bias-detection/test/fairness',
     testImage: '/api/v1/bias-detection/test/image',
@@ -112,6 +111,7 @@ export const API_ENDPOINTS = {
     systemApplicabilityAcceptOverride: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/applicability/accept-override`,
     generateReport: '/api/v1/ai-governance/reports/generate',
     listReports: '/api/v1/ai-governance/reports',
+    exportReport: (id: string, format: 'pdf' | 'docx') => `/api/v1/reports/snapshots/${encodeURIComponent(id)}/${format}`,
     assessRisks: '/api/v1/ai-governance/risks/assess',
     riskDashboard: '/api/v1/ai-governance/dashboard/risk',
     status: '/api/v1/ai-governance/status',
@@ -280,7 +280,7 @@ export const API_ENDPOINTS = {
 
   // Invitations
   invitations: {
-    getDetails: (token: string) => `/api/v1/invitations/${token}`,
-    accept: (token: string) => `/api/v1/invitations/${token}/accept`,
+    getDetails: (token: string) => `/api/v1/organizations/invitations/${token}`,
+    accept: (token: string) => `/api/v1/organizations/invitations/${token}/accept`,
   },
 } as const

@@ -146,6 +146,8 @@ async def create_run(
         if len(raw) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=f"{slot.label} is over 25 MB")
         files[slot.name], names[slot.name] = raw, upload.filename
+    if engine.collect:
+        files.update(engine.collect(db, m.org_id, system_id))
     for p in engine.params:
         if p.required and params.get(p.name) in (None, ""):
             raise HTTPException(status_code=422, detail=f"Set {p.label.lower()}")

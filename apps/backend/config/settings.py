@@ -7,7 +7,7 @@ import secrets
 from typing import List, Optional
 try:
     from pydantic_settings import BaseSettings
-    from pydantic import field_validator
+    from pydantic import field_validator, model_validator
     validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
@@ -312,6 +312,15 @@ class ProductionSettings(Settings):
     database_echo: bool = False
     
     # Production security requirements
+    @model_validator(mode="after")
+    def require_explicit_secrets(self):
+        # The base defaults are random per process, so an unset secret passes every check below
+        # yet signs tokens no other worker or restart can verify. Production must supply both.
+        missing = [n.upper() for n in ("secret_key", "jwt_secret") if n not in self.model_fields_set]
+        if missing:
+            raise ValueError(f"{' and '.join(missing)} must be set when ENVIRONMENT is production")
+        return self
+
     @validator("secret_key")
     def validate_secret_key(cls, v):
         if v == "development-secret-key-change-in-production":

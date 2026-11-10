@@ -80,7 +80,6 @@ export default function ProvenancePage() {
                 <TableHead className="font-bold">Model ID</TableHead>
                 <TableHead className="font-bold">Lineage Depth</TableHead>
                 <TableHead className="font-bold">Timestamp</TableHead>
-                <TableHead className="font-bold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -95,11 +94,6 @@ export default function ProvenancePage() {
                   </TableCell>
                   <TableCell>
                     {new Date(record.timestamp).toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="noShadow" size="sm">
-                      View Details
-                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

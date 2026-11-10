@@ -3,6 +3,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { IconInfoCircle, IconRefresh, IconArrowRight } from '@tabler/icons-react'
 import { useAvailableModels, useBatchEvaluate } from '@/lib/api/hooks/useLLMJudge'
 import { InputForm } from './components/InputForm'
@@ -26,6 +28,8 @@ export default function LLMJudgePage() {
 
   const { models, categories, loading: modelsLoading, error: modelsError } = useAvailableModels()
   const { evaluateBatch, result, loading, error, clearResult } = useBatchEvaluate()
+  const { selectedSystem } = useSystemContext()
+  const systemId = selectedSystem.metadata?.source === 'fallback' || !selectedSystem.id ? undefined : selectedSystem.id
 
   // ========================================================================
   // Handlers
@@ -37,7 +41,7 @@ export default function LLMJudgePage() {
     biasCategories: string[],
     targetModel: string
   ) => {
-    await evaluateBatch(text, judgeModel, biasCategories, targetModel)
+    await evaluateBatch(text, judgeModel, biasCategories, targetModel, systemId)
   }
 
   const handleNewEvaluation = () => {
@@ -69,6 +73,8 @@ export default function LLMJudgePage() {
           state-of-the-art judge models for comprehensive bias detection.
         </AlertDescription>
       </Alert>
+
+      {systemId && <StoredAnalyses systemId={systemId} sources={['judge']} refreshKey={result?.analysis_id ?? 0} />}
 
       {/* Main Content */}
       {!hasResults ? (

@@ -3,7 +3,6 @@ import {
   IconScale,
   IconShieldLock,
   IconActivity,
-  IconChartLine,
   IconSettings,
   IconRobot,
   IconTarget,
@@ -133,12 +132,6 @@ export const NAVIGATION_ITEMS: NavigationCategory[] = [
     title: 'Operate',
     icon: IconActivity,
     items: [
-      {
-        title: 'Advanced Analytics',
-        href: '/analytics',
-        icon: IconChartLine,
-        description: 'Trends and comparisons',
-      },
       {
         title: 'Real-time Monitoring',
         href: '/monitoring',

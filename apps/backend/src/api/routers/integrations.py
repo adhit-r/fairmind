@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _caller_org, _load_json_value
+from api.routes.llm import LLMError, _public_https, decrypt, encrypt
 from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
 
@@ -94,10 +95,19 @@ def suggest_stage_mlflow(versions: List[Dict[str, Any]], aliases: Dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
-async def _sync_mlflow(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+def _public_tracking_uri(config: Dict[str, Any]) -> str:
+    """The MLflow tracking URI, which must be a public https address: it is fetched server-side."""
     base = str(config.get("tracking_uri") or "").rstrip("/")
     if not base:
         raise HTTPException(status_code=400, detail="MLflow integration has no tracking_uri")
+    try:
+        return _public_https(base, "MLflow tracking URI")
+    except LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+async def _sync_mlflow(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+    base = _public_tracking_uri(config)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     found: List[Dict[str, Any]] = []
     page_token: Optional[str] = None
@@ -400,6 +410,8 @@ async def list_integrations(http: Request, db: Session = Depends(get_db)):
 @router.post("", status_code=201, dependencies=[Depends(org_mutator)])
 async def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
+    if body.kind == "mlflow":
+        _public_tracking_uri(body.config)
     row_id = str(uuid.uuid4())
     db.execute(
         text(
@@ -412,7 +424,7 @@ async def create_integration(body: IntegrationCreate, http: Request, db: Session
             "kind": body.kind,
             "name": body.name,
             "config": json.dumps(body.config),
-            "token": body.token or None,
+            "token": encrypt(body.token) if body.token else None,
             "now": _now(),
         },
     )
@@ -437,8 +449,10 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
     _ensure_tables()
     org = _caller_org(http)
     row = _get_integration(db, org, integration_id)
-    kind, config, token = row[2], _load_json_value(row[4], {}), row[5]
+    # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
+    kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
     now = _now()
+    legacy_plaintext = bool(row[5]) and decrypt(row[5]) is None
     try:
         found = await _CONNECTORS[kind](config, token)
     except HTTPException as exc:
@@ -448,6 +462,9 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
         )
         db.commit()
         raise
+
+    if legacy_plaintext:
+        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": integration_id})
 
     created = updated = 0
     for item in found:

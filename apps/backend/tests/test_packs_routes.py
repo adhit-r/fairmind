@@ -266,7 +266,7 @@ def test_evaluations_filter_by_pillar_and_engine(tmp_database):
     everything = client.get(f"{PACKS}/evaluations").json()
     assert len(everything) == 109
     secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Partial"}).json()
-    assert len(secure) == 2 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
+    assert len(secure) == 1 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
     drift = client.get(f"{PACKS}/evaluations", params={"q": "data drift"}).json()
     assert [e["id"] for e in drift] == ["EV-DAT-01"] and drift[0]["tests"] and drift[0]["installed"] is False
     assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["pack"]["id"] == drift[0]["pack"]["id"]

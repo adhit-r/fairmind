@@ -956,3 +956,44 @@ def test_listing_approval_requests_across_systems_shows_only_what_the_user_can_s
     assert theirs.status_code == 200 and theirs.json() == []
     scoped = client.get(f"/api/v1/ai-governance/approval-requests?entity_type=ai_system&entity_id={system_id}")
     assert scoped.status_code in (403, 404)
+
+
+def test_stored_report_exports_pdf_and_docx_and_rejects_posted_claims(assurance_client) -> None:
+    client, session_factory, active_user = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="owner")
+    _seed_org(session, ORG_B, USER_B, role="owner")
+    system_id, _, _ = _seed_catalog_and_system(session)
+    session.close()
+
+    report_id = client.post(
+        "/api/v1/ai-governance/reports/generate",
+        json={"system_id": system_id, "report_type": "governance"},
+    ).json()["id"]
+
+    pdf = client.get(f"/api/v1/reports/snapshots/{report_id}/pdf")
+    docx = client.get(f"/api/v1/reports/snapshots/{report_id}/docx")
+    legacy = client.post("/api/v1/reports/bias-evaluation/pdf", json={"report_id": report_id})
+    assert pdf.status_code == docx.status_code == legacy.status_code == 200
+    assert pdf.content.startswith(b"%PDF") and legacy.content.startswith(b"%PDF")
+    assert docx.content.startswith(b"PK") and b"System A" in pdf.content
+    import io
+    import zipfile
+
+    from docx import Document
+
+    text = "\n".join(p.text for p in Document(io.BytesIO(docx.content)).paragraphs)
+    cells = " ".join(c.text for t in Document(io.BytesIO(docx.content)).tables for r in t.rows for c in r.cells)
+    assert "System A" in cells and report_id in cells and "Snapshot SHA-256" in cells
+    assert zipfile.is_zipfile(io.BytesIO(docx.content)) and text
+
+    posted = client.post(
+        "/api/v1/reports/bias-evaluation/pdf",
+        json={"report_id": report_id, "compliance_status": {"gdpr_compliant": True}},
+    )
+    assert posted.status_code == 422
+    assert client.post("/api/v1/reports/bias-evaluation/docx", json={"model_type": "x"}).status_code == 422
+
+    active_user["value"] = _token(USER_B)
+    assert client.get(f"/api/v1/reports/snapshots/{report_id}/pdf").status_code == 404
+    assert client.post("/api/v1/reports/bias-evaluation/docx", json={"report_id": report_id}).status_code == 404

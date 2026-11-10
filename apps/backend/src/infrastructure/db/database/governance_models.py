@@ -3929,6 +3929,23 @@ class GovernanceMonitoringPolicy(Base):
         return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
 
 
+class GovernanceBiasAnalysis(Base):
+    """A stored LLM-judge or advanced-bias analysis run against one AI system."""
+
+    __tablename__ = "governance_bias_analyses"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)  # "llm-judge" or an advanced-bias method, e.g. "causal"
+    inputs_json = Column(Text, nullable=False, default="{}")  # summary of what was analysed, not the raw rows
+    result_json = Column(Text, nullable=False, default="{}")
+    verdict = Column(String, nullable=False)  # "pass", "fail" or "insufficient"
+    severity = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 

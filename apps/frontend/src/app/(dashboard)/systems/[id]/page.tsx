@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { checkCell } from '@/components/ui/matrix'
 import { VERDICT_LABEL, VERDICT_TONE, VerdictExplainer, tierOverride } from './VerdictExplainer'
 import { TargetPanel } from './TargetPanel'
+import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { cn } from '@/lib/utils'
 
 type JourneyKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'decision' | 'operate'
@@ -174,8 +175,11 @@ function SystemFileBody({ id }: { id: string }) {
   useEffect(() => reveal(window.location.hash), [])
 
   const open = (href: string) => {
-    if (id) setSelectedSystemId(id)
-    router.push(href)
+    if (!id) return router.push(href)
+    setSelectedSystemId(id)
+    // Carry the system in the URL so the link can be shared; SystemContext reads ?system=.
+    const [path, hash] = href.split('#')
+    router.push(`${path}${path.includes('?') ? '&' : '?'}system=${encodeURIComponent(id)}${hash ? `#${hash}` : ''}`)
   }
 
   const act = async (key: string, fn: () => Promise<void>) => {
@@ -360,6 +364,7 @@ function SystemFileBody({ id }: { id: string }) {
             />
             <FairnessRunPanel inspect={inspectCsv} run={runFairness} />
             {id && <TargetPanel systemId={id} />}
+            {id && <StoredAnalyses systemId={id} sources={['judge', 'advanced']} />}
           </Stage>
 
           <Stage step={JOURNEY[2]} {...stage('govern')} pill={<Action small onClick={() => open(`/systems/${encodeURIComponent(id)}/plan`)}>Open plan</Action>} primary={<Action onClick={() => open(`/systems/${encodeURIComponent(id)}/plan`)}>Open plan</Action>} actions={<>

@@ -107,6 +107,12 @@ function getStoredSystemId() {
   return window.localStorage.getItem("fairmind:selected-ai-system")
 }
 
+/** A `?system=<id>` in the URL wins over the remembered selection, so links are shareable. */
+function getUrlSystemId() {
+  if (typeof window === "undefined") return null
+  return new URLSearchParams(window.location.search).get("system")
+}
+
 export function chooseSelectedSystemId(
   systemIds: string[],
   currentId: string,
@@ -174,7 +180,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
           return chooseSelectedSystemId(
             nextSystems.map((system) => system.id),
             currentId,
-            getStoredSystemId(),
+            getUrlSystemId() ?? getStoredSystemId(),
           )
         })
       } else {
