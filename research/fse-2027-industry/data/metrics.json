@@ -1,0 +1,74 @@
+{
+ "window": {
+  "start": "2026-11-01",
+  "end_inclusive": "2026-11-09",
+  "tz": "+00:00",
+  "branch": "origin/main"
+ },
+ "commits_non_merge": 386,
+ "commits_ai_coauthored": 366,
+ "commits_ai_share": 0.948,
+ "commits_author_date_before_window": 12,
+ "ai_coauthor_names": {
+  "Claude Opus 5.5": 301,
+  "Claude Fable 5.1": 64,
+  "Claude Opus 4.8": 1
+ },
+ "merged_prs": 174,
+ "merged_prs_per_day_min_max": [
+  6,
+  47
+ ],
+ "test_runs": {
+  "success": 165,
+  "failure": 66,
+  "action_required": 1
+ },
+ "failed_runs_by_job": {
+  "backend": 59,
+  "sandbox": 3,
+  "boundaries": 2,
+  "frontend": 2
+ },
+ "releases": [
+  {
+   "tag": "v0.3.1-alpha",
+   "published": "2026-11-08T23:00:45Z",
+   "signed": true
+  },
+  {
+   "tag": "v0.3.0-alpha",
+   "published": "2026-11-07T19:44:48Z",
+   "signed": true
+  },
+  {
+   "tag": "v0.2.0-alpha",
+   "published": "2026-11-05T14:59:40Z",
+   "signed": false
+  }
+ ],
+ "scorecard": {
+  "date": "2026-11-10T05:33:50Z",
+  "score": 8.5,
+  "checks": {
+   "Code-Review": 0,
+   "Maintained": 10,
+   "Dependency-Update-Tool": 10,
+   "Security-Policy": 10,
+   "Dangerous-Workflow": 10,
+   "Token-Permissions": 10,
+   "Binary-Artifacts": 10,
+   "CII-Best-Practices": 5,
+   "Pinned-Dependencies": 9,
+   "License": 10,
+   "SAST": 10,
+   "Packaging": 10,
+   "Branch-Protection": 5,
+   "Signed-Releases": 9,
+   "Vulnerabilities": 10,
+   "Fuzzing": 10,
+   "Contributors": 3,
+   "CI-Tests": 10
+  }
+ }
+}

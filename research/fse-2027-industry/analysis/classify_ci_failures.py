@@ -23,6 +23,9 @@ SIGS = [
     ("flaky: evidence revalidation", False, r"FAILED tests/test_verified_evidence_admission_postgres.py"),
 ]
 
+# Branch whose pull request introduced each break on main.
+ORIGIN = {"break on main: changed golden values": "task/fairmind-e-ccai-review"}
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -37,6 +40,9 @@ def main():
                          if re.search(r"FAILED |Error|error|expected|counts changed", l))
         hits = [(c, own) for c, own, pat in SIGS if re.search(pat, log, re.M)]
         cause, own = hits[0] if hits else ("run-level failure, no failed job log", False)
+        # A break on main is the change's own failure on the branch that introduced it.
+        if ORIGIN.get(cause) == r["headBranch"]:
+            cause, own = "regression in the change", True
         later = [x for x in allruns if x["headBranch"] == r["headBranch"] and x["createdAt"] > r["createdAt"]]
         n = next((i + 1 for i, x in enumerate(later) if x["conclusion"] == "success"), None)
         rows.append({"run": r["databaseId"], "created": r["createdAt"], "branch": r["headBranch"], "event": r["event"],
