@@ -3,7 +3,7 @@
 import importlib
 from pathlib import Path
 
-from src.api.routers.evaluation_results import RULES
+from src.application.services.evaluation_results import RULES
 from src.application.services.eval_engines import REGISTRY, VALIDATED
 from tests.known_answer import COVERED
 

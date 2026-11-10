@@ -115,7 +115,7 @@ def _fairness_payload(files: Dict[str, bytes], params: Dict[str, Any], cache: Di
 def _fairness_part(evaluation: str) -> Callable[..., Dict[str, Any]]:
     """The same rule that reads a stored fairness run onto the evaluations page, applied to a run made from the decisions file."""
     def run(files, params, cache):
-        from src.api.routers.evaluation_results import RULES
+        from src.application.services.evaluation_results import RULES
 
         verdict = RULES[evaluation][1](_fairness_payload(files, params, cache))
         if verdict is None:
@@ -190,7 +190,7 @@ def _suite_engine(suite_id: str, parts: Tuple[str, ...]) -> Engine:
 
 def collect_results(db, org_id: str, system_id: str) -> Dict[str, bytes]:
     """The latest stored result of every evaluation for one AI system."""
-    from src.api.routers.evaluation_results import results
+    from src.application.services.evaluation_results import results
 
     rows = [{"evaluationId": ev, "status": s["status"], "detail": s["detail"], "at": s["at"]}
             for ev, r in results(db, org_id).items() for s in r["systems"] if s["systemId"] == system_id]
