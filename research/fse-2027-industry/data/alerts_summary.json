@@ -1,0 +1,28 @@
+{
+ "dependabot": {
+  "open_at_start": 420,
+  "open_at_start_by_severity": {
+   "medium": 159,
+   "high": 200,
+   "low": 31,
+   "critical": 30
+  },
+  "of_those_closed_in_window": 420,
+  "last_closed": "2026-11-04",
+  "opened_in_window": 0
+ },
+ "code_scanning": {
+  "raised_in_window": 48,
+  "raised_by_tool_and_state": {
+   "Scorecard:fixed": 42,
+   "Scorecard:open": 1,
+   "CodeQL:dismissed": 4,
+   "CodeQL:fixed": 1
+  },
+  "raised_high_by_tool": {
+   "Scorecard": 11,
+   "CodeQL": 5
+  },
+  "older_alerts_closed_in_window": 59
+ }
+}

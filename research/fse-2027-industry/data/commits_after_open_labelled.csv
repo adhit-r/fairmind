@@ -1,0 +1,119 @@
+pr,commit,headline,prompted_by
+183,6229703da5,fix: address maintainer review feedback on risk taxonomy PR,review feedback
+183,1cb7ecafe1,use as alias for both model imports in create_tables,continued work
+183,87110d6fdb,Merge branch 'main' into feat/risk-taxonomy-157,catch-up merge from main
+183,58ee9b8c16,chore: cleanup,cleanup or revert
+187,21ace2c8c2,docs: pin js-yaml to the patched 4.3.2,security scanner or advisory
+187,98df9a3ca5,app: mount SessionProvider around the dashboard shell,CI or verification failure
+187,9c3547bfe2,docs: pin nanoid to the patched 3.3.20,security scanner or advisory
+187,922909704d,ci: development-only e2e admin replaces the hard-coded login,CI or verification failure
+187,2efebaddcb,docs: take the safe npm audit fixes in the docs lockfile,security scanner or advisory
+187,0095b29bd9,auth: declare role and password_hash on the User model,CI or verification failure
+187,ddf0f6df5c,test(e2e): name the backend response when invalid-credentials login f…,CI or verification failure
+187,62fb1b77cb,ci(e2e): keep the backend log and print it after the tests,CI or verification failure
+187,4af417dfe1,db: create the user and organisation tables with the governance ones,CI or verification failure
+187,c94c1b8860,Merge branch 'main' of https://github.com/adhit-r/fairmind into featu…,catch-up merge from main
+187,28def594a1,db: close the discovered-assets table args lost in the main merge,CI or verification failure
+187,2ba20a397e,db: create tables one at a time so one bad definition cannot roll bac…,CI or verification failure
+187,4e7410ef75,governance: bootstrap tables one at a time as well,CI or verification failure
+187,8812244c08,db: create ORM tables at startup and name any table that fails,CI or verification failure
+187,0ffa75ad57,ci(e2e): show the backend's startup lines without SQLite debug noise,CI or verification failure
+187,007f8c1a71,"db: create tables from every model registry, not just one copy of Base",CI or verification failure
+187,b5df8583bc,db: log which model registries table creation saw,CI or verification failure
+187,7c73debf57,db: log which database each layer opens at startup,CI or verification failure
+187,acfbd7b48a,ci(e2e): print the backend's key diagnostic lines first,CI or verification failure
+187,7605f54c65,ci(e2e): list the SQLite files and their tables after the run,CI or verification failure
+187,d63e5e57ca,ci(e2e): give the backend a database file the unit-test cleanup never…,CI or verification failure
+188,317d362585,website: move astro to 7.4.4 for the 7.1.x advisories,security scanner or advisory
+188,3b10d0f6f7,"website: take the safe npm audit fixes (devalue, dompurify, nanoid, s…",security scanner or advisory
+197,bb90f224b0,ui: move eight workbench pages and FramedIcon onto the new design,continued work
+197,15763f5e7e,Merge pull request #198 from adhit-r/feature/medium-pages-new-design,catch-up merge from main
+197,cf8599664f,ui: move the heavy pages and every remaining component onto the new d…,continued work
+197,e5b108fd03,Merge pull request #199 from adhit-r/feature/heavy-pages-new-design,catch-up merge from main
+197,5ea8d7a2e0,docs: describe the lifecycle-shell design in CLAUDE.md,continued work
+197,1d4ccc07b5,ui: fix what the browser pass found on the restyled pages,CI or verification failure
+197,4dde1afbe9,"ui: delete the retired neobrutalist tokens, utilities and dead compon…",continued work
+197,7ad77586c5,Merge branch 'feature/heavy-pages-new-design' into feature/light-page…,catch-up merge from main
+197,36f7518180,Merge origin/main into feature/light-pages-new-design,catch-up merge from main
+212,f7544074f4,website: agentic AI governance positioning and lifecycle-shell redesign,continued work
+212,c4d9f240cc,website: rewrite inner pages for the shipped product; keep approvals …,correcting a claim in prose
+212,4e47387d00,website: homepage copy matches what runs itself today,correcting a claim in prose
+212,3bb7607040,website: manifest and OG image match the softened homepage claim,correcting a claim in prose
+212,b87dfdf878,"website: lead with evaluations and workflows, not DPDP; tidy the hero…",continued work
+213,3a859b72db,Merge remote-tracking branch 'origin/main' into task/fumadocs-15,catch-up merge from main
+214,8322a46654,Merge remote-tracking branch 'origin/main' into feature/python-sdk-mcp,catch-up merge from main
+214,454f83473a,Merge remote-tracking branch 'origin/main' into feature/python-sdk-mcp,catch-up merge from main
+215,e6320d8947,Merge remote-tracking branch 'origin/main' into feature/huggingface-c…,catch-up merge from main
+216,23057e373b,Merge remote-tracking branch 'origin/main' into feature/inspection-packs,catch-up merge from main
+216,16d689bae2,Merge remote-tracking branch 'origin/main' into feature/inspection-packs,catch-up merge from main
+217,d3ba312657,Merge remote-tracking branch 'origin/main' into feature/watch-drift,catch-up merge from main
+218,eb373afda0,Merge remote-tracking branch 'origin/main' into task/prune-fake-pages,catch-up merge from main
+219,9221034cfe,Merge remote-tracking branch 'origin/main' into feature/rbi-free-ai-c…,catch-up merge from main
+220,293b7bab4e,Merge remote-tracking branch 'origin/main' into fix/approvals-respect…,catch-up merge from main
+221,e8ea4e3216,"deploy: website on the root host, app and synthetic-data demo on thei…",continued work
+221,9abe7cf93b,deploy: track the tunnel ingress config,continued work
+221,a6eb23083e,"fix(backend): bind org_members user ids as text, not uuid",external system or deployment
+221,4fdf0f51e0,"fix(backend): write boolean is_active as TRUE, not 1",external system or deployment
+221,46c94b2db1,Merge remote-tracking branch 'origin/main' into task/lightsail-deploy,catch-up merge from main
+222,8a02b754c3,ci: run the E2E jobs on ubuntu-24.04,CI or verification failure
+222,28c80e0663,Merge remote-tracking branch 'origin/main' into feature/evaluation-re…,catch-up merge from main
+224,b9150f950c,frontend: build the live notes page without Neon env vars,CI or verification failure
+224,419e74b440,Merge main into feature/neon-realtime-live-notes,catch-up merge from main
+224,2b433599e4,Merge main into feature/neon-realtime-live-notes,catch-up merge from main
+228,c0836f21c3,deps: pyjwt 2.15.1 for two moderate advisories in 2.14.0,security scanner or advisory
+228,adbf531dd7,deps: authlib 1.9.3 for two high advisories in 1.9.0,security scanner or advisory
+230,50d5010513,Merge remote-tracking branch 'origin/main' into feature/frameworks-ca…,catch-up merge from main
+232,78a2cc1dcb,lightsail: route app.fairmind.xyz through the tunnel; add the fairmin…,continued work
+232,cf6d635e8b,website: blog.fairmind.xyz redirects to fairmind.xyz/blog/,continued work
+232,1b17bd965d,dns runbook: www must point at Netlify for the apex certificate,continued work
+232,07fb489803,Merge remote-tracking branch 'origin/main' into fix/website-app-url-d…,catch-up merge from main
+232,ca5b05d645,"dns runbook: website deploys from main; renew, not provision, for an …",continued work
+247,dcabe2896e,Merge remote-tracking branch 'origin/main' into task/remove-legacy-po…,catch-up merge from main
+257,d2430350e8,Merge remote-tracking branch 'origin/main' into HEAD,catch-up merge from main
+257,8700581d87,Evaluation Runs no longer widens the page on phones after the shell r…,CI or verification failure
+260,6b626b05a9,Merge origin/main into task/postgres-only-db-setup,catch-up merge from main
+262,5717cbb89a,"platform connections: responses carry fixed text per error kind, neve…",security scanner or advisory
+263,53b1efd062,tests: build the made-up target auth value at runtime so secret scann…,security scanner or advisory
+263,bd38f2622f,"Fix two CodeQL alerts: encode the system id in the connect link, and …",security scanner or advisory
+263,19b0d79faf,Merge remote-tracking branch 'origin/main' into feature/behaviour-tests,catch-up merge from main
+265,aaf6c233cd,Redesign blog theme as a calm editorial publication,continued work
+278,4ae2c105fd,Merge remote-tracking branch 'origin/main' into task/p0-slice1-backen…,catch-up merge from main
+279,724cebde0a,build(deps): bump the actions group across 1 directory with 6 updates,automated rebase
+294,6b6c50dbff,Merge remote-tracking branch 'origin/main' into feature/blog-week1,catch-up merge from main
+304,590ae9b89a,Merge branch 'main' into task/p0-slice2-worker-queue,catch-up merge from main
+304,47a3191fe7,Merge commit 'ac683f2d' into task/p0-slice2-worker-queue,catch-up merge from main
+308,8bc5f03f6e,"website: type NIST AI 600-1 as a risk profile, as the catalogue does",correcting a claim in prose
+309,52d88c7c47,"Harden security: pickle RCE, SQLi, CI injection, OAuth secret, XSS, D…",continued work
+309,28d9aecac6,Merge origin/main into task/postgres-only-db-setup,catch-up merge from main
+310,ed58762cda,Merge origin/main into task/psycopg3-sqlalchemy-2-1,catch-up merge from main
+310,7d1c0d817c,Merge branch 'main' into task/psycopg3-sqlalchemy-2-1,catch-up merge from main
+311,6a2b100a3e,Merge branch 'main' into fix/destructive-foreground,catch-up merge from main
+314,a95c13c192,Merge main (policy alerts) into Draft with AI,catch-up merge from main
+317,c9873c6abe,Merge remote-tracking branch 'origin/main' into fix/retired-model-ids,catch-up merge from main
+322,56f6a03d62,build(deps): bump the backend-minor-patch group across 1 directory wi…,automated rebase
+325,95451b3599,Merge remote-tracking branch 'origin/main' into task/fastapi-lazy-rou…,catch-up merge from main
+333,9381264c85,Keep Docker base image digests current with Dependabot,continued work
+335,ebb85d3a46,Serve compliance frameworks from the pack catalogue,continued work
+337,55637584f7,"Address PR 337 review: importer checks, calibration guards, honest pa…",review feedback
+337,2d910fcfad,"Drop remaining ""registered"" wording for the FairMind-E panel and H1-H4",correcting a claim in prose
+337,137fd52a74,"Label the placeholder mitigation bars as illustrative; fix a stray "",:""",correcting a claim in prose
+338,7b6fed1ff2,Give LLM routers a side-effect-free grok_cli import; fail gates on rg…,CI or verification failure
+339,dca5376a52,Correct Assurance V2 startup and PostgreSQL claims in docs,correcting a claim in prose
+340,29f84217c7,Address the PR 340 review findings,review feedback
+340,59ce1a659e,Merge branch 'main' of https://github.com/adhit-r/fairmind into task/…,catch-up merge from main
+341,0ac655a3ed,Add FairMind-E rater packets and CCAI paper PDFs,continued work
+341,e4070a52d7,Rebuild CCAI PDFs and fig2 from the corrected sources,continued work
+350,80d42b49b8,Drop uv.lock files created by local test runs,cleanup or revert
+358,e2836b349b,Measure the PostgreSQL 18 catalog through 013n on Neon,continued work
+399,e3e51b2711,Drop design-rule pins for the deleted orphan pages,CI or verification failure
+400,94886283d7,Give each PyPI project its own publishing environment,external system or deployment
+401,9384ccaec4,Keep the MCP Registry description under 100 characters,external system or deployment
+402,3a5e594f47,Update the Watch panel test for the PyPI install line,CI or verification failure
+404,ca3710599c,Merge main and install from PyPI in the new docs pages,catch-up merge from main
+404,1fbd5f4972,"Revert ""Fix confidence per provenance class and address CCAI review o…",cleanup or revert
+412,3de2aa5671,Draw grid cell textures without CSS gradients,CI or verification failure
+412,50f2afb02a,Merge remote-tracking branch 'origin/main' into feature/governance-gr…,catch-up merge from main
+413,914d6009d7,Align the fixtures and panel profiles with the class-midpoint confide…,CI or verification failure
+413,0c73e40c0d,Merge origin/main into task/fairmind-e-quiet-window,catch-up merge from main
+414,57bf88ce71,Fix main CI: regenerate FairMind-E artifacts and stop the sandbox OOM…,CI or verification failure
+414,11d2f1671c,Drop the sandbox OOM retry: it did not fix the flake,CI or verification failure
