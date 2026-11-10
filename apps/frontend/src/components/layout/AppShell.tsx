@@ -272,7 +272,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Sparkles className="h-[15px] w-[15px] text-[var(--fm-brand)]" aria-hidden />
           <span className="flex-1">Ask FairMind</span>
-          <kbd className="rounded-[5px] border border-[var(--fm-line)] px-1.5 font-sans text-[11px] text-[var(--fm-ink3)] max-md:hidden">⌘K</kbd>
+          <kbd className="rounded-[5px] border border-[var(--fm-line)] px-1.5 font-sans text-[11px] text-[var(--fm-ink3)] max-md:hidden">Ctrl K</kbd>
         </button>
         <Suspense fallback={null}>
           <TodayLink />
