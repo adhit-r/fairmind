@@ -887,3 +887,35 @@ def test_the_agent_only_does_a_step_that_is_waiting_for_output(tmp_database):
     _, client = _installed_org(tmp_database)
     gate = _to_gate(client)
     assert client.post(f"{PACKS}/runs/{gate['id']}/steps/{gate['currentStep']}/agent").status_code == 409
+
+
+def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_database, monkeypatch):
+    from api.routes import llm
+
+    org_id, client = _org(tmp_database)
+    assert client.post(f"{PACKS}/ask", json={"question": "Which systems are blocked?"}).status_code == 409  # no provider yet
+    system = _system(tmp_database, org_id)
+    _store(tmp_database, org_id, system, "fairness_test", _fairness(False), "2026-11-01T10:00:00")
+    _save_provider(client)
+    seen = {}
+
+    async def answer(conn, system_prompt, user, schema):
+        seen["prompt"] = json.loads(user)
+        return {"answer": "Credit model fails fairness.", "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
+            "model": conn.model, "latencyMs": 5, "usage": {}}
+
+    monkeypatch.setattr(llm, "complete", answer)
+    body = client.post(f"{PACKS}/ask", json={"question": "Which systems are blocked?"}).json()
+    assert body["answer"] == "Credit model fails fairness."
+    assert body["systems"] == [{"id": system, "name": "Credit model", "reason": "Fairness fails"}]
+    assert body["systemsRead"] == 1 and seen["prompt"]["question"] == "Which systems are blocked?"
+    gate = seen["prompt"]["facts"]["systems"][0]
+    assert gate["verdict"] and any(c["label"] for c in gate["checks"])
+
+    async def failing(conn, system_prompt, user, schema):
+        raise llm.LLMError("Anthropic is rate limiting this key")
+
+    monkeypatch.setattr(llm, "complete", failing)
+    failed = client.post(f"{PACKS}/ask", json={"question": "Anything?"})
+    assert failed.status_code == 502 and failed.json()["detail"] == "Anthropic is rate limiting this key"
+    assert client.post(f"{PACKS}/ask", json={"question": ""}).status_code == 422

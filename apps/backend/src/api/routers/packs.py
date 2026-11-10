@@ -1213,6 +1213,101 @@ async def agent_step(run_id: str, step_id: str, m: OrgMembership = Depends(_mana
     return _run_json(db, run_id)
 
 
+# --- Ask FairMind: questions about the estate, answered by the organisation's model ---
+
+ASK_SYSTEM = (
+    "You are FairMind's assistant. You answer one person's question about their organisation's AI systems, "
+    "each system's release gate (verdict, confidence and the state of each check) and the workflow runs "
+    "waiting for a person. Use only the facts you are given. When the facts do not answer the question, say "
+    "what is missing instead of guessing. Answer in at most four short sentences of plain prose. In systems, "
+    "list the systems your answer is about, by the id given in the facts, each with a reason of a few words."
+)
+ASK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "systems": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "reason": {"type": "string"}},
+                "required": ["id", "reason"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["answer", "systems"],
+    "additionalProperties": False,
+}
+ASK_MAX_SYSTEMS = 60  # ponytail: the first 60 systems by name; retrieve by question if estates outgrow one prompt
+
+
+class AskBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+
+
+def _ask_facts(db: Session, org_id: str) -> dict:
+    from api.routes.fairness_runs import _gate_payload
+
+    systems = db.execute(
+        text("SELECT id, name, risk_tier, lifecycle_stage FROM governance_ai_systems WHERE org_id = :org ORDER BY name LIMIT :n"),
+        {"org": org_id, "n": ASK_MAX_SYSTEMS},
+    ).fetchall()
+    estate = []
+    for s in systems:
+        gate = _gate_payload(db, s.id, s.risk_tier)
+        estate.append({
+            "id": s.id, "name": s.name, "riskTier": s.risk_tier, "lifecycleStage": s.lifecycle_stage,
+            "verdict": gate["verdict"], "confidence": gate["confidence"], "approvalStatus": gate["approvalStatus"],
+            "checks": [
+                {k: c[k] for k in ("label", "state", "confidence", "evidenceClass", "fails", "stale") if k in c}
+                for c in gate["checks"]
+            ],
+            "reasons": gate["reasons"][:6],
+        })
+    waiting = db.execute(
+        text("SELECT * FROM workflow_runs WHERE org_id = :org AND status = 'waiting' ORDER BY created_at DESC LIMIT 30"),
+        {"org": org_id},
+    ).mappings().all()
+    runs = [{k: v for k, v in _summary(db, r).items() if k in ("workflowName", "currentStep", "waitingFor", "createdAt")} for r in waiting]
+    return {"systems": estate, "waitingRuns": runs}
+
+
+@router.post("/ask")
+async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    """One question about the estate, answered by the organisation's model from the gates and waiting runs alone."""
+    _ensure_tables(db)
+    row = _ai_row(db, m.org_id)
+    if not row or not row["enabled"]:
+        raise HTTPException(status_code=409, detail="Set up an AI provider in organisation settings to ask FairMind")
+    conn = _stored_connection(row)
+    facts = _ask_facts(db, m.org_id)
+    names = {s["id"]: s["name"] for s in facts["systems"]}
+    prompt = json.dumps({"question": body.question.strip(), "facts": facts}, default=str, sort_keys=True)
+    db.rollback()  # hold no transaction open while the model works
+    try:
+        data, meta = await llm.complete(conn, ASK_SYSTEM, prompt, ASK_SCHEMA)
+    except llm.LLMError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    answer = str(data.get("answer") or "").strip()
+    if not answer:
+        raise HTTPException(status_code=502, detail="The model returned an empty answer")
+    cited, seen = [], set()
+    for item in data.get("systems") or []:
+        sid = str(item.get("id") or "") if isinstance(item, dict) else ""
+        if sid in names and sid not in seen:  # only systems that are in this organisation's facts
+            seen.add(sid)
+            cited.append({"id": sid, "name": names[sid], "reason": str(item.get("reason") or "")[:200]})
+    return {
+        "answer": answer[:4000],
+        "systems": cited,
+        "provider": conn.provider.name,
+        "model": meta["model"],
+        "systemsRead": len(facts["systems"]),
+        "runsRead": len(facts["waitingRuns"]),
+    }
+
+
 # --- the organisation's model (bring your own key) -------------------------
 
 
