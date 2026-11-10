@@ -4,7 +4,7 @@ The inputs are stored run contents written by hand; every expected verdict and s
 rule's definition in the catalogue (impact ratio at or above 0.8 etc. is decided by the stored checks).
 """
 
-from src.api.routers.evaluation_results import RULES
+from src.application.services.evaluation_results import RULES
 from tests.known_answer import known_answer
 
 

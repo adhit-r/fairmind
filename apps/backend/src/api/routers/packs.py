@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
-from api.routes import evaluation_results
+from src.application.services import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
 from src.application.services.clause_map_service import _catalogue

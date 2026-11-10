@@ -97,7 +97,7 @@ def engine_status(evaluations):
     For the rest, the workbook's code search survives only as a hint: 'Partial' where it found related code.
     """
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from src.api.routers.evaluation_results import RULES
+    from src.application.services.evaluation_results import RULES
     from src.application.services import eval_engines
     from src.application.services.eval_engines import VALIDATED
 
