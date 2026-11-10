@@ -75,6 +75,12 @@ class DatabaseManager:
                 # Table by table: one failing definition must not roll back
                 # the users table.
                 for table in metadata.sorted_tables:
+                    # Already there: skip the per-table round trips. Callers run this
+                    # inside request handlers, where ~80 checks against a remote
+                    # database froze the event loop for minutes.
+                    if table.schema is None and table.name in existing:
+                        created += 1
+                        continue
                     try:
                         table.create(bind=self.engine, checkfirst=True)
                         created += 1
