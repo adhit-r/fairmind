@@ -13,7 +13,8 @@ if [ ! -d "$TARGET" ]; then
 fi
 
 # Emoji blocks plus the emoji-presentation symbols outside them, ZWJ and VS16.
-EMOJI='[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{23FF}\x{2139}\x{203C}\x{2049}\x{3030}\x{303D}\x{3297}\x{3299}\x{200D}\x{FE0F}]'
+# U+2318 (the Command key sign) is left out: it is a keyboard glyph with no emoji form.
+EMOJI='[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{2300}-\x{2317}\x{2319}-\x{23FF}\x{2139}\x{203C}\x{2049}\x{3030}\x{303D}\x{3297}\x{3299}\x{200D}\x{FE0F}]'
 # Heavy borders cover every side variant (border-b-4, xl:border-r-2, border-8).
 # A spinner ring may use border-[2px], which this does not match.
 RETIRED='bg-gradient|linear-gradient|radial-gradient|\bborder-([xytrblse]-)?[248]\b|\bborder-black\b|shadow-brutal|shadow-\[[0-9-]+px_[0-9-]+px_0|\bfont-black\b|\brounded-none\b|#0F1412|#FCFDF8|bg-\[#FF6B35\]'
