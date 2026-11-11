@@ -12,14 +12,16 @@ try:
 except ImportError:
     from pydantic import BaseSettings, validator
 from pydantic import Field, SecretStr
+from dotenv import dotenv_values
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     """Application settings with validation and environment-specific configurations."""
     
-    # Environment
-    environment: str = "development"
+    # Environment. Production unless told otherwise, so a deploy that forgets to
+    # set it never runs development behaviour.
+    environment: str = "production"
     # Local development only: JWTAuthenticationMiddleware signs loopback
     # requests without a token in as this existing user. Ignored outside development.
     fairmind_dev_login_email: Optional[str] = None
@@ -268,6 +270,12 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.environment == "development"
+
+    @property
+    def database_is_local(self) -> bool:
+        """True when DATABASE_URL points at this machine."""
+        from urllib.parse import urlsplit
+        return urlsplit(self.database_url).hostname in ("localhost", "127.0.0.1", "::1")
     
     @property
     def database_config(self) -> dict:
@@ -340,6 +348,10 @@ class ProductionSettings(Settings):
         return v
 
 
+# Same file Settings reads (Config.env_file), relative to the working directory.
+_ENV_FILE: Optional[str] = ".env"
+
+
 def resolve_environment() -> str:
     """The environment name both the settings class and the environment field use.
 
@@ -348,9 +360,15 @@ def resolve_environment() -> str:
     the two disagree: NODE_ENV=production with ENVIRONMENT=development built a
     ProductionSettings whose is_development was True, which skipped the Neon auth
     middleware despite NEON_AUTH_ENABLED=true and switched on the dev auto-login.
-    NODE_ENV stays supported for start.sh, which already sets it.
+    NODE_ENV stays supported for start.sh, which already sets it. The .env file
+    is read too, as Settings reads it. With nothing set the answer is production.
     """
-    return (os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "development").lower()
+    file_values = dotenv_values(_ENV_FILE) if _ENV_FILE and os.path.exists(_ENV_FILE) else {}
+
+    def pick(name):
+        return os.getenv(name) or file_values.get(name)
+
+    return (pick("ENVIRONMENT") or pick("NODE_ENV") or "production").lower()
 
 
 @lru_cache()

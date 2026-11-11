@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 
+# Settings default to production; the suite exercises development behaviour.
+# Set before tests.pg, whose database setup already imports config.settings.
+os.environ.setdefault("ENVIRONMENT", "development")
+
 from tests import pg
 
 if not pg.SERVER_URL:

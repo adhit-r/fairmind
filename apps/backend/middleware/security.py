@@ -4,7 +4,7 @@ Production-ready security middleware for FairMind backend.
 
 import re
 import time
-from typing import Callable
+from typing import Callable, Optional
 from fastapi import Request, Response, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -369,6 +369,21 @@ def _is_public_path(path: str) -> bool:
     return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIXES)
 
 
+def dev_login_email(settings) -> Optional[str]:
+    """The local user that loopback requests without a token sign in as, or None.
+
+    Development only, and never against a remote database: behind a tunnel or a
+    same-host proxy every request arrives from loopback, so the client address
+    alone is no guard.
+    """
+    email = settings.fairmind_dev_login_email
+    if email and settings.is_development and settings.database_is_local:
+        return email
+    if email:
+        logger.warning("FAIRMIND_DEV_LOGIN_EMAIL ignored: needs ENVIRONMENT=development and a local DATABASE_URL")
+    return None
+
+
 class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
     """JWT authentication middleware using new secure JWT infrastructure."""
     
@@ -388,11 +403,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         self.InvalidTokenException = InvalidTokenException
         self.TokenMissingException = TokenMissingException
         self.log_jwt_security_event = log_jwt_security_event
-        # Local development only: sign loopback requests that carry no token in
-        # as this existing user. Never active outside ENVIRONMENT=development.
-        self.dev_login_email = (
-            settings.fairmind_dev_login_email if settings.is_development else None
-        )
+        self.dev_login_email = dev_login_email(settings)
 
     async def _dev_login(self, request: Request):
         """TokenData for the configured local user, or None when not applicable."""

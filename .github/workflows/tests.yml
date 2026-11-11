@@ -33,6 +33,8 @@ jobs:
       # A server the tests may create and drop databases on; tests/pg.py builds the app database
       # and sets DATABASE_URL itself.
       FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
+      # The backend defaults to production; the research suite imports it outside pytest.
+      ENVIRONMENT: development
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
