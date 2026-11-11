@@ -551,8 +551,8 @@ async def get_invitation_details(token: str):
 
     Returns: 200 OK with invitation details
     Raises:
-    - 400 Bad Request: Invalid or expired token
-    - 404 Not Found: Invitation not found
+    - 400 Bad Request: expired
+    - 404 Not Found: unknown, revoked or already used
     """
     try:
         async with get_db_connection() as db:
@@ -562,11 +562,10 @@ async def get_invitation_details(token: str):
                 {"token": token}
             )
 
-            if not invitation:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or expired invitation token"
-                )
+            # Only a pending invitation is shown: a revoked or used one discloses
+            # nothing, and an unknown token is not called "expired".
+            if not invitation or invitation["status"] != "pending":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
             # Check if expired
             if _expired(invitation["expires_at"]):
@@ -631,10 +630,7 @@ async def accept_invitation(
             )
 
             if not invitation:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or expired invitation token"
-                )
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
             # 2. Validate invitation is not expired and pending
             if _expired(invitation["expires_at"]):
