@@ -161,16 +161,19 @@ class DatabaseManager:
                 bind=self.engine
             )
 
-            # Create all tables defined in models
-            try:
-                from src.infrastructure.db.database.models import Base
-                Base.metadata.create_all(bind=self.engine)
-                logger.info("Database tables created successfully")
-            except Exception as error:
-                logger.warning(
-                    "Database table creation failed (%s)",
-                    type(error).__name__,
-                )
+            # Development convenience only. Elsewhere the schema comes from
+            # scripts/setup_db.py, run before the app starts (deploy/lightsail
+            # runs it as the migrate service), so the app never guesses at DDL.
+            if settings.is_development:
+                try:
+                    from src.infrastructure.db.database.models import Base
+                    Base.metadata.create_all(bind=self.engine)
+                    logger.info("Database tables created successfully")
+                except Exception as error:
+                    logger.warning(
+                        "Database table creation failed (%s)",
+                        type(error).__name__,
+                    )
 
             logger.info("Database connections initialized successfully")
 

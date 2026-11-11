@@ -64,6 +64,12 @@ docker compose logs -f backend
 
 Update: `git pull && docker compose up -d --build`.
 
+Every `up` first runs the `migrate` service (`scripts/setup_db.py`: schema upgrade,
+reference data, then verify). The backend starts only if it succeeds; otherwise the
+running backend stays up. Read why with `docker compose logs migrate`, or check without
+changing anything: `docker compose run --rm migrate python scripts/setup_db.py verify`.
+The app itself no longer creates tables outside development.
+
 ## Cloudflare controls
 
 Before the first customer signs in, apply the WAF, rate-limit, cache and Access rules in
