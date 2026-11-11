@@ -908,6 +908,14 @@ async def remove_member(
                 "DELETE FROM org_members WHERE id = :id AND org_id = :org_id",
                 {"id": member_id, "org_id": org_id}
             )
+            # End the removed user's sessions, and stop their stored org pointing here.
+            await db.execute(
+                "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, "
+                "org_id = CASE WHEN CAST(org_id AS TEXT) = :org_id THEN NULL ELSE org_id END, "
+                "primary_org_id = CASE WHEN CAST(primary_org_id AS TEXT) = :org_id THEN NULL ELSE primary_org_id END "
+                "WHERE id = :user_id",
+                {"org_id": str(org_id), "user_id": member["user_id"]},
+            )
 
             # Log audit event
             await _log_org_audit(

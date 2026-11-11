@@ -116,6 +116,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"ORM table creation incomplete: {e}")
 
+    # Sign-in reads users.token_version; create_tables never alters an existing table.
+    # ponytail: idempotent DDL at boot until migrations have a runner (migrations/023).
+    try:
+        from sqlalchemy import text as _sql
+        from database.connection import db_manager as orm_db_manager
+
+        with orm_db_manager.engine.begin() as conn:
+            conn.execute(_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0"))
+    except Exception as e:
+        logger.error(f"users.token_version is missing and sign-in will fail; apply migrations/023: {e}")
+
     # Initialize cache connections
     try:
         await init_cache()
