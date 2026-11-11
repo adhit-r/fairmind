@@ -440,7 +440,7 @@ async def invite_member(
                 """
                 SELECT om.id FROM org_members om
                 JOIN users u ON om.user_id = u.id
-                WHERE om.org_id = :org_id AND u.email = :email
+                WHERE om.org_id = :org_id AND lower(u.email) = lower(:email)
                 """,
                 {"org_id": org_id, "email": payload.email}
             )
@@ -454,7 +454,7 @@ async def invite_member(
             existing_invite = await db.fetch_one(
                 """
                 SELECT id FROM org_invitations
-                WHERE org_id = :org_id AND email = :email AND status = 'pending' AND expires_at > :now
+                WHERE org_id = :org_id AND lower(email) = lower(:email) AND status = 'pending' AND expires_at > :now
                 """,
                 {"org_id": org_id, "email": payload.email, "now": datetime.utcnow()}
             )

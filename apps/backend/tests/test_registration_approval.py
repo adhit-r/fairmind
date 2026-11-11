@@ -131,9 +131,12 @@ def test_approval_creates_a_new_org_owned_by_the_requester(env):
     to, name, org_name, url, _minutes = call.args
     assert (to, name, org_name) == ("new@corp.example.com", "New Person", "Corp")
     # The email's link sets the first password: a reset token bound to this user's hash.
-    prefix = "/reset-password#token="
-    assert prefix in url
-    claims = auth_manager.read_password_reset_token(url.split(prefix, 1)[1])
+    from urllib.parse import parse_qs, urlsplit
+
+    assert urlsplit(url).path == "/reset-password"
+    fragment = parse_qs(urlsplit(url).fragment)
+    assert fragment["welcome"] == ["1"]  # the page greets a new account, not a reset
+    claims = auth_manager.read_password_reset_token(fragment["token"][0])
     assert claims["sub"] == user["id"]
     assert claims["pwd"] == auth_manager.password_fingerprint(user["password_hash"])
 
@@ -202,3 +205,13 @@ def test_admin_lists_pending_requests(env):
     assert response.status_code == 200, response.text
     [row] = response.json()["requests"]
     assert (row["id"], row["status"], row["message"]) == (request_id, "pending", "Pilot for our credit models")
+
+
+def test_a_second_request_for_the_same_email_looks_the_same_and_adds_nothing(env):
+    client, engine, email = env
+    first = _submit(client, email="Same@corp.example.com")
+    second = _submit(client, email="same@corp.example.com")  # 201 either way, not 409
+
+    assert second == first
+    assert len(_rows(engine, "SELECT id FROM registration_requests")) == 1
+    assert email.send_registration_request_to_admin.call_count == 1
