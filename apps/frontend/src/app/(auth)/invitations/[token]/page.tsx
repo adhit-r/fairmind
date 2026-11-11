@@ -99,7 +99,7 @@ export default function InvitationPage() {
     return (
       <Shell>
         <div className="flex flex-col items-center py-6" role="status">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" aria-hidden />
+          <div className="h-8 w-8 animate-spin rounded-full border-[2px] border-[var(--fm-line)] border-t-[var(--fm-ink)]" aria-hidden />
           <p className="mt-4 text-sm text-[var(--fm-ink2)]">Checking your invitation</p>
         </div>
       </Shell>

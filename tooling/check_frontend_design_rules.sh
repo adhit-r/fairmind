@@ -25,7 +25,6 @@ RETIRED='bg-gradient|linear-gradient|radial-gradient|\bborder-([xytrblse]-)?[248
 # so this list only shrinks. Never add new files here.
 PINS=(
   'app/(auth)/callback/page.tsx:2'
-  'app/(auth)/invitations/[token]/page.tsx:3'
   'app/(dashboard)/admin/audit-log/page.tsx:1'
   'app/(dashboard)/admin/registrations/page.tsx:2'
   'app/(dashboard)/admin/roles/page.tsx:2'
