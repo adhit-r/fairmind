@@ -23,6 +23,13 @@ MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "016_registrati
 ADMIN_ID = "platform-operator"
 
 
+class _Row(dict):
+    """A row like the `databases` Record the app gets: indexable, but no .get()."""
+
+    def get(self, *_args, **_kwargs):
+        raise AttributeError("get")
+
+
 class _Db:
     """The fetch_one / fetch_all / execute slice of the `databases` API, over SQLAlchemy."""
 
@@ -31,7 +38,7 @@ class _Db:
 
     async def fetch_all(self, query, params=None):
         with self.engine.begin() as conn:
-            return [dict(r) for r in conn.execute(text(query), params or {}).mappings().all()]
+            return [_Row(r) for r in conn.execute(text(query), params or {}).mappings().all()]
 
     async def fetch_one(self, query, params=None):
         rows = await self.fetch_all(query, params)
@@ -184,3 +191,14 @@ def test_deny_marks_the_request_and_creates_nothing(env):
     assert _rows(engine, "SELECT id FROM organizations") == []
     email.send_denial_email.assert_called_once_with("new@corp.example.com", "New Person", "Corp", "not a customer")
     assert client.post(f"/api/v1/registrations/{request_id}/approve", json={}).status_code == 409
+
+
+def test_admin_lists_pending_requests(env):
+    client, _, _ = env
+    request_id = _submit(client, message="Pilot for our credit models")
+
+    response = client.get("/api/v1/registrations?status_filter=pending")
+
+    assert response.status_code == 200, response.text
+    [row] = response.json()["requests"]
+    assert (row["id"], row["status"], row["message"]) == (request_id, "pending", "Pilot for our credit models")

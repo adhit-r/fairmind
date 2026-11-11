@@ -132,13 +132,13 @@ async def list_registrations(
                         "email": r["email"],
                         "name": r["name"],
                         "org_name": r["org_name"],
-                        "org_domain": r.get("org_domain"),
+                        "org_domain": r["org_domain"],
                         "requested_role": r["requested_role"],
-                        "message": r.get("message"),
+                        "message": r["message"],
                         "status": r["status"],
-                        "review_notes": r.get("review_notes"),
-                        "reviewed_at": r["reviewed_at"].isoformat() if r.get("reviewed_at") else None,
-                        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+                        "review_notes": r["review_notes"],
+                        "reviewed_at": r["reviewed_at"].isoformat() if r["reviewed_at"] else None,
+                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                     }
                     for r in rows
                 ]
@@ -212,7 +212,7 @@ async def approve_registration(
                     "id": org_id,
                     "name": req["org_name"],
                     "slug": f"{slug_base}-{secrets.token_hex(3)}",
-                    "domain": req.get("org_domain"),
+                    "domain": req["org_domain"],
                     "owner": user_id,
                 },
             )
