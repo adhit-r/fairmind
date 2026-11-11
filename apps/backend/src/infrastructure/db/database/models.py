@@ -205,6 +205,8 @@ class User(Base):
     # Account status
     is_active = Column(Boolean, default=True)
     is_verified_email = Column(Boolean, default=False)
+    # Bumped to end every session of this user; refresh tokens carry the value they were issued at.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
 
     # Organization relationships
     # organizations.owner_id points back at users, so these two keys are added after both tables exist (use_alter).

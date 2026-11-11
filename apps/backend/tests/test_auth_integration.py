@@ -23,9 +23,17 @@ _USERS = make_user_store(
 )
 
 
+_SIGNED_OUT: list[str] = []
+
+
 @pytest.fixture(autouse=True)
 def _users_table(monkeypatch):
     monkeypatch.setattr("config.auth._fetch_user_row", fake_fetch_user_row(_USERS))
+
+    async def _revoke(user_id):  # the users table is a dict here; logout bumps token_version
+        _SIGNED_OUT.append(user_id)
+
+    monkeypatch.setattr("api.routes.auth.revoke_user_sessions", _revoke)
 
 
 class TestAuthenticationIntegration:
@@ -216,6 +224,7 @@ class TestAuthenticationIntegration:
         assert response.status_code == 200
         data = response.json()
         assert "Successfully logged out" in data["message"]
+        assert _SIGNED_OUT[-1] == _USERS["admin@fairmind.ai"]["id"]  # every session ends, not just this token
     
     def test_logout_without_token(self, client, setup_jwt):
         """Test logout without token."""

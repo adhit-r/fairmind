@@ -17,7 +17,8 @@ import time
 import uuid
 
 from config.auth import (
-    auth_manager, 
+    auth_manager,
+    revoke_user_sessions,
     get_current_user, 
     get_current_active_user,
     User, 
@@ -334,9 +335,11 @@ async def logout(
 ):
     """Logout user and revoke tokens using new JWT infrastructure."""
     try:
-        # Revoke the current token
+        # Revoke the current token, and end every session of this user: their refresh
+        # tokens stop working (the blacklist alone needs Redis, which production lacks).
         if credentials and credentials.credentials:
             await auth_manager.revoke_token(credentials.credentials)
+        await revoke_user_sessions(current_user.user_id)
         
         # Remove user session from cache
         session_key = f"session:{current_user.user_id}"
@@ -443,7 +446,9 @@ async def reset_password(payload: PasswordResetConfirm):
             raise invalid
         # Compare-and-set on the old hash: of two concurrent uses of one token, only one lands.
         changed = await db.fetch_one(
-            "UPDATE users SET password_hash = :new WHERE id = :id AND password_hash = :old RETURNING id",
+            # Bumping token_version signs out every existing session along with the old password.
+            "UPDATE users SET password_hash = :new, token_version = COALESCE(token_version, 0) + 1 "
+            "WHERE id = :id AND password_hash = :old RETURNING id",
             {
                 "new": auth_manager.get_password_hash(payload.password),
                 "id": claims["sub"],
