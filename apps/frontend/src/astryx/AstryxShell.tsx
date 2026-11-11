@@ -1,5 +1,6 @@
 'use client'
 
+import '@astryxdesign/core/reset.css'
 import './shell.css'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
