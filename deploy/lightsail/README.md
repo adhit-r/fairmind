@@ -70,6 +70,11 @@ running backend stays up. Read why with `docker compose logs migrate`, or check 
 changing anything: `docker compose run --rm migrate python scripts/setup_db.py verify`.
 The app itself no longer creates tables outside development.
 
+## Cloudflare controls
+
+Before the first customer signs in, apply the WAF, rate-limit, cache and Access rules in
+[cloudflare.md](cloudflare.md).
+
 ## Cloudflare free-plan limits
 
 - 100 MB request body: larger dataset uploads fail at the edge.

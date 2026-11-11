@@ -55,6 +55,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # API answers carry per-user data; no browser or edge cache may keep them.
+        if request.url.path.startswith("/api/") and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         
         if settings.is_production:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
