@@ -303,6 +303,8 @@ checkpoints/
 !.github/**/*.yml
 !.github/**/*.yaml
 data/
+# The app's API data hooks are source, not data.
+!apps/frontend/src/astryx/data/
 datasets/
 *.parquet
 *.feather
