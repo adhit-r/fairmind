@@ -373,3 +373,17 @@ async def test_audit_logs_cannot_be_deleted():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_invitation_expiry_compares_naive_and_aware_timestamps_in_utc():
+    # Production stores expires_at as timestamptz, ORM-built databases as timestamp;
+    # comparing either with a naive utcnow() used to raise and answer 500.
+    from datetime import datetime, timedelta, timezone
+
+    from api.routes.org_management import _expired
+
+    now = datetime.now(timezone.utc)
+    assert _expired(now - timedelta(minutes=1))
+    assert not _expired(now + timedelta(days=1))
+    assert _expired((now - timedelta(minutes=1)).replace(tzinfo=None))
+    assert not _expired((now + timedelta(days=1)).replace(tzinfo=None))

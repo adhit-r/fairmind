@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
 import httpx
-import re
 import secrets
 import time
 import uuid
@@ -235,7 +234,9 @@ class SignupRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
-    org_name: str
+    # Signup is by invitation only; a new organisation comes from an approved
+    # access request (POST /api/v1/register), never from this endpoint.
+    invitation_token: str
 
 
 def _check_password_length(password: str) -> None:
@@ -246,25 +247,36 @@ def _check_password_length(password: str) -> None:
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 async def signup(payload: SignupRequest):
-    """Self-serve signup: creates a new organization owned by the new user."""
+    """Create an account for someone holding an invitation, then sign them in.
+
+    The account is created without an organization; the invitee then accepts the
+    invitation (POST /organizations/invitations/{token}/accept). Holding the
+    token, which only went to that address, is what verifies the email.
+    """
     from config.database import get_db_transaction
 
     _check_password_length(payload.password)
-    name, org_name = payload.name.strip(), payload.org_name.strip()
-    if not name or not org_name:
-        raise HTTPException(status_code=422, detail="Name and organization are required")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name is required")
 
     user_id = str(uuid.uuid4())
-    org_id = str(uuid.uuid4())
-    slug_base = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "org"
     try:
         async with get_db_transaction() as db:
+            invitation = await db.fetch_one(
+                "SELECT id FROM org_invitations WHERE token = :token AND status = 'pending' "
+                "AND expires_at > now() AND lower(email) = lower(:email)",
+                {"token": payload.invitation_token, "email": payload.email},
+            )
+            if not invitation:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This invitation is invalid, expired, or for a different email address",
+                )
             if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": payload.email}):
                 raise HTTPException(status_code=409, detail="An account with this email already exists")
-            # The signer owns their organisation through org_members; the global role
-            # stays analyst, since admin is the platform operator.
-            # users and organizations reference each other, so create the user first,
-            # then the organization it owns, then point the user at it.
+            # The global role stays analyst, since admin is the platform operator;
+            # org rights come from org_members when the invitation is accepted.
             await db.execute(
                 "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active) "
                 "VALUES (:id, :email, :username, :name, :pw, 'analyst', CAST(:roles AS jsonb), TRUE)",
@@ -277,27 +289,13 @@ async def signup(payload: SignupRequest):
                     "roles": '["analyst"]',
                 },
             )
-            await db.execute(
-                "INSERT INTO organizations (id, name, slug, owner_id, is_active) "
-                "VALUES (:id, :name, :slug, :owner, TRUE)",
-                {"id": org_id, "name": org_name, "slug": f"{slug_base}-{secrets.token_hex(3)}", "owner": user_id},
-            )
-            await db.execute(
-                "UPDATE users SET org_id = :org, primary_org_id = :org WHERE id = :id",
-                {"org": org_id, "id": user_id},
-            )
-            await db.execute(
-                "INSERT INTO org_members (id, org_id, user_id, role, status, joined_at) "
-                "VALUES (:id, :org, :user, 'owner', 'active', now())",
-                {"id": str(uuid.uuid4()), "org": org_id, "user": user_id},
-            )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Signup error: {e}")
         raise HTTPException(status_code=500, detail="Signup failed")
 
-    logger.info(f"Self-serve signup: user={user_id} org={org_id}")
+    logger.info(f"Signup by invitation: user={user_id}")
     return await login(LoginRequest(email=payload.email, password=payload.password))
 
 

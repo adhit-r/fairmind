@@ -13,6 +13,8 @@ export const API_ENDPOINTS = {
   auth: {
     login: '/api/v1/auth/login',
     register: '/api/v1/auth/register',
+    // Without an invitation, an account starts as an access request a platform admin approves.
+    requestAccess: '/api/v1/register',
     refresh: '/api/v1/auth/refresh',
     logout: '/api/v1/auth/logout',
     me: '/api/v1/auth/me',

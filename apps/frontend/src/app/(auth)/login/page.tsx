@@ -18,6 +18,13 @@ import { IconAlertTriangle, IconBrandGoogle } from '@tabler/icons-react'
 
 const AUTHENTIK_ENABLED = !!process.env.NEXT_PUBLIC_AUTHENTIK_URL
 
+/** Where to go after sign-in: a same-site path from ?next=, else the dashboard. */
+function nextPath(): string {
+  const next = new URLSearchParams(window.location.search).get('next')
+  // A leading '//' or '/\' would leave the site.
+  return next && /^\/(?![/\\])/.test(next) ? next : '/dashboard'
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const { login, loading, error } = useAuth()
@@ -39,7 +46,7 @@ export default function LoginPage() {
         title: "Login successful",
         description: "Welcome back!",
       })
-      router.push('/dashboard')
+      router.push(nextPath())
     } catch (err) {
       toast({
         title: "Login failed",
@@ -141,7 +148,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground mb-3">Don't have an account?</p>
           <a href="/register" className="inline-block px-4 py-2 border border-[var(--fm-line)] font-medium text-sm">
-            Create an account
+            Request access
           </a>
         </div>
       </Card>

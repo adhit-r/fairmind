@@ -18,7 +18,7 @@ import json
 import csv
 from io import StringIO
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
@@ -257,6 +257,13 @@ def _permission_list(value) -> List[str]:
         except (TypeError, ValueError):
             return []
     return list(normalize_org_role_permissions(value))
+
+
+def _expired(expires_at: datetime) -> bool:
+    """Compare in UTC whether the column is timestamp (ORM) or timestamptz (production schema)."""
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= datetime.now(timezone.utc)
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -562,7 +569,7 @@ async def get_invitation_details(token: str):
                 )
 
             # Check if expired
-            if invitation["expires_at"] <= datetime.utcnow():
+            if _expired(invitation["expires_at"]):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invitation has expired"
@@ -630,7 +637,7 @@ async def accept_invitation(
                 )
 
             # 2. Validate invitation is not expired and pending
-            if invitation["expires_at"] <= datetime.utcnow():
+            if _expired(invitation["expires_at"]):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invitation has expired"
@@ -643,7 +650,7 @@ async def accept_invitation(
                 )
 
             # 3. Validate email matches
-            if invitation["email"] != current_user.email:
+            if invitation["email"].lower() != current_user.email.lower():
                 await _log_org_audit(
                     org_id=str(invitation["org_id"]),
                     user_id=current_user.user_id,
