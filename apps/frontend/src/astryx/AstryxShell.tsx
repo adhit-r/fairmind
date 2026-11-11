@@ -14,6 +14,7 @@ import { Item } from '@astryxdesign/core/Item'
 import { Avatar } from '@astryxdesign/core/Avatar'
 import { Layout, LayoutContent, LayoutPanel } from '@astryxdesign/core/Layout'
 import { createStaticSource } from '@astryxdesign/core/Typeahead'
+import { useMediaQuery } from '@astryxdesign/core/hooks'
 import { useOrg } from '@/context/OrgContext'
 import { useSession } from '@/context/SessionContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
@@ -84,6 +85,13 @@ function AgentLine() {
   )
 }
 
+function SignOut() {
+  const { user, logout } = useSession()
+  const router = useRouter()
+  if (!user) return null
+  return <Button label="Sign out" variant="ghost" size="sm" onClick={() => logout().finally(() => router.push('/login'))} />
+}
+
 function Me() {
   const { user, logout } = useSession()
   const router = useRouter()
@@ -111,6 +119,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
   const counts = useNavCounts()
   const { systems } = useSystemContext()
   const [isPaletteOpen, setPaletteOpen] = useState(false)
+  const isPhone = useMediaQuery('(max-width: 767px)')
   const group = groupOf(pathname) ?? (pathname.startsWith('/systems') ? NAV[1] : null)
 
   useEffect(() => {
@@ -163,11 +172,15 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
     </nav>
   )
 
-  const panel = group && (
-    <nav className="fm-panel" aria-label={group.title}>
+  const places = group?.places.map((p) => ({ ...p, n: p.count ? counts[p.count] : undefined }))
+
+  // The panel is always there, so the organisation, search, the agents' line and sign out are reachable from every page;
+  // a page outside the menu groups simply has no list of places.
+  const panel = (
+    <nav className="fm-panel" aria-label={group?.title ?? 'FairMind'}>
       <OrgName />
       <Button label="Search or ask" icon={<Search size={16} />} width="100%" onClick={() => setPaletteOpen(true)} />
-      <div className="fm-list">
+      {group && <div className="fm-list">
         <div className="fm-group-title">
           <Heading level={2}>{group.title}</Heading>
         </div>
@@ -192,7 +205,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
             />
           )
         })}
-      </div>
+      </div>}
       <AgentLine />
       <Me />
     </nav>
@@ -203,17 +216,52 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
       <div className="fm-app">
         <Layout
           height="fill"
+          header={
+            isPhone ? (
+              <header className="fm-phone">
+                <div className="fm-phone-top">
+                  <Link className="fm-brand" href="/dashboard" aria-label="FairMind home">
+                    <img src="/logo.png" alt="" />
+                  </Link>
+                  <OrgName />
+                  <span className="fm-grow" />
+                  <Button label="Search" icon={<Search size={16} />} isIconOnly variant="ghost" onClick={() => setPaletteOpen(true)} />
+                  <Link className="fm-chip" href={SETTINGS.href} aria-current={isOn(pathname, SETTINGS) ? 'page' : undefined}>
+                    Settings
+                  </Link>
+                  <SignOut />
+                </div>
+                <nav className="fm-chips" aria-label="Sections">
+                  {NAV.map((g) => (
+                    <Link key={g.key} className="fm-chip" href={g.places[0].href} aria-current={group === g ? 'true' : undefined}>
+                      {g.short}
+                    </Link>
+                  ))}
+                </nav>
+                {places && places.length > 1 && (
+                  <nav className="fm-chips sub" aria-label={group?.title}>
+                    {places.map((p) => (
+                      <Link key={p.href} className="fm-chip" href={p.href} aria-current={isOn(pathname, p) ? 'page' : undefined}>
+                        {p.label}
+                        {p.n != null && <b>{p.n}</b>}
+                      </Link>
+                    ))}
+                  </nav>
+                )}
+              </header>
+            ) : undefined
+          }
           start={
-            <>
-              <LayoutPanel width={78} padding={0}>
-                {strip}
-              </LayoutPanel>
-              {panel && (
+            isPhone ? undefined : (
+              <>
+                <LayoutPanel width={78} padding={0}>
+                  {strip}
+                </LayoutPanel>
                 <LayoutPanel width={228} padding={0}>
                   {panel}
                 </LayoutPanel>
-              )}
-            </>
+              </>
+            )
           }
           content={<LayoutContent padding={0}>{children}</LayoutContent>}
         />

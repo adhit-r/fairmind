@@ -58,3 +58,22 @@
 .fm-page { padding: 24px 28px 64px; max-width: 1440px; }
 .fm-card { padding: 16px 18px; border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); }
 @media (max-width: 700px) { .fm-page { padding: 16px; } }
+
+/* Phone: the menu folds into a header of chips; the strip and panel would leave no room for the page. */
+.fm-phone { display: grid; gap: 8px; padding: 10px 16px 8px; background: var(--color-background-muted); border-bottom: 1px solid var(--color-border); }
+.fm-phone-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fm-phone .fm-brand { width: 36px; height: 36px; margin: 0; flex: none; }
+.fm-phone .fm-brand img { width: 24px; height: 24px; }
+.fm-phone .fm-org { padding: 0; min-width: 0; }
+.fm-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.fm-chips::-webkit-scrollbar { display: none; }
+.fm-chip { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 5px 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-background-card); color: var(--color-text-secondary); font-size: 13px; font-weight: 500; text-decoration: none; }
+.fm-chip[aria-current] { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+.fm-chip b { font-family: var(--font-family-code, ui-monospace, monospace); font-weight: 500; font-size: 12px; }
+.fm-chips.sub .fm-chip { padding: 4px 10px; font-size: 12.5px; }
+@media (max-width: 767px) { .fm-legacy { padding: 16px; } }
+.fm-phone .fm-org { flex: 1 1 auto; overflow: hidden; }
+.fm-phone .fm-org > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-phone .fm-org > :last-child { display: none; }
+.fm-phone .fm-grow { display: none; }
+.fm-phone-top > :is(a, button) { flex: none; }
