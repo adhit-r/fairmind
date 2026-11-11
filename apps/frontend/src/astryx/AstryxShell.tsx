@@ -121,6 +121,15 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
   const isPhone = useMediaQuery('(max-width: 767px)')
   const group = groupOf(pathname) ?? (pathname.startsWith('/systems') ? NAV[1] : null)
 
+  // Each page's title names it, so tabs, history and screen readers can tell pages apart.
+  const systemId = pathname.match(/^\/systems\/([^/]+)$/)?.[1]
+  const pageName = systemId
+    ? systems.find((s) => s.id === decodeURIComponent(systemId))?.name ?? 'AI system'
+    : ALL.find((p) => isOn(pathname, p))?.label ?? null
+  useEffect(() => {
+    document.title = pageName ? `${pageName} | FairMind` : 'FairMind'
+  }, [pageName])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {

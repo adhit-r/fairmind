@@ -21,6 +21,17 @@ const REASONS: Record<number, string> = {
   410: 'This link has expired. Ask the sender for a new one.',
 }
 
+/** The pack's frame for loading and error states, so a failed link still looks like FairMind. */
+function Notice({ title, body, alert = false }: { title: string; body: string; alert?: boolean }) {
+  return (
+    <Card className="p-6">
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-ink3)]">FairMind inspection pack</div>
+      <h1 className="mt-1 text-xl font-semibold tracking-tight text-[var(--fm-ink)]">{title}</h1>
+      <p role={alert ? 'alert' : 'status'} className="mt-2 text-sm text-[var(--fm-ink2)]">{body}</p>
+    </Card>
+  )
+}
+
 function AuditorView() {
   const { packId } = useParams<{ packId: string }>()
   const token = useSearchParams().get('t')
@@ -45,8 +56,8 @@ function AuditorView() {
     }
   }, [packId, token])
 
-  if (error) return <p role="alert" className="text-sm text-[#b4232c]">{error}</p>
-  if (!pack) return <p className="text-sm text-[var(--fm-ink2)]">Loading pack</p>
+  if (error) return <Notice title="This pack cannot be shown" body={error} alert />
+  if (!pack) return <Notice title="Loading the inspection pack" body="Checking the link and fetching the manifest." />
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,7 +104,7 @@ export default function VerifyPackPage() {
   return (
     <main className="min-h-screen bg-[var(--fm-bg)] px-4 py-10 text-[var(--fm-ink)]">
       <div className="mx-auto max-w-4xl">
-        <Suspense fallback={<p className="text-sm text-[var(--fm-ink2)]">Loading pack</p>}>
+        <Suspense fallback={<Notice title="Loading the inspection pack" body="Checking the link and fetching the manifest." />}>
           <AuditorView />
         </Suspense>
       </div>
