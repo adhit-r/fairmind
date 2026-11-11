@@ -15,15 +15,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loginSchema, type LoginFormData } from '@/lib/validations/schemas'
 import { IconAlertTriangle, IconBrandGoogle } from '@tabler/icons-react'
+import { safeNextPath } from '@/lib/safe-next-path'
 
 const AUTHENTIK_ENABLED = !!process.env.NEXT_PUBLIC_AUTHENTIK_URL
-
-/** Where to go after sign-in: a same-site path from ?next=, else the dashboard. */
-function nextPath(): string {
-  const next = new URLSearchParams(window.location.search).get('next')
-  // A leading '//' or '/\' would leave the site.
-  return next && /^\/(?![/\\])/.test(next) ? next : '/dashboard'
-}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -46,7 +40,7 @@ export default function LoginPage() {
         title: "Login successful",
         description: "Welcome back!",
       })
-      router.push(nextPath())
+      router.push(safeNextPath(new URLSearchParams(window.location.search).get('next'), window.location.origin))
     } catch (err) {
       toast({
         title: "Login failed",
