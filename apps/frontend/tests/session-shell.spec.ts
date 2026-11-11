@@ -86,8 +86,8 @@ test('shares one verified session across the dashboard shell', async ({ context,
 
   await page.goto('/tests')
 
-  await expect(page.getByText(currentUser.username, { exact: true })).toBeVisible()
-  await expect(page.getByText(currentUser.email, { exact: true })).toBeVisible()
+  await expect(page.getByText(currentUser.username, { exact: true }).locator('visible=true').first()).toBeVisible()
+  await expect(page.getByText(currentUser.email, { exact: true }).locator('visible=true').first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
   expect(session.getCurrentSessionRequests()).toBe(1)
   expect(session.getCurrentSessionAuthorization()).toBe('Bearer session-access-token')

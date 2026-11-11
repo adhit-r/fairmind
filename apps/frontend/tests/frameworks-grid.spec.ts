@@ -4,9 +4,11 @@ import { GRID_FW, installGridFixtures, layoutFacts, ONE_PER_TIER } from './grid-
 test.describe('Frameworks grid', () => {
   test.beforeEach(async ({ page }) => installGridFixtures(page))
 
-  test('/frameworks opens the first confirmed framework', async ({ page }) => {
+  test('/frameworks lists the frameworks and links to each grid', async ({ page }) => {
     await page.goto('/frameworks')
-    await expect(page).toHaveURL(new RegExp(`/frameworks/${GRID_FW}$`), { timeout: 30_000 })
+    await expect(page).toHaveURL(/\/frameworks$/)
+    const table = page.getByRole('region', { name: 'Frameworks' })
+    await expect(table.getByRole('link', { name: 'ISO/IEC 42001:2023' })).toHaveAttribute('href', `/frameworks/${GRID_FW}`, { timeout: 30_000 })
   })
 
   test('by system renders one grid, one legend, at most three cards', async ({ page }) => {

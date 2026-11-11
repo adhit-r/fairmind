@@ -1,8 +1,5 @@
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Route } from '@playwright/test'
 import { GRID_FW, installGridFixtures, layoutFacts } from './grid-fixtures'
-
-// Journey stays mounted while hidden, so only the cards on screen count.
-const visibleCards = (page: Page) => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('main .fm-card')].filter((el) => el.offsetParent !== null).length)
 
 // The system file for sys-a, answered here on top of the grid fixtures; nothing reaches a database.
 const GOV = '/api/v1/ai-governance'
@@ -34,51 +31,34 @@ test.describe('System page tabs', () => {
     })
   })
 
-  test('the hero, Journey by default, Requirements grid and Record', async ({ page }) => {
+  test('the system file, Requirements grid and Record', async ({ page }) => {
     await page.goto('/systems/sys-a')
     await expect(page.getByRole('heading', { level: 1, name: 'Grid system A' })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByText('0.72', { exact: true })).toBeVisible()
-    await expect(page.getByRole('region', { name: 'Decision' })).toBeVisible()
-    await expect(page.getByRole('navigation', { name: 'Lifecycle' }).getByRole('link', { name: /Govern/ })).toHaveAttribute('aria-current', 'step')
+    await expect(page.getByRole('navigation', { name: 'Tabs' }).getByRole('button')).toHaveCount(3)
+    for (const name of ['System file', 'Requirements', 'Record']) await expect(page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Journey' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { level: 3, name: 'Release gate' })).toBeVisible()
+    await expect(page.getByText('0.72', { exact: true }).first()).toBeVisible()
+    await expect(page.locator('[data-mx="sysreq"]')).toHaveCount(0)
 
-    // Journey is one card: the current stage (Govern) open, every other stage a row that expands on click.
-    expect(await visibleCards(page)).toBeLessThanOrEqual(3)
-    const govern = page.getByRole('region', { name: 'Govern' })
-    await expect(govern.getByRole('button', { name: /Govern/ })).toHaveAttribute('aria-expanded', 'true')
-    await expect(govern.getByRole('button', { name: 'Open plan' })).toBeVisible()
-    const operate = page.getByRole('region', { name: 'Operate' })
-    const operateRow = operate.getByRole('button', { name: /Operate/ })
-    await expect(operateRow).toHaveAttribute('aria-expanded', 'false')
-    expect((await operate.boundingBox())?.height).toBeLessThanOrEqual(45)
-    await expect(operate.getByRole('button', { name: 'Generate audit report' })).toBeVisible()
-    await expect(operate.getByText('Audit reports')).toBeHidden()
-    await operateRow.click()
-    await expect(operateRow).toHaveAttribute('aria-expanded', 'true')
-    await expect(operate.getByText('Audit reports')).toBeVisible()
-    await expect(operate.getByRole('button', { name: 'Monitoring', exact: true })).toBeVisible()
-    expect(await visibleCards(page)).toBeLessThanOrEqual(3)
-
-    await page.getByRole('tab', { name: 'Requirements' }).click()
+    await page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'Requirements' }).click()
     const grid = page.locator('[data-mx="sysreq"]')
     await expect(grid).toBeVisible()
     await expect(grid.locator('tbody .fm-cel.proven')).toHaveCount(1)
-    await expect(page.getByRole('region', { name: 'Decision' })).toBeHidden()
-    expect(await visibleCards(page)).toBeLessThanOrEqual(3)
     expect((await layoutFacts(page)).legends).toBe(1)
 
-    await page.getByRole('tab', { name: 'Record' }).click()
+    await page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'Record' }).click()
     await expect(page.getByRole('region', { name: 'Sealed decisions' }).getByText('abcdef012345')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Approval decisions' }).getByText('Approved')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Approval decisions' }).getByText('· approver')).toBeVisible()
-    expect(await visibleCards(page)).toBeLessThanOrEqual(3)
   })
 
   test('no horizontal scroll at 375px on the Requirements tab', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/systems/sys-a')
-    await expect(page.getByRole('region', { name: 'Operate' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Grid system A' })).toBeVisible({ timeout: 30_000 })
     expect((await layoutFacts(page)).overflow).toBeLessThanOrEqual(0)
-    await page.getByRole('tab', { name: 'Requirements' }).click()
+    await page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'Requirements' }).click()
     await expect(page.locator('[data-mx="sysreq"]')).toBeVisible()
     expect((await layoutFacts(page)).overflow).toBeLessThanOrEqual(0)
   })

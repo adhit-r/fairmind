@@ -124,7 +124,7 @@ function ActionAlert({
 }: {
   title: string
   error: Error
-  alertRef: React.RefObject<HTMLDivElement>
+  alertRef: React.RefObject<HTMLDivElement | null>
 }) {
   const nextAction = error instanceof EvaluationApiRequestError ? error.nextAction : undefined
   return (

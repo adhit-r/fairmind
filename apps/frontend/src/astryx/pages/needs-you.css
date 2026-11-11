@@ -1,0 +1,11 @@
+.fm-inbox { display: grid; }
+.fm-inbox-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px auto; gap: 16px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--color-border-subtle, var(--color-background-muted)); }
+.fm-inbox-row:first-child { border-top: 0; }
+.fm-inbox-row:hover { background: var(--color-overlay-hover); }
+.fm-inbox-what { display: grid; gap: 2px; min-width: 0; }
+.fm-inbox-what b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-inbox-what span { color: var(--color-text-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-inbox-who { color: var(--color-text-secondary); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-inbox-act { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.fm-panel-card { padding: 4px 0; border-radius: var(--radius-element); }
+@media (max-width: 900px) { .fm-inbox-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } .fm-inbox-act { justify-content: flex-start; } }
