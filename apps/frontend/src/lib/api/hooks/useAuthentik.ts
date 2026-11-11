@@ -18,7 +18,7 @@ interface AuthTokenResponse {
     id: string;
     email: string;
     username: string;
-    roles: string[];
+    roles?: string[];
   };
 }
 
