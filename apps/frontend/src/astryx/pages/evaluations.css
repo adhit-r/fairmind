@@ -1,0 +1,24 @@
+.fm-ev-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.fm-ev-split.has-panel { grid-template-columns: minmax(0, 1fr) 380px; }
+@media (max-width: 1100px) { .fm-ev-split.has-panel { grid-template-columns: minmax(0, 1fr); } }
+.fm-ev-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; }
+.fm-ev-search { flex: 1 1 240px; max-width: 360px; }
+.fm-ev-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); }
+.fm-ev-table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 13px; color: var(--color-text-primary); }
+.fm-ev-table th { text-align: left; font-weight: 500; font-size: 12px; color: var(--color-text-secondary); padding: 8px 12px; border-bottom: 1px solid var(--color-border); }
+.fm-ev-table td { padding: 10px 12px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.fm-ev-table tr.fm-ev-row { cursor: pointer; }
+.fm-ev-table tr.fm-ev-row:hover td { background: var(--color-overlay-hover); }
+.fm-ev-table tr.is-selected td { background: var(--color-background-muted); }
+.fm-ev-table tr.fm-ev-group td { background: var(--color-background-muted); cursor: pointer; }
+.fm-ev-group button { all: unset; display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
+.fm-ev-id { font-family: var(--font-family-code, ui-monospace, monospace); font-size: 12px; color: var(--color-text-secondary); }
+.fm-ev-name { display: grid; gap: 2px; }
+.fm-ev-name button { all: unset; cursor: pointer; font-weight: 500; }
+.fm-ev-name button:focus-visible { outline: 2px solid var(--color-border-focus, currentColor); outline-offset: 2px; }
+.fm-ev-muted { color: var(--color-text-secondary); }
+.fm-ev-panel { border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); padding: 16px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.fm-ev-sys { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--color-border); }
+.fm-ev-sys:first-child { border-top: 0; }
+.fm-ev-sys-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.fm-ev-sys a { color: var(--color-text-primary); font-weight: 500; }

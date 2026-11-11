@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Figtree, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
@@ -8,6 +8,8 @@ const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
 })
+const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" })
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
   title: "FairMind - Build Fair & Trustworthy AI",
@@ -57,7 +59,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} font-sans`}>
+      <body className={`${inter.variable} ${figtree.variable} ${mono.variable} font-sans`}>
         <ErrorBoundary>
           {children}
           <Toaster />

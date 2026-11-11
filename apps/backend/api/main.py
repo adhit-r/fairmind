@@ -409,6 +409,7 @@ _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags=["fairness"], required=False)
 _include_router("api.routes.autopilot", prefix="/api/v1/ai-governance", tags=["autopilot"], required=False)
+_include_router("api.routes.governance_plan", prefix="/api/v1/plan", tags=["plan"], required=False)
 _include_router("api.routes.applicability", prefix="/api/v1/ai-governance", tags=["applicability"], required=False)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)

@@ -346,7 +346,7 @@ async def list_org_members(
                     om.id,
                     om.user_id,
                     u.email,
-                    u.full_name as name,
+                    COALESCE(u.name, u.username) as name,
                     om.role,
                     om.status,
                     om.joined_at

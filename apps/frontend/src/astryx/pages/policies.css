@@ -1,0 +1,17 @@
+.po-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.po-facts li { display: grid; gap: 2px; padding: 12px 14px; border-radius: var(--radius-element); background: var(--color-background-muted); }
+.po-facts b { font-family: var(--font-family-code, ui-monospace, monospace); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.po-facts span { font-size: 13px; color: var(--color-text-secondary); }
+.po-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.po-table th { padding: 10px 12px; text-align: start; font-size: 12px; font-weight: 500; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.po-table td { padding: 10px 12px; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+.po-table tr:last-child td { border-bottom: 0; }
+.po-table td.name a { color: var(--color-text-primary); font-weight: 500; text-decoration: none; }
+.po-table td.name a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.po-table td.name small { display: block; color: var(--color-text-secondary); font-size: 12px; }
+.po-table td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.po-scroll { overflow-x: auto; }
+.po-alerts { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.po-alerts li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-element); background: var(--color-background-card); }
+.po-alerts .grow { flex: 1; min-width: 220px; display: grid; gap: 2px; }
+.po-alerts .grow small { color: var(--color-text-secondary); font-size: 12.5px; }

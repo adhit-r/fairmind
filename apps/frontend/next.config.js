@@ -12,6 +12,15 @@ const nextConfig = {
         destination: '/compliance-dashboard',
         permanent: false,
       },
+      // Older addresses for pages that now live in the new menu.
+      { source: '/integrations', destination: '/discovery', permanent: false },
+      { source: '/model-inventory', destination: '/systems', permanent: false },
+      { source: '/risks', destination: '/findings', permanent: false },
+      { source: '/remediation', destination: '/findings', permanent: false },
+      { source: '/compliance/runs', destination: '/runs', permanent: false },
+      { source: '/compliance/evaluations', destination: '/evaluations', permanent: false },
+      { source: '/evidence/packs', destination: '/auditor-packs', permanent: false },
+      { source: '/org-admin/settings', destination: '/settings', permanent: false },
       {
         source: '/remediation-wizard',
         destination: '/remediation?mode=guided',
@@ -67,4 +76,6 @@ const nextConfig = {
   output: 'standalone',
 }
 
-module.exports = nextConfig
+const { withAstryx } = require('@astryxdesign/build/next')
+
+module.exports = withAstryx(nextConfig)

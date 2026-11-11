@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
-import { AlertTriangle, FileCheck2, FileOutput, FileText, Plug, Scale, Settings, Sparkles, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, FileCheck2, FileOutput, FileText, ListChecks, Plug, Scale, Settings, Sparkles, type LucideIcon } from 'lucide-react'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { usePendingDecisions } from '@/lib/api/hooks/usePendingDecisions'
@@ -24,6 +24,7 @@ const LIBRARY: Array<{ section: string; links: Array<{ label: string; href: stri
   {
     section: 'Records',
     links: [
+      { label: 'Plan', href: '/plan', icon: ListChecks },
       { label: 'Findings', href: '/risks', icon: AlertTriangle },
       { label: 'Evidence', href: '/evidence', icon: FileCheck2 },
       { label: 'Exports', href: '/audit-reports', icon: FileOutput },
@@ -271,7 +272,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Sparkles className="h-[15px] w-[15px] text-[var(--fm-brand)]" aria-hidden />
           <span className="flex-1">Ask FairMind</span>
-          <kbd className="rounded-[5px] border border-[var(--fm-line)] px-1.5 font-sans text-[11px] text-[var(--fm-ink3)] max-md:hidden">⌘K</kbd>
+          <kbd className="rounded-[5px] border border-[var(--fm-line)] px-1.5 font-sans text-[11px] text-[var(--fm-ink3)] max-md:hidden">Ctrl K</kbd>
         </button>
         <Suspense fallback={null}>
           <TodayLink />

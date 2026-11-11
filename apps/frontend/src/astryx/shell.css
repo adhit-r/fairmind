@@ -1,0 +1,79 @@
+/* The two-level menu: a strip of groups, then a panel of that group's pages. Astryx tokens only. */
+.fm-app { height: 100vh; }
+.fm-strip { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; padding: 12px 6px; background: var(--color-background-muted); border-inline-end: 1px solid var(--color-border); overflow-y: auto; }
+.fm-brand { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 8px; border-radius: 50%; background: var(--color-background-card); border: 1px solid var(--color-border); }
+.fm-brand img { width: 30px; height: 30px; object-fit: cover; border-radius: 50%; }
+.fm-sb { position: relative; display: grid; justify-items: center; gap: 4px; width: 64px; padding: 8px 0 7px; border: 0; border-radius: var(--radius-element); background: none; color: var(--color-text-secondary); font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1.2; cursor: pointer; text-decoration: none; }
+.fm-sb:hover { background: var(--color-overlay-hover); color: var(--color-text-primary); }
+.fm-sb:focus-visible { outline: 2px solid var(--focus-outline-color); outline-offset: 2px; }
+.fm-sb .ic { display: grid; place-items: center; width: 40px; height: 32px; border-radius: 10px; }
+.fm-sb[aria-current='true'] { color: var(--color-text-primary); font-weight: 600; }
+.fm-sb[aria-current='true'] .ic { background: var(--color-accent); color: var(--color-on-accent); }
+.fm-sb .hot { position: absolute; top: 5px; right: 10px; width: 9px; height: 9px; border-radius: 50%; background: var(--fm-found); box-shadow: 0 0 0 2px var(--color-background-muted); }
+.fm-grow { flex: 1; }
+.fm-panel { display: flex; flex-direction: column; gap: 14px; height: 100%; padding: 16px 10px; background: var(--color-background-body); border-inline-end: 1px solid var(--color-border); overflow-y: auto; }
+.fm-org { display: grid; gap: 1px; padding: 2px 8px 0; }
+.fm-org select { min-width: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--color-text-primary); }
+.fm-list { display: grid; gap: 2px; }
+.fm-group-title { padding: 4px 8px 6px; }
+.fm-hot-count { color: var(--color-text-warning); }
+.fm-me { display: flex; align-items: center; gap: 8px; padding: 8px; border-top: 1px solid var(--color-border); }
+.fm-me > span { min-width: 0; flex: 1; }
+.fm-legacy { padding: 22px 28px 64px; background: var(--fm-bg, var(--color-background-body)); min-height: 100%; }
+
+/* The live line in the menu. */
+.fm-feed { display: grid; gap: 5px; margin-top: auto; padding: 12px; border-radius: var(--radius-element); background: var(--color-background-card); border: 1px solid var(--color-border); color: var(--color-text-primary); text-decoration: none; font-size: 12.5px; line-height: 1.35; }
+.fm-feed .who { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.fm-feed .who i { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-disabled); }
+.fm-feed .who i.on { background: var(--color-info); animation: fm-pulse 1.6s ease-in-out infinite; }
+.fm-feed .doing { color: var(--color-text-secondary); }
+@keyframes fm-pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+
+/* Board cells: one look for a check's state, wherever it shows. */
+.cell { display: grid; place-items: center; width: 100%; min-width: 30px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 6px; font: inherit; cursor: pointer; transition: transform 120ms ease-out; }
+.cell:hover { transform: translateY(-1px); }
+.cell:focus-visible { outline: 2px solid var(--focus-outline-color); outline-offset: 2px; }
+.cell.proven { background: var(--fm-ok-wash); color: var(--fm-ok); }
+.cell.running { background: var(--color-info-muted); color: var(--color-info); }
+.cell.needs { background: var(--fm-found-wash); color: var(--color-text-warning); border-color: var(--fm-found); }
+.cell.fails { background: var(--color-error-muted); color: var(--color-error); border-color: var(--color-error); }
+.cell.planned { background: var(--color-background-muted); color: var(--color-text-disabled); }
+.cell.none { background: none; color: var(--color-text-disabled); cursor: default; }
+.cell.mini { width: 22px; min-width: 22px; height: 18px; border-radius: 5px; }
+.cell.running::after { content: ''; width: 40%; height: 3px; border-radius: 2px; background: currentColor; animation: fm-pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fm-feed .who i.on, .cell.running::after { animation: none; }
+  .cell { transition: none; }
+}
+.cell.attested { background: var(--fm-ok-wash); color: var(--fm-ok); border-color: var(--fm-ok); border-style: dashed; }
+.cell.estimated { background: var(--color-info-muted); color: var(--color-info); }
+.cell.stale { background: var(--fm-found-wash); color: var(--color-text-warning); }
+.cell.open { background: var(--color-background-muted); color: var(--color-text-disabled); }
+.cell.atorg { background: var(--color-background-muted); color: var(--color-text-secondary); }
+.cell.needs b { width: 8px; height: 8px; border-radius: 50%; background: var(--fm-found); }
+.cell .tilde { font-weight: 700; font-size: 15px; line-height: 1; }
+
+/* Shared page frame for Astryx pages. */
+.fm-page { padding: 24px 28px 64px; max-width: 1440px; }
+.fm-card { padding: 16px 18px; border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); }
+@media (max-width: 700px) { .fm-page { padding: 16px; } }
+
+/* Phone: the menu folds into a header of chips; the strip and panel would leave no room for the page. */
+.fm-phone { display: grid; gap: 8px; padding: 10px 16px 8px; background: var(--color-background-muted); border-bottom: 1px solid var(--color-border); }
+.fm-phone-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fm-phone .fm-brand { width: 36px; height: 36px; margin: 0; flex: none; }
+.fm-phone .fm-brand img { width: 24px; height: 24px; }
+.fm-phone .fm-org { padding: 0; min-width: 0; }
+.fm-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.fm-chips::-webkit-scrollbar { display: none; }
+.fm-chip { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 5px 12px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-background-card); color: var(--color-text-secondary); font-size: 13px; font-weight: 500; text-decoration: none; }
+.fm-chip[aria-current] { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+.fm-chip b { font-family: var(--font-family-code, ui-monospace, monospace); font-weight: 500; font-size: 12px; }
+.fm-chips.sub .fm-chip { padding: 4px 10px; font-size: 12.5px; }
+@media (max-width: 767px) { .fm-legacy { padding: 16px; } }
+.fm-phone .fm-org { flex: 1 1 auto; overflow: hidden; }
+.fm-phone .fm-org > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-phone .fm-org > :last-child { display: none; }
+.fm-phone .fm-grow { display: none; }
+.fm-phone-top > :is(a, button) { flex: none; }

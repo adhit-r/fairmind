@@ -1,4 +1,12 @@
-@tailwind base;
+/* Layer order first, before any import is hoisted: Tailwind's preflight sits under Astryx so older pages keep it and Astryx components win. */
+@layer tw-preflight, reset, astryx-base, astryx-theme, product;
+
+@layer tw-preflight {
+  @tailwind base;
+}
+
+@astryx;
+
 @tailwind components;
 @tailwind utilities;
 
