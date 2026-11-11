@@ -67,4 +67,6 @@ const nextConfig = {
   output: 'standalone',
 }
 
-module.exports = nextConfig
+const { withAstryx } = require('@astryxdesign/build/next')
+
+module.exports = withAstryx(nextConfig)

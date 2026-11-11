@@ -5,14 +5,10 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { SystemContextProvider } from '@/components/workflow/SystemContext'
 import { OrgProvider } from '@/context/OrgContext'
 import { SessionProvider } from '@/context/SessionContext'
-import { AppShell } from '@/components/layout/AppShell'
-import { SystemBreadcrumb } from '@/components/layout/SystemBreadcrumb'
+import { AstryxShell } from '@/astryx/AstryxShell'
 
-// Pages rebuilt in the new shell carry their own context. Every other page is a
-// legacy tool page and gets a one-line breadcrumb back to the system file.
-const NEW_SHELL_PAGES = new Set(['/dashboard', '/onboard', '/integrations'])
-const inNewShell = (pathname: string) =>
-  NEW_SHELL_PAGES.has(pathname) || pathname.startsWith('/systems/') || pathname === '/frameworks' || pathname.startsWith('/frameworks/')
+// Pages in the new menu are built on Astryx. Any other page is an older tool page: it keeps its own styles inside a padded frame.
+const ASTRYX = /^\/(dashboard|needs-you|systems|discovery|plan|frameworks|policies|evaluations|runs|agent-audits|decisions|monitoring|findings|environment|evidence|auditor-packs|autopilot|ask|settings)(\/|$)/
 
 export default function DashboardLayout({
   children,
@@ -25,10 +21,7 @@ export default function DashboardLayout({
       <AuthGuard>
         <OrgProvider>
           <SystemContextProvider>
-            <AppShell>
-              {!inNewShell(pathname ?? '') && <SystemBreadcrumb />}
-              {children}
-            </AppShell>
+            <AstryxShell>{ASTRYX.test(pathname ?? '') ? children : <div className="fm-legacy">{children}</div>}</AstryxShell>
           </SystemContextProvider>
         </OrgProvider>
       </AuthGuard>

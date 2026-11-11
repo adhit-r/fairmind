@@ -1,4 +1,12 @@
-@tailwind base;
+@layer tw-preflight, reset, astryx-base, astryx-theme, product;
+@import '@astryxdesign/core/reset.css';
+
+@layer tw-preflight {
+  @tailwind base;
+}
+
+@astryx;
+
 @tailwind components;
 @tailwind utilities;
 
