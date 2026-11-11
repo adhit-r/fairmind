@@ -81,6 +81,20 @@ def drop_test_databases() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def accept_synthetic_sessions(request, monkeypatch) -> None:
+    """Most tests sign requests with tokens for users that have no users row
+    (tests/auth_helpers.auth_headers), which the per-request session check would
+    reject. test_session_revocation runs the real check (real_session_check)."""
+    if request.node.get_closest_marker("real_session_check"):
+        return
+
+    async def _live(user_id, token_version, org_id):
+        return True
+
+    monkeypatch.setattr("config.auth._session_is_live", _live)
+
+
+@pytest.fixture(autouse=True)
 def reset_in_memory_rate_limit() -> Generator[None, None, None]:
     """Keep request histories isolated between function-scoped API clients."""
     _reset_in_memory_rate_limit()

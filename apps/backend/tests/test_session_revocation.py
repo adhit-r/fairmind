@@ -19,6 +19,8 @@ from config.auth import InvalidTokenException, User, UserRole, auth_manager, rev
 from api.routes import org_management
 from tests.test_registration_approval import _Db, _rows
 
+pytestmark = pytest.mark.real_session_check
+
 
 @pytest.fixture
 def db(monkeypatch):
@@ -152,3 +154,46 @@ async def test_refresh_compares_the_token_version_with_the_user(monkeypatch):
 
 async def _noop(**_kwargs):
     return None
+
+
+@pytest.mark.asyncio
+async def test_access_tokens_stop_on_the_next_request(db, monkeypatch):
+    """Logout, suspension and removal end access tokens now, not when they expire."""
+    monkeypatch.setattr(org_management, "_log_org_audit", _noop)
+    owner = _user(db)
+    org = _org(db, owner)
+    _join(db, org, owner, role="owner")
+    member = _user(db)
+    _point_at(db, member, org)
+    member_row = _join(db, org, member, role="admin")
+
+    async def fresh_token():
+        return auth_manager.create_access_token(await auth_manager.get_user_by_id(member))
+
+    token = await fresh_token()
+    assert (await auth_manager.verify_token(token)).org_id == org
+
+    await revoke_user_sessions(member)  # logout or password reset
+    with pytest.raises(InvalidTokenException, match="signed out"):
+        await auth_manager.verify_token(token)
+
+    token = await fresh_token()
+    with db.begin() as conn:
+        conn.execute(text("UPDATE org_members SET status = 'suspended' WHERE id = :id"), {"id": member_row})
+    with pytest.raises(InvalidTokenException, match="signed out"):
+        await auth_manager.verify_token(token)
+    with db.begin() as conn:
+        conn.execute(text("UPDATE org_members SET status = 'active' WHERE id = :id"), {"id": member_row})
+
+    token = await fresh_token()
+    admin = SimpleNamespace(user_id=owner)
+    await org_management.update_member(
+        org, member_row, org_management.UpdateMemberRequest(role="member"), SimpleNamespace(client=None, headers={}), admin
+    )
+    with pytest.raises(InvalidTokenException, match="signed out"):  # it carried the admin role's rights
+        await auth_manager.verify_token(token)
+
+    token = await fresh_token()
+    await org_management.remove_member(org, member_row, SimpleNamespace(client=None, headers={}), admin)
+    with pytest.raises(InvalidTokenException, match="signed out"):
+        await auth_manager.verify_token(token)

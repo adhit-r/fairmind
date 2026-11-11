@@ -62,6 +62,8 @@ export default function RegisterPage() {
           router.push(`/invitations/${inviteToken}`)
           return
         }
+        // The current token was issued before this membership; get one that carries it.
+        await apiClient.refreshSession()
         localStorage.setItem('selected_org_id', invitation.org_id)
         router.push('/dashboard')
         return

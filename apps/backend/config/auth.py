@@ -269,6 +269,13 @@ class AuthManager:
             ):
                 raise InvalidTokenException("API key is revoked, or its user is inactive or left the organization")
             
+            if (
+                token_type == TokenType.ACCESS.value
+                and parsed_principal_kind is PrincipalKind.HUMAN
+                and not await _session_is_live(str(user_id), int(payload.get("ver") or 0), str(org_id) if org_id else None)
+            ):
+                raise InvalidTokenException("Session has been signed out")
+
             # Convert timestamps if they're datetime objects
             if isinstance(exp, datetime):
                 exp_dt = exp
@@ -317,8 +324,7 @@ class AuthManager:
             user = await self.get_user_by_id(token_data.user_id)
             if not user or not user.is_active:
                 raise InvalidTokenException("User not found or inactive")
-            # ponytail: only refresh checks the version, so an access token outlives a revocation
-            # by at most jwt_expire_minutes. Check it in verify_token too if that window matters.
+            # verify_token checks the same version on every access token (_session_is_live).
             if token_data.token_version != user.token_version:
                 raise InvalidTokenException("Session has been signed out")
             
@@ -433,6 +439,28 @@ async def _api_key_is_live(api_key: str, user_id: str, org_id: Optional[str] = N
         "WHERE k.user_id = :user AND k.key_hash = :hash AND k.is_active AND u.is_active"
     )
     params = {"user": user_id, "hash": api_key_hash(api_key)}
+    if org_id:
+        sql += (
+            " AND EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = u.id "
+            "AND CAST(m.org_id AS TEXT) = :org AND m.status = 'active')"
+        )
+        params["org"] = org_id
+    async with get_db_connection() as db:
+        row = await db.fetch_one(sql, params)
+    return row is not None
+
+
+async def _session_is_live(user_id: str, token_version: int, org_id: Optional[str]) -> bool:
+    """A human session token works only while its user is active, nobody has
+    ended the user's sessions since it was issued (token_version), and, when it
+    names an org, the user is still an active member there. One indexed lookup
+    per request, so removal, suspension, logout and password reset take effect
+    on the next request instead of when the token expires."""
+    if user_id == E2E_ADMIN_ID and _e2e_admin() is not None:
+        return True  # development-only account with no users row
+    from .database import get_db_connection
+    sql = "SELECT 1 FROM users u WHERE u.id = :user AND u.is_active AND COALESCE(u.token_version, 0) = :ver"
+    params: Dict[str, Any] = {"user": user_id, "ver": token_version}
     if org_id:
         sql += (
             " AND EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = u.id "

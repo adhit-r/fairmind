@@ -76,6 +76,8 @@ export default function InvitationPage() {
     const res = await apiClient.post(API_ENDPOINTS.invitations.accept(token), {}, { enableRetry: false })
     const msg = res.error || ''
     if (res.success || msg.includes('already a member')) {
+      // The current token was issued before this membership; get one that carries it.
+      await apiClient.refreshSession()
       localStorage.setItem('selected_org_id', invitation.org_id)
       router.push('/dashboard')
       return

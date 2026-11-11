@@ -19,6 +19,7 @@ import { Token } from '@astryxdesign/core/Token'
 import { List, ListItem } from '@astryxdesign/core/List'
 
 import { useOrg } from '@/context/OrgContext'
+import { useSession } from '@/context/SessionContext'
 import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
 import { AIProviderSettings } from '@/components/packs/AIProviderSettings'
 import { PlatformConnectionSettings } from '@/components/packs/PlatformConnectionSettings'
@@ -32,6 +33,7 @@ import {
   useApiKeys,
   useMembers,
   useOrgAuditLog,
+  usePendingAccessRequests,
   useRoles,
   type ApiKeyRow,
   type AuditEntry,
@@ -45,6 +47,8 @@ const SECTIONS = [
   { id: 'team', label: 'Team and roles' },
   { id: 'developers', label: 'Developers' },
   { id: 'audit-log', label: 'Audit log' },
+  // Shown to platform admins only: approving a request creates a new organisation.
+  { id: 'access-requests', label: 'Access requests' },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
@@ -64,8 +68,10 @@ export default function SettingsPage() {
 
 function Settings() {
   const requested = useSearchParams().get('section')
+  const platformAdmin = useSession().user?.role === 'admin'
+  const sections = SECTIONS.filter((s) => s.id !== 'access-requests' || platformAdmin)
   const [active, setActive] = useState<SectionId>(SECTIONS.find((s) => s.id === requested)?.id ?? 'organisation')
-  const title = SECTIONS.find((s) => s.id === active)?.label
+  const title = sections.find((s) => s.id === active)?.label
 
   return (
     <div className="fm-page">
@@ -74,7 +80,7 @@ function Settings() {
         <div className="fm-st">
           <nav className="fm-st-nav" aria-label="Settings sections">
             <List density="spacious">
-              {SECTIONS.map((s) => (
+              {sections.map((s) => (
                 <ListItem key={s.id} label={s.label} isSelected={active === s.id} onClick={() => setActive(s.id)} />
               ))}
             </List>
@@ -93,11 +99,29 @@ function Settings() {
               {active === 'team' && <TeamSection />}
               {active === 'developers' && <DevelopersSection />}
               {active === 'audit-log' && <AuditSection />}
+              {active === 'access-requests' && platformAdmin && <AccessRequestsSection />}
             </VStack>
           </div>
         </div>
       </VStack>
     </div>
+  )
+}
+
+function AccessRequestsSection() {
+  const pending = usePendingAccessRequests(true)
+  if (pending.loading) return <Skeleton height={80} />
+  if (pending.error) return <Problem message={pending.error} retry={pending.reload} />
+  const n = pending.data.length
+  return (
+    <VStack gap={3}>
+      <Text color="secondary">
+        {n === 0
+          ? 'No requests are waiting. New requests also arrive by email.'
+          : `${n} ${n === 1 ? 'request is' : 'requests are'} waiting. Approving one creates the organisation and emails the requester a link to choose a password.`}
+      </Text>
+      <HStack><Button label="Review access requests" variant={n ? 'primary' : 'secondary'} href="/admin/registrations" /></HStack>
+    </VStack>
   )
 }
 

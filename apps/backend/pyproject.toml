@@ -206,6 +206,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "e2e: marks tests as end-to-end tests",
+    "real_session_check: run config.auth._session_is_live against the database instead of the suite-wide stub",
 ]
 
 [tool.coverage.run]

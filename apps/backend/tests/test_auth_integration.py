@@ -35,7 +35,6 @@ def _users_table(monkeypatch):
 
     monkeypatch.setattr("api.routes.auth.revoke_user_sessions", _revoke)
 
-
 class TestAuthenticationIntegration:
     """Integration tests for authentication endpoints."""
     
