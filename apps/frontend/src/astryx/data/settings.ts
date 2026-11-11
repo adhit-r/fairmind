@@ -67,6 +67,10 @@ export const useMembers = (orgId?: string) => useGet<OrgMember[]>(orgPath(orgId,
 export const useRoles = (orgId?: string) => useGet<OrgRole[]>(orgPath(orgId, 'roles'), (r) => r.roles ?? [], EMPTY_ROLES)
 export const useApiKeys = () => useGet<ApiKeyRow[]>('/api/v1/auth/api-keys', (r) => r.api_keys ?? [], EMPTY_KEYS)
 
+/** Pending access requests; platform admins only (the endpoint answers 403 to anyone else). */
+export const usePendingAccessRequests = (enabled: boolean) =>
+  useGet<{ id: string }[]>(enabled ? '/api/v1/registrations?status_filter=pending' : null, (r) => r.requests ?? [], [])
+
 export const PAGE_SIZE = 25
 export function useOrgAuditLog(orgId: string | undefined, page: number) {
   return useGet<{ logs: AuditEntry[]; total: number }>(
