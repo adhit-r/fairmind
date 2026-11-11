@@ -64,6 +64,11 @@ docker compose logs -f backend
 
 Update: `git pull && docker compose up -d --build`.
 
+## Cloudflare controls
+
+Before the first customer signs in, apply the WAF, rate-limit, cache and Access rules in
+[cloudflare.md](cloudflare.md).
+
 ## Cloudflare free-plan limits
 
 - 100 MB request body: larger dataset uploads fail at the edge.
