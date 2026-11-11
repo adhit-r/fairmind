@@ -24,6 +24,8 @@ if not pg.SERVER_URL:
     )
 # Before the app imports settings: the app runs against a migrated session database.
 os.environ["DATABASE_URL"] = pg.create_app_database()
+# Settings default to production; the suite exercises development behaviour.
+os.environ.setdefault("ENVIRONMENT", "development")
 
 from api.main import app
 import config.database as _app_database
