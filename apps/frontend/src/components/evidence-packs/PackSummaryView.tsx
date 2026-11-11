@@ -49,11 +49,11 @@ function SystemCard({ entry }: { entry: PackSystemEntry }) {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-ink3)]">
-                <th className="pb-2 pr-4 font-semibold">Framework</th>
-                <th className="pb-2 pr-4 text-right font-semibold">Proven</th>
-                <th className="pb-2 pr-4 text-right font-semibold">Attested</th>
-                <th className="pb-2 pr-4 text-right font-semibold">Open</th>
-                <th className="pb-2 text-right font-semibold">Clauses</th>
+                <th scope="col" className="pb-2 pr-4 font-semibold">Framework</th>
+                <th scope="col" className="pb-2 pr-4 text-right font-semibold">Proven</th>
+                <th scope="col" className="pb-2 pr-4 text-right font-semibold">Attested</th>
+                <th scope="col" className="pb-2 pr-4 text-right font-semibold">Open</th>
+                <th scope="col" className="pb-2 text-right font-semibold">Clauses</th>
               </tr>
             </thead>
             <tbody>

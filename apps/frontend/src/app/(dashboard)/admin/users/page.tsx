@@ -100,22 +100,22 @@ export default function AdminUsersPage() {
             <table className="w-full">
               <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Name
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Email
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Roles
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Last Login
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Actions
                   </th>
                 </tr>

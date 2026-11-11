@@ -77,3 +77,20 @@
 .fm-phone .fm-org > :last-child { display: none; }
 .fm-phone .fm-grow { display: none; }
 .fm-phone-top > :is(a, button) { flex: none; }
+
+/* Skip link: off screen until focused, then the first thing a keyboard user sees. */
+.fm-skip {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--fm-ink);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.fm-skip:focus { top: 12px; }
+.fm-main { display: block; min-height: 100%; }
+.fm-main:focus { outline: none; }

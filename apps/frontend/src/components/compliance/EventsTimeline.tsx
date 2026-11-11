@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { describeChart } from '@/components/charts/describe'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface EventsTimelineProps {
@@ -24,36 +25,38 @@ export function EventsTimeline({ data, isLoading = false }: EventsTimelineProps)
             No data available
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#000" />
-              <XAxis
-                dataKey="date"
-                stroke="#000"
-                style={{ fontSize: '12px', fontWeight: 'bold' }}
-              />
-              <YAxis
-                stroke="#000"
-                style={{ fontSize: '12px', fontWeight: 'bold' }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '2px solid #000',
-                  boxShadow: 'var(--fm-shadow)',
-                }}
-                labelStyle={{ color: '#000', fontWeight: 'bold' }}
-              />
-              <Line
-                type="monotone"
-                dataKey="count"
-                stroke="#FF6B35"
-                strokeWidth={3}
-                dot={{ fill: '#FF6B35', r: 5, strokeWidth: 2 }}
-                activeDot={{ r: 7 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div role="img" aria-label={describeChart('Events per day', data.map((d) => [d.date, d.count]))}>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#000" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#000"
+                  style={{ fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <YAxis
+                  stroke="#000"
+                  style={{ fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '2px solid #000',
+                    boxShadow: 'var(--fm-shadow)',
+                  }}
+                  labelStyle={{ color: '#000', fontWeight: 'bold' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#FF6B35"
+                  strokeWidth={3}
+                  dot={{ fill: '#FF6B35', r: 5, strokeWidth: 2 }}
+                  activeDot={{ r: 7 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </CardContent>
     </Card>

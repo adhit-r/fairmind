@@ -215,6 +215,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
       {/* Every Astryx link and button with an href navigates with Next's router. */}
       <LinkProvider component={Link}>
       <div className="fm-app">
+        <a className="fm-skip" href="#fm-main">Skip to content</a>
         <Layout
           height="fill"
           header={
@@ -264,7 +265,11 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
               </>
             )
           }
-          content={<LayoutContent padding={0}>{children}</LayoutContent>}
+          content={
+            <LayoutContent padding={0}>
+              <main id="fm-main" tabIndex={-1} className="fm-main">{children}</main>
+            </LayoutContent>
+          }
         />
       </div>
       <CommandPalette

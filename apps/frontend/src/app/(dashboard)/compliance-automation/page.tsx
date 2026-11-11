@@ -478,11 +478,11 @@ function ReportsSection() {
           <table className="w-full">
             <thead className="border-b border-[var(--fm-line)] bg-gray-100">
               <tr>
-                <th className="px-6 py-4 text-left font-bold text-black">Framework</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Status</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Score</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Generated</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Action</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Framework</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Status</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Score</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Generated</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Action</th>
               </tr>
             </thead>
             <tbody>
