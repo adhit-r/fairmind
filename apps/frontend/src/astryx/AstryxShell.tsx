@@ -19,6 +19,8 @@ import { useSession } from '@/context/SessionContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { usePendingDecisions } from '@/lib/api/hooks/usePendingDecisions'
 import { useAIProvider, useRuns, useWaitingRuns } from '@/lib/api/hooks/usePacks'
+import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
+import { useRisks } from '@/lib/api/hooks/useRisks'
 import { fairmindTheme } from './theme'
 import { ALL, NAV, SETTINGS, groupOf, isOn, type Place } from './nav'
 
@@ -28,12 +30,16 @@ function useNavCounts(): Partial<Record<NonNullable<Place['count']>, number>> {
   const { requests } = usePendingDecisions()
   const waiting = useWaitingRuns().data ?? []
   const runs = useRuns().data ?? []
+  const { discovered, loading: discoveryLoading } = useIntegrations()
+  const { summary: risks } = useRisks()
   // Approval requests are not org-scoped yet; count only those for systems in this estate.
   const mine = requests.filter((r) => systems.some((s) => s.id === r.entity_id))
   return {
     needs: mine.length + waiting.length,
     systems: systems.length,
     runs: runs.filter((r) => r.status === 'running' || r.status === 'queued').length,
+    ...(discoveryLoading ? {} : { found: discovered.length }),
+    ...(risks ? { findings: risks.open } : {}),
   }
 }
 

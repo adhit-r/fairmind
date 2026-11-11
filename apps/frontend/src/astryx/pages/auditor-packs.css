@@ -1,0 +1,6 @@
+.fm-pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+.fm-pk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.fm-pk-hash { font-family: var(--font-family-code, ui-monospace, monospace); font-size: 13px; color: var(--color-text-secondary); }
+.fm-pk-link { display: block; padding: 10px 12px; border-radius: var(--radius-element); background: var(--color-background-muted); font-family: var(--font-family-code, ui-monospace, monospace); font-size: 13px; word-break: break-all; }
+.fm-pk-body { padding: 16px; }
+@media (max-width: 520px) { .fm-pk-grid { grid-template-columns: minmax(0, 1fr); } }

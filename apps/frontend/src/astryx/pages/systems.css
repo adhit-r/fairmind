@@ -1,0 +1,28 @@
+.sys-lanes { display: grid; grid-template-columns: minmax(132px, 168px) minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--color-border); border: 1px solid var(--color-border); border-radius: var(--radius-container); overflow: hidden; min-width: 760px; }
+.sys-scroll { overflow-x: auto; }
+.sys-head, .sys-src, .sys-col { display: flex; flex-direction: column; gap: 4px; padding: 12px; background: var(--color-background-card); }
+.sys-head { justify-content: flex-end; }
+.sys-head.found, .sys-col.found { background: var(--fm-found-wash); }
+.sys-head.approved, .sys-col.approved { background: var(--fm-ok-wash); }
+.sys-head b { font-family: var(--font-family-code, ui-monospace, monospace); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.sys-head span { font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.sys-src { justify-content: center; }
+.sys-src b { font-weight: 600; color: var(--color-text-primary); }
+.sys-src span { font-size: 13px; color: var(--color-text-secondary); }
+.sys-col { min-height: 72px; gap: 2px; padding: 8px; }
+.sys-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--radius-element); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 14px; text-align: start; cursor: pointer; }
+.sys-item:hover, .sys-item[aria-pressed='true'] { background: var(--color-overlay-hover); }
+.sys-item:focus-visible { outline: 2px solid var(--focus-outline-color); outline-offset: 2px; }
+.sys-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sys-item .cell { cursor: inherit; }
+.sys-item .cell:hover { transform: none; }
+.sys-more { align-self: start; }
+.sys-filter { display: flex; align-items: center; gap: 8px; }
+
+.dsc-card { display: flex; flex-direction: column; gap: 12px; }
+.dsc-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--color-border); }
+.dsc-row .nm { font-weight: 600; color: var(--color-text-primary); }
+.dsc-row .sub { font-size: 13px; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.dsc-form { display: grid; gap: 12px; max-width: 520px; }
+.dsc-kinds { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 700px) { .dsc-row { grid-template-columns: minmax(0, 1fr); } }
