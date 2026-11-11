@@ -283,7 +283,7 @@ export const API_ENDPOINTS = {
 
   // Invitations
   invitations: {
-    getDetails: (token: string) => `/api/v1/organizations/invitations/${token}`,
-    accept: (token: string) => `/api/v1/organizations/invitations/${token}/accept`,
+    getDetails: (token: string) => `/api/v1/organizations/invitations/${encodeURIComponent(token)}`,
+    accept: (token: string) => `/api/v1/organizations/invitations/${encodeURIComponent(token)}/accept`,
   },
 } as const
