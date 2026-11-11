@@ -258,6 +258,19 @@ openapi_tags = [
 ]
 
 # Create FastAPI application with production configuration
+# Error reporting: on only when SENTRY_DSN is set. No request bodies or user
+# details leave the process (send_default_pii stays off).
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        release=settings.api_version,
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+    )
+
 app = FastAPI(
     title=settings.api_title,
     description=f"""
@@ -673,18 +686,19 @@ def health_check():
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
-        return {
+        # A monitor reads the status code, not the body: unhealthy is a 503.
+        return JSONResponse(status_code=503, content={
             "status": "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "error": "Health check failed; see the server log",
-            "message": "Health check service error"
-        }
+        })
 
 
 @app.get("/health/ready")
 async def readiness_check():
-    """Kubernetes readiness probe endpoint."""
-    return await health_service.get_readiness_status()
+    """Readiness probe: 200 when the database answers, else 503 so traffic moves away."""
+    status = await health_service.get_readiness_status()
+    return status if status["status"] == "ready" else JSONResponse(status_code=503, content=status)
 
 
 @app.get("/health/live")
