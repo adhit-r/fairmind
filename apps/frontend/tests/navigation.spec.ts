@@ -66,10 +66,14 @@ test.describe('Navigation', () => {
 
 
 test.describe('Library links', () => {
-  test('Frameworks opens the frameworks grid, not the packs hub', async ({ page }) => {
+  test('Rules group lists Frameworks at /frameworks, not the packs hub', async ({ page }) => {
     await installGridFixtures(page)
-    await page.goto('/dashboard')
-    const link = page.locator('aside').getByRole('link', { name: 'Frameworks', exact: true })
-    await expect(link).toHaveAttribute('href', '/frameworks', { timeout: 30_000 })
+    // The menu shows the places of the group the page is in; Frameworks sits in Rules and opens /frameworks.
+    await page.goto('/policies')
+    const rules = page.getByRole('navigation', { name: 'Rules' })
+    await expect(rules.getByText('Frameworks', { exact: true })).toBeVisible({ timeout: 30_000 })
+    await rules.getByText('Frameworks', { exact: true }).click()
+    await expect(page).toHaveURL(/\/frameworks$/, { timeout: 30_000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Frameworks' })).toBeVisible()
   })
 })

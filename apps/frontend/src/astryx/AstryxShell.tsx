@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Theme } from '@astryxdesign/core/theme'
+import { LinkProvider } from '@astryxdesign/core/Link'
 import { Button } from '@astryxdesign/core/Button'
 import { CommandPalette } from '@astryxdesign/core/CommandPalette'
 import { Heading, Text } from '@astryxdesign/core/Text'
@@ -200,7 +201,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
                   </Text>
                 ) : undefined
               }
-              onClick={() => router.push(p.href)}
+              href={p.href}
               isSelected={isOn(pathname, p)}
             />
           )
@@ -213,6 +214,8 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
 
   return (
     <Theme theme={fairmindTheme} mode="light">
+      {/* Every Astryx link and button with an href navigates with Next's router. */}
+      <LinkProvider component={Link}>
       <div className="fm-app">
         <Layout
           height="fill"
@@ -277,6 +280,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
           setPaletteOpen(false)
         }}
       />
+      </LinkProvider>
     </Theme>
   )
 }
