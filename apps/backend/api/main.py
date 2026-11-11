@@ -107,25 +107,28 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}")
         raise
 
-    # ORM-managed tables (users, organisations, governance). Table by table,
-    # so one failing definition does not block the rest.
-    try:
-        from database.connection import db_manager as orm_db_manager
+    # Development only. Elsewhere the schema is scripts/setup_db.py's job, run before
+    # the app starts (deploy/lightsail runs it as the migrate service), so production
+    # never applies DDL from a request-serving process.
+    if settings.is_development:
+        # ORM-managed tables (users, organisations, governance). Table by table,
+        # so one failing definition does not block the rest.
+        try:
+            from database.connection import db_manager as orm_db_manager
 
-        orm_db_manager.create_tables()
-    except Exception as e:
-        logger.warning(f"ORM table creation incomplete: {e}")
+            orm_db_manager.create_tables()
+        except Exception as e:
+            logger.warning(f"ORM table creation incomplete: {e}")
 
-    # Sign-in reads users.token_version; create_tables never alters an existing table.
-    # ponytail: idempotent DDL at boot until migrations have a runner (migrations/023).
-    try:
-        from sqlalchemy import text as _sql
-        from database.connection import db_manager as orm_db_manager
+        # Sign-in reads users.token_version; create_tables never alters an existing table.
+        try:
+            from sqlalchemy import text as _sql
+            from database.connection import db_manager as orm_db_manager
 
-        with orm_db_manager.engine.begin() as conn:
-            conn.execute(_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0"))
-    except Exception as e:
-        logger.error(f"users.token_version is missing and sign-in will fail; apply migrations/023: {e}")
+            with orm_db_manager.engine.begin() as conn:
+                conn.execute(_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0"))
+        except Exception as e:
+            logger.error(f"users.token_version is missing and sign-in will fail; run scripts/setup_db.py: {e}")
 
     # Initialize cache connections
     try:

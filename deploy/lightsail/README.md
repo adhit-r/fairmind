@@ -70,6 +70,18 @@ running backend stays up. Read why with `docker compose logs migrate`, or check 
 changing anything: `docker compose run --rm migrate python scripts/setup_db.py verify`.
 The app itself no longer creates tables outside development.
 
+Before the first deploy with this step, run the verify once from your machine against
+production: `DATABASE_URL=<production url> uv run python scripts/setup_db.py verify` in
+`apps/backend`. When `migrate` fails, its log names each problem:
+
+- `missing table` / `missing column`: rerun `docker compose up -d`; setup adds what is missing.
+- `controls not loaded`: the reference data step failed; the log above it says why.
+- `migration ledger`: the database is behind the operator chain. Apply the listed
+  `migrations/upgrade_paths/` files in order with `psql -v ON_ERROR_STOP=1 -f <file>`, then rerun.
+
+There is no flag to skip the step: a backend on a schema that failed verify is the
+failure this step exists to prevent. The previous backend keeps serving meanwhile.
+
 ## Cloudflare controls
 
 Before the first customer signs in, apply the WAF, rate-limit, cache and Access rules in
