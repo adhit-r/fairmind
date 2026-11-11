@@ -1,5 +1,27 @@
 /** @type {import('next').NextConfig} */
+// Sent on every page and proxied API response. Cloudflare can add the same at
+// the edge (deploy/lightsail/cloudflare.md); setting them here keeps them when
+// the app runs anywhere else. A full CSP with nonces is a separate change.
+const SECURITY_HEADERS = [
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+]
+
 const nextConfig = {
+  poweredByHeader: false,
+
+  async headers() {
+    return [
+      { source: '/:path*', headers: SECURITY_HEADERS },
+      // Authenticated API answers must never sit in a shared cache.
+      { source: '/api/:path*', headers: [{ key: 'Cache-Control', value: 'no-store' }] },
+    ]
+  },
+
   async redirects() {
     return [
       {
