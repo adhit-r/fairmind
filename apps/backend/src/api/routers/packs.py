@@ -373,7 +373,7 @@ def _run_or_404(db: Session, org_id: str, run_id: str):
 
 
 @router.get("/catalogue")
-async def get_catalogue(_m: OrgMembership = Depends(_member)):
+def get_catalogue(_m: OrgMembership = Depends(_member)):
     pillars = [
         {
             "id": p.id,
@@ -398,7 +398,7 @@ async def get_catalogue(_m: OrgMembership = Depends(_member)):
 
 
 @router.get("/controls")
-async def get_controls(_m: OrgMembership = Depends(_member)):
+def get_controls(_m: OrgMembership = Depends(_member)):
     """The catalogue's common controls with the workflows that implement each, and the raw control-to-requirement crosswalk."""
     data = _catalogue()
     return {
@@ -416,7 +416,7 @@ async def get_controls(_m: OrgMembership = Depends(_member)):
 
 
 @router.get("")
-async def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     installed = set(_installed_ids(db, m.org_id))
     return [_pack_json(pid, pid in installed) for pid in PACKS]
@@ -454,7 +454,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
 
 
 @router.get("/evaluations")
-async def list_evaluations(
+def list_evaluations(
     pillar: Optional[str] = Query(default=None),
     engine: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
@@ -475,7 +475,7 @@ async def list_evaluations(
 
 
 @router.get("/evaluations/{evaluation_id}")
-async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     ev = EVALUATIONS.get(evaluation_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
@@ -484,7 +484,7 @@ async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member)
 
 
 @router.get("/library/{pack_id}")
-async def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
@@ -542,7 +542,7 @@ def _bundle_json(bundle_id: str, installed: List[str], org: Coverage) -> dict:
 
 
 @router.get("/bundles")
-async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     installed = _installed_ids(db, m.org_id)
     org = _org_coverage(db, m.org_id, installed)
@@ -550,7 +550,7 @@ async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depend
 
 
 @router.post("/bundles/{bundle_id}/install")
-async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if bundle_id not in BUNDLES:
         raise HTTPException(status_code=404, detail="Bundle not found")
     _ensure_tables(db)
@@ -561,7 +561,7 @@ async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), d
 
 
 @router.get("/journeys")
-async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org = _org_coverage(db, m.org_id, _installed_ids(db, m.org_id))
     installed = set(_installed_ids(db, m.org_id))
@@ -596,7 +596,7 @@ def _framework_workflows(framework_key: str, installed: set, latest: Dict[str, A
 
 
 @router.post("/journeys/{framework_key}/install")
-async def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     """Add a framework: install every pack that covers or tests one of its requirements."""
     if framework_key not in FRAMEWORKS:
         raise HTTPException(status_code=404, detail="Journey not found")
@@ -608,7 +608,7 @@ async def install_framework(framework_key: str, m: OrgMembership = Depends(_mana
 
 
 @router.get("/journeys/{framework_key}")
-async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     fw = FRAMEWORKS.get(framework_key)
     if not fw:
         raise HTTPException(status_code=404, detail="Journey not found")
@@ -709,7 +709,7 @@ def _install(db: Session, m: OrgMembership, pack_id: str) -> None:
 
 
 @router.post("/{pack_id}/install")
-async def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
@@ -718,7 +718,7 @@ async def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: S
 
 
 @router.delete("/{pack_id}/install")
-async def uninstall_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def uninstall_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
@@ -738,7 +738,7 @@ def _workflow_or_404(workflow_id: str) -> Workflow:
 
 
 @router.get("/workflows/{workflow_id}")
-async def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
     org_id = m.org_id
@@ -789,7 +789,7 @@ async def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db
 
 
 @router.post("/workflows/{workflow_id}/runs")
-async def start_run(
+def start_run(
     workflow_id: str,
     body: StartRunBody = StartRunBody(),
     m: OrgMembership = Depends(_manager),
@@ -841,7 +841,7 @@ async def start_run(
 
 
 @router.get("/runs")
-async def list_runs(
+def list_runs(
     status: Optional[str] = Query(default=None),
     m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
@@ -864,7 +864,7 @@ async def list_runs(
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_run(run_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _run_or_404(db, m.org_id, run_id)
     return _run_json(db, run_id)
@@ -1013,7 +1013,7 @@ def _claim(db: Session, run_id: str, step_id: str) -> None:
 
 
 @router.post("/runs/{run_id}/steps/{step_id}/output")
-async def submit_step_output(
+def submit_step_output(
     run_id: str,
     step_id: str,
     body: StepOutputBody,
@@ -1385,18 +1385,18 @@ def _body_connection(body: AIProviderBody, stored) -> tuple:
 
 
 @router.get("/ai-providers")
-async def list_ai_providers(_m: OrgMembership = Depends(_member)):
+def list_ai_providers(_m: OrgMembership = Depends(_member)):
     return llm.catalogue()
 
 
 @router.get("/ai-provider")
-async def get_ai_provider(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_ai_provider(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     return {"config": _ai_json(_ai_row(db, m.org_id))}
 
 
 @router.put("/ai-provider")
-async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if grok_cli.enabled():
         raise HTTPException(status_code=409, detail=_CLI_SAVES_NOTHING)
     _ensure_tables(db)
@@ -1436,7 +1436,7 @@ async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_man
 
 
 @router.delete("/ai-provider")
-async def delete_ai_provider(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def delete_ai_provider(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if grok_cli.enabled():
         raise HTTPException(status_code=409, detail=_CLI_SAVES_NOTHING)
     _ensure_tables(db)
@@ -1470,7 +1470,7 @@ async def test_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_man
 
 
 @router.post("/runs/{run_id}/decision")
-async def decide_run(
+def decide_run(
     run_id: str,
     body: DecisionBody,
     m: OrgMembership = Depends(_manager),
@@ -1615,7 +1615,7 @@ def _draft_or_404(db: Session, org_id: str, workflow_id: str):
 
 
 @router.get("/workflows/{workflow_id}/versions")
-async def list_versions(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_versions(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _workflow_or_404(workflow_id)
     _ensure_tables(db)
     rows = (
@@ -1645,14 +1645,14 @@ async def list_versions(workflow_id: str, m: OrgMembership = Depends(_member), d
 
 
 @router.get("/workflows/{workflow_id}/draft")
-async def get_draft(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_draft(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
     return _draft_json(db, _draft_or_404(db, m.org_id, wf.id), wf)
 
 
 @router.post("/workflows/{workflow_id}/draft")
-async def create_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def create_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     """Start a draft from the version runs use now. If one exists it is returned as it is."""
     wf = _editable(db, m, workflow_id)
     row = _draft(db, m.org_id, wf.id)
@@ -1689,7 +1689,7 @@ async def create_draft(workflow_id: str, m: OrgMembership = Depends(_manager), d
 
 
 @router.put("/workflows/{workflow_id}/draft")
-async def save_draft(workflow_id: str, body: DraftBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_draft(workflow_id: str, body: DraftBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     """Save the draft as it is; problems are reported, not refused, so half-finished edits are kept."""
     wf = _editable(db, m, workflow_id)
     row = _draft_or_404(db, m.org_id, wf.id)
@@ -1705,7 +1705,7 @@ async def save_draft(workflow_id: str, body: DraftBody, m: OrgMembership = Depen
 
 
 @router.delete("/workflows/{workflow_id}/draft")
-async def discard_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def discard_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     wf = _editable(db, m, workflow_id)
     row = _draft_or_404(db, m.org_id, wf.id)
     db.execute(text("DELETE FROM workflow_versions WHERE id = :id AND status = 'draft'"), {"id": row["id"]})
@@ -1714,7 +1714,7 @@ async def discard_draft(workflow_id: str, m: OrgMembership = Depends(_manager), 
 
 
 @router.post("/workflows/{workflow_id}/draft/publish")
-async def publish_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def publish_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     wf = _editable(db, m, workflow_id)
     row = _draft_or_404(db, m.org_id, wf.id)
     problems = _problems(_steps_of(row), wf)
@@ -1732,4 +1732,4 @@ async def publish_draft(workflow_id: str, m: OrgMembership = Depends(_manager), 
         db.rollback()
         raise HTTPException(status_code=409, detail="The draft changed while publishing, retry")
     db.commit()
-    return await get_workflow(workflow_id, m, db)
+    return get_workflow(workflow_id, m, db)

@@ -226,14 +226,14 @@ def _check_system(db: Session, user: TokenData, system_id: Optional[str]) -> Non
 
 
 @router.get("/systems/{system_id}/analyses")
-async def list_analyses(system_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def list_analyses(system_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     return store.list_for_system(db, _caller_org(http), system_id, [KIND])
 
 
 @router.get("/analyses/{analysis_id}")
-async def get_analysis(analysis_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def get_analysis(analysis_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = store.get_one(db, _caller_org(http), analysis_id, [KIND])
     if not row:
@@ -241,7 +241,7 @@ async def get_analysis(analysis_id: str, http: Request, current_user: TokenData 
     return row
 
 @router.get("/models", response_model=AvailableModelsResponse)
-async def get_available_models():
+def get_available_models():
     """
     Get list of available judge models and bias categories
 
@@ -522,7 +522,7 @@ async def evaluate_with_multiple_judges(
         )
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint for LLM Judge service"""
     return {
         "status": "healthy",

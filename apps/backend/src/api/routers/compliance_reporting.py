@@ -68,7 +68,7 @@ class StakeholderDashboardRequest(BaseModel):
 # Endpoints
 
 @router.get("/frameworks")
-async def list_frameworks():
+def list_frameworks():
     """
     List all supported regulatory frameworks
     
@@ -134,7 +134,7 @@ async def list_frameworks():
 
 
 @router.get("/frameworks/{framework}/requirements")
-async def get_framework_requirements(framework: RegulatoryFramework):
+def get_framework_requirements(framework: RegulatoryFramework):
     """
     Get requirements for a specific regulatory framework
     
@@ -232,7 +232,7 @@ async def generate_fairness_documentation(request: FairnessDocumentationRequest)
 
 
 @router.post("/stakeholder-dashboard", dependencies=[Depends(org_member)])
-async def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
+def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
     """
     Get stakeholder dashboard data
     
@@ -259,7 +259,7 @@ async def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
 
 
 @router.get("/risk-levels")
-async def get_risk_levels():
+def get_risk_levels():
     """
     Get AI system risk levels per EU AI Act
     
@@ -321,7 +321,7 @@ async def get_risk_levels():
 
 
 @router.post("/assess-risk")
-async def assess_system_risk(
+def assess_system_risk(
     system_data: Dict[str, Any] = Body(..., description="AI system information")
 ):
     """
@@ -407,7 +407,7 @@ def _get_requirements_for_risk_level(risk_level: RiskLevel) -> List[str]:
 
 
 @router.get("/compliance-templates")
-async def get_compliance_templates():
+def get_compliance_templates():
     """
     Get compliance documentation templates
     
@@ -480,7 +480,7 @@ async def get_compliance_templates():
 
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",

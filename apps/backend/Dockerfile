@@ -64,5 +64,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE 8000
 
-# Start command
+# Start command. One worker on purpose: the policy-alert and autopilot loops in
+# api/main.py run once per worker and would send duplicate alerts and runs. Sync
+# handlers already run in the threadpool, so one slow request no longer stalls
+# the rest. ponytail: add workers after those loops take a Postgres advisory lock.
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

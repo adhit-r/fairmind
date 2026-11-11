@@ -432,7 +432,7 @@ async def comprehensive_multimodal_analysis(
         raise HTTPException(status_code=500, detail=f"Comprehensive multimodal analysis failed: {str(e)}")
 
 @router.get("/available-modalities")
-async def get_available_modalities():
+def get_available_modalities():
     """
     Get available modality types for analysis
     """
@@ -448,7 +448,7 @@ async def get_available_modalities():
         raise HTTPException(status_code=500, detail=f"Failed to get available modalities: {str(e)}")
 
 @router.get("/bias-detectors")
-async def get_bias_detectors():
+def get_bias_detectors():
     """
     Get available bias detectors for each modality
     """
@@ -463,7 +463,7 @@ async def get_bias_detectors():
         raise HTTPException(status_code=500, detail=f"Failed to get bias detectors: {str(e)}")
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """
     Health check for the multimodal bias detection service
     """

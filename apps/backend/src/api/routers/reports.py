@@ -47,7 +47,7 @@ def _export(report_id: str, fmt: str, current_user: TokenData, db: Session) -> R
 
 
 @router.get("/snapshots/{report_id}/pdf")
-async def export_snapshot_pdf(
+def export_snapshot_pdf(
     report_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -56,7 +56,7 @@ async def export_snapshot_pdf(
 
 
 @router.get("/snapshots/{report_id}/docx")
-async def export_snapshot_docx(
+def export_snapshot_docx(
     report_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -65,7 +65,7 @@ async def export_snapshot_docx(
 
 
 @router.post("/bias-evaluation/pdf")
-async def generate_pdf_report(
+def generate_pdf_report(
     request: StoredReportExport,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -74,7 +74,7 @@ async def generate_pdf_report(
 
 
 @router.post("/bias-evaluation/docx")
-async def generate_docx_report(
+def generate_docx_report(
     request: StoredReportExport,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -83,7 +83,7 @@ async def generate_docx_report(
 
 
 @router.get("/formats")
-async def get_supported_formats():
+def get_supported_formats():
     """List supported export formats; both take a stored report snapshot id."""
     return {
         "formats": [

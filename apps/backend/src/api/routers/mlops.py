@@ -25,7 +25,7 @@ class LogTestRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_mlops_status():
+def get_mlops_status():
     """
     Get the status of MLOps integrations (W&B, MLflow)
     """
@@ -42,7 +42,7 @@ async def get_mlops_status():
 
 
 @router.post("/log-test")
-async def log_test_results(request: LogTestRequest, m: OrgMembership = Depends(org_mutator)):
+def log_test_results(request: LogTestRequest, m: OrgMembership = Depends(org_mutator)):
     """
     Log bias test results to configured MLOps platforms
     """
@@ -73,7 +73,7 @@ async def log_test_results(request: LogTestRequest, m: OrgMembership = Depends(o
 
 
 @router.get("/run-url/{provider}/{run_id}")
-async def get_run_url(provider: str, run_id: str):
+def get_run_url(provider: str, run_id: str):
     """
     Get the URL for a specific run on an MLOps platform
     """

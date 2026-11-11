@@ -1136,7 +1136,7 @@ def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[s
 
 
 @router.get("/status")
-async def governance_status(db: Session = Depends(get_db)):
+def governance_status(db: Session = Depends(get_db)):
     _ensure_tables(db)
     return {
         "status": "operational",
@@ -1159,7 +1159,7 @@ def _already_created(db: Session, table: str, row_id: str, org_id: str) -> bool:
 
 
 @router.post("/workspaces")
-async def create_workspace(request: WorkspaceCreateRequest, http: Request, db: Session = Depends(get_db)):
+def create_workspace(request: WorkspaceCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
     workspace_id = str(request.id or uuid.uuid4())
@@ -1195,7 +1195,7 @@ async def create_workspace(request: WorkspaceCreateRequest, http: Request, db: S
 
 
 @router.get("/workspaces")
-async def list_workspaces(http: Request, db: Session = Depends(get_db)):
+def list_workspaces(http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     rows = db.execute(
         text(
@@ -1208,7 +1208,7 @@ async def list_workspaces(http: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/systems")
-async def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session = Depends(get_db)):
+def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
     system_id = str(request.id or uuid.uuid4())
@@ -1256,7 +1256,7 @@ def _insert_ai_system(db: Session, request: AISystemCreateRequest, system_id: st
 
 
 @router.get("/systems")
-async def list_ai_systems(
+def list_ai_systems(
     http: Request,
     workspace_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
@@ -1283,7 +1283,7 @@ async def list_ai_systems(
 
 
 @router.get("/systems/{system_id}")
-async def get_ai_system(system_id: str, db: Session = Depends(get_db)):
+def get_ai_system(system_id: str, db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = db.execute(
         text(
@@ -1298,7 +1298,7 @@ async def get_ai_system(system_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/lifecycle/{system_id}/summary")
-async def get_ai_system_lifecycle_summary(system_id: str, db: Session = Depends(get_db)):
+def get_ai_system_lifecycle_summary(system_id: str, db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = db.execute(
         text(
@@ -1317,7 +1317,7 @@ async def get_ai_system_lifecycle_summary(system_id: str, db: Session = Depends(
 
 
 @router.get("/dashboard/risk")
-async def get_risk_dashboard(
+def get_risk_dashboard(
     system_id: Optional[str] = Query(default=None),
     current_user: TokenData = Depends(get_current_active_user),
     membership: OrgMembership = Depends(org_member),
@@ -1340,7 +1340,7 @@ async def get_risk_dashboard(
 
 
 @router.post("/risks/assess")
-async def assess_risks(
+def assess_risks(
     request: RiskAssessmentRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -1411,7 +1411,7 @@ async def assess_risks(
 
 
 @router.get("/compliance/frameworks")
-async def get_frameworks():
+def get_frameworks():
     """Frameworks from the pack catalogue, each with its active requirement keys as controls."""
     from api.routes.pack_catalogue import FRAMEWORK_KEYS, FRAMEWORKS
 
@@ -1433,7 +1433,7 @@ async def get_frameworks():
 
 
 @router.get("/systems/{system_id}/evidence")
-async def list_system_evidence(
+def list_system_evidence(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -1482,7 +1482,7 @@ class SystemEvidenceCreateRequest(BaseModel):
 
 
 @router.post("/systems/{system_id}/evidence")
-async def create_system_evidence(
+def create_system_evidence(
     system_id: str,
     request: SystemEvidenceCreateRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -1544,7 +1544,7 @@ async def create_system_evidence(
 
 
 @router.get("/systems/{system_id}/approvals")
-async def list_system_approvals(
+def list_system_approvals(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -1587,7 +1587,7 @@ async def list_system_approvals(
 
 
 @router.post("/systems/{system_id}/approvals")
-async def create_system_approval(
+def create_system_approval(
     system_id: str,
     request: SystemApprovalRequestCreateRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -1638,7 +1638,7 @@ async def create_system_approval(
 
 
 @router.post("/approval-workflows")
-async def create_approval_workflow(
+def create_approval_workflow(
     request: ApprovalWorkflowCreateRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -1676,7 +1676,7 @@ async def create_approval_workflow(
 
 
 @router.get("/approval-workflows")
-async def list_approval_workflows(
+def list_approval_workflows(
     entity_type: Optional[str] = Query(default=None),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -1712,7 +1712,7 @@ async def list_approval_workflows(
 
 
 @router.post("/approval-workflows/{workflow_id}/requests")
-async def create_approval_request(
+def create_approval_request(
     workflow_id: str,
     request: ApprovalRequestCreateRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -1806,7 +1806,7 @@ def _release_blockers(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
 
 
 @router.post("/approval-requests/{request_id}/decision")
-async def make_approval_decision(
+def make_approval_decision(
     request_id: str,
     request: ApprovalDecisionRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -1933,7 +1933,7 @@ async def make_approval_decision(
 
 
 @router.get("/approval-requests/{request_id}")
-async def get_approval_request(
+def get_approval_request(
     request_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -1954,7 +1954,7 @@ async def get_approval_request(
 
 
 @router.get("/approval-requests")
-async def list_approval_requests(
+def list_approval_requests(
     entity_type: str = Query(min_length=1),
     entity_id: Optional[str] = Query(default=None),
     current_user: TokenData = Depends(get_current_active_user),
@@ -1996,7 +1996,7 @@ async def list_approval_requests(
 
 
 @router.get("/approval-requests/{request_id}/decisions")
-async def list_approval_decisions(
+def list_approval_decisions(
     request_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2007,7 +2007,7 @@ async def list_approval_decisions(
 
 
 @router.get("/approval/system/{system_id}")
-async def get_system_approval_status(
+def get_system_approval_status(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2040,7 +2040,7 @@ async def get_system_approval_status(
 
 
 @router.post("/approval/system/{system_id}/request")
-async def create_system_approval_request(
+def create_system_approval_request(
     system_id: str,
     request: SystemApprovalRequestCreateRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -2303,7 +2303,7 @@ class EvidenceCollectV2Request(BaseModel):
 
 
 @router.get("/evidence-v2/{system_id}")
-async def list_evidence_v2(
+def list_evidence_v2(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2315,7 +2315,7 @@ async def list_evidence_v2(
 
 
 @router.get("/evidence-item/{evidence_id}")
-async def get_evidence_item(
+def get_evidence_item(
     evidence_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2330,7 +2330,7 @@ async def get_evidence_item(
 
 
 @router.patch("/evidence-item/{evidence_id}")
-async def update_evidence_item(
+def update_evidence_item(
     evidence_id: str,
     request: EvidenceUpdateRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -2395,7 +2395,7 @@ async def update_evidence_item(
 
 
 @router.post("/evidence-item/{evidence_id}/links")
-async def add_evidence_item_link(
+def add_evidence_item_link(
     evidence_id: str,
     request: EvidenceLinkItemRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -2430,7 +2430,7 @@ async def add_evidence_item_link(
 
 
 @router.delete("/evidence-item/{evidence_id}/links/{link_id}")
-async def remove_evidence_item_link(
+def remove_evidence_item_link(
     evidence_id: str,
     link_id: str,
     current_user: TokenData = Depends(get_current_active_user),
@@ -2450,7 +2450,7 @@ async def remove_evidence_item_link(
 
 
 @router.post("/evidence/collect-v2")
-async def collect_evidence_v2(
+def collect_evidence_v2(
     request: EvidenceCollectV2Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2504,7 +2504,7 @@ async def collect_evidence_v2(
 
 
 @router.post("/evidence/collect")
-async def collect_evidence(
+def collect_evidence(
     request: EvidenceCollectRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2563,17 +2563,17 @@ async def collect_evidence(
 
 
 @router.post("/evidence/upload")
-async def upload_evidence(
+def upload_evidence(
     request: EvidenceCollectRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     # Alias to keep frontend contract compatibility.
-    return await collect_evidence(request, current_user, db)
+    return collect_evidence(request, current_user, db)
 
 
 @router.post("/evidence/collections")
-async def link_evidence_to_entity(
+def link_evidence_to_entity(
     request: EvidenceLinkRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2614,7 +2614,7 @@ async def link_evidence_to_entity(
 
 
 @router.get("/evidence/{system_id}/summary")
-async def get_evidence_summary(
+def get_evidence_summary(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2626,7 +2626,7 @@ async def get_evidence_summary(
 
 
 @router.get("/evidence/{system_id}")
-async def list_evidence(
+def list_evidence(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2637,7 +2637,7 @@ async def list_evidence(
 
 
 @router.get("/remediation")
-async def list_remediation_tasks(
+def list_remediation_tasks(
     system_id: str = Query(min_length=1),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2661,7 +2661,7 @@ async def list_remediation_tasks(
 
 
 @router.post("/remediation")
-async def create_remediation_task(
+def create_remediation_task(
     request: RemediationCreateRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -2741,7 +2741,7 @@ def _sync_task_findings(db: Session, system_id: str, risk_ids: set) -> None:
 
 
 @router.patch("/remediation/{task_id}")
-async def update_remediation_task(
+def update_remediation_task(
     task_id: str,
     request: RemediationUpdateRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -2850,7 +2850,7 @@ class AuditReportGenerateRequest(BaseModel):
 
 
 @router.post("/reports/generate")
-async def generate_audit_report(
+def generate_audit_report(
     request: AuditReportGenerateRequest,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -3021,7 +3021,7 @@ async def generate_audit_report(
 
 
 @router.get("/reports")
-async def list_audit_reports(
+def list_audit_reports(
     system_id: str = Query(min_length=1),
     report_type: Optional[str] = Query(None),
     current_user: TokenData = Depends(get_current_active_user),
@@ -3050,7 +3050,7 @@ async def list_audit_reports(
 
 
 @router.get("/reports/{report_id}")
-async def get_audit_report(
+def get_audit_report(
     report_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),

@@ -92,12 +92,12 @@ def _require_org_mutator(db: Session, org_id: str, current_user: TokenData) -> N
 
 
 @router.get("/packs/frameworks")
-async def list_pack_frameworks(current_user: TokenData = Depends(get_current_active_user)):
+def list_pack_frameworks(current_user: TokenData = Depends(get_current_active_user)):
     return clause_frameworks()
 
 
 @router.post("/packs")
-async def create_pack(
+def create_pack(
     body: PackCreateRequest,
     http: Request,
     current_user: TokenData = Depends(get_current_active_user),
@@ -138,7 +138,7 @@ async def create_pack(
 
 
 @router.get("/packs")
-async def list_packs(http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def list_packs(http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     rows = db.execute(
         text(f"SELECT {_COLUMNS} FROM governance_evidence_packs WHERE org_id = :org ORDER BY created_at DESC"), {"org": _caller_org(http)}
@@ -147,14 +147,14 @@ async def list_packs(http: Request, current_user: TokenData = Depends(get_curren
 
 
 @router.get("/packs/{pack_id}")
-async def get_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def get_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = _pack_row(db, pack_id, _caller_org(http))
     return {**_summary(row), "manifest": json.loads(row[5])}
 
 
 @router.get("/packs/{pack_id}/download")
-async def download_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def download_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = _pack_row(db, pack_id, _caller_org(http))
     body = json.dumps({"manifest": json.loads(row[5]), "manifestHash": row[6]}, indent=2, ensure_ascii=False)
@@ -162,7 +162,7 @@ async def download_pack(pack_id: str, http: Request, current_user: TokenData = D
 
 
 @router.post("/packs/{pack_id}/share")
-async def share_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def share_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
     _pack_row(db, pack_id, org_id)
@@ -177,7 +177,7 @@ async def share_pack(pack_id: str, http: Request, current_user: TokenData = Depe
 
 
 @router.delete("/packs/{pack_id}/share")
-async def revoke_pack_share(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def revoke_pack_share(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
     _pack_row(db, pack_id, org_id)
@@ -188,7 +188,7 @@ async def revoke_pack_share(pack_id: str, http: Request, current_user: TokenData
 
 
 @public_router.get("/packs/{pack_id}")
-async def public_pack(pack_id: str, t: Optional[str] = Query(None, max_length=256), db: Session = Depends(get_db)):
+def public_pack(pack_id: str, t: Optional[str] = Query(None, max_length=256), db: Session = Depends(get_db)):
     """Read-only pack for an auditor holding the share token. Unknown pack and wrong token look the same."""
     _ensure_tables(db)
     row = db.execute(text(f"SELECT {_COLUMNS} FROM governance_evidence_packs WHERE id = :id"), {"id": pack_id}).fetchone()

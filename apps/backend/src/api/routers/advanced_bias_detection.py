@@ -132,14 +132,14 @@ def _check_system(db: Session, user: TokenData, system_id: Optional[str]) -> Non
 
 
 @router.get("/systems/{system_id}/analyses", summary="Stored analyses for one AI system, latest first")
-async def list_analyses(system_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def list_analyses(system_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     return store.list_for_system(db, _caller_org(http), system_id, sorted(KINDS))
 
 
 @router.get("/analyses/{stored_id}", summary="One stored analysis with its full result")
-async def get_analysis(stored_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def get_analysis(stored_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = store.get_one(db, _caller_org(http), stored_id, sorted(KINDS))
     if not row:
@@ -322,7 +322,7 @@ async def analyze_contextual_bias(request: ContextualAnalysisRequest, http: Requ
         raise HTTPException(status_code=500, detail=f"Error in contextual bias analysis: {str(e)}")
 
 @router.get("/bias-types", summary="Get available bias types")
-async def get_bias_types():
+def get_bias_types():
     """Get list of available bias types for analysis"""
     try:
         return {
@@ -341,7 +341,7 @@ async def get_bias_types():
         raise HTTPException(status_code=500, detail=f"Error getting bias types: {str(e)}")
 
 @router.get("/analysis-methods", summary="Get available analysis methods")
-async def get_analysis_methods():
+def get_analysis_methods():
     """Get list of available analysis methods"""
     try:
         return {
