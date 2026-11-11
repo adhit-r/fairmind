@@ -511,7 +511,7 @@ async def authentik_oauth_callback(
         # Exchange authorization code for access token
         token_url = f"{settings.authentik_server_url}/application/o/token/"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10) as client:
             token_response = await client.post(
                 token_url,
                 data={
@@ -803,7 +803,7 @@ async def revoke_api_key(
 
 
 @router.post("/users", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def create_user():
+def create_user():
     """Not implemented. Accounts come from signup (POST /api/v1/auth/register), approved
     access requests (POST /api/v1/registrations/{id}/approve) and organisation
     invitations (POST /api/v1/organizations/{org_id}/members/invite)."""

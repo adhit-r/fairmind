@@ -657,7 +657,7 @@ async def list_audit_logs(
 
 # Production-ready health check endpoints
 @app.get("/health")
-async def health_check():
+def health_check():
     """Simple health check endpoint."""
     try:
         return {
@@ -691,7 +691,7 @@ async def liveness_check():
 
 
 @app.get("/")
-async def root():
+def root():
     """Root endpoint with API information."""
     return {
         "message": "Fairmind AI Governance API",
@@ -725,7 +725,7 @@ async def root():
     }
 
 @app.get("/api")
-async def api_info():
+def api_info():
     """API information endpoint"""
     return {
         "name": "Fairmind ML Service API",

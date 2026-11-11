@@ -465,7 +465,7 @@ class RiskIncidentManager:
                 }]
             }
             
-            response = requests.post(webhook_url, json=payload)
+            response = requests.post(webhook_url, json=payload, timeout=10)
             response.raise_for_status()
             
             logger.info(f"Slack alert sent for {alert.id}")
@@ -496,7 +496,7 @@ class RiskIncidentManager:
             }
             
             headers = webhook_config.get("headers", {})
-            response = requests.post(webhook_url, json=payload, headers=headers)
+            response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
             
             logger.info(f"Webhook alert sent for {alert.id}")

@@ -70,7 +70,7 @@ class EvidenceResponse(BaseModel):
 
 
 @router.get("/frameworks")
-async def get_frameworks():
+def get_frameworks():
     """Get available regulatory frameworks"""
     return {
         "frameworks": [
@@ -107,7 +107,7 @@ async def get_frameworks():
 
 
 @router.get("/controls")
-async def get_technical_controls(framework: Optional[str] = None):
+def get_technical_controls(framework: Optional[str] = None):
     """Get available technical controls"""
     controls = evidence_service.technical_controls
     
@@ -212,7 +212,7 @@ async def check_compliance(
 
 
 @router.get("/evidence/{evidence_id}")
-async def get_evidence(evidence_id: str, m: OrgMembership = Depends(org_member)) -> EvidenceResponse:
+def get_evidence(evidence_id: str, m: OrgMembership = Depends(org_member)) -> EvidenceResponse:
     """Get detailed evidence by ID (only evidence this organisation collected)"""
     
     evidence = evidence_service.evidence_store.get(evidence_id)
@@ -335,7 +335,7 @@ async def get_model_compliance(
 
 
 @router.post("/evidence/manual")
-async def upload_manual_evidence(
+def upload_manual_evidence(
     control_id: str,
     framework: str,
     evidence_type: str,

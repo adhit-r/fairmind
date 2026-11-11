@@ -387,7 +387,7 @@ def _system_or_404(db: Session, system_id: str):
 
 
 @router.get("/systems/{system_id}/autopilot")
-async def get_autopilot(system_id: str, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def get_autopilot(system_id: str, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     return _view(db, _system_or_404(db, system_id))
@@ -425,7 +425,7 @@ async def run_autopilot(system_id: str, action: Optional[str] = Query(default=No
 
 
 @router.put("/systems/{system_id}/data-sources/{purpose}")
-async def set_data_source(system_id: str, purpose: str, body: SourceBody, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def set_data_source(system_id: str, purpose: str, body: SourceBody, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if purpose not in PURPOSES:
         raise HTTPException(status_code=404, detail="Unknown data source")
     _ensure_tables(db)
@@ -444,7 +444,7 @@ async def set_data_source(system_id: str, purpose: str, body: SourceBody, curren
 
 
 @router.delete("/systems/{system_id}/data-sources/{purpose}")
-async def delete_data_source(system_id: str, purpose: str, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def delete_data_source(system_id: str, purpose: str, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if purpose not in PURPOSES:
         raise HTTPException(status_code=404, detail="Unknown data source")
     _ensure_tables(db)
@@ -456,7 +456,7 @@ async def delete_data_source(system_id: str, purpose: str, current_user: TokenDa
 
 
 @router.get("/estate/autopilot")
-async def estate_autopilot(http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def estate_autopilot(http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """Systems on autopilot, what it did this week, and the steps on their routes that need a person."""
     _ensure_tables(db)
     org = _caller_org(http)

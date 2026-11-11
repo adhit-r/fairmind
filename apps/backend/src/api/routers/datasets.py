@@ -110,7 +110,7 @@ async def list_datasets(
 
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
-async def get_dataset(dataset_id: str):
+def get_dataset(dataset_id: str):
     """
     Get detailed dataset information
     
@@ -123,7 +123,7 @@ async def get_dataset(dataset_id: str):
 
 
 @router.delete("/{dataset_id}", response_model=DatasetResponse)
-async def delete_dataset(dataset_id: str):
+def delete_dataset(dataset_id: str):
     """
     Delete a dataset
     
@@ -136,7 +136,7 @@ async def delete_dataset(dataset_id: str):
 
 
 @router.post("/{dataset_id}/validate", response_model=DatasetResponse)
-async def validate_dataset_columns(
+def validate_dataset_columns(
     dataset_id: str,
     target_column: str,
     feature_columns: List[str],
@@ -154,7 +154,7 @@ async def validate_dataset_columns(
 
 
 @router.get("/{dataset_id}/schema")
-async def get_dataset_schema(dataset_id: str):
+def get_dataset_schema(dataset_id: str):
     """
     Get dataset schema information
     

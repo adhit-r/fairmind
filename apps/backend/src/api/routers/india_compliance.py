@@ -158,7 +158,7 @@ class ComplianceQuestionResponse(BaseModel):
 # ============================================================================
 
 @router.get("/frameworks", response_model=FrameworkListResponse)
-async def list_frameworks(current_user: str = Depends(get_current_user)):
+def list_frameworks(current_user: str = Depends(get_current_user)):
     """
     List all supported India-specific compliance frameworks
     
@@ -640,7 +640,7 @@ async def get_compliance_trends(
 # ============================================================================
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint for India compliance service"""
     return {
         "status": "healthy",

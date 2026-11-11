@@ -227,14 +227,14 @@ def _fields(body: TargetBody) -> Dict[str, str]:
 
 
 @router.get("/ai-systems/{system_id}/target")
-async def get_target(system_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_target(system_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
     return {"target": _json(_row(db, system_id))}
 
 
 @router.put("/ai-systems/{system_id}/target")
-async def save_target(system_id: str, body: TargetBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_target(system_id: str, body: TargetBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
     try:
@@ -270,7 +270,7 @@ async def save_target(system_id: str, body: TargetBody, m: OrgMembership = Depen
 
 
 @router.delete("/ai-systems/{system_id}/target")
-async def delete_target(system_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def delete_target(system_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
     db.execute(text("DELETE FROM governance_ai_system_targets WHERE system_id = :id"), {"id": system_id})

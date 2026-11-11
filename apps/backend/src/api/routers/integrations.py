@@ -401,7 +401,7 @@ def _get_integration(db: Session, org_id: str, integration_id: str) -> Any:
 
 
 @router.get("")
-async def list_integrations(http: Request, db: Session = Depends(get_db)):
+def list_integrations(http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     rows = db.execute(
         text(f"SELECT {_INTEGRATION_COLS} FROM governance_integrations WHERE org_id = :org ORDER BY created_at DESC"),
@@ -411,7 +411,7 @@ async def list_integrations(http: Request, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201, dependencies=[Depends(org_mutator)])
-async def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
+def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     if body.kind == "mlflow":
         _public_tracking_uri(body.config)
@@ -436,7 +436,7 @@ async def create_integration(body: IntegrationCreate, http: Request, db: Session
 
 
 @router.delete("/{integration_id}", status_code=204, dependencies=[Depends(org_mutator)])
-async def delete_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
+def delete_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)
     _get_integration(db, org, integration_id)
@@ -524,7 +524,7 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
 
 
 @router.get("/discovered")
-async def list_discovered(
+def list_discovered(
     http: Request,
     status: str = Query(default="new", pattern="^(new|promoted|ignored|all)$"),
     db: Session = Depends(get_db),
@@ -570,7 +570,7 @@ def _workspace_for(db: Session, org_id: str, integration_row: Any) -> str:
 
 
 @router.post("/discovered/{asset_id}/promote", dependencies=[Depends(org_mutator)])
-async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Session = Depends(get_db)):
+def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Session = Depends(get_db)):
     """Turn a discovered asset into a governed system. Suggestions apply unless overridden."""
     _ensure_tables()
     org = _caller_org(http)
@@ -618,7 +618,7 @@ async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: 
 
 
 @router.post("/discovered/{asset_id}/ignore", dependencies=[Depends(org_mutator)])
-async def ignore_asset(asset_id: str, http: Request, db: Session = Depends(get_db)):
+def ignore_asset(asset_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)
     _get_asset(db, org, asset_id)

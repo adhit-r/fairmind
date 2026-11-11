@@ -163,7 +163,7 @@ class ApprovalActionRequest(BaseModel):
 
 
 @router.post("/requests")
-async def create_approval_request(
+def create_approval_request(
     request: ApprovalRequestCreate,
     db: Session = Depends(get_db),
 ):
@@ -264,7 +264,7 @@ async def create_approval_request(
 
 
 @router.get("/requests")
-async def list_approval_requests(
+def list_approval_requests(
     status: Optional[str] = Query(default=None),
     ai_system_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
@@ -295,7 +295,7 @@ async def list_approval_requests(
 
 
 @router.get("/requests/{request_id}")
-async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
+def get_approval_request(request_id: str, db: Session = Depends(get_db)):
     """Get an approval request with its decision history."""
     _ensure_tables(db)
     row = db.execute(
@@ -311,7 +311,7 @@ async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/requests/{request_id}/approve")
-async def approve_request(
+def approve_request(
     request_id: str,
     body: ApprovalActionRequest,
     db: Session = Depends(get_db),
@@ -388,7 +388,7 @@ async def approve_request(
 
 
 @router.post("/requests/{request_id}/reject")
-async def reject_request(
+def reject_request(
     request_id: str,
     body: ApprovalActionRequest,
     db: Session = Depends(get_db),

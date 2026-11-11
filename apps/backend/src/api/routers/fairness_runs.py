@@ -66,8 +66,10 @@ router = APIRouter(tags=["fairness"], dependencies=[Depends(_enforce_org_scope)]
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-async def _read_upload(file: UploadFile) -> bytes:
-    data = await file.read()
+def _read_upload(file: UploadFile) -> bytes:
+    # Sync on purpose: the handlers run in the threadpool, and the form parser has
+    # already spooled the upload. Read one byte past the limit, never the whole file.
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if not data:
         raise HTTPException(status_code=422, detail="The uploaded file is empty")
     if len(data) > MAX_UPLOAD_BYTES:
@@ -211,7 +213,7 @@ def _apply_policy_rules(db: Session, system_id: str, gate: Dict[str, Any]) -> No
 
 
 @router.post("/systems/{system_id}/fairness-runs/inspect")
-async def inspect_fairness_csv(
+def inspect_fairness_csv(
     system_id: str,
     file: UploadFile = File(...),
     current_user: TokenData = Depends(get_current_active_user),
@@ -220,7 +222,7 @@ async def inspect_fairness_csv(
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     try:
-        return inspect_csv(await _read_upload(file), _last_run_metadata(db, system_id))
+        return inspect_csv(_read_upload(file), _last_run_metadata(db, system_id))
     except FairnessRunError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -241,7 +243,7 @@ def _confirmation_summary(record: Optional[Dict[str, Any]]) -> Optional[Dict[str
 
 
 @router.post("/systems/{system_id}/fairness-runs")
-async def create_fairness_run(
+def create_fairness_run(
     system_id: str,
     http: Request,
     file: UploadFile = File(...),
@@ -262,7 +264,7 @@ async def create_fairness_run(
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_row(db, system_id)
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
-    data = await _read_upload(file)
+    data = _read_upload(file)
     now = datetime.now(timezone.utc).isoformat()
     try:
         # The suggestion is recomputed from these bytes, so a client cannot choose what it was shown.
@@ -341,7 +343,7 @@ async def create_fairness_run(
 
 
 @router.get("/systems/{system_id}/fairness-runs")
-async def list_fairness_runs(
+def list_fairness_runs(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -384,7 +386,7 @@ async def list_fairness_runs(
 
 
 @router.get("/systems/{system_id}/clause-map")
-async def get_clause_map(
+def get_clause_map(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -408,7 +410,7 @@ async def get_clause_map(
 
 
 @router.get("/systems/{system_id}/seals")
-async def get_decision_seals(
+def get_decision_seals(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -420,7 +422,7 @@ async def get_decision_seals(
 
 
 @router.get("/systems/{system_id}/gate")
-async def get_release_gate(
+def get_release_gate(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -436,7 +438,7 @@ def _org_systems(db: Session, http: Request) -> List[Any]:
 
 
 @router.get("/estate/gates")
-async def get_estate_gates(
+def get_estate_gates(
     http: Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -455,7 +457,7 @@ async def get_estate_gates(
 
 
 @router.get("/frameworks/{framework_key}/systems")
-async def get_framework_systems(
+def get_framework_systems(
     framework_key: str,
     http: Request,
     current_user: TokenData = Depends(get_current_active_user),
@@ -530,7 +532,7 @@ def _latest_fairness_run(db: Session, system_id: str) -> Optional[Dict[str, Any]
 
 
 @router.post("/systems/{system_id}/monitoring-runs")
-async def create_monitoring_run(
+def create_monitoring_run(
     system_id: str,
     http: Request,
     file: UploadFile = File(...),
@@ -549,7 +551,7 @@ async def create_monitoring_run(
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
     try:
         result = run_monitoring(
-            await _read_upload(file),
+            _read_upload(file),
             attributes=attribute_list,
             prediction=prediction or None,
             score=score or None,
@@ -629,7 +631,7 @@ class MonitoringPolicyRequest(BaseModel):
 
 
 @router.get("/systems/{system_id}/monitoring-policy")
-async def get_monitoring_policy(
+def get_monitoring_policy(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -640,7 +642,7 @@ async def get_monitoring_policy(
 
 
 @router.put("/systems/{system_id}/monitoring-policy")
-async def put_monitoring_policy(
+def put_monitoring_policy(
     system_id: str,
     body: MonitoringPolicyRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -673,7 +675,7 @@ async def put_monitoring_policy(
 
 
 @router.get("/systems/{system_id}/monitoring-runs")
-async def list_monitoring_runs(
+def list_monitoring_runs(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -703,7 +705,7 @@ class AttestationRequest(BaseModel):
 
 
 @router.post("/systems/{system_id}/attestations")
-async def create_attestation(
+def create_attestation(
     system_id: str,
     body: AttestationRequest,
     http: Request,

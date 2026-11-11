@@ -626,7 +626,7 @@ def _view(db: Session, org_id: str) -> Dict[str, Any]:
 
 
 @router.get("")
-async def get_plan(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_plan(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     return _view(db, m.org_id)
 
@@ -698,7 +698,7 @@ async def answer(body: AnswerBody, m: OrgMembership = Depends(_manager), db: Ses
 
 
 @router.post("/generate")
-async def generate(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def generate(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     plan = _plan_row(db, m.org_id)
     if "frameworks" not in plan["profile"]:
@@ -719,7 +719,7 @@ def _task_or_404(db: Session, org_id: str, key: str) -> Dict[str, Any]:
 
 
 @router.patch("/tasks/{key}")
-async def patch_task(key: str, body: TaskPatch, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def patch_task(key: str, body: TaskPatch, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _task_or_404(db, m.org_id, key)
     db.execute(
@@ -734,7 +734,7 @@ async def patch_task(key: str, body: TaskPatch, m: OrgMembership = Depends(_mana
 
 
 @router.post("/tasks/{key}/attest")
-async def attest_task(key: str, body: AttestBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def attest_task(key: str, body: AttestBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     task = _task_or_404(db, m.org_id, key)
     if task["kind"] != "org":
