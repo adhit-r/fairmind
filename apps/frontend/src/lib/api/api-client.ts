@@ -313,6 +313,14 @@ export class ApiClient {
     }
   }
 
+  /**
+   * Swap the access token for a fresh one now. The organisation in a token is
+   * fixed when it is issued, so call this after the caller joins one.
+   */
+  refreshSession(): Promise<boolean> {
+    return this.refreshAccessToken()
+  }
+
   private async refreshAccessToken(): Promise<boolean> {
     const refreshToken = this.refreshToken
     if (!refreshToken) {
