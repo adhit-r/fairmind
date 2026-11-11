@@ -57,7 +57,13 @@ export function useAuth() {
     }
   }
 
-  const register = async (data: { name: string; email: string; org_name: string; password: string }) => {
+  const register = async (data: {
+    name: string
+    email: string
+    password: string
+    org_name?: string
+    invitation_token?: string
+  }) => {
     try {
       setLoading(true)
       setError(null)

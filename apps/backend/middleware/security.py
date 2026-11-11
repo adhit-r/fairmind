@@ -2,6 +2,7 @@
 Production-ready security middleware for FairMind backend.
 """
 
+import re
 import time
 from typing import Callable
 from fastapi import Request, Response, HTTPException, status
@@ -358,6 +359,7 @@ _PUBLIC_EXACT = {
     "/api/v1/register",
 }
 _PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
+_INVITATION_PREVIEW = re.compile(r"/api/v1/organizations/invitations/[^/]+")
 
 
 def _is_public_path(path: str) -> bool:
@@ -427,6 +429,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Auditor pack links carry their own token; the route checks it.
         if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
+            return await call_next(request)
+
+        # An invitee previews an invitation before they have an account; accepting needs one.
+        if request.method == "GET" and _INVITATION_PREVIEW.fullmatch(request.url.path):
             return await call_next(request)
 
         # Extract JWT token from Authorization header
