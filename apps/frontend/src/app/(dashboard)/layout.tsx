@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { SystemContextProvider } from '@/components/workflow/SystemContext'
 import { OrgProvider } from '@/context/OrgContext'
+import { NeedsYouProvider } from '@/astryx/data/needsYou'
 import { SessionProvider } from '@/context/SessionContext'
 import { AstryxShell } from '@/astryx/AstryxShell'
 
@@ -21,7 +22,9 @@ export default function DashboardLayout({
       <AuthGuard>
         <OrgProvider>
           <SystemContextProvider>
-            <AstryxShell>{ASTRYX.test(pathname ?? '') ? children : <div className="fm-legacy">{children}</div>}</AstryxShell>
+            <NeedsYouProvider>
+              <AstryxShell>{ASTRYX.test(pathname ?? '') ? children : <div className="fm-legacy">{children}</div>}</AstryxShell>
+            </NeedsYouProvider>
           </SystemContextProvider>
         </OrgProvider>
       </AuthGuard>

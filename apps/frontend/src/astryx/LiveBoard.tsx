@@ -74,7 +74,9 @@ function CellMark({ state }: { state: string }) {
 
 type Section = 'attention' | 'progress' | 'approved'
 const SECTIONS: Array<{ key: Section; title: string }> = [
-  { key: 'attention', title: 'Needs you' },
+  // A failing or stale check is work on the system; only a pending decision waits on a person
+  // (and is on the Needs you page), so this group is not called Needs you.
+  { key: 'attention', title: 'Needs attention' },
   { key: 'progress', title: 'Being checked' },
   { key: 'approved', title: 'Approved and watched' },
 ]
