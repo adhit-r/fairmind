@@ -38,9 +38,12 @@ def _ensure_tables() -> None:
     if _tables_ready:
         return
     import database.governance_models  # noqa: F401
+    from config.settings import settings
     from database.connection import Base, db_manager
 
-    Base.metadata.create_all(bind=db_manager.engine)
+    # Outside development scripts/setup_db.py creates these tables before start.
+    if settings.is_development:
+        Base.metadata.create_all(bind=db_manager.engine)
     _tables_ready = True
 
 
