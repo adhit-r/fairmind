@@ -1,5 +1,6 @@
-"""Self-serve signup makes the signer owner of a new organisation, never a platform admin.
+"""Signup is by invitation only, and never makes the signer a platform admin.
 
+New organisations come from approved access requests (test_registration_approval).
 The global admin role passes require_admin (registration approvals, user
 management), so a public endpoint must not hand it out.
 """
@@ -36,22 +37,16 @@ def env(monkeypatch):
         yield client, engine
 
 
-def test_signup_owns_its_organisation_but_is_not_a_platform_admin(env):
+@pytest.mark.parametrize("extra", ({}, {"org_name": "Corp"}, {"invitation_token": ""}))
+def test_signup_without_an_invitation_creates_nothing(env, extra):
     client, engine = env
     response = client.post(
         "/api/v1/auth/register",
-        json={"email": "signer@corp.example.com", "password": "a-long-enough-pass", "name": "Signer", "org_name": "Corp"},
+        json={"email": "signer@corp.example.com", "password": "a-long-enough-pass", "name": "Signer", **extra},
     )
-    assert response.status_code in (200, 201), response.text
-
-    [user] = _rows(engine, "SELECT id, role, roles FROM users WHERE email = :e", e="signer@corp.example.com")
-    assert user["role"] == "analyst"
-    assert "admin" not in str(user["roles"])
-
-    [member] = _rows(engine, "SELECT role, status FROM org_members WHERE user_id = :u", u=user["id"])
-    assert (member["role"], member["status"]) == ("owner", "active")
-    [org] = _rows(engine, "SELECT owner_id FROM organizations WHERE name = 'Corp'")
-    assert str(org["owner_id"]) == str(user["id"])
+    assert response.status_code in (400, 422), response.text
+    assert _rows(engine, "SELECT id FROM users") == []
+    assert _rows(engine, "SELECT id FROM organizations") == []
 
 
 def _invite(engine, email: str, *, status: str = "pending", days: int = 7) -> str:
@@ -85,8 +80,9 @@ def test_invitee_signup_creates_no_organisation(env):
     )
     assert response.status_code in (200, 201), response.text
 
-    [user] = _rows(engine, "SELECT id, org_id FROM users WHERE email = :e", e="invitee@corp.example.com")
+    [user] = _rows(engine, "SELECT id, org_id, role, roles FROM users WHERE email = :e", e="invitee@corp.example.com")
     assert user["org_id"] is None
+    assert user["role"] == "analyst" and "admin" not in str(user["roles"])
     assert _rows(engine, "SELECT id FROM org_members WHERE user_id = :u", u=user["id"]) == []
     assert len(_rows(engine, "SELECT id FROM organizations")) == 1  # only the inviting org
 
@@ -105,12 +101,3 @@ def test_invitee_signup_needs_a_live_invitation_for_that_email(env, email, statu
     )
     assert response.status_code == 400, response.text
     assert _rows(engine, "SELECT id FROM users WHERE email = :e", e=email) == []
-
-
-def test_signup_without_invitation_still_needs_an_organisation_name(env):
-    client, _ = env
-    response = client.post(
-        "/api/v1/auth/register",
-        json={"email": "solo@corp.example.com", "password": "a-long-enough-pass", "name": "Solo"},
-    )
-    assert response.status_code == 422

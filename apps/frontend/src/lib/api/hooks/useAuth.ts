@@ -61,8 +61,7 @@ export function useAuth() {
     name: string
     email: string
     password: string
-    org_name?: string
-    invitation_token?: string
+    invitation_token: string
   }) => {
     try {
       setLoading(true)
