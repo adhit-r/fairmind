@@ -848,6 +848,13 @@ async def update_member(
                     f"UPDATE org_members SET {', '.join(updates)} WHERE id = :id AND org_id = :org_id",
                     params
                 )
+                if payload.role and payload.role != member["role"]:
+                    # Tokens carry the rights of the old role; end them. A suspended
+                    # member needs no bump: tokens require an active membership.
+                    await db.execute(
+                        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = :uid",
+                        {"uid": member["user_id"]},
+                    )
 
                 # Log audit event
                 await _log_org_audit(
