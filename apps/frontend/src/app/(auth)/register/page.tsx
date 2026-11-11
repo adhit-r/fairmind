@@ -8,6 +8,7 @@ import { AuthSplit } from '../AuthSplit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/lib/api/hooks/useAuth'
 import { apiClient } from '@/lib/api/api-client'
@@ -25,7 +26,9 @@ export default function RegisterPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { register, loading } = useAuth()
-  const [form, setForm] = useState({ name: '', email: '', org_name: '', password: '' })
+  const [form, setForm] = useState({ name: '', email: '', org_name: '', password: '', message: '' })
+  const [requested, setRequested] = useState(false)
+  const [sending, setSending] = useState(false)
   // /register?invite=<token>: create the account, then join the inviting organization.
   const [inviteToken, setInviteToken] = useState<string | null>(null)
   const [invitation, setInvitation] = useState<Invitation | null>(null)
@@ -63,18 +66,44 @@ export default function RegisterPage() {
         router.push('/dashboard')
         return
       }
-      await register(form)
-      router.push('/onboard')
+      setSending(true)
+      const res = await apiClient.post(
+        API_ENDPOINTS.auth.requestAccess,
+        { name: form.name, email: form.email, org_name: form.org_name, message: form.message || undefined },
+        { enableRetry: false },
+      )
+      if (!res.success) throw new Error(res.error || 'Please try again.')
+      setRequested(true)
     } catch (err) {
       toast({
-        title: 'Could not create your account',
+        title: inviteToken ? 'Could not create your account' : 'Could not send your request',
         description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'destructive',
       })
+    } finally {
+      setSending(false)
     }
   }
 
   const joining = Boolean(inviteToken)
+
+  if (requested) {
+    return (
+      <AuthSplit>
+        <Card className="w-full max-w-lg p-8 fm-card">
+          <div className="flex flex-col items-center text-center">
+            <OrangeLogo size="lg" />
+            <h1 className="text-[24px] font-semibold tracking-tight mt-4">Request sent</h1>
+            <p className="text-muted-foreground mt-2">
+              We review every request. When yours is approved, an email to {form.email} will
+              let you choose a password and sign in.
+            </p>
+            <a href="/login" className="mt-6 text-sm font-medium underline">Back to sign in</a>
+          </div>
+        </Card>
+      </AuthSplit>
+    )
+  }
 
   return (
     <AuthSplit>
@@ -82,12 +111,12 @@ export default function RegisterPage() {
         <div className="flex flex-col items-center mb-8">
           <OrangeLogo size="lg" />
           <h1 className="text-[24px] font-semibold tracking-tight mt-4">
-            {joining ? `Join ${invitation?.org_name ?? 'your team'}` : 'Create your organization'}
+            {joining ? `Join ${invitation?.org_name ?? 'your team'}` : 'Request access'}
           </h1>
           <p className="text-muted-foreground mt-2 text-center">
             {joining
               ? 'Create your account to accept the invitation.'
-              : 'You will own the new organization and can invite your team after setup.'}
+              : 'Tell us who you are. Once approved, you own the new organization and can invite your team.'}
           </p>
         </div>
 
@@ -113,16 +142,26 @@ export default function RegisterPage() {
                 onChange={e => set('org_name', e.target.value)} className="border border-[var(--fm-line)]" />
             </div>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" required type="password" autoComplete="new-password"
-              minLength={MIN_PASSWORD} aria-describedby="password-hint" value={form.password}
-              onChange={e => set('password', e.target.value)} className="border border-[var(--fm-line)]" />
-            <p id="password-hint" className="text-xs text-muted-foreground">At least {MIN_PASSWORD} characters.</p>
-          </div>
+          {joining ? (
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input id="password" required type="password" autoComplete="new-password"
+                minLength={MIN_PASSWORD} aria-describedby="password-hint" value={form.password}
+                onChange={e => set('password', e.target.value)} className="border border-[var(--fm-line)]" />
+              <p id="password-hint" className="text-xs text-muted-foreground">At least {MIN_PASSWORD} characters.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="message">What will you use FairMind for? (optional)</Label>
+              <Textarea id="message" rows={3} value={form.message}
+                onChange={e => set('message', e.target.value)} className="border border-[var(--fm-line)]" />
+            </div>
+          )}
 
-          <Button type="submit" className="w-full" disabled={loading || (joining && !invitation)}>
-            {loading ? 'Creating account...' : joining ? 'Create account and join' : 'Create account'}
+          <Button type="submit" className="w-full" disabled={loading || sending || (joining && !invitation)}>
+            {joining
+              ? loading ? 'Creating account...' : 'Create account and join'
+              : sending ? 'Sending request...' : 'Request access'}
           </Button>
         </form>
 

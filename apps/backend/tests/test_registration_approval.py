@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from api.routes import registration
-from config.auth import UserRole, require_admin
+from config.auth import UserRole, auth_manager, require_admin
 from tests import pg
 from tests.auth_helpers import make_token_data
 
@@ -59,6 +59,8 @@ def env(monkeypatch):
     monkeypatch.setattr(registration, "get_db_transaction", connection)
     email = AsyncMock()
     monkeypatch.setattr(registration, "email_service", email)
+    # Submissions share the per-process rate limit with password resets; start each test clean.
+    monkeypatch.setattr("src.api.routers.auth._reset_requests", {})
 
     app = FastAPI()
     app.include_router(registration.router, prefix="/api/v1")
@@ -112,13 +114,30 @@ def test_approval_creates_a_new_org_owned_by_the_requester(env):
     [member] = _rows(engine, "SELECT * FROM org_members")
     assert user["email"] == "new@corp.example.com" and user["id"] == body["user_id"]
     assert user["role"] == "analyst"  # the requested 'admin' is not granted
-    assert not user["password_hash"]  # no usable password until set via invite/reset
+    assert user["password_hash"]  # a random one nobody knows, so reset links work
     assert str(user["org_id"]) == str(user["primary_org_id"]) == str(org["id"]) == body["org_id"]
     assert org["name"] == "Corp" and str(org["owner_id"]) == user["id"]
     assert (member["user_id"], member["role"], member["status"]) == (user["id"], "owner", "active")
     [req] = _rows(engine, "SELECT * FROM registration_requests")
     assert (req["status"], str(req["org_id"]), req["reviewed_by"]) == ("approved", body["org_id"], ADMIN_ID)
-    email.send_approval_email.assert_called_once_with("new@corp.example.com", "New Person", "Corp")
+    [call] = email.send_approval_email.call_args_list
+    to, name, org_name, url, _minutes = call.args
+    assert (to, name, org_name) == ("new@corp.example.com", "New Person", "Corp")
+    # The email's link sets the first password: a reset token bound to this user's hash.
+    prefix = "/reset-password#token="
+    assert prefix in url
+    claims = auth_manager.read_password_reset_token(url.split(prefix, 1)[1])
+    assert claims["sub"] == user["id"]
+    assert claims["pwd"] == auth_manager.password_fingerprint(user["password_hash"])
+
+
+def test_submissions_are_rate_limited_per_ip(env):
+    client, _, email = env
+    for i in range(5):
+        _submit(client, email=f"person{i}@corp.example.com")
+    response = client.post("/api/v1/register", json={"email": "x@corp.example.com", "name": "X", "org_name": "Y"})
+    assert response.status_code == 429
+    assert email.send_registration_request_to_admin.call_count == 5
 
 
 def test_approval_refuses_an_email_that_already_has_an_account(env):
