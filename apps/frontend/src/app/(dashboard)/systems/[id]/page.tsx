@@ -457,8 +457,8 @@ function SystemFileBody({ id }: { id: string }) {
             <Button label="Stored analyses" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'analyses' })} />
             <Button label="Open plan" variant="secondary" size="sm" href={`/systems/${encodeURIComponent(id)}/plan`} />
             <Button label="Run an evaluation" variant="secondary" size="sm" onClick={() => open('/tests')} />
-            <Button label="Frameworks" variant="secondary" size="sm" onClick={() => open('/compliance')} />
-            <Button label="Workflow runs" variant="secondary" size="sm" href="/compliance/runs" />
+            <Button label="Frameworks" variant="secondary" size="sm" href="/frameworks" />
+            <Button label="Workflow runs" variant="secondary" size="sm" href="/runs" />
             <Button label="Monitoring" variant="secondary" size="sm" onClick={() => open('/monitoring')} />
           </HStack>
         </VStack>

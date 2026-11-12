@@ -20,6 +20,9 @@
 .fm-me { display: flex; align-items: center; gap: 8px; padding: 8px; border-top: 1px solid var(--color-border); }
 .fm-me > span { min-width: 0; flex: 1; }
 .fm-legacy { padding: 22px 28px 64px; background: var(--fm-bg, var(--color-background-body)); min-height: 100%; }
+.fm-legacy-back { display: inline-flex; margin-bottom: 14px; font-size: 13px; font-weight: 500; color: var(--fm-ink2); text-decoration: none; }
+.fm-legacy-back::before { content: "\2190"; margin-right: 6px; }
+.fm-legacy-back:hover { color: var(--fm-ink); }
 
 /* The live line in the menu. */
 .fm-feed { display: grid; gap: 5px; margin-top: auto; padding: 12px; border-radius: var(--radius-element); background: var(--color-background-card); border: 1px solid var(--color-border); color: var(--color-text-primary); text-decoration: none; font-size: 12.5px; line-height: 1.35; }
