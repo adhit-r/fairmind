@@ -181,6 +181,8 @@ class Settings(BaseSettings):
     
     # Error Tracking
     sentry_dsn: Optional[str] = None
+    # Cloudflare Turnstile secret; when set, the public forms require a token (config/turnstile.py).
+    turnstile_secret_key: Optional[str] = None
     
     # AWS S3
     aws_access_key_id: Optional[str] = None

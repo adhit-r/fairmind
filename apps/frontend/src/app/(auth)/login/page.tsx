@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { HumanCheck, awaitingHumanCheck, humanCheckHeaders } from '@/components/auth/HumanCheck'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/api/hooks/useAuth'
 import { useAuthentik } from '@/lib/api/hooks/useAuthentik'
@@ -33,9 +35,12 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   })
 
+  const [check, setCheck] = useState<string | null>(null)
+  const [checkRound, setCheckRound] = useState(0)
+
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login(data)
+      await login(data, humanCheckHeaders(check))
       toast({
         title: "Login successful",
         description: "Welcome back!",
@@ -47,6 +52,8 @@ export default function LoginPage() {
         description: err instanceof Error ? err.message : "Invalid credentials",
         variant: "destructive",
       })
+    } finally {
+      setCheckRound((n) => n + 1) // a check token works once
     }
   }
 
@@ -104,10 +111,11 @@ export default function LoginPage() {
             )}
           </div>
 
+          <HumanCheck onToken={setCheck} resetKey={checkRound} />
           <Button
             type="submit"
             className="w-full"
-            disabled={loading}
+            disabled={loading || awaitingHumanCheck(check)}
             aria-busy={loading}
             aria-label={loading ? 'Signing in, please wait' : 'Sign in to FairMind'}
           >
