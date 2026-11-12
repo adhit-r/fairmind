@@ -155,8 +155,8 @@ class AuthManager:
         
         return self.jwt_manager.create_token(payload, expires_delta)
     
-    def create_refresh_token(self, user: User) -> str:
-        """Create a refresh token using new JWT infrastructure."""
+    def create_refresh_token(self, user: User, jti: Optional[str] = None) -> str:
+        """Create a refresh token; with a jti it is a rotating token (issue_refresh_token)."""
         expires_delta = timedelta(days=self.refresh_token_expire_days)
         
         payload = {
@@ -169,8 +169,41 @@ class AuthManager:
             "principal_kind": PrincipalKind.HUMAN.value,
             "ver": user.token_version,
         }
+        if jti:
+            payload["jti"] = jti
         
         return self.jwt_manager.create_token(payload, expires_delta)
+
+    async def issue_refresh_token(self, user: User) -> str:
+        """A rotating refresh token: its jti is recorded so it can be used exactly once."""
+        jti = uuid.uuid4().hex
+        await _store_refresh_jti(
+            jti, str(user.id), datetime.now(timezone.utc) + timedelta(days=self.refresh_token_expire_days)
+        )
+        return self.create_refresh_token(user, jti=jti)
+
+    async def refresh_session(self, refresh_token: str) -> tuple[str, str]:
+        """Rotate: spend this refresh token, return a new access token and refresh token.
+
+        A rotating token presented a second time means it was copied; every session
+        of the user ends (token_version bump) and the request fails. Tokens issued
+        before rotation existed carry no jti; they refresh once into a rotating one.
+        """
+        claims = self.jwt_manager.verify_token(refresh_token) or {}
+        jti = claims.get("jti")
+        if jti:
+            outcome = await _claim_refresh_jti(jti)
+            if outcome == "reused":
+                user_id = claims.get("user_id")
+                if user_id:
+                    await revoke_user_sessions(str(user_id))
+                logger.warning("Refresh token reuse detected; every session of the user was ended")
+                raise InvalidTokenException("Session has been signed out")
+            if outcome != "ok":
+                raise InvalidTokenException("Refresh token is not recognised")
+        access_token = await self.refresh_access_token(refresh_token)
+        user = await self.get_user_by_id(str(claims.get("user_id")))
+        return access_token, await self.issue_refresh_token(user)
     
     def create_api_key(self, user: User, name: str) -> str:
         """Create an API key using new JWT infrastructure."""
@@ -465,6 +498,30 @@ async def _session_is_live(user_id: str, token_version: int, org_id: Optional[st
     async with get_db_connection() as db:
         row = await db.fetch_one(sql, params)
     return row is not None
+
+
+async def _store_refresh_jti(jti: str, user_id: str, expires_at: datetime) -> None:
+    from .database import get_db_connection
+    async with get_db_connection() as db:
+        await db.execute(
+            "INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES (:jti, :user, :exp)",
+            {"jti": jti, "user": user_id, "exp": expires_at},
+        )
+
+
+async def _claim_refresh_jti(jti: str) -> str:
+    """Mark a refresh token used: "ok" the first time, "reused" after, "unknown" if never issued."""
+    from .database import get_db_connection
+    async with get_db_connection() as db:
+        claimed = await db.fetch_one(
+            "UPDATE refresh_tokens SET used_at = now() "
+            "WHERE jti = :jti AND used_at IS NULL AND expires_at > now() RETURNING jti",
+            {"jti": jti},
+        )
+        if claimed:
+            return "ok"
+        seen = await db.fetch_one("SELECT used_at FROM refresh_tokens WHERE jti = :jti", {"jti": jti})
+    return "reused" if seen and seen["used_at"] is not None else "unknown"
 
 
 async def revoke_user_sessions(user_id: str) -> None:

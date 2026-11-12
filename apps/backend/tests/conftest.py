@@ -84,7 +84,8 @@ def drop_test_databases() -> Generator[None, None, None]:
 def accept_synthetic_sessions(request, monkeypatch) -> None:
     """Most tests sign requests with tokens for users that have no users row
     (tests/auth_helpers.auth_headers), which the per-request session check would
-    reject. test_session_revocation runs the real check (real_session_check)."""
+    reject, and record refresh token ids in memory. test_session_revocation runs
+    both against the database (real_session_check)."""
     if request.node.get_closest_marker("real_session_check"):
         return
 
@@ -92,6 +93,23 @@ def accept_synthetic_sessions(request, monkeypatch) -> None:
         return True
 
     monkeypatch.setattr("config.auth._session_is_live", _live)
+
+    # Rotating refresh token ids live in memory for the same reason.
+    issued: dict[str, bool] = {}
+
+    async def _store(jti, user_id, expires_at):
+        issued[jti] = False
+
+    async def _claim(jti):
+        if jti not in issued:
+            return "unknown"
+        if issued[jti]:
+            return "reused"
+        issued[jti] = True
+        return "ok"
+
+    monkeypatch.setattr("config.auth._store_refresh_jti", _store)
+    monkeypatch.setattr("config.auth._claim_refresh_jti", _claim)
 
 
 @pytest.fixture(autouse=True)

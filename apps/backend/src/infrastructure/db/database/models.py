@@ -449,3 +449,19 @@ class OrganizationAuditLog(Base):
     organization = relationship("Organization", back_populates="audit_logs")
     user = relationship("User")
 
+
+
+class RefreshToken(Base):
+    """One row per issued browser refresh token, for rotation and reuse detection.
+
+    Each refresh marks its token used and issues a new one; a token presented
+    again after use means someone else holds it, so every session of that user
+    ends (config.auth.AuthManager.refresh_session).
+    """
+    __tablename__ = "refresh_tokens"
+
+    jti = Column(String(64), primary_key=True)
+    user_id = Column(String, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
