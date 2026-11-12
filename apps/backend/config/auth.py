@@ -25,13 +25,8 @@ from .jwt_exceptions import (
     TokenMissingException,
     handle_jwt_exception
 )
-from .jwt_models import (
-    JWTPayload, 
-    TokenRequest, 
-    TokenResponse, 
-    UserRole, 
-    TokenType
-)
+# UserRole and TokenType are defined below; jwt_models' copies were shadowed by them.
+from .jwt_models import JWTPayload, TokenRequest, TokenResponse
 
 logger = logging.getLogger("fairmind.auth")
 

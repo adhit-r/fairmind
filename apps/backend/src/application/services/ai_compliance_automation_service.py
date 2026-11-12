@@ -556,7 +556,6 @@ class AIComplianceAutomationService:
         citations = []
         
         # Look for common citation patterns
-        import re
         patterns = [
             r'Section \d+',
             r'DPDP Act',

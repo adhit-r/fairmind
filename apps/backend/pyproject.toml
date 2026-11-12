@@ -255,3 +255,12 @@ max-locals = 20
 max-returns = 6
 max-branches = 15
 max-statements = 60
+
+[tool.ruff.lint]
+# CI gate (audit C9): only rules that flag real bugs, so it can be strict from day
+# one: syntax errors, undefined names, redefinitions, == None, mutable defaults.
+select = ["E9", "F63", "F7", "F82", "F811", "E711", "B006"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest fixtures are named like the fixture they receive, which F811 misreads.
+"tests/**" = ["F811"]

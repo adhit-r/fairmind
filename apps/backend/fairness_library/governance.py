@@ -7,7 +7,7 @@ import json
 import yaml
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
 import logging
 from pathlib import Path
