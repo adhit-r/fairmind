@@ -149,13 +149,13 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
           <thead>
             {colGroups.some((g) => g.label) && (
               <tr className="mx-gh">
-                <th className="mx-rq" />
+                <th scope="col" className="mx-rq" />
                 {colGroups.map((g, i) => (
-                  <th key={i} colSpan={g.cols.length} className={cn('mx-gl', labels[i].ov && 'mx-ov', labels[i].up && 'mx-up')}>
+                  <th scope="col" key={i} colSpan={g.cols.length} className={cn('mx-gl', labels[i].ov && 'mx-ov', labels[i].up && 'mx-up')}>
                     <span title={g.label || undefined}>{g.label}</span>
                   </th>
                 ))}
-                <th colSpan={span - 1 - cols.length} />
+                <th scope="col" colSpan={span - 1 - cols.length} />
               </tr>
             )}
             <tr>
@@ -185,7 +185,7 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
                   {countHead}
                 </th>
               )}
-              <th className="mx-fill" />
+              <th scope="col" className="mx-fill" />
             </tr>
           </thead>
           <tbody>

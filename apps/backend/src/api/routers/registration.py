@@ -61,14 +61,13 @@ async def submit_registration(payload: RegistrationRequest, request: Request):
         async with get_db_connection() as db:
             # Check for existing pending request from same email
             existing = await db.fetch_one(
-                "SELECT id FROM registration_requests WHERE email = :email AND status = 'pending'",
+                "SELECT id FROM registration_requests WHERE lower(email) = lower(:email) AND status = 'pending'",
                 {"email": payload.email},
             )
             if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="A pending request for this email already exists.",
-                )
+                # Same answer as a new request, so the form cannot be used to learn
+                # who has applied; no second row and no second admin email.
+                return {"id": str(existing["id"]), "status": "pending", "message": "Request submitted. You will be notified by email."}
 
             # No organisation is created or looked up until an admin approves.
             await db.execute(
@@ -132,13 +131,13 @@ async def list_registrations(
                         "email": r["email"],
                         "name": r["name"],
                         "org_name": r["org_name"],
-                        "org_domain": r.get("org_domain"),
+                        "org_domain": r["org_domain"],
                         "requested_role": r["requested_role"],
-                        "message": r.get("message"),
+                        "message": r["message"],
                         "status": r["status"],
-                        "review_notes": r.get("review_notes"),
-                        "reviewed_at": r["reviewed_at"].isoformat() if r.get("reviewed_at") else None,
-                        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+                        "review_notes": r["review_notes"],
+                        "reviewed_at": r["reviewed_at"].isoformat() if r["reviewed_at"] else None,
+                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                     }
                     for r in rows
                 ]
@@ -212,7 +211,7 @@ async def approve_registration(
                     "id": org_id,
                     "name": req["org_name"],
                     "slug": f"{slug_base}-{secrets.token_hex(3)}",
-                    "domain": req.get("org_domain"),
+                    "domain": req["org_domain"],
                     "owner": user_id,
                 },
             )
@@ -233,7 +232,7 @@ async def approve_registration(
 
         token = auth_manager.create_password_reset_token(user_id, password_hash)
         # The token rides in the fragment, which browsers never send to a server.
-        set_password_url = f"{settings.frontend_url}/reset-password#token={token}"
+        set_password_url = f"{settings.frontend_url}/reset-password#token={token}&welcome=1"
         import asyncio
         asyncio.create_task(
             email_service.send_approval_email(

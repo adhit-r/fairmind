@@ -18,7 +18,7 @@ const STAGES = [
 ] as const
 
 export default function HomePage() {
-  const { systems } = useSystemContext()
+  const { systems, loading, error } = useSystemContext()
   const counts = STAGES.map((s) => ({ ...s, n: systems.filter((x) => x.stage === s.key).length }))
 
   return (
@@ -28,7 +28,11 @@ export default function HomePage() {
           <VStack gap={1}>
             <Heading level={1}>AI estate</Heading>
             <Text color="secondary">
-              {systems.length} registered AI system{systems.length === 1 ? '' : 's'}, each against the five release checks and its release decision.
+              {loading
+                ? 'Loading your registered AI systems.'
+                : error
+                  ? 'Your AI systems could not be loaded; the board below says why.'
+                  : `${systems.length} registered AI system${systems.length === 1 ? '' : 's'}, each against its release checks and release decision.`}
             </Text>
           </VStack>
           <HStack gap={2}>
@@ -39,7 +43,7 @@ export default function HomePage() {
 
         <LiveBoard />
 
-        {systems.length > 0 && (
+        {!loading && systems.length > 0 && (
           <section className="fm-card" aria-labelledby="stages-title">
             <VStack gap={3}>
               <Heading level={2} id="stages-title">

@@ -194,6 +194,8 @@ function TeamSection() {
   const [failure, setFailure] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
 
+  // Owners and admins manage people; everyone else sees the list and who to ask.
+  const canManage = selectedOrg?.role === 'owner' || selectedOrg?.role === 'admin'
   const roleOptions = roles.data.map((r) => ({ value: r.name, label: r.name }))
   const inviteRole = role || roleOptions.find((o) => o.value === 'analyst')?.value || roleOptions[0]?.value || ''
 
@@ -224,7 +226,7 @@ function TeamSection() {
       key: 'role',
       header: 'Role',
       width: pixel(200),
-      renderCell: (m) => (
+      renderCell: (m) => !canManage ? <Text>{m.role}</Text> : (
         <Selector
           label={`Role for ${m.name || m.email || 'member'}`}
           isLabelHidden
@@ -236,7 +238,7 @@ function TeamSection() {
       ),
     },
     { key: 'status', header: 'Status', width: pixel(100), renderCell: (m) => <Token size="sm" color={m.status === 'active' ? 'green' : 'gray'} label={m.status} /> },
-    {
+    ...(!canManage ? [] : [{
       key: 'remove',
       header: '',
       width: pixel(150),
@@ -246,7 +248,7 @@ function TeamSection() {
         ) : (
           <Button label="Remove" size="sm" variant="ghost" onClick={() => setConfirming(m.id)} />
         ),
-    },
+    } satisfies TableColumn<MemberRow>]),
   ]
 
   if (!orgId) return <Problem message="No organisation is selected." />
@@ -256,8 +258,11 @@ function TeamSection() {
       <VStack gap={2}>
         <HStack hAlign="between" vAlign="center">
           <Heading level={3}>People</Heading>
-          <Button label="Invite a person" variant="secondary" onClick={() => setInviting(true)} />
+          {canManage && <Button label="Invite a person" variant="secondary" onClick={() => setInviting(true)} />}
         </HStack>
+        {!canManage && (
+          <Text color="secondary">Only owners and admins can invite people or change roles. Ask one of them.</Text>
+        )}
         {members.loading ? (
           <Skeleton height={120} />
         ) : members.error ? (

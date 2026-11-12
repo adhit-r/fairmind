@@ -269,10 +269,10 @@ export function FairnessRunPanel({
               <table className="w-full min-w-[640px] text-[12.5px]">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--fm-ink3)]">
                   <tr>
-                    <th className="w-[84px] pb-1.5 font-medium">Protected</th>
-                    <th className="pb-1.5 font-medium">Column</th>
-                    <th className="pb-1.5 font-medium">Values</th>
-                    <th className="pb-1.5 font-medium">Why it&apos;s listed</th>
+                    <th scope="col" className="w-[84px] pb-1.5 font-medium">Protected</th>
+                    <th scope="col" className="pb-1.5 font-medium">Column</th>
+                    <th scope="col" className="pb-1.5 font-medium">Values</th>
+                    <th scope="col" className="pb-1.5 font-medium">Why it&apos;s listed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -385,12 +385,12 @@ export function FairnessRunPanel({
             <table className="w-full min-w-[640px] text-[12.5px]">
               <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--fm-ink3)]">
                 <tr>
-                  <th className="pb-1.5 font-medium">Attribute</th>
-                  <th className="pb-1.5 font-medium">Groups</th>
-                  <th className="pb-1.5 text-right font-medium">Impact ratio</th>
-                  <th className="pb-1.5 text-right font-medium">Equal opp. gap</th>
-                  <th className="pb-1.5 text-right font-medium">Eq. odds gap</th>
-                  <th className="pb-1.5 text-right font-medium">Calibration gap</th>
+                  <th scope="col" className="pb-1.5 font-medium">Attribute</th>
+                  <th scope="col" className="pb-1.5 font-medium">Groups</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Impact ratio</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Equal opp. gap</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Eq. odds gap</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Calibration gap</th>
                 </tr>
               </thead>
               <tbody>

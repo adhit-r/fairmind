@@ -207,12 +207,12 @@ export default function OrgMembersPage() {
             <table className="w-full">
               <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-left font-bold text-black">Name</th>
-                  <th className="px-6 py-4 text-left font-bold text-black">Email</th>
-                  <th className="px-6 py-4 text-left font-bold text-black">Role</th>
-                  <th className="px-6 py-4 text-left font-bold text-black">Status</th>
-                  <th className="px-6 py-4 text-left font-bold text-black">Joined</th>
-                  <th className="px-6 py-4 text-left font-bold text-black">Actions</th>
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">Name</th>
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">Email</th>
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">Role</th>
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">Status</th>
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">Joined</th>
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">Actions</th>
                 </tr>
               </thead>
               <tbody>

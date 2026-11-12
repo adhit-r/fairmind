@@ -70,18 +70,6 @@ def _client() -> TestClient:
     async def callback() -> dict[str, bool]:
         return {"public": True}
 
-    @app.post("/api/v1/auth/oauth2/validate")
-    async def oauth2_validate() -> dict[str, bool]:
-        return {"public": True}
-
-    @app.post("/api/v1/auth/oauth2/sync-user")
-    async def oauth2_sync_user() -> dict[str, bool]:
-        return {"public": True}
-
-    @app.post("/api/v1/auth/oauth2/refresh")
-    async def oauth2_refresh() -> dict[str, bool]:
-        return {"public": True}
-
     @app.get("/api/v1/protected")
     async def protected() -> dict[str, bool]:
         return {"protected": True}
@@ -217,9 +205,6 @@ def test_public_route_requires_the_declared_http_method() -> None:
     [
         "/api/v1/register",
         "/api/v1/auth/callback",
-        "/api/v1/auth/oauth2/validate",
-        "/api/v1/auth/oauth2/sync-user",
-        "/api/v1/auth/oauth2/refresh",
     ],
 )
 def test_identity_bootstrap_routes_are_public_without_an_access_token(path: str) -> None:

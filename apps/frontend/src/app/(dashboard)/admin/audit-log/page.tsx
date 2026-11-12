@@ -150,22 +150,22 @@ export default function AdminAuditLogPage() {
             <table className="w-full">
               <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Timestamp
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     User
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Action
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Resource
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     IP Address
                   </th>
                 </tr>

@@ -134,7 +134,7 @@ export function MonitoringRunPanel({
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--fm-ink3)]">
-                <tr><th className="pb-1.5 font-medium">Attribute</th><th className="pb-1.5 font-medium">Selection now vs baseline</th><th className="pb-1.5 text-right font-medium">Max rate drift</th><th className="pb-1.5 text-right font-medium">Impact ratio</th><th className="pb-1.5 text-right font-medium">Worst PSI</th></tr>
+                <tr><th scope="col" className="pb-1.5 font-medium">Attribute</th><th scope="col" className="pb-1.5 font-medium">Selection now vs baseline</th><th scope="col" className="pb-1.5 text-right font-medium">Max rate drift</th><th scope="col" className="pb-1.5 text-right font-medium">Impact ratio</th><th scope="col" className="pb-1.5 text-right font-medium">Worst PSI</th></tr>
               </thead>
               <tbody>
                 {result.result.attributes.map((a) => (

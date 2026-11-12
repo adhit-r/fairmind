@@ -387,3 +387,47 @@ def test_invitation_expiry_compares_naive_and_aware_timestamps_in_utc():
     assert not _expired(now + timedelta(days=1))
     assert _expired((now - timedelta(minutes=1)).replace(tzinfo=None))
     assert not _expired((now + timedelta(days=1)).replace(tzinfo=None))
+
+
+@pytest.mark.asyncio
+async def test_invitation_preview_shows_only_pending_invitations(monkeypatch):
+    """An unknown, revoked or used link answers 404 and discloses nothing (re-audit N9)."""
+    import secrets
+    import uuid
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timedelta
+
+    from fastapi import HTTPException
+    from sqlalchemy import text
+
+    from api.routes import org_management
+    from tests import pg
+    from tests.test_registration_approval import _Db
+
+    engine = pg.fresh_engine()
+    db = _Db(engine)
+
+    @asynccontextmanager
+    async def connection():
+        yield db
+
+    monkeypatch.setattr(org_management, "get_db_connection", connection)
+    owner, org = str(uuid.uuid4()), str(uuid.uuid4())
+    tokens = {status: secrets.token_urlsafe(16) for status in ("pending", "accepted", "cancelled")}
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, email, username, role, is_active) VALUES (:id, :e, :id, 'analyst', TRUE)"),
+                     {"id": owner, "e": f"{owner}@test.invalid"})
+        conn.execute(text("INSERT INTO organizations (id, name, slug, owner_id) VALUES (:id, 'Inviting', :id, :o)"),
+                     {"id": org, "o": owner})
+        for status, token in tokens.items():
+            conn.execute(text("INSERT INTO org_invitations (id, org_id, email, role, token, expires_at, status) "
+                              "VALUES (:id, :org, 'invitee@test.invalid', 'member', :t, :exp, :s)"),
+                         {"id": str(uuid.uuid4()), "org": org, "t": token, "s": status,
+                          "exp": datetime.utcnow() + timedelta(days=7)})
+
+    shown = await org_management.get_invitation_details(tokens["pending"])
+    assert shown.org_name == "Inviting"
+    for token in (tokens["accepted"], tokens["cancelled"], "not-a-real-token"):
+        with pytest.raises(HTTPException) as refused:
+            await org_management.get_invitation_details(token)
+        assert refused.value.status_code == 404
