@@ -39,10 +39,8 @@ export function useAuth() {
 
       if (response.success && response.data) {
         apiClient.setAccessToken(response.data.access_token)
-        apiClient.setRefreshToken(response.data.refresh_token)
         if (typeof window !== 'undefined') {
           localStorage.setItem('access_token', response.data.access_token)
-          localStorage.setItem('refresh_token', response.data.refresh_token)
         }
         return response.data
       } else {
@@ -74,10 +72,8 @@ export function useAuth() {
 
       if (response.success && response.data) {
         apiClient.setAccessToken(response.data.access_token)
-        apiClient.setRefreshToken(response.data.refresh_token)
         if (typeof window !== 'undefined') {
           localStorage.setItem('access_token', response.data.access_token)
-          localStorage.setItem('refresh_token', response.data.refresh_token)
         }
         return response.data
       } else {
@@ -149,18 +145,12 @@ export function useAuth() {
       )
 
       if (response.success && response.data) {
-        const { access_token, refresh_token, user } = response.data
+        const { access_token, user } = response.data
 
         // Store tokens
         apiClient.setAccessToken(access_token)
-        if (refresh_token) {
-          apiClient.setRefreshToken(refresh_token)
-        }
         if (typeof window !== 'undefined') {
           localStorage.setItem('access_token', access_token)
-          if (refresh_token) {
-            localStorage.setItem('refresh_token', refresh_token)
-          }
         }
 
         // Set user in state

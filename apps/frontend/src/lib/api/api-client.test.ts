@@ -157,6 +157,31 @@ test('refreshes an expired current-user request once before returning its authen
   ])
 })
 
+test('refreshes with the HttpOnly cookie when no refresh token is held in the page', async () => {
+  const storage = installBrowser()
+  storage.setItem('access_token', 'expired-access')
+  const client = new ApiClient('https://fairmind.test')
+  client.setAccessToken('expired-access')
+  const refreshCalls: RequestInit[] = []
+  let meCalls = 0
+  globalThis.fetch = (async (url, init) => {
+    if (String(url).endsWith('/api/v1/auth/refresh')) {
+      refreshCalls.push(init ?? {})
+      return response(200, { access_token: 'refreshed-access' })
+    }
+    meCalls += 1
+    return meCalls === 1 ? response(401, { detail: 'expired' }) : response(200, { id: 'user-1' })
+  }) as typeof fetch
+
+  const result = await client.get('/api/v1/auth/me', { enableRetry: false })
+
+  assert.equal(result.success, true)
+  assert.equal(refreshCalls.length, 1)
+  assert.equal(refreshCalls[0].body, '{}') // the token travels in the cookie, not the body
+  assert.equal(refreshCalls[0].credentials, 'include')
+  assert.equal(storage.getItem('refresh_token'), null)
+})
+
 test('does not turn UI organization selection into API query authority', async () => {
   const storage = installBrowser()
   storage.setItem('selected_org_id', 'organization-1')

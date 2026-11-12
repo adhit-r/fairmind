@@ -322,10 +322,9 @@ export class ApiClient {
   }
 
   private async refreshAccessToken(): Promise<boolean> {
+    // Browsers hold the refresh token in the HttpOnly fm_refresh cookie, sent with
+    // this request; a token in memory (older sessions) still works.
     const refreshToken = this.refreshToken
-    if (!refreshToken) {
-      return false
-    }
 
     if (this.refreshPromise) {
       return this.refreshPromise
@@ -339,7 +338,8 @@ export class ApiClient {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+          body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
+          credentials: 'include',
         })
 
         if (!response.ok) {
@@ -451,6 +451,9 @@ export class ApiClient {
         const response = await fetch(url, {
           ...fetchOptions,
           headers,
+          // Carries the HttpOnly refresh cookie both through the same-origin proxy
+          // and to an API on another origin of the same site (local development).
+          credentials: 'include',
           signal: controller.signal,
         })
 
@@ -470,7 +473,7 @@ export class ApiClient {
         }
 
         if (!response.ok) {
-          if (response.status === 401 && allowRefresh && this.refreshToken) {
+          if (response.status === 401 && allowRefresh) {
             const refreshed = await this.refreshAccessToken()
             if (refreshed) {
               headers['Authorization'] = `Bearer ${this.accessToken}`

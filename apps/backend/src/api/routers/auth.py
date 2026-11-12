@@ -2,7 +2,7 @@
 Authentication routes for JWT-based security and Authentik OAuth2 integration.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
@@ -86,7 +86,29 @@ class LoginResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Browsers send the fm_refresh cookie instead; the CLI, SDK and MCP send it here.
+    refresh_token: Optional[str] = None
+
+
+# The browser's refresh token lives in this HttpOnly cookie, out of reach of page
+# scripts, so an XSS cannot read and replay a 30-day credential (audit S2, S3).
+# Path /api covers the backend's own /api/v1/auth/* and the frontend proxy's
+# /api/proxy/api/v1/auth/*; SameSite=Strict keeps other sites from sending it.
+REFRESH_COOKIE = "fm_refresh"
+
+
+def _set_refresh_cookie(response: Optional[Response], token: str) -> None:
+    if response is None:
+        return
+    response.set_cookie(
+        REFRESH_COOKIE,
+        token,
+        max_age=auth_manager.refresh_token_expire_days * 86400,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="strict",
+        path="/api",
+    )
 
 
 class RefreshResponse(BaseModel):
@@ -132,7 +154,7 @@ class AuthentikCallbackResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(login_data: LoginRequest):
+async def login(login_data: LoginRequest, response: Response = None):
     logger.info(f"Login attempt for: {login_data.email}")
     """
     Authenticate user and return JWT tokens using new JWT infrastructure.
@@ -212,6 +234,7 @@ async def login(login_data: LoginRequest):
                 "org_id": user.org_id,
             }
         }
+        _set_refresh_cookie(response, response_data["refresh_token"])
         return LoginResponse(**response_data)
         
     except HTTPException:
@@ -246,7 +269,7 @@ def _check_password_length(password: str) -> None:
 
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
-async def signup(payload: SignupRequest):
+async def signup(payload: SignupRequest, response: Response):
     """Create an account for someone holding an invitation, then sign them in.
 
     The account is created without an organization; the invitee then accepts the
@@ -296,14 +319,17 @@ async def signup(payload: SignupRequest):
         raise HTTPException(status_code=500, detail="Signup failed")
 
     logger.info(f"Signup by invitation: user={user_id}")
-    return await login(LoginRequest(email=payload.email, password=payload.password))
+    return await login(LoginRequest(email=payload.email, password=payload.password), response)
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-async def refresh_token(refresh_data: RefreshRequest):
-    """Refresh access token using refresh token with new JWT infrastructure."""
+async def refresh_token(request: Request, refresh_data: RefreshRequest = RefreshRequest()):
+    """A new access token for a refresh token from the body or the fm_refresh cookie."""
     try:
-        access_token = await auth_manager.refresh_access_token(refresh_data.refresh_token)
+        token = refresh_data.refresh_token or request.cookies.get(REFRESH_COOKIE)
+        if not token:
+            raise TokenMissingException("No refresh token")
+        access_token = await auth_manager.refresh_access_token(token)
         
         return RefreshResponse(
             access_token=access_token,
@@ -328,10 +354,12 @@ async def refresh_token(refresh_data: RefreshRequest):
 
 @router.post("/logout")
 async def logout(
+    response: Response,
     current_user: TokenData = Depends(get_current_active_user),
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
 ):
     """Logout user and revoke tokens using new JWT infrastructure."""
+    response.delete_cookie(REFRESH_COOKIE, path="/api")
     try:
         # Revoke the current token, and end every session of this user: their refresh
         # tokens stop working (the blacklist alone needs Redis, which production lacks).
@@ -462,7 +490,8 @@ async def reset_password(payload: PasswordResetConfirm):
 @router.post("/callback", response_model=AuthentikCallbackResponse)
 async def authentik_oauth_callback(
     code: str = Query(..., description="Authorization code from Authentik"),
-    state: str = Query(..., description="State parameter for CSRF protection")
+    state: str = Query(..., description="State parameter for CSRF protection"),
+    response: Response = None,
 ):
     """
     Handle Authentik OAuth2 callback.
@@ -598,6 +627,7 @@ async def authentik_oauth_callback(
 
         logger.info(f"User authenticated via Authentik: {user.email}")
 
+        _set_refresh_cookie(response, refresh_token)
         return AuthentikCallbackResponse(
             access_token=access_token,
             refresh_token=refresh_token,
