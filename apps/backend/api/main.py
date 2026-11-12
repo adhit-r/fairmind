@@ -9,7 +9,7 @@ This service provides comprehensive AI governance capabilities including:
 - Versioned assurance planning and evidence review
 """
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -667,8 +667,10 @@ async def list_audit_logs(
             return {"logs": logs}
 
     except Exception as e:
-        logger.warning(f"Audit logs query failed: {e}")
-        return {"logs": []}
+        # Never an empty list on failure: an audit trail that looks empty when it
+        # could not be read is a compliance defect.
+        logger.error(f"Audit logs query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="The audit log could not be read; see the server log")
 
 
 # Production-ready health check endpoints
