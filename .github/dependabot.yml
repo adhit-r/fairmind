@@ -8,6 +8,9 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # tensorflow 2.21 requires h5py<3.15; a 3.16 bump made requirements.txt uninstallable.
+      - dependency-name: "h5py"
+        versions: [">=3.15"]
     groups:
       backend-minor-patch:
         update-types: [minor, patch]
