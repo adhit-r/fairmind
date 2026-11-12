@@ -7,6 +7,9 @@ import { z } from 'zod'
 
 import { API_ENDPOINTS } from './endpoints'
 
+/** Set while the browser is signed in to the public read-only demo; cleared with the session. */
+export const DEMO_FLAG = 'fm_demo'
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T
@@ -310,6 +313,7 @@ export class ApiClient {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('access_token')
       window.localStorage.removeItem('refresh_token')
+      window.localStorage.removeItem(DEMO_FLAG)
     }
   }
 

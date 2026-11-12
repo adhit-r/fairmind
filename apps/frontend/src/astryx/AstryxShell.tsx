@@ -19,6 +19,7 @@ import { createStaticSource } from '@astryxdesign/core/Typeahead'
 import { useMediaQuery } from '@astryxdesign/core/hooks'
 import { useOrg } from '@/context/OrgContext'
 import { useSession } from '@/context/SessionContext'
+import { DEMO_FLAG } from '@/lib/api/api-client'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useAIProvider, useRuns } from '@/lib/api/hooks/usePacks'
 import { useNeedsYou } from './data/needsYou'
@@ -141,6 +142,21 @@ function Me() {
         </Text>
       </span>
       <Button label="Sign out" variant="ghost" size="sm" onClick={() => logout().finally(() => router.push('/login'))} />
+    </div>
+  )
+}
+
+/** Shown while signed in to the public demo: the server refuses every change made there. */
+function DemoNotice() {
+  const [demo, setDemo] = useState(false)
+  useEffect(() => {
+    try { setDemo(localStorage.getItem(DEMO_FLAG) === '1') } catch { /* storage blocked */ }
+  }, [])
+  if (!demo) return null
+  return (
+    <div className="fm-demo-notice" role="note">
+      <Text>You are in the FairMind demo. Look around freely; changes are switched off.</Text>
+      <Link href="/register">Request access</Link>
     </div>
   )
 }
@@ -311,6 +327,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
           content={
             <LayoutContent padding={0}>
               <main id="fm-main" tabIndex={-1} className="fm-main">
+                <DemoNotice />
                 {!orgLoading && !selectedOrg && !WITHOUT_ORG.test(pathname) ? <NoOrganisation /> : children}
               </main>
             </LayoutContent>

@@ -35,6 +35,7 @@ from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
 from core.middleware.error_handling import public_validation_errors
 from middleware.security import (
     SecurityHeadersMiddleware,
+    DemoReadOnlyMiddleware,
     RateLimitMiddleware,
     JWTAuthenticationMiddleware,
 )
@@ -349,6 +350,7 @@ app.add_middleware(AuditLoggingMiddleware)  # Audit logging for compliance
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(OrgIsolationMiddleware)  # Org isolation and context injection
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(DemoReadOnlyMiddleware)  # inside auth: request.state.user is set
 if settings.neon_auth_enabled and settings.is_production:
     app.add_middleware(NeonAuthMiddleware)  # Neon JWT verification middleware
 else:
