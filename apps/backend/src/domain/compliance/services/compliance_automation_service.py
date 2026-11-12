@@ -135,7 +135,9 @@ class ComplianceAutomationService:
             ).fetchall():
                 load = lambda v: v if isinstance(v, dict) else (json.loads(v) if v else {})
                 records.append({"id": r[0], "evidenceType": r[1], "content": load(r[2]), "confidence": r[3], "metadata": load(r[4]), "created_at": r[5]})
-        gate = release_gate(system[1] if system else "high", records)
+        from src.application.services.environmental_service import environmental_gate_enabled
+
+        gate = release_gate(system[1] if system else "high", records, include_environmental=environmental_gate_enabled(db, str(schedule.org_id)))
         requirements = []
         for c in gate["checks"]:
             status = "Fail" if c.get("fails") else {"proven": "Pass", "attested": "Attested"}.get(c["state"], "Not assessed")

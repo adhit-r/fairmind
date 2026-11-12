@@ -11,6 +11,9 @@ import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
 import { Selector } from '@astryxdesign/core/Selector'
 import { CodeBlock } from '@astryxdesign/core/CodeBlock'
+import { Switch } from '@astryxdesign/core/Switch'
+import { apiClient } from '@/lib/api/api-client'
+import { useOrgResource } from '@/lib/api/hooks/usePacks'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Table, pixel, proportional } from '@astryxdesign/core/Table'
 import type { TableColumn } from '@astryxdesign/core/Table'
@@ -143,7 +146,42 @@ function OrganisationSection() {
         {selectedOrg.domain && <MetadataListItem label="Domain">{selectedOrg.domain}</MetadataListItem>}
         <MetadataListItem label="Created">{day(selectedOrg.created_at)}</MetadataListItem>
       </MetadataList>
-      <Banner status="info" title="Read-only for now" description="There is no way to rename an organisation or change its settings from the app yet." />
+      <ReleaseGateSetting canChange={['owner', 'admin'].includes(String(selectedOrg.role).toLowerCase())} orgId={selectedOrg.id} />
+      <Banner status="info" title="Name and domain are read-only for now" description="There is no way to rename an organisation from the app yet." />
+    </VStack>
+  )
+}
+
+/** Whether environmental impact counts in this organisation's release decisions. Off unless an owner or admin turns it on. */
+function ReleaseGateSetting({ orgId, canChange }: { orgId: string; canChange: boolean }) {
+  const setting = useOrgResource<{ environmentalGate: boolean }>('/api/v1/ai-governance/release-gate/settings')
+  const [failure, setFailure] = useState<string | null>(null)
+  async function change(on: boolean) {
+    setFailure(null)
+    const res = await apiClient.put(`/api/v1/ai-governance/release-gate/settings?org_id=${encodeURIComponent(orgId)}`, { environmentalGate: on })
+    if (res.success) setting.reload()
+    else setFailure(res.error || 'The setting could not be saved')
+  }
+  return (
+    <VStack gap={2}>
+      <Heading level={3}>Release gate</Heading>
+      {setting.error ? (
+        <Problem message={setting.error} retry={setting.reload} />
+      ) : (
+        <Switch
+          label="Count environmental impact in release decisions"
+          description={
+            canChange
+              ? 'When on, every system needs an environmental assessment before it can be approved, and energy use is one of the checks its release confidence is scored on.'
+              : 'Only an owner or admin can change this.'
+          }
+          value={setting.data?.environmentalGate ?? false}
+          isLoading={setting.loading}
+          isDisabled={!canChange || setting.loading}
+          changeAction={change}
+        />
+      )}
+      {failure && <Banner status="error" title={failure} />}
     </VStack>
   )
 }

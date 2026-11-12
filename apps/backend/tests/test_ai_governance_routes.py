@@ -260,6 +260,7 @@ def test_ai_governance_new_system_without_evidence_reads_zero_readiness_everywhe
     assert client.get(f"/api/v1/ai-governance/lifecycle/{system_id}/summary").json()["readiness"] == 0
 
 
+@pytest.mark.usefixtures("environmental_gate_on")
 def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticated_org_database):
     workspace_resp = client.post(
         "/api/v1/ai-governance/workspaces",

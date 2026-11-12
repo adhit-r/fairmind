@@ -408,3 +408,12 @@ def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
+
+
+@pytest.fixture
+def environmental_gate_on(monkeypatch):
+    """Organisations leave environmental impact out of the release gate unless an owner turns it on;
+    tests written for the five-check gate turn it on for every organisation."""
+    import src.application.services.environmental_service as environmental_service
+
+    monkeypatch.setattr(environmental_service, "environmental_gate_enabled", lambda db, org_id: bool(org_id))
