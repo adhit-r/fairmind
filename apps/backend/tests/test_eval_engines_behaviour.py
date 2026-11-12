@@ -77,6 +77,23 @@ def test_indirect_injection_sends_the_document_with_the_request():
         _run("EV-SEC-02", live, probes=_csv("prompt", "Summarise this"))
 
 
+def test_cyberseceval_cases_run_pinned_with_their_judge_question():
+    seen, asked = [], []
+
+    def verdict(q, schema):
+        asked.append(q["probe"].get("judgeQuestion"))
+        return {"violation": "PWNED" in q["answer"], "reason": "r"}
+
+    live = _live(answer=lambda p: seen.append(p) or ("PWNED" if len(seen) <= 2 else "Summary."), verdict=verdict)
+    out = _run("EV-SEC-02", live, params={"probe_source": "CyberSecEval"})
+    assert len(seen) == 51 and all(s == s.rstrip() for s in seen) and all(asked)
+    assert out["status"] == "failed" and out["metrics"]["violations"] == 2  # 2 of 51 is over 2%
+    assert out["metrics"]["probeSource"].startswith("CyberSecEval") and "@ ef5a774" in out["metrics"]["probeSource"]
+    assert "CyberSecEval" in [p for p in REGISTRY["EV-SEC-02"].spec()["params"] if p["name"] == "probe_source"][0]["options"]
+    with pytest.raises(EngineError, match="not a probe source"):
+        _run("EV-SEC-01", live, params={"probe_source": "CyberSecEval"})
+
+
 def test_probes_are_written_by_the_judge_from_the_intended_use():
     calls = []
 

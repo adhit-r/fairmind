@@ -35,6 +35,7 @@ class Param:
     kind: str = "text"  # text | number | json
     default: Any = None
     required: bool = False
+    options: Tuple[str, ...] = ()  # a text param limited to these values, shown as a choice
 
 
 # (system, user, JSON schema) -> the organisation's model's JSON answer; raises EngineError

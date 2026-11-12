@@ -334,7 +334,19 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
                 <label htmlFor={`param-${p.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
                   {p.label}{p.required ? '' : ' (optional)'}
                 </label>
-                {p.kind === 'json' ? (
+                {p.options?.length ? (
+                  <select
+                    id={`param-${p.name}`}
+                    value={params[p.name] ?? ''}
+                    onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
+                    className={FIELD}
+                  >
+                    <option value="">None</option>
+                    {p.options.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                ) : p.kind === 'json' ? (
                   <textarea
                     id={`param-${p.name}`}
                     rows={3}
