@@ -97,3 +97,5 @@
 .fm-skip:focus { top: 12px; }
 .fm-main { display: block; min-height: 100%; }
 .fm-main:focus { outline: none; }
+.fm-demo-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin: 12px 24px 0; padding: 10px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-element); background: var(--color-background-muted); }
+.fm-demo-notice a { font-weight: 600; color: var(--color-text-primary); }

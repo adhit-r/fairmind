@@ -31,6 +31,7 @@ _PUBLIC_ROUTES = frozenset(
         ("GET", "/redoc"),
         ("GET", "/api/v1/auth/health"),
         ("POST", "/api/v1/auth/callback"),
+        ("POST", "/api/v1/auth/demo"),
         ("POST", "/api/v1/auth/login"),
         ("POST", "/api/v1/auth/password-reset"),
         ("POST", "/api/v1/auth/password-reset/request"),
@@ -39,6 +40,34 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/register"),
     }
 )
+
+
+# What the demo account may still send besides reads: ending its own session.
+_DEMO_WRITES = frozenset({("POST", "/api/v1/auth/logout"), ("POST", "/api/v1/auth/refresh")})
+
+
+class DemoReadOnlyMiddleware(BaseHTTPMiddleware):
+    """Refuses every change made as the public demo user (settings.demo_user_email).
+
+    Runs inside the authentication middleware, so request.state.user is set. One
+    guard for every route: a new endpoint cannot forget it.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        demo = (settings.demo_user_email or "").strip().lower()
+        user = getattr(request.state, "user", None)
+        if (
+            demo
+            and user is not None
+            and (getattr(user, "email", "") or "").lower() == demo
+            and request.method not in ("GET", "HEAD", "OPTIONS")
+            and (request.method, request.url.path) not in _DEMO_WRITES
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "The demo is read-only. Request access to use FairMind with your own systems."},
+            )
+        return await call_next(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { apiClient, type ApiResponse } from '../api-client'
+import { apiClient, DEMO_FLAG, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 import type { LoginRequest, LoginResponse, User } from '../types'
 
@@ -27,16 +27,22 @@ export function useAuth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const login = async (credentials: LoginRequest, headers?: Record<string, string>) => {
+  const login = (credentials: LoginRequest, headers?: Record<string, string>) =>
+    signIn(API_ENDPOINTS.auth.login, credentials, headers)
+
+  /** Signs in to the public demo organisation, read-only. */
+  const loginDemo = async (headers?: Record<string, string>) => {
+    const data = await signIn(API_ENDPOINTS.auth.demo, {}, headers)
+    localStorage.setItem(DEMO_FLAG, '1')
+    return data
+  }
+
+  const signIn = async (path: string, body: unknown, headers?: Record<string, string>) => {
     try {
       setLoading(true)
       setError(null)
 
-      const response: ApiResponse<LoginResponse> = await apiClient.post(
-        API_ENDPOINTS.auth.login,
-        credentials,
-        { headers }
-      )
+      const response: ApiResponse<LoginResponse> = await apiClient.post(path, body, { headers })
 
       if (response.success && response.data) {
         apiClient.setAccessToken(response.data.access_token)
@@ -176,6 +182,7 @@ export function useAuth() {
     loading,
     error,
     login,
+    loginDemo,
     register,
     logout,
     loginWithAuthentik,

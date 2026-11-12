@@ -183,6 +183,9 @@ class Settings(BaseSettings):
     sentry_dsn: Optional[str] = None
     # Cloudflare Turnstile secret; when set, the public forms require a token (config/turnstile.py).
     turnstile_secret_key: Optional[str] = None
+    # The public demo: POST /api/v1/auth/demo signs a visitor in as this existing
+    # user, and DemoReadOnlyMiddleware refuses every change made as them. Off when unset.
+    demo_user_email: Optional[str] = None
     
     # AWS S3
     aws_access_key_id: Optional[str] = None

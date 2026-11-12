@@ -20,10 +20,11 @@ import { IconAlertTriangle, IconBrandGoogle } from '@tabler/icons-react'
 import { safeNextPath } from '@/lib/safe-next-path'
 
 const AUTHENTIK_ENABLED = !!process.env.NEXT_PUBLIC_AUTHENTIK_URL
+const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO === 'true'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login, loading, error } = useAuth()
+  const { login, loginDemo, loading, error } = useAuth()
   const { login: authentikLogin, isLoading: ssoLoading } = useAuthentik()
   const { toast } = useToast()
 
@@ -54,6 +55,19 @@ export default function LoginPage() {
       })
     } finally {
       setCheckRound((n) => n + 1) // a check token works once
+    }
+  }
+
+  const tryDemo = async () => {
+    try {
+      await loginDemo()
+      router.push('/dashboard')
+    } catch (err) {
+      toast({
+        title: 'The demo did not open',
+        description: err instanceof Error ? err.message : 'Try again in a moment.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -145,6 +159,22 @@ export default function LoginPage() {
               {ssoLoading ? 'Redirecting...' : 'Continue with SSO'}
             </Button>
           </>
+        )}
+
+        {DEMO_ENABLED && (
+          <div className="mt-6 rounded-[14px] border border-[var(--fm-line)] p-4 text-center">
+            <p className="text-sm font-medium">See FairMind before you sign up</p>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">A demo organisation with real systems, evaluations and evidence. Read-only.</p>
+            <Button
+              type="button"
+              variant="neutral"
+              className="w-full border border-[var(--fm-line)]"
+              onClick={tryDemo}
+              disabled={loading}
+            >
+              Try the demo
+            </Button>
+          </div>
         )}
 
         <div className="mt-6 text-center">
