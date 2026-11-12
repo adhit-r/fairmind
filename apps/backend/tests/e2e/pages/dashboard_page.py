@@ -23,7 +23,6 @@ class DashboardPage(BasePage):
         self.dashboard_shell = 'text="DASHBOARD"'
         self.dashboard_loading = '[data-testid="dashboard-loading"]'
         self.dashboard_error = '[data-testid="dashboard-error"]'
-        self.bias_detection_card = '[data-testid="bias-detection"], .bias-detection-card'
         self.monitoring_card = '[data-testid="monitoring"], .monitoring-card'
         self.navigation_menu = 'nav, [role="navigation"], .navigation'
 
@@ -43,6 +42,8 @@ class DashboardPage(BasePage):
             "release readiness",
             "register your first ai system",
             "dashboard",
+            # The E2E admin is never stored, so it belongs to no organisation; the shell then shows this one page.
+            "you are not in an organisation yet",
         ]
 
         deadline = time.monotonic() + 15
@@ -65,23 +66,10 @@ class DashboardPage(BasePage):
             """Dashboard is in error state."""
             return self.is_visible(self.dashboard_error)        
 
-    def click_bias_detection(self) -> None:
-        """Click on bias detection card or link."""
-        if self.is_visible(self.bias_detection_card):
-            self.click(self.bias_detection_card)
-
     def click_monitoring(self) -> None:
         """Click on monitoring card or link."""
         if self.is_visible(self.monitoring_card):
             self.click(self.monitoring_card)
-
-    def navigate_to_bias_detection(self) -> None:
-        """Navigate to bias detection page."""
-        link = self.page.locator('a[href="/bias"]').first
-        if self.page.locator('a[href="/bias"]').count() > 0:
-            link.click()
-        else:
-            self.navigate("/bias")
 
     def navigate_to_monitoring(self) -> None:
         """Navigate to monitoring page."""

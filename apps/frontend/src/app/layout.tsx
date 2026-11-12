@@ -12,9 +12,9 @@ const figtree = Figtree({ subsets: ["latin"], variable: "--font-figtree" })
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
-  title: "FairMind - Build Fair & Trustworthy AI",
-  description: "Evidence-grade AI governance and assurance control plane for scoped evaluation planning, evidence review, and human decisions.",
-  keywords: ["AI governance", "bias detection", "ethical AI", "AI compliance", "fairness", "MLOps"],
+  title: "FairMind",
+  description: "Know every AI system you run, prove each one is fit to release, and give auditors records they can verify.",
+  keywords: ["AI governance", "AI release decisions", "AI compliance", "EU AI Act", "ISO 42001", "AI agents"],
   authors: [{ name: "FairMind Team" }],
   viewport: {
     width: "device-width",
@@ -32,8 +32,8 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "FairMind - Build Fair & Trustworthy AI",
-    description: "Plan AI evaluations and review scoped evidence without unsupported execution or compliance claims.",
+    title: "FairMind",
+    description: "Know every AI system you run, prove each one is fit to release, and give auditors records they can verify.",
     type: "website",
     images: [
       {
@@ -46,8 +46,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "FairMind - Build Fair & Trustworthy AI",
-    description: "Evidence-grade AI assurance control plane",
+    title: "FairMind",
+    description: "Proof-grade release decisions for every AI system you run.",
     images: ["/logo.png"],
   },
 }

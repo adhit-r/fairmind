@@ -10,6 +10,9 @@ from sqlalchemy import text as sql
 from api.main import app
 from src.application.services.fairness_run_service import effective_tier, gate_explain, path_forward, release_gate, tier_reasons
 from tests.auth_helpers import auth_headers
+import pytest
+
+pytestmark = pytest.mark.usefixtures("environmental_gate_on")  # written for the five-check gate
 
 NOW = datetime(2026, 11, 7, tzinfo=timezone.utc)
 PASSING_RUN = {"id": "run", "evidenceType": "fairness_test", "confidence": 0.95, "metadata": {"provenance_class": "measured"}, "timestamp": "2026-11-06T00:00:00+00:00", "content": {"all_checks_pass": True, "attributes": []}}

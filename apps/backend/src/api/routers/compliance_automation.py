@@ -595,56 +595,6 @@ def acknowledge_violation(
 # REMEDIATION ENDPOINTS
 # ============================================================================
 
-@router.post("/gap-remediation", response_model=GapRemediationResponse)
-def get_remediation_plan(
-    request: GapRemediationRequest,
-    current_user=Depends(get_current_user),
-) -> GapRemediationResponse:
-    """
-    Get an AI-generated remediation plan for a compliance gap.
-
-    Uses LLM-powered analysis to generate step-by-step remediation
-    guidance for specific compliance gaps.
-    """
-    try:
-        # TODO: Call AIComplianceAutomationService.generate_remediation_plan()
-        logger.info(f"Generating remediation plan for gap: {request.gap_id}")
-
-        # Placeholder response
-        return GapRemediationResponse(
-            plan_id=str(uuid.uuid4()),
-            framework=request.framework,
-            gap_id=request.gap_id,
-            gap_description="Placeholder gap description",
-            severity=SeverityEnum.HIGH,
-            remediation_steps=[
-                RemediationStepRequest(
-                    step_number=1,
-                    action="Analyze requirement",
-                    description="Understand the compliance requirement",
-                    effort_hours=2,
-                ),
-                RemediationStepRequest(
-                    step_number=2,
-                    action="Implement fix",
-                    description="Implement the required fix",
-                    effort_hours=8,
-                ),
-            ],
-            estimated_effort_hours=10,
-            legal_citations=[request.framework.value],
-            success_criteria=["Requirement met", "Evidence documented"],
-            generated_by="ai",
-            generated_at=datetime.utcnow(),
-        )
-
-    except Exception as e:
-        logger.error(f"Error generating remediation plan: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate remediation plan"
-        )
-
 
 # ============================================================================
 # STATUS ENDPOINTS

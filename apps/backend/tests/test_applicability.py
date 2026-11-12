@@ -161,6 +161,7 @@ def test_suggest_route():
     assert client.post(f"{GOV}/applicability/suggest", json={"use": "astrology"}).status_code == 422
 
 
+@pytest.mark.usefixtures("environmental_gate_on")  # written for the five-check gate
 def test_confirm_sets_the_tier_keeps_metadata_and_records_evidence():
     client = _client(str(uuid.uuid4()), "owner@test.invalid")
     sid = _system(client)
@@ -257,6 +258,7 @@ def test_a_lower_tier_needs_a_second_person():
     assert fresh.status_code == 200 and fresh.json()["applicability"]["tier"] == "low"
 
 
+@pytest.mark.usefixtures("environmental_gate_on")  # written for the five-check gate
 def test_seal_carries_the_tier_and_the_applicability_record():
     client = _client(str(uuid.uuid4()), "owner@test.invalid")
     sid = _system(client)

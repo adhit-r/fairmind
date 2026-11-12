@@ -26,10 +26,12 @@ export function bandRange({ from, to }: GateExplain['row'][number]) {
   return `${two(from)} to ${two(to - 0.01)}`
 }
 
+const CHECK_WORDS: Record<number, string> = { 4: 'four', 5: 'five' }
+
 export function arithmetic(gate: ReleaseGate) {
   const counts = `${gate.proven} proven, ${gate.attested} attested, ${gate.open} open.`
   if (!gate.explain) return `Confidence ${two(gate.confidence)}: ${counts}`
-  return `${cap(gate.explain.effectiveTier)} tier. Confidence ${two(gate.confidence)} is the average of five checks, each worth up to ${two(gate.explain.perCheck)}: ${counts}`
+  return `${cap(gate.explain.effectiveTier)} tier. Confidence ${two(gate.confidence)} is the average of ${CHECK_WORDS[gate.checks.length] ?? gate.checks.length} checks, each worth up to ${two(gate.explain.perCheck)}: ${counts}`
 }
 
 const checkName = (key: GateCheck['key'], gate: ReleaseGate) => (gate.checks.find((c) => c.key === key)?.label ?? key.replace(/_/g, ' ')).toLowerCase()

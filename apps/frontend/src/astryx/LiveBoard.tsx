@@ -17,7 +17,7 @@ import { useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
 import type { GateCheck } from '@/lib/api/hooks/useSystemFile'
 import { checkCell, classLabel, KIND_TITLE, type CellState } from '@/components/ui/matrix'
 
-/** The five release checks the gate scores, in the order the release story reads, then the decision. */
+/** The release checks the gate can score (environmental only where the organisation weighs it), in the order the release story reads, then the decision. */
 const CHECKS: Array<{ key: GateCheck['key']; name: string; group: string }> = [
   { key: 'data_governance', name: 'Data governance', group: 'Data' },
   { key: 'fairness', name: 'Fairness', group: 'Test' },
@@ -27,7 +27,7 @@ const CHECKS: Array<{ key: GateCheck['key']; name: string; group: string }> = [
 ]
 const GROUPS = ['Data', 'Test', 'Release', 'Operate']
 type Col = { key: string; name: string; group: string }
-const COLS: Col[] = [...CHECKS.slice(0, 4), { key: 'decision', name: 'Decision', group: 'Release' }, CHECKS[4]]
+const ALL_COLS: Col[] = [...CHECKS.slice(0, 4), { key: 'decision', name: 'Decision', group: 'Release' }, CHECKS[4]]
 
 /** A decision cell: approved is proven; a pending request waits on a person; a rejection fails. */
 type DecisionState = 'proven' | 'needs' | 'fails' | 'planned'
@@ -106,6 +106,8 @@ export function LiveBoard() {
       return gate ? [{ system: s, gate }] : []
     })
   }, [systems, gates.data])
+  // An organisation that keeps energy use out of its release gate gets no Environment column.
+  const COLS = gates.data?.some((g) => g.checks.some((c) => c.key === 'environmental')) ? ALL_COLS : ALL_COLS.filter((c) => c.key !== 'environmental')
 
   const stateOf = (gate: EstateGate, col: Col): string => {
     if (col.key === 'decision') return decisionCell(gate.approvalStatus)
@@ -155,8 +157,13 @@ export function LiveBoard() {
       <section className="fm-board">
         <EmptyState
           title="No registered AI systems yet"
-          description="Register a system, or connect a source and let discovery find them. Each registered system gets a row here."
-          actions={<Button variant="primary" label="Go to Discovery" href="/discovery" />}
+          description="Register systems by hand or from a CSV, or connect a source and let discovery find them. Each registered system gets a row here."
+          actions={
+            <>
+              <Button variant="primary" label="Register systems" href="/onboard" />
+              <Button label="Find unregistered AI" href="/discovery" />
+            </>
+          }
         />
       </section>
     )

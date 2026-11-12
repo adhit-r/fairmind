@@ -228,20 +228,6 @@ export const reportAPI = {
     },
 }
 
-// Remediation APIs
-export const remediationAPI = {
-    /**
-     * Get AI-generated remediation plan for a compliance gap
-     */
-    generatePlan: async (data: {
-        framework: string
-        gap_id: string
-        model_id?: string
-    }): Promise<RemediationPlan> => {
-        return unwrap(api.post('/api/v1/compliance/gap-remediation', data))
-    },
-}
-
 // System Status API
 export const statusAPI = {
     /**

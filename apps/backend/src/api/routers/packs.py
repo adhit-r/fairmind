@@ -950,6 +950,29 @@ def _edge(step, *needles: str) -> Optional[str]:
     return None
 
 
+def _escalate(db: Session, run, wf, step, user_id: Optional[str]) -> dict:
+    """Email the organisation's owners and admins; the ledger records how many were told, or that nobody was."""
+    from src.application.services.reviewer_notify import decision_email, reviewer_emails, send_in_background
+
+    recipients = reviewer_emails(db, run["org_id"], user_id)
+    if recipients:
+        send_in_background(
+            recipients,
+            f"Escalated: {wf.name}",
+            decision_email(
+                f"{wf.name} was escalated",
+                [f"The run reached \"{step.title}\" and needs the {wf.approver} to look at it."],
+                "/runs",
+            ),
+        )
+    return {
+        "approver": wf.approver,
+        "notificationSent": bool(recipients),
+        "recipients": len(recipients),
+        **({} if recipients else {"reason": "The organisation has no owner or admin with an email address."}),
+    }
+
+
 def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -> None:
     """Move the run onto step_id and through every step the engine finishes itself. Caller commits."""
     wf = WORKFLOWS[run["workflow_id"]]
@@ -969,8 +992,7 @@ def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -
         if step.kind == "trigger":
             payload = {"systemId": run["ai_system_id"], "startedBy": run["started_by"], "workflowVersion": run["workflow_version"]}
         elif step.kind == "escalate":
-            # ponytail: recorded only; no notifier exists yet, so nobody is messaged.
-            payload = {"approver": wf.approver, "notificationSent": False}
+            payload = _escalate(db, run, wf, step, user_id)
         else:
             head = db.execute(
                 text("SELECT seq, hash FROM workflow_run_events WHERE run_id = :id ORDER BY seq DESC LIMIT 1"),

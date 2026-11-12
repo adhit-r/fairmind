@@ -308,28 +308,6 @@ def get_models(m: OrgMembership = Depends(org_member)):
         logger.error(f"Error getting models: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/reports")
-def get_reports(m: OrgMembership = Depends(org_member)):
-    """Get reports for frontend display"""
-    # Placeholder for now
-    return {
-        "success": True,
-        "data": [],
-        "count": 0
-    }
-
-@router.get("/monitoring-metrics")
-def get_monitoring_metrics(m: OrgMembership = Depends(org_member)):
-    """Get monitoring metrics for frontend display"""
-    # Placeholder
-    return {
-        "success": True,
-        "data": {
-            "system_health": "healthy",
-            "active_models": 0,
-            "total_predictions": 0
-        }
-    }
 
 @router.get("/health")
 def database_health():
@@ -354,11 +332,3 @@ def database_health():
 @main_router.get("/models")
 def get_models_main(m: OrgMembership = Depends(org_member)):
     return get_models(m)
-
-@main_router.get("/reports") 
-def get_reports_main(m: OrgMembership = Depends(org_member)):
-    return get_reports(m)
-
-@main_router.get("/monitoring/metrics")
-def get_monitoring_metrics_main(m: OrgMembership = Depends(org_member)):
-    return get_monitoring_metrics(m)

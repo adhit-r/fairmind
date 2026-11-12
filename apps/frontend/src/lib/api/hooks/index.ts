@@ -13,7 +13,7 @@ export { usePolicyActions, usePolicyResource } from './usePolicies'
 export { useAIGovernance } from './useAIGovernance'
 export { useDatasets } from './useDatasets'
 export { useAuditLogs } from './useAuditLogs'
-export { useMonitoring, useSystemHealth } from './useMonitoring'
+export { useSystemHealth } from './useMonitoring'
 export { useAnalytics } from './useAnalytics'
 export { useEvaluationRuns } from './useEvaluationRuns'
 export type {

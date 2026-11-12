@@ -65,7 +65,7 @@ export function NeedsYouProvider({ children }: { children: ReactNode }) {
     for (const r of approvals.data ?? []) {
       // Approval requests are not org-scoped yet; keep only this estate's systems.
       if (r.status !== 'pending' || !names.has(r.entity_id)) continue
-      out.push({ id: `approval:${r.id}`, kind: 'approval', title: `Release decision for ${names.get(r.entity_id) ?? 'a system'}`, detail: 'Waiting for a reviewer to approve or reject the release.', who: r.requested_by ? `Requested by ${r.requested_by}` : 'Requested', cta: 'Review', panel: true })
+      out.push({ id: `approval:${r.id}`, kind: 'approval', title: `Release decision for ${names.get(r.entity_id) ?? 'a system'}`, detail: 'Waiting for a reviewer to approve or reject the release.', who: r.requested_by ? `Requested by ${r.requested_by}` : 'Requested', cta: 'Review', href: `/systems/${encodeURIComponent(r.entity_id)}?decide` })
     }
     for (const run of waiting.data ?? []) {
       const approval = run.waitingFor === 'approval'

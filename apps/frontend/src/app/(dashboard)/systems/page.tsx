@@ -131,7 +131,12 @@ function Lanes() {
       <EmptyState
         title="No AI systems yet"
         description="Connect GitHub, MLflow or Hugging Face to find them, or register one by hand."
-        actions={<Button variant="primary" label="Find unregistered AI" href="/discovery" />}
+        actions={
+          <>
+            <Button variant="primary" label="Register systems" href="/onboard" />
+            <Button label="Find unregistered AI" href="/discovery" />
+          </>
+        }
       />
     )
   }
@@ -284,7 +289,10 @@ export default function SystemsPage() {
             <Heading level={1}>AI systems</Heading>
             <Text color="secondary">Every AI system found and registered, by where it came from and how far along it is.</Text>
           </VStack>
-          <Button label="Find unregistered AI" variant="secondary" href="/discovery" />
+          <HStack gap={2}>
+            <Button label="Register systems" variant="secondary" href="/onboard" />
+            <Button label="Find unregistered AI" variant="secondary" href="/discovery" />
+          </HStack>
         </HStack>
         <Suspense fallback={<Skeleton height={56} />}>
           <Lanes />

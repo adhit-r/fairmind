@@ -334,20 +334,3 @@ async def get_model_compliance(
         )
 
 
-@router.post("/evidence/manual")
-def upload_manual_evidence(
-    control_id: str,
-    framework: str,
-    evidence_type: str,
-    data: Dict[str, Any]
-):
-    """Upload manual evidence (documents, screenshots, attestations)"""
-    
-    # This would handle manual evidence uploads
-    # For now, return a placeholder
-    return {
-        "message": "Manual evidence upload coming soon",
-        "control_id": control_id,
-        "framework": framework,
-        "evidence_type": evidence_type
-    }

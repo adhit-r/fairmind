@@ -11,6 +11,9 @@ from src.application.services.clause_map_service import _catalogue, tracked_requ
 from tests import pg
 from tests.auth_helpers import auth_headers
 from tests.test_packs_routes import _org, _serving
+import pytest
+
+pytestmark = pytest.mark.usefixtures("environmental_gate_on")  # written for the five-check gate
 
 AIG = "/api/v1/ai-governance"
 

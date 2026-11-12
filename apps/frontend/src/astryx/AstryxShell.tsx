@@ -13,6 +13,7 @@ import { CommandPalette } from '@astryxdesign/core/CommandPalette'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Item } from '@astryxdesign/core/Item'
 import { Avatar } from '@astryxdesign/core/Avatar'
+import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { Layout, LayoutContent, LayoutPanel } from '@astryxdesign/core/Layout'
 import { createStaticSource } from '@astryxdesign/core/Typeahead'
 import { useMediaQuery } from '@astryxdesign/core/hooks'
@@ -68,6 +69,38 @@ function OrgName() {
   )
 }
 
+/**
+ * Everything in the menu belongs to an organisation. When the person has none, or the list could not load,
+ * one page says so and what to do, instead of every page failing with its own error.
+ */
+function NoOrganisation() {
+  const { error, refreshOrgs } = useOrg()
+  const { user } = useSession()
+  if (error) {
+    return (
+      <div className="fm-page">
+        <EmptyState
+          title="Your organisations could not load"
+          description={`FairMind could not read which organisations you belong to (${error}). Check your connection and try again.`}
+          actions={<Button label="Try again" onClick={() => void refreshOrgs()} />}
+        />
+      </div>
+    )
+  }
+  return (
+    <div className="fm-page">
+      <EmptyState
+        title="You are not in an organisation yet"
+        description="AI systems, rules and records all belong to an organisation. Ask an owner of your organisation to invite you; the invitation link brings you straight in."
+        actions={user?.role === 'admin' ? <Button label="Review access requests" href="/admin/registrations" /> : undefined}
+      />
+    </div>
+  )
+}
+
+/** Platform admin pages work without an organisation. */
+const WITHOUT_ORG = /^\/admin(\/|$)/
+
 /** What the organisation's agents are doing now, from the run list. */
 function AgentLine() {
   const runs = useRuns().data ?? []
@@ -117,9 +150,10 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const counts = useNavCounts()
   const { systems } = useSystemContext()
+  const { selectedOrg, isLoading: orgLoading } = useOrg()
   const [isPaletteOpen, setPaletteOpen] = useState(false)
   const isPhone = useMediaQuery('(max-width: 767px)')
-  const group = groupOf(pathname) ?? (pathname.startsWith('/systems') ? NAV[1] : null)
+  const group = groupOf(pathname) ?? (pathname.startsWith('/systems') || pathname === '/onboard' ? NAV[1] : null)
 
   // Each page's title names it, so tabs, history and screen readers can tell pages apart.
   const systemId = pathname.match(/^\/systems\/([^/]+)$/)?.[1]
@@ -276,7 +310,9 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
           }
           content={
             <LayoutContent padding={0}>
-              <main id="fm-main" tabIndex={-1} className="fm-main">{children}</main>
+              <main id="fm-main" tabIndex={-1} className="fm-main">
+                {!orgLoading && !selectedOrg && !WITHOUT_ORG.test(pathname) ? <NoOrganisation /> : children}
+              </main>
             </LayoutContent>
           }
         />

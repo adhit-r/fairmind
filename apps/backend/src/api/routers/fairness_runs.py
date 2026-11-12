@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import (
     CLOSED_RISK_STATUSES,
+    OrgMembership,
+    org_member,
     _authenticated_actor,
     _caller_org,
     _enforce_org_scope,
@@ -139,7 +141,9 @@ def _approval_blockers(db: Session, system_id: str, gate: Dict[str, Any]) -> Lis
         env = {"blocked": True, "code": "missing_environmental_evidence"}
     counts = (_release_blockers(db, system_id) or {}).get("blockers", {})
     findings, tasks = counts.get("openHighOrCriticalFindings", 0), counts.get("activeCriticalTasks", 0)
-    out = [{"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": env.get("code") != "missing_environmental_evidence"}]
+    out = []
+    if env.get("code") != "not_required":
+        out.append({"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": env.get("code") != "missing_environmental_evidence"})
     if env.get("blocked") and env.get("code") != "missing_environmental_evidence":
         out.append({"key": env.get("code"), "text": ENV_BLOCKER_TEXT.get(env.get("code"), env.get("reason")), "met": False})
     out.append({"key": "open_findings", "text": "No open high or critical findings" + (f" ({findings} open)" if findings else ""), "met": not findings})
@@ -159,7 +163,10 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
     applicability, stage = _system_applicability(db, system_id)
     tier = effective_tier(risk_tier, applicability)
-    assessed = _environmental_assessed(db, system_id)
+    from src.application.services.environmental_service import system_environmental_gate_enabled
+
+    with_env = system_environmental_gate_enabled(db, system_id)
+    assessed = _environmental_assessed(db, system_id) if with_env else None
     approval = decided = None
     if with_decision:
         approval = _fetch_latest_system_approval(db, system_id)
@@ -170,15 +177,16 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate = release_gate(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence,
         approval_status=approval["status"] if approval else "not_requested", last_decision=decided[0] if decided else None,
+        include_environmental=with_env,
     )
     gate["reasons"] += tier_reasons(risk_tier, applicability)
     _apply_policy_rules(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
-    gate["explain"] = gate_explain(risk_tier, applicability)
+    gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
-        approval_blockers=_approval_blockers(db, system_id, gate),
+        approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
     )
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
@@ -431,6 +439,48 @@ def get_release_gate(
     _require_system_access(db, system_id, current_user)
     system = _system_row(db, system_id)
     return _gate_payload(db, system_id, system.risk_tier)
+
+
+class ReleaseGateSettings(BaseModel):
+    environmentalGate: bool
+
+
+@router.get("/release-gate/settings", response_model=ReleaseGateSettings)
+def get_release_gate_settings(http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
+    """Which checks this organisation's release gate weighs. Any member may read it."""
+    from src.application.services.environmental_service import environmental_gate_enabled
+
+    return {"environmentalGate": environmental_gate_enabled(db, m.org_id)}
+
+
+@router.put("/release-gate/settings", response_model=ReleaseGateSettings)
+def set_release_gate_settings(
+    body: ReleaseGateSettings, http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)
+):
+    """Owners and admins choose whether environmental impact counts in release decisions; each change is audited."""
+    if str(m.role).lower() not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only an owner or admin of the organisation can change the release gate")
+    db.execute(
+        text(
+            "UPDATE organizations SET metadata = COALESCE(metadata::jsonb, '{}'::jsonb) || jsonb_build_object('environmentalGate', CAST(:on AS boolean)), "
+            "updated_at = NOW() WHERE id::text = :id"
+        ),
+        {"on": body.environmentalGate, "id": m.org_id},
+    )
+    db.execute(
+        text(
+            "INSERT INTO org_audit_logs (id, org_id, user_id, action, resource_type, resource_id, changes, status, ip_address, user_agent, created_at) "
+            "VALUES (:id, :org, :user, :action, 'organization', :org, CAST(:changes AS json), 'success', :ip, :ua, NOW())"
+        ),
+        {
+            "id": str(uuid.uuid4()), "org": m.org_id, "user": m.user_id,
+            "action": "release_gate_environmental_" + ("on" if body.environmentalGate else "off"),
+            "changes": json.dumps({"environmentalGate": body.environmentalGate}),
+            "ip": http.client.host if http.client else None, "ua": http.headers.get("user-agent"),
+        },
+    )
+    db.commit()
+    return {"environmentalGate": body.environmentalGate}
 
 
 def _org_systems(db: Session, http: Request) -> List[Any]:

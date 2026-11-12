@@ -172,10 +172,14 @@ function EnvironmentView() {
   const rows = useMemo(() => {
     const byId = new Map((gates.data ?? []).map((g) => [g.systemId, g]))
     return systems.flatMap((s) => {
-      const check = byId.get(s.id)?.checks.find((c) => c.key === 'environmental')
-      return check && (!focus || s.id === focus) ? [{ system: s, state: checkCell(check) }] : []
+      const gate = byId.get(s.id)
+      if (!gate || (focus && s.id !== focus)) return []
+      // Where the organisation leaves environmental impact out of its gate, an assessment can still be made and exported.
+      const check = gate.checks.find((c) => c.key === 'environmental')
+      return [{ system: s, state: check ? checkCell(check) : ('open' as CellState) }]
     })
   }, [systems, gates.data, focus])
+  const counted = !gates.data?.length || gates.data.some((g) => g.checks.some((c) => c.key === 'environmental'))
   const count = (...st: CellState[]) => rows.filter((r) => st.includes(r.state)).length
 
   return (
@@ -187,6 +191,15 @@ function EnvironmentView() {
             Energy and carbon for each AI system, scored into an impact tier with a stated confidence. {focus && <Link href="/environment">Show every system</Link>}
           </Text>
         </VStack>
+
+        {!counted && (
+          <Banner
+            status="info"
+            title="Not counted in release decisions"
+            description="Your organisation leaves environmental impact out of its release gate. Assessments here still feed CSRD reporting. An owner or admin can count them in Settings."
+            endContent={<Button label="Open Settings" size="sm" href="/settings" />}
+          />
+        )}
 
         {gates.error && <Banner status="error" title="The environmental checks could not load" description={gates.error} endContent={<Button label="Try again" size="sm" onClick={() => gates.reload()} />} />}
 

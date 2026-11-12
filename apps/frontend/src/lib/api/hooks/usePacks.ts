@@ -350,7 +350,7 @@ export function useOrgResource<T>(path: string | null): Resource<T> {
   if (path && !selectedOrg) {
     return isLoading
       ? { ...res, loading: true }
-      : { ...res, loading: false, error: 'Select an organisation to see its packs.' }
+      : { ...res, loading: false, error: 'You are not in an organisation yet.' }
   }
   return res
 }
