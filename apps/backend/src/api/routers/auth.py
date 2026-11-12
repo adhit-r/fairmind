@@ -156,6 +156,47 @@ class AuthentikCallbackResponse(BaseModel):
 
 
 
+async def _issue_session(user, response: Optional[Response]) -> LoginResponse:
+    """Tokens for a signed-in user: the refresh token also goes into the fm_refresh cookie."""
+    # Create tokens using new JWT infrastructure
+    access_token = str(auth_manager.create_access_token(user))
+    refresh_token = str(await auth_manager.issue_refresh_token(user))
+    
+    # Ensure they are not byte string representations like "b'...'"
+    if access_token.startswith("b'") and access_token.endswith("'"):
+         access_token = access_token[2:-1]
+    if refresh_token.startswith("b'") and refresh_token.endswith("'"):
+         refresh_token = refresh_token[2:-1]
+    
+    # Cache user session
+    session_key = f"session:{user.id}"
+    await cache_manager.set(
+        session_key,
+        {
+            "user_id": user.id,
+            "email": user.email,
+            "role": user.role.value,
+            "last_login": datetime.utcnow().isoformat()
+        },
+        ttl=86400  # 24 hours
+    )
+    
+    response_data = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_in": auth_manager.access_token_expire_minutes * 60,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "role": user.role.value,
+            "org_id": user.org_id,
+        }
+    }
+    _set_refresh_cookie(response, response_data["refresh_token"])
+    return LoginResponse(**response_data)
+
+
 @router.post("/login", response_model=LoginResponse, dependencies=[Depends(require_turnstile)])
 async def login(login_data: LoginRequest, response: Response = None):
     logger.info(f"Login attempt for: {login_data.email}")
@@ -200,45 +241,8 @@ async def login(login_data: LoginRequest, response: Response = None):
                 detail="Invalid email or password"
             )
         
-        # Create tokens using new JWT infrastructure
-        access_token = str(auth_manager.create_access_token(user))
-        refresh_token = str(await auth_manager.issue_refresh_token(user))
-        
-        # Ensure they are not byte string representations like "b'...'"
-        if access_token.startswith("b'") and access_token.endswith("'"):
-             access_token = access_token[2:-1]
-        if refresh_token.startswith("b'") and refresh_token.endswith("'"):
-             refresh_token = refresh_token[2:-1]
-        
-        # Cache user session
-        session_key = f"session:{user.id}"
-        await cache_manager.set(
-            session_key,
-            {
-                "user_id": user.id,
-                "email": user.email,
-                "role": user.role.value,
-                "last_login": datetime.utcnow().isoformat()
-            },
-            ttl=86400  # 24 hours
-        )
-        
         logger.info(f"User logged in successfully: {user.email}")
-        
-        response_data = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_in": auth_manager.access_token_expire_minutes * 60,
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "role": user.role.value,
-                "org_id": user.org_id,
-            }
-        }
-        _set_refresh_cookie(response, response_data["refresh_token"])
-        return LoginResponse(**response_data)
+        return await _issue_session(user, response)
         
     except HTTPException:
         raise
@@ -254,6 +258,30 @@ async def login(login_data: LoginRequest, response: Response = None):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed"
         )
+
+
+
+def _is_demo_user(email: Optional[str]) -> bool:
+    demo = (settings.demo_user_email or "").strip().lower()
+    return bool(demo) and (email or "").lower() == demo
+
+
+@router.post("/demo", response_model=LoginResponse)
+async def demo_login(response: Response):
+    """Signs a visitor in to the public demo organisation, read-only.
+
+    No human check: the account holds only demo data and can change nothing, so a
+    bot gains nothing a visitor does not; the rate limit still applies. The docs
+    recorder signs in here too.
+
+    Off (404) unless DEMO_USER_EMAIL names an existing, active user. The account
+    has no known password; DemoReadOnlyMiddleware refuses every change made as it.
+    """
+    email = settings.demo_user_email
+    user = await auth_manager.get_user_by_email(email) if email else None
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="The demo is not available.")
+    return await _issue_session(user, response)
 
 
 class SignupRequest(BaseModel):
@@ -369,11 +397,10 @@ async def logout(
         # tokens stop working (the blacklist alone needs Redis, which production lacks).
         if credentials and credentials.credentials:
             await auth_manager.revoke_token(credentials.credentials)
-        await revoke_user_sessions(current_user.user_id)
-        
-        # Remove user session from cache
-        session_key = f"session:{current_user.user_id}"
-        await cache_manager.delete(session_key)
+        # Many visitors share the demo account: one signing out must not end the others' sessions.
+        if not _is_demo_user(current_user.email):
+            await revoke_user_sessions(current_user.user_id)
+            await cache_manager.delete(f"session:{current_user.user_id}")
         
         logger.info(f"User logged out successfully: {current_user.email}")
         

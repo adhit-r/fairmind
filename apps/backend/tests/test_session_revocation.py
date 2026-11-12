@@ -210,6 +210,9 @@ async def test_refresh_tokens_rotate_and_a_reused_one_ends_every_session(db):
     assert access and second and second != first
     _, third = await auth_manager.refresh_session(second)
 
+    await auth_manager.refresh_session(first)  # a second tab within the grace window: no alarm
+    with db.begin() as conn:  # age the first use past the grace window
+        conn.execute(text("UPDATE refresh_tokens SET used_at = now() - interval '1 hour'"))
     with pytest.raises(InvalidTokenException, match="signed out"):
         await auth_manager.refresh_session(first)  # copied token used again
     [row] = _rows(db, f"SELECT token_version FROM users WHERE id = '{user_id}'")

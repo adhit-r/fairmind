@@ -201,8 +201,18 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
     if (!systemId && selectedSystem?.id) setSystemId(selectedSystem.id)
   }, [selectedSystem, systemId])
 
-  const filesReady = from === 'connection' ? !!connection : spec.slots.every((s) => !s.required || files[s.name])
-  const ready = !!systemId && connected && filesReady && spec.params.every((p) => !p.required || (params[p.name] ?? '').trim())
+  // A behaviour test whose probes can be written, uploaded or taken from a benchmark offers that as one choice.
+  const probeSlot = spec.slots.find((s) => s.name === 'probes' && !s.required)
+  const countParam = spec.params.find((p) => p.name === 'probe_count')
+  const benchParam = spec.params.find((p) => p.name === 'probe_source')
+  const choosing = from === 'upload' && !!probeSlot && !!countParam
+  const [probes, setProbes] = useState('write') // 'write', 'upload' or a benchmark name
+  const slots = choosing ? spec.slots.filter((s) => s !== probeSlot) : spec.slots
+  const settings = choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : spec.params
+  const count = (params.probe_count ?? '').trim() || String(countParam?.default ?? '')
+
+  const filesReady = from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
+  const ready = !!systemId && connected && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   /** A behaviour test answers with a job; follow it until the run is stored. */
   async function follow(started: EvaluationJob) {
@@ -241,12 +251,19 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
         }
       } else values[p.name] = raw
     }
+    if (choosing) {
+      delete values.probe_count
+      delete values.probe_source
+      if (probes === 'write') values.probe_count = Number(count)
+      else if (probes !== 'upload') values.probe_source = probes
+    }
     const form = new FormData()
     form.append('system_id', systemId)
     form.append('params', JSON.stringify(values))
     if (live) form.append('mode', 'live')
     form.append('source', from)
-    if (from === 'upload') for (const s of spec.slots) if (files[s.name]) form.append(s.name, files[s.name] as File)
+    if (from === 'upload')
+      for (const s of spec.slots) if (files[s.name] && (!choosing || s !== probeSlot || probes === 'upload')) form.append(s.name, files[s.name] as File)
     const res = await runEvaluation(evaluationId, form)
     if (res.error || !res.data) setFailure(res.error)
     else if ('job' in res.data) await follow(res.data.job)
@@ -310,7 +327,56 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
         )}
       </div>
       {spec.live && <Connections spec={spec} systemId={systemId} onReady={setConnected} />}
-      {from === 'upload' && spec.slots.map((s) => (
+      {choosing && probeSlot && countParam && (
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Probes</legend>
+          {[
+            ...(benchParam?.options ?? []).map((o) => ({ value: o, title: `${o} benchmark`, help: benchParam?.help ?? '' })),
+            { value: 'write', title: 'Write them for this system', help: "Your organisation's model writes them from the system's intended use." },
+            { value: 'upload', title: 'Upload your own', help: probeSlot.help },
+          ].map((o) => {
+            const on = probes === o.value
+            return (
+              <label
+                key={o.value}
+                className={`flex cursor-pointer items-start gap-3 rounded-[10px] border bg-white px-3.5 py-3 ${on ? 'border-[var(--fm-ink)]' : 'border-[var(--fm-line)]'}`}
+              >
+                <input type="radio" name="probes" value={o.value} checked={on} onChange={() => setProbes(o.value)} className="mt-0.5 accent-[var(--fm-ink)]" />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-[var(--fm-ink)]">{o.title}</span>
+                  <span className={`text-xs leading-normal ${MUTED}`}>{o.help}</span>
+                  {on && o.value === 'write' && (
+                    <span className="mt-2 flex flex-wrap items-center gap-2.5">
+                      <input
+                        id="param-probe_count"
+                        type="number"
+                        min={1}
+                        aria-label={countParam.label}
+                        value={params.probe_count ?? ''}
+                        placeholder={String(countParam.default ?? '')}
+                        onChange={(e) => setParams((v) => ({ ...v, probe_count: e.target.value }))}
+                        className={FIELD.replace('w-full', 'w-24')}
+                      />
+                      <span className={`text-xs ${MUTED}`}>{countParam.help}</span>
+                    </span>
+                  )}
+                  {on && o.value === 'upload' && (
+                    <input
+                      id="slot-probes"
+                      type="file"
+                      aria-label={probeSlot.label}
+                      accept={ACCEPT[probeSlot.kind] || undefined}
+                      onChange={(e) => setFiles((f) => ({ ...f, probes: e.target.files?.[0] ?? null }))}
+                      className="mt-2 text-sm text-[var(--fm-ink)] file:mr-3 file:rounded-full file:border file:border-[var(--fm-line)] file:bg-white file:px-3 file:py-1.5 file:text-[13px] file:font-semibold"
+                    />
+                  )}
+                </span>
+              </label>
+            )
+          })}
+        </fieldset>
+      )}
+      {from === 'upload' && slots.map((s) => (
         <div key={s.name} className="flex flex-col gap-1.5">
           <label htmlFor={`slot-${s.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
             {s.label}{s.required ? '' : ' (optional)'}
@@ -325,11 +391,11 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
           <span className={`text-xs ${MUTED}`}>{s.help}</span>
         </div>
       ))}
-      {spec.params.length > 0 && (
-        <details className="rounded-[10px] border border-[var(--fm-line)] px-3 py-2" open={spec.params.some((p) => p.required)}>
+      {settings.length > 0 && (
+        <details className="rounded-[10px] border border-[var(--fm-line)] px-3 py-2" open={settings.some((p) => p.required)}>
           <summary className="cursor-pointer text-[13px] font-semibold text-[var(--fm-ink)]">Settings</summary>
           <div className="mt-3 flex flex-col gap-3.5">
-            {spec.params.map((p) => (
+            {settings.map((p) => (
               <div key={p.name} className="flex flex-col gap-1.5">
                 <label htmlFor={`param-${p.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
                   {p.label}{p.required ? '' : ' (optional)'}
@@ -382,8 +448,17 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
           </div>
         </div>
       )}
-      <div>
+      <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className={BTN_P} disabled={!ready || busy}>{busy ? 'Running' : 'Run evaluation'}</button>
+        {choosing && (
+          <span className={`min-w-[180px] flex-1 text-xs ${MUTED}`}>
+            {probes === 'write'
+              ? `Your organisation's model writes ${count} probes from the intended use.`
+              : probes === 'upload'
+                ? 'Sends every row of your file.'
+                : 'Sends the same published cases every run.'}
+          </span>
+        )}
       </div>
       {spec.live && <p className={`m-0 text-xs ${MUTED}`}>Runs in the background; you can leave this page and find the result under Runs.</p>}
     </form>

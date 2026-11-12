@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-from . import model
+from . import agentic, assess, model, ops
 from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_json, result, split
 
 
@@ -124,9 +124,18 @@ def _fairness_part(evaluation: str) -> Callable[..., Dict[str, Any]]:
     return run
 
 
+def _engine(engine_id: str) -> Engine:
+    return next(e for m in (model, agentic, assess, ops) for e in m.ENGINES if e.id == engine_id)
+
+
 def _file_part(engine_id: str) -> Callable[..., Dict[str, Any]]:
-    engine = next(e for e in model.ENGINES if e.id == engine_id)
+    engine = _engine(engine_id)
     return lambda files, params, cache: engine.run(files, params)
+
+
+def _part(engine_id: str):
+    engine = _engine(engine_id)
+    return (_file_part(engine_id), engine.slots, engine.params)
 
 
 def _explanation_part(fn):
@@ -145,6 +154,7 @@ PARTS: Dict[str, Tuple[Callable[..., Dict[str, Any]], Tuple[Slot, ...], Tuple[Pa
     "EV-FAI-06": (_fairness_part("EV-FAI-06"), (DECISIONS,), FAIRNESS_PARAMS[:4]),
     "EV-FAI-03": (_file_part("EV-FAI-03"), (DECISIONS,), FAIRNESS_PARAMS),
     "EV-OVS-04": (_explanation_part(explanation_quality), (EXPLAIN_SLOT,), EXPLAIN_PARAMS),
+    **{i: _part(i) for i in ("EV-OVS-03", "EV-DEV-03", "EV-SEC-16")},
 }
 # The behaviour test EV-TST-04 (robustness) and EV-RSK-01, EV-PRV-04 call the system and run on their own, so a suite made of
 # uploaded files leaves them out; each suite says so in its method.
@@ -154,10 +164,14 @@ SECTORS: Dict[str, Tuple[str, ...]] = {
     "EV-USE-07": ("EV-TST-01", "EV-FAI-01", "EV-OVS-04"),
     "EV-USE-08": ("EV-TST-01", "EV-FAI-01", "EV-FAI-03"),
     "EV-USE-09": ("EV-TST-01", "EV-FAI-01", "EV-FAI-02"),
+    "EV-USE-05": ("EV-TST-01", "EV-RSK-01", "EV-OVS-03", "EV-PRV-04"),
+    "EV-USE-06": ("EV-DEV-03", "EV-SEC-16", "EV-SEC-20"),
 }
 
 
-def _suite_engine(suite_id: str, parts: Tuple[str, ...]) -> Engine:
+def _suite_engine(suite_id: str, listed: Tuple[str, ...]) -> Engine:
+    parts = tuple(p for p in listed if p in PARTS)
+    apart = [p for p in listed if p not in PARTS]
     slots: Dict[str, Slot] = {}
     params: Dict[str, Param] = {}
     for p in parts:
@@ -181,8 +195,9 @@ def _suite_engine(suite_id: str, parts: Tuple[str, ...]) -> Engine:
         summary = f"{count['passed']} of {len(rows)} components passed" + (f"; {', '.join(bad)}" if bad else "") + "."
         return result(status, summary, {"components": len(rows), **count, **{r["evaluation"]: r["status"] for r in rows}}, rows)
 
-    method = ("Runs " + ", ".join(parts) + " on the files given and passes only when every component passes. The behaviour tests "
-              "that call the system (for example EV-TST-04) run on their own.")
+    method = ("Runs " + ", ".join(parts) + " on the files given and passes only when every component passes. "
+              + (f"These call the system or read its platform and run on their own: {', '.join(apart)}." if apart else
+                 "The behaviour tests that call the system (for example EV-TST-04) run on their own."))
     return Engine(suite_id, method, tuple(slots.values()), run, tuple(params.values()))
 
 

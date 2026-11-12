@@ -12,6 +12,8 @@ export const API_ENDPOINTS = {
   // Authentication
   auth: {
     login: '/api/v1/auth/login',
+    // The public read-only demo (off unless the backend sets DEMO_USER_EMAIL).
+    demo: '/api/v1/auth/demo',
     register: '/api/v1/auth/register',
     // Without an invitation, an account starts as an access request a platform admin approves.
     requestAccess: '/api/v1/register',
