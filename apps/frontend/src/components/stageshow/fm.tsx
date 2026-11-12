@@ -19,9 +19,9 @@ export function Cell({ state, style, ...rest }: { state: CellState; style?: CSSP
 /** The five checks of the release gate, in the order the app shows them. */
 export const CHECKS = ['Fairness', 'Data governance', 'Human oversight', 'Monitoring', 'Environmental']
 
-/** The lifecycle the rail walks through. */
-export const STAGES = ['Inventory', 'Plan', 'Run', 'Decide', 'Operate']
-const LIBRARY = ['Systems', 'Evidence', 'Frameworks', 'Workflows', 'Agent']
+/** The app's menu groups, in the order a system moves through them: found, planned, tested, released, on record. */
+export const STAGES = ['Inventory', 'Rules', 'Testing', 'Release', 'Records']
+const LIBRARY = ['Home', 'Agents', 'Settings']
 
 /** The rail of the app: the five stages, then the library; `at` lights one stage. */
 export function Rail({ at, labels = true, library = true }: { at: number; labels?: boolean; library?: boolean }) {
@@ -35,7 +35,7 @@ export function Rail({ at, labels = true, library = true }: { at: number; labels
       ))}
       {library && (
         <>
-          <div className="fm-rail__group fm-label">Library</div>
+          <div className="fm-rail__group fm-label">More</div>
           {LIBRARY.map((s) => (
             <div key={s} className="fm-rail__item">
               <span className="fm-rail__num" />

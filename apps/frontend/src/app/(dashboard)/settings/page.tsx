@@ -10,6 +10,7 @@ import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
 import { Selector } from '@astryxdesign/core/Selector'
+import { CodeBlock } from '@astryxdesign/core/CodeBlock'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Table, pixel, proportional } from '@astryxdesign/core/Table'
 import type { TableColumn } from '@astryxdesign/core/Table'
@@ -19,6 +20,7 @@ import { Token } from '@astryxdesign/core/Token'
 import { List, ListItem } from '@astryxdesign/core/List'
 
 import { useOrg } from '@/context/OrgContext'
+import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useSession } from '@/context/SessionContext'
 import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
 import { AIProviderSettings } from '@/components/packs/AIProviderSettings'
@@ -400,6 +402,8 @@ function DevelopersSection() {
         <Table<KeyRow> data={keys.data as KeyRow[]} columns={columns} idKey="name" density="balanced" />
       )}
 
+      <CiGate />
+
       <Dialog isOpen={creating} onOpenChange={setCreating} width={460}>
         <DialogHeader title="Create an API key" onOpenChange={setCreating} />
         <div className="fm-st-pad">
@@ -472,6 +476,44 @@ function AuditSection() {
           <Button label="Older" size="sm" variant="secondary" isDisabled={page >= last} onClick={() => setPage(page + 1)} />
         </HStack>
       </HStack>
+    </VStack>
+  )
+}
+
+/** The GitHub Action that fails a job unless a system's release gate is green, filled in for one of the organisation's systems. */
+function CiGate() {
+  const { systems } = useSystemContext()
+  const [systemId, setSystemId] = useState('')
+  const chosen = systemId || systems[0]?.id || ''
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : null
+  const yaml = `jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: adhit-r/fairmind/.github/actions/fairmind-gate@main
+        with:
+          system: \${{ vars.FAIRMIND_SYSTEM_ID }}
+          api-url: \${{ vars.FAIRMIND_API_URL }}
+          api-key: \${{ secrets.FAIRMIND_API_KEY }}
+          # Pass on a conditional go, or fail until a person approves:
+          # allow-conditional: "true"
+          # require-approval: "true"`
+  return (
+    <VStack gap={3}>
+      <Heading level={3}>Gate releases in CI</Heading>
+      <Text color="secondary">
+        Add this step to a GitHub workflow and the job fails unless the system&apos;s release gate says go. Set the repository variables and secret below.
+      </Text>
+      {systems.length > 0 && (
+        <Selector label="System" value={chosen} onChange={setSystemId} options={systems.map((s) => ({ value: s.id, label: s.name }))} />
+      )}
+      <MetadataList label={{ width: 170 }}>
+        <MetadataListItem label="FAIRMIND_SYSTEM_ID"><Text hasTabularNumbers>{chosen || 'Register a system first'}</Text></MetadataListItem>
+        <MetadataListItem label="FAIRMIND_API_URL"><Text>{apiUrl ?? 'Your FairMind API address'}</Text></MetadataListItem>
+        <MetadataListItem label="FAIRMIND_API_KEY"><Text>A key from the list above, as a secret</Text></MetadataListItem>
+      </MetadataList>
+      <CodeBlock code={yaml} language="yaml" hasCopyButton size="sm" />
     </VStack>
   )
 }
