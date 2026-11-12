@@ -2039,6 +2039,28 @@ def get_system_approval_status(
     }
 
 
+def _tell_reviewers_a_decision_waits(db: Session, system_id: str, current_user: TokenData) -> None:
+    """Email the organisation's owners and admins (not the requester) that a release decision waits in Needs you."""
+    from src.application.services.reviewer_notify import decision_email, reviewer_emails, send_in_background
+
+    row = db.execute(
+        text("SELECT name, org_id, risk_tier FROM governance_ai_systems WHERE id = :id"), {"id": system_id}
+    ).fetchone()
+    if not row:
+        return
+    name, org_id, tier = row
+    send_in_background(
+        reviewer_emails(db, org_id, current_user.user_id),
+        f"Release decision waiting: {name}",
+        decision_email(
+            f"{name} is waiting for a release decision",
+            [f"{_authenticated_actor(current_user)} asked for a release decision on {name} ({tier} risk).",
+             "Open it to see what is proven, what is only claimed, and decide."],
+            "/needs-you",
+        ),
+    )
+
+
 @router.post("/approval/system/{system_id}/request")
 def create_system_approval_request(
     system_id: str,
@@ -2058,6 +2080,7 @@ def create_system_approval_request(
         {"entity_type": "ai_system", "entity_id": system_id, "status": "pending"},
     ).fetchone()
     if existing_request:
+        # Asking again does not message the reviewers again.
         _require_approval_request_access(db, str(existing_request[0]), current_user, mutate=True)
         serialized = _serialize_approval_request_row(existing_request)
         return {
@@ -2091,6 +2114,7 @@ def create_system_approval_request(
         },
     )
     db.commit()
+    _tell_reviewers_a_decision_waits(db, system_id, current_user)
 
     created_request = {
         "id": request_id,

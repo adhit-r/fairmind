@@ -33,6 +33,10 @@ function detailOf(e: RunEvent): string {
       .join('. ')
   }
   if (typeof p.sealedHeadHash === 'string') return `Sealed events 1 to ${String(p.sealedThroughSeq)}`
+  if (typeof p.notificationSent === 'boolean')
+    return p.notificationSent
+      ? `Emailed ${String(p.recipients)} ${p.recipients === 1 ? 'reviewer' : 'reviewers'}`
+      : `Nobody was messaged${typeof p.reason === 'string' ? `: ${p.reason}` : ''}`
   return ''
 }
 

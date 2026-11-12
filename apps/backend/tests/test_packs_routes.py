@@ -355,6 +355,10 @@ def test_changes_loop_through_revise_then_escalate_after_three_rounds(tmp_databa
     run = _decide(client, run, "request_changes", "still not right")
     assert run["events"][-4]["payload"]["escalated"]
     assert ("step.completed", "escalate") in _kinds(run)
+    # The ledger says who was told; it never claims a message nobody sent.
+    told = next(e["payload"] for e in run["events"] if (e["kind"], e["stepId"]) == ("step.completed", "escalate"))
+    assert told["notificationSent"] == (told["recipients"] > 0)
+    assert told["notificationSent"] or told["reason"]
     assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
     assert _approval_count(tmp_database, run["id"]) == 5
 
