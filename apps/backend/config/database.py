@@ -67,14 +67,12 @@ class DatabaseManager:
         self.database: Optional[Database] = None
         self.engine = None
         self.SessionLocal = None
-        self._pool = None
 
     async def _close_resources(self) -> list[Exception]:
         """Best-effort close of every initialized resource in reverse order."""
         errors: list[Exception] = []
         engine_to_close, self.engine = self.engine, None
         database_to_close, self.database = self.database, None
-        pool_to_close, self._pool = self._pool, None
         self.SessionLocal = None
 
         if engine_to_close is not None:
@@ -85,11 +83,6 @@ class DatabaseManager:
         if database_to_close is not None:
             try:
                 await database_to_close.disconnect()
-            except Exception as error:
-                errors.append(error)
-        if pool_to_close is not None:
-            try:
-                await pool_to_close.close()
             except Exception as error:
                 errors.append(error)
         return errors
