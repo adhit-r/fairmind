@@ -446,7 +446,7 @@ class ReleaseGateSettings(BaseModel):
 
 
 @router.get("/release-gate/settings", response_model=ReleaseGateSettings)
-async def get_release_gate_settings(http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
+def get_release_gate_settings(http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
     """Which checks this organisation's release gate weighs. Any member may read it."""
     from src.application.services.environmental_service import environmental_gate_enabled
 
@@ -454,7 +454,7 @@ async def get_release_gate_settings(http: Request, m: OrgMembership = Depends(or
 
 
 @router.put("/release-gate/settings", response_model=ReleaseGateSettings)
-async def set_release_gate_settings(
+def set_release_gate_settings(
     body: ReleaseGateSettings, http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)
 ):
     """Owners and admins choose whether environmental impact counts in release decisions; each change is audited."""
