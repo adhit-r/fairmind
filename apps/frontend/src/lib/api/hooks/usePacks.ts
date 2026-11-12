@@ -475,7 +475,7 @@ export interface EngineSpec {
   id: string
   method: string
   slots: Array<{ name: string; label: string; help: string; kind: 'csv' | 'text' | 'json' | 'binary'; required: boolean }>
-  params: Array<{ name: string; label: string; help: string; kind: 'text' | 'number' | 'json'; default: unknown; required: boolean }>
+  params: Array<{ name: string; label: string; help: string; kind: 'text' | 'number' | 'json'; default: unknown; required: boolean; options?: string[] }>
   platform: boolean
   platformMethod: string
   judge: boolean
