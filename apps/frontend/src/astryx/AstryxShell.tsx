@@ -153,7 +153,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
   const { selectedOrg, isLoading: orgLoading } = useOrg()
   const [isPaletteOpen, setPaletteOpen] = useState(false)
   const isPhone = useMediaQuery('(max-width: 767px)')
-  const group = groupOf(pathname) ?? (pathname.startsWith('/systems') ? NAV[1] : null)
+  const group = groupOf(pathname) ?? (pathname.startsWith('/systems') || pathname === '/onboard' ? NAV[1] : null)
 
   // Each page's title names it, so tabs, history and screen readers can tell pages apart.
   const systemId = pathname.match(/^\/systems\/([^/]+)$/)?.[1]

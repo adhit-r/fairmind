@@ -155,8 +155,13 @@ export function LiveBoard() {
       <section className="fm-board">
         <EmptyState
           title="No registered AI systems yet"
-          description="Register a system, or connect a source and let discovery find them. Each registered system gets a row here."
-          actions={<Button variant="primary" label="Go to Discovery" href="/discovery" />}
+          description="Register systems by hand or from a CSV, or connect a source and let discovery find them. Each registered system gets a row here."
+          actions={
+            <>
+              <Button variant="primary" label="Register systems" href="/onboard" />
+              <Button label="Find unregistered AI" href="/discovery" />
+            </>
+          }
         />
       </section>
     )
