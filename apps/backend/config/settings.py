@@ -55,11 +55,13 @@ class Settings(BaseSettings):
     # PostgreSQL only, e.g. postgresql://user:pass@host/db
     database_url: str = Field(default="", validate_default=True)
     database_echo: bool = False
-    database_pool_size: int = 20
+    # Per pool, per process; a process has the async pool, the sync engine and the
+    # ORM engine. Small by default so replicas stay under Neon's connection limit.
+    database_pool_size: int = 5
     # Seconds to wait for a pooled connection at startup. Serverless Postgres
     # (Neon) can take 10 to 30 seconds to wake a suspended compute.
     database_connect_timeout: int = 60
-    database_max_overflow: int = 30
+    database_max_overflow: int = 5
     database_timeout: int = 30
     assurance_v2_enabled: bool = False
     # Core assurance surfaces stay separately hidden until their exact
