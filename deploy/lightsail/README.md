@@ -53,6 +53,9 @@ On the instance: `chmod 644 tunnel.json` (cloudflared runs as a non-root user in
   `ENVIRONMENT=production`, `DATABASE_URL` (Neon), `SECRET_KEY`, `JWT_SECRET`,
   `ALLOWED_ORIGINS=https://app.fairmind.xyz`. Leave `REDIS_URL` unset.
 - `frontend.env`: server-side frontend keys (`DATABASE_URL`, `NEON_REALTIME_SECRET`, `NEON_REALTIME_URL`).
+- The public demo ("Try the demo" on the sign-in page, read-only): `DEMO_USER_EMAIL=<demo account>` in
+  `backend.env` (restart the backend) and `NEXT_PUBLIC_DEMO=true` in `.env` (built in, so
+  `docker compose up -d --build frontend`). The account must exist; leave both unset to keep it off.
 
 ## 4. Deploy / update
 
