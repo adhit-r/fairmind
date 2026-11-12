@@ -43,11 +43,13 @@ const nextConfig = {
       { source: '/compliance/evaluations', destination: '/evaluations', permanent: false },
       { source: '/evidence/packs', destination: '/auditor-packs', permanent: false },
       { source: '/org-admin/settings', destination: '/settings', permanent: false },
-      {
-        source: '/remediation-wizard',
-        destination: '/remediation?mode=guided',
-        permanent: false,
-      },
+      { source: '/remediation-wizard', destination: '/findings', permanent: false },
+      // Retired tool pages: the evaluations they stood for live in the catalogue now.
+      ...['/bias', '/advanced-bias', '/llm-judge', '/llm-testing', '/benchmarks', '/fairness-documentation', '/explainability-studio', '/multimodal-bias'].map(
+        (source) => ({ source, destination: '/evaluations', permanent: false }),
+      ),
+      { source: '/ai-bom', destination: '/systems', permanent: false },
+      { source: '/provenance', destination: '/systems', permanent: false },
     ]
   },
 

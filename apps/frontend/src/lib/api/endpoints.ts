@@ -47,7 +47,6 @@ export const API_ENDPOINTS = {
     dashboardStats: '/api/v1/database/dashboard-stats',
     models: '/api/v1/database/models',
     reports: '/api/v1/database/reports',
-    monitoringMetrics: '/api/v1/database/monitoring-metrics',
     health: '/api/v1/database/health',
   },
 

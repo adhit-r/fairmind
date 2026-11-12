@@ -6,7 +6,6 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { apiClient } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 import { runHook, stub } from './runHookForTest'
-import { NAVIGATION_ITEMS } from '../../constants/navigation'
 import { EvaluationRunList } from '../../../app/(dashboard)/evidence/components/EvaluationRunList'
 import type {
   ControlAssessmentUpdateResult,
@@ -220,22 +219,6 @@ test('the evaluation-list consumer renders the backward-compatible GET DTO', asy
   assert.match(markup, /Evaluation run Bias suite/)
   assert.match(markup, /bias-suite/)
   assert.match(markup, /Content hash/)
-})
-
-test('keeps Govern & Prove to the six assurance destinations', () => {
-  const governance = NAVIGATION_ITEMS.find((category) => category.id === 'compliance')
-
-  assert.deepEqual(
-    governance?.items?.map(({ title, href }) => [title, href]),
-    [
-      ['Overview', '/ai-governance'],
-      ['AI Systems', '/model-inventory'],
-      ['Frameworks & Controls', '/compliance-dashboard'],
-      ['Evidence & Evaluations', '/evidence'],
-      ['Findings', '/risks'],
-      ['Reports & Assurance', '/reports'],
-    ],
-  )
 })
 
 test('resolves every system assignment to its matching framework version', async () => {

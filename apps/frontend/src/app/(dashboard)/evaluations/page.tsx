@@ -88,7 +88,8 @@ export default function EvaluationsPage() {
   const evals = useEvaluations()
   const [q, setQ] = useState('')
   const [pillar, setPillar] = useState('all')
-  const [engine, setEngine] = useState('all')
+  // Runnable first: an evaluation with no engine behind it is listed, but not by default.
+  const [engine, setEngine] = useState('runnable')
   const [pack, setPack] = useState('all')
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -168,9 +169,9 @@ export default function EvaluationsPage() {
                 ))}
               </SegmentedControl>
               <SegmentedControl label="Engine" value={engine} onChange={setEngine} size="sm">
-                <SegmentedControlItem label="All" value="all" />
                 <SegmentedControlItem label="Runnable" value="runnable" />
                 <SegmentedControlItem label="Not built yet" value="not" />
+                <SegmentedControlItem label="All" value="all" />
               </SegmentedControl>
               <SegmentedControl label="Packs" value={pack} onChange={setPack} size="sm">
                 <SegmentedControlItem label="All" value="all" />
