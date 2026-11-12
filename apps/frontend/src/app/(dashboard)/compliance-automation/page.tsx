@@ -7,6 +7,7 @@
 
 "use client";
 
+import { pollWhileVisible } from '@/lib/poll'
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api/api-client";
 import { useToast } from "@/hooks/use-toast";
@@ -32,8 +33,7 @@ export default function ComplianceAutomationPage() {
   // Fetch system status on mount and periodically
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    return pollWhileVisible(fetchStatus, 30000); // every 30 seconds while the tab is visible
   }, []);
 
   const fetchStatus = async () => {

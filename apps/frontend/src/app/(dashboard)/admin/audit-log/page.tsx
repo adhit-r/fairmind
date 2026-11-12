@@ -53,12 +53,17 @@ export default function AdminAuditLogPage() {
         const response = await api.get<{ logs: AuditLog[] }>(
           `/api/v1/audit-logs?${params}`
         );
+        if (!response.success) {
+          // An audit log that silently shows nothing would read as "nothing happened".
+          setLogs([]);
+          setError(response.error || "The audit log could not be loaded.");
+          return;
+        }
         setLogs(response.data?.logs || []);
         setError(null);
       } catch (err) {
-        // Endpoint unavailable: show an empty list
-        console.warn("Audit logs API not yet implemented:", err);
         setLogs([]);
+        setError(err instanceof Error ? err.message : "The audit log could not be loaded.");
       } finally {
         setIsLoading(false);
       }
@@ -133,6 +138,11 @@ export default function AdminAuditLogPage() {
         {isLoading ? (
           <div className="flex justify-center">
             <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
+          </div>
+        ) : error ? (
+          <div role="alert" className="p-8 fm-card text-center">
+            <h3 className="text-xl font-semibold text-[var(--fm-ink)]">The audit log could not be loaded</h3>
+            <p className="mt-2 text-[var(--fm-ink2)]">{error}</p>
           </div>
         ) : logs.length === 0 ? (
           <div className="p-8 fm-card">

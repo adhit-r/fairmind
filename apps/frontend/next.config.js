@@ -6,7 +6,10 @@ const SECURITY_HEADERS = [
   { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+  // The directives that need no nonce: no plugins, no <base> hijack, forms post
+  // only here, never framed. script-src with nonces needs every page rendered
+  // per request and a production-build check, so it is a separate change.
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
 ]

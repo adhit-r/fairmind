@@ -9,7 +9,7 @@ This service provides comprehensive AI governance capabilities including:
 - Versioned assurance planning and evidence review
 """
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -46,6 +46,35 @@ from src.application.services.governance_assurance_service import OrgMembership
 logger = get_logger("main")
 
 
+# Postgres advisory lock keys for the timed sweeps below (any distinct bigints).
+_AUTOPILOT_LOCK = 7_310_001
+_POLICY_ALERT_LOCK = 7_310_002
+
+
+async def _exclusively(key: int, work) -> bool:
+    """Run work() only if no other worker or replica is running the same sweep.
+
+    A session advisory lock on a dedicated connection, held for the sweep and
+    released after, so N workers do the work once instead of N times (duplicate
+    alert emails, duplicate autopilot runs). False when another holder has it.
+    """
+    from sqlalchemy import text as _sql
+    from database.connection import db_manager as orm_db_manager
+
+    conn = await asyncio.to_thread(orm_db_manager.engine.connect)
+    try:
+        got = await asyncio.to_thread(lambda: conn.execute(_sql("SELECT pg_try_advisory_lock(:k)"), {"k": key}).scalar())
+        if not got:
+            return False
+        try:
+            await work()
+        finally:
+            await asyncio.to_thread(lambda: conn.execute(_sql("SELECT pg_advisory_unlock(:k)"), {"k": key}))
+        return True
+    finally:
+        await asyncio.to_thread(conn.close)
+
+
 async def _autopilot_loop(interval: int) -> None:
     """Run the release autopilot for every system set to run, on a timer."""
     from database.connection import db_manager as orm_db_manager
@@ -54,7 +83,7 @@ async def _autopilot_loop(interval: int) -> None:
     while True:
         await asyncio.sleep(interval)
         try:
-            await sweep(orm_db_manager.SessionLocal)
+            await _exclusively(_AUTOPILOT_LOCK, lambda: sweep(orm_db_manager.SessionLocal))
         except Exception as e:  # a failed sweep must not stop the next one
             logger.warning(f"Autopilot sweep failed: {e}")
 
@@ -68,7 +97,10 @@ async def _policy_alert_loop(interval: int) -> None:
     while True:
         await asyncio.sleep(interval)
         try:
-            await sweep_policy_alerts(orm_db_manager.SessionLocal, email_service.send_policy_alert, settings.frontend_url)
+            await _exclusively(
+                _POLICY_ALERT_LOCK,
+                lambda: sweep_policy_alerts(orm_db_manager.SessionLocal, email_service.send_policy_alert, settings.frontend_url),
+            )
         except Exception as e:  # a failed sweep must not stop the next one
             logger.warning(f"Policy alert sweep failed: {e}")
 
@@ -667,8 +699,10 @@ async def list_audit_logs(
             return {"logs": logs}
 
     except Exception as e:
-        logger.warning(f"Audit logs query failed: {e}")
-        return {"logs": []}
+        # Never an empty list on failure: an audit trail that looks empty when it
+        # could not be read is a compliance defect.
+        logger.error(f"Audit logs query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="The audit log could not be read; see the server log")
 
 
 # Production-ready health check endpoints

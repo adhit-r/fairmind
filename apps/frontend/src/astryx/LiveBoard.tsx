@@ -1,5 +1,6 @@
 'use client'
 
+import { pollWhileVisible } from '@/lib/poll'
 import './board.css'
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -95,8 +96,7 @@ export function LiveBoard() {
     if (gates.data) setCheckedAt(new Date())
   }, [gates.data])
   useEffect(() => {
-    const id = setInterval(() => gates.reload(), 60_000)
-    return () => clearInterval(id)
+    return pollWhileVisible(() => gates.reload(), 60_000)
   }, [gates])
 
   const rows = useMemo(() => {

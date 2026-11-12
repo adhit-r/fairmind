@@ -43,6 +43,8 @@ class DatabaseManager:
             database_url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=settings.database_pool_size,
+            max_overflow=settings.database_max_overflow,
             echo=os.getenv("DEBUG", "false").lower() == "true"
         )
         if settings.assurance_v2_enabled:

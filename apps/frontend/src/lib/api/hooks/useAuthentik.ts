@@ -187,13 +187,10 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
         if (!tokenData) {
           throw new Error(response.error ?? "Authentication failed — no token data returned");
         }
-        const { access_token, refresh_token, user } = tokenData;
+        const { access_token, user } = tokenData;
 
         // Store tokens (access in memory/state, refresh in secure cookie handled by backend)
         localStorage.setItem("access_token", access_token);
-        if (refresh_token) {
-          localStorage.setItem("refresh_token", refresh_token);
-        }
 
         // Clear PKCE parameters from storage
         sessionStorage.removeItem("oauth_state");
