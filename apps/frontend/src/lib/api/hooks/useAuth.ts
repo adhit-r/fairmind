@@ -27,14 +27,15 @@ export function useAuth() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const login = async (credentials: LoginRequest) => {
+  const login = async (credentials: LoginRequest, headers?: Record<string, string>) => {
     try {
       setLoading(true)
       setError(null)
 
       const response: ApiResponse<LoginResponse> = await apiClient.post(
         API_ENDPOINTS.auth.login,
-        credentials
+        credentials,
+        { headers }
       )
 
       if (response.success && response.data) {
@@ -60,14 +61,15 @@ export function useAuth() {
     email: string
     password: string
     invitation_token: string
-  }) => {
+  }, headers?: Record<string, string>) => {
     try {
       setLoading(true)
       setError(null)
 
       const response: ApiResponse<LoginResponse> = await apiClient.post(
         API_ENDPOINTS.auth.register,
-        data
+        data,
+        { headers }
       )
 
       if (response.success && response.data) {

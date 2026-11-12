@@ -41,6 +41,7 @@ from config.jwt_models import (
 )
 from config.settings import settings
 from config.authentik_config import get_authentik_config
+from config.turnstile import require_turnstile
 
 logger = logging.getLogger("fairmind.auth")
 
@@ -153,7 +154,7 @@ class AuthentikCallbackResponse(BaseModel):
 
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse, dependencies=[Depends(require_turnstile)])
 async def login(login_data: LoginRequest, response: Response = None):
     logger.info(f"Login attempt for: {login_data.email}")
     """
@@ -268,7 +269,7 @@ def _check_password_length(password: str) -> None:
         raise HTTPException(status_code=422, detail="Password must be 12 to 72 bytes long")
 
 
-@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_turnstile)])
 async def signup(payload: SignupRequest, response: Response):
     """Create an account for someone holding an invitation, then sign them in.
 
@@ -420,7 +421,7 @@ def _reset_rate_limited(*keys: str) -> bool:
     return False
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(require_turnstile)])
 async def request_password_reset(payload: PasswordResetRequest, request: Request):
     """Email a single-use reset link. The answer is the same whether or not the account exists."""
     from config.database import get_db_connection

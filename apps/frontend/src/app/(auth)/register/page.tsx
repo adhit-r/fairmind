@@ -1,5 +1,6 @@
 'use client'
 
+import { HumanCheck, awaitingHumanCheck, humanCheckHeaders } from '@/components/auth/HumanCheck'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { OrangeLogo } from '@/components/OrangeLogo'
@@ -28,6 +29,8 @@ export default function RegisterPage() {
   const { register, loading } = useAuth()
   const [form, setForm] = useState({ name: '', email: '', org_name: '', password: '', message: '' })
   const [requested, setRequested] = useState(false)
+  const [check, setCheck] = useState<string | null>(null)
+  const [checkRound, setCheckRound] = useState(0)
   const [sending, setSending] = useState(false)
   // /register?invite=<token>: create the account, then join the inviting organization.
   const [inviteToken, setInviteToken] = useState<string | null>(null)
@@ -55,7 +58,10 @@ export default function RegisterPage() {
     e.preventDefault()
     try {
       if (inviteToken && invitation) {
-        await register({ name: form.name, email: form.email, password: form.password, invitation_token: inviteToken })
+        await register(
+          { name: form.name, email: form.email, password: form.password, invitation_token: inviteToken },
+          humanCheckHeaders(check),
+        )
         const accepted = await apiClient.post(API_ENDPOINTS.invitations.accept(inviteToken), {}, { enableRetry: false })
         if (!accepted.success) {
           // The account exists; the invitation page lets them retry.
@@ -72,7 +78,7 @@ export default function RegisterPage() {
       const res = await apiClient.post(
         API_ENDPOINTS.auth.requestAccess,
         { name: form.name, email: form.email, org_name: form.org_name, message: form.message || undefined },
-        { enableRetry: false },
+        { enableRetry: false, headers: humanCheckHeaders(check) },
       )
       if (!res.success) throw new Error(res.error || 'Please try again.')
       setRequested(true)
@@ -84,6 +90,7 @@ export default function RegisterPage() {
       })
     } finally {
       setSending(false)
+      setCheckRound((n) => n + 1) // a check token works once
     }
   }
 
@@ -160,7 +167,8 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading || sending || (joining && !invitation)}>
+          <HumanCheck onToken={setCheck} resetKey={checkRound} />
+          <Button type="submit" className="w-full" disabled={loading || sending || (joining && !invitation) || awaitingHumanCheck(check)}>
             {joining
               ? loading ? 'Creating account...' : 'Create account and join'
               : sending ? 'Sending request...' : 'Request access'}

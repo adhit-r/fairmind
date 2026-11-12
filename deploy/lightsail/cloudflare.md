@@ -60,11 +60,18 @@ Add a self-hosted application for `app.fairmind.xyz` with paths `/admin/*`,
 platform operators' emails, require a login method with MFA. Every access-request approval
 then needs both an Access login and a FairMind admin session.
 
-## 7. Turnstile (not wired yet)
+## 7. Turnstile
 
-Turnstile on login, request access and forgot password needs a site key and secret from
-Turnstile, a widget on those three pages and a server-side check of the token. Until that
-ships, the rate limit and bot rules above are the protection for those forms.
+The app checks Turnstile on sign-in, signup by invitation, request access and forgot
+password once both keys are set; with either missing, the check is off.
+
+1. Cloudflare dashboard, Turnstile, Add widget: hostname `app.fairmind.xyz`, mode Managed.
+2. Put the site key in `deploy/lightsail/.env` as `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (it is
+   built into the frontend, so rebuild: `docker compose up -d --build frontend`).
+3. Put the secret key in `backend.env` as `TURNSTILE_SECRET_KEY` and restart the backend.
+
+The backend verifies each token with Cloudflare and fails closed: if Cloudflare cannot be
+reached, those forms answer 503 instead of letting the request through.
 
 ## 8. Origin
 

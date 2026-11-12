@@ -22,6 +22,7 @@ from pydantic import BaseModel, EmailStr
 
 from config.database import get_db_connection, get_db_transaction
 from config.settings import settings
+from config.turnstile import require_turnstile
 from config.auth import auth_manager, get_current_active_user, require_admin, TokenData
 from src.application.services.api_boundary_dependencies import email_service
 
@@ -46,7 +47,7 @@ class ReviewRequest(BaseModel):
 
 # ── Public: submit a signup request ──────────────────────────────────────────
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_turnstile)])
 async def submit_registration(payload: RegistrationRequest, request: Request):
     """Anyone can request access. Admin is notified via Resend."""
     from middleware.security import client_ip
