@@ -105,6 +105,8 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Type-check
         run: npx tsc --noEmit -p .
+      - name: Lint (eslint.config.mjs; errors fail, compiler-readiness rules warn)
+        run: npm run lint
       - name: Unit tests
         run: npx --yes tsx@4.23.15 --test 'src/**/*.test.ts'
 

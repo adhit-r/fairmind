@@ -82,10 +82,11 @@ export function WatchPanel({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [now] = useState(() => Date.now())
   if (!policy) return null
 
   const latest = runs[0]
-  const stale = latest ? Date.now() - new Date(latest.createdAt).getTime() > STALE_AFTER_CADENCES * policy.cadenceHours * 3_600_000 : false
+  const stale = latest ? now - new Date(latest.createdAt).getTime() > STALE_AFTER_CADENCES * policy.cadenceHours * 3_600_000 : false
   const options = CADENCES.some((c) => c.hours === policy.cadenceHours) ? CADENCES : [...CADENCES, { hours: policy.cadenceHours, label: `Every ${policy.cadenceHours} hours`, cron: cronFor(policy.cadenceHours) }]
   const trend = runs.slice(0, TREND_LENGTH).reverse().map((r) => {
     const ratio = r.attributes.length ? Math.min(...r.attributes.map((a) => a.disparateImpactRatio)) : null

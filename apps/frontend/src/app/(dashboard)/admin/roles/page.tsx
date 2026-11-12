@@ -166,7 +166,7 @@ export default function AdminRolesPage() {
                   <li>Navigate to Directory &gt; Groups</li>
                   <li>Select the appropriate role group (admin, analyst, viewer)</li>
                   <li>Add the user to the group</li>
-                  <li>The user's roles will be updated on their next login</li>
+                  <li>The user&apos;s roles will be updated on their next login</li>
                 </ol>
               </div>
 

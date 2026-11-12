@@ -148,7 +148,7 @@ export default function LoginPage() {
         )}
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground mb-3">Don't have an account?</p>
+          <p className="text-sm text-muted-foreground mb-3">Don&apos;t have an account?</p>
           <a href="/register" className="inline-block px-4 py-2 border border-[var(--fm-line)] font-medium text-sm">
             Request access
           </a>

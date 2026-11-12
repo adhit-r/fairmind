@@ -107,27 +107,6 @@ export function useAuth() {
   }
 
   /**
-   * Initiate OAuth2 login flow with Authentik
-   * Redirects to Authentik authorization endpoint using PKCE flow
-   */
-  const loginWithAuthentik = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const { useAuthentik } = await import('./useAuthentik')
-      const { login } = useAuthentik()
-      await login()
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('OAuth2 login failed')
-      setError(error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  /**
    * Handle OAuth2 callback after Authentik redirect
    * Exchanges authorization code for tokens
    *
@@ -178,7 +157,6 @@ export function useAuth() {
     login,
     register,
     logout,
-    loginWithAuthentik,
     handleAuthenticCallback,
   }
 }
