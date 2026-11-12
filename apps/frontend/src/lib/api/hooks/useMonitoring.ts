@@ -2,6 +2,7 @@
  * Monitoring API Hooks
  */
 
+import { pollWhileVisible } from '@/lib/poll'
 import { useState, useEffect, useCallback } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
@@ -63,8 +64,7 @@ export function useSystemHealth() {
     fetchHealth()
     
     // Auto-refresh every 60 seconds
-    const interval = setInterval(fetchHealth, 60000)
-    return () => clearInterval(interval)
+    return pollWhileVisible(fetchHealth, 60000)
   }, [fetchHealth])
 
   return { health, loading, error, refetch: fetchHealth }
