@@ -10,10 +10,9 @@ import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
-import { TextArea } from '@astryxdesign/core/TextArea'
 import { Token } from '@astryxdesign/core/Token'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { decideRequest, useApprovalDecisions, useApprovalRequests, useSystemSeals } from '@/astryx/data/approvals'
+import { useApprovalDecisions, useApprovalRequests, useSystemSeals } from '@/astryx/data/approvals'
 
 type Status = 'pending' | 'approved' | 'rejected'
 const WORD: Record<Status, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' }
@@ -25,9 +24,6 @@ export default function DecisionsPage() {
   const requests = useApprovalRequests()
   const [filter, setFilter] = useState<Status>('pending')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [notes, setNotes] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const names = useMemo(() => new Map(systems.map((s) => [s.id, s.name])), [systems])
   const rows = useMemo(
@@ -42,25 +38,12 @@ export default function DecisionsPage() {
   const decisions = useApprovalDecisions(open?.id ?? null)
   const seals = useSystemSeals(open?.entity_id ?? null)
 
-  const decide = async (d: 'approved' | 'rejected') => {
-    if (!open) return
-    setBusy(true)
-    setError(null)
-    const err = await decideRequest(open.id, d, notes.trim())
-    setBusy(false)
-    if (err) return setError(err)
-    setNotes('')
-    requests.reload()
-    decisions.reload()
-    seals.reload()
-  }
-
   return (
     <div className="fm-page">
       <VStack gap={5}>
         <VStack gap={1}>
           <Heading level={1}>Decisions</Heading>
-          <Text color="secondary">Every release decision for your systems, who asked, and the sealed record of what was decided.</Text>
+          <Text color="secondary">Every release decision for your systems, who asked, and the sealed record of what was decided. Waiting requests are decided on the system file, beside its release gate.</Text>
         </VStack>
 
         {requests.error && <Banner status="error" title="Decisions could not load" description={requests.error} endContent={<Button label="Try again" size="sm" onClick={() => requests.reload()} />} />}
@@ -82,7 +65,7 @@ export default function DecisionsPage() {
                 <span>System</span><span>Requested by</span><span>Status</span><span>Updated</span>
               </div>
               {visible.map((r) => (
-                <button key={r.id} type="button" className="fm-dec-row" onClick={() => { setOpenId(r.id); setNotes(''); setError(null) }}>
+                <button key={r.id} type="button" className="fm-dec-row" onClick={() => setOpenId(r.id)}>
                   <b>{names.get(r.entity_id)}</b>
                   <span>{r.requested_by ?? 'Not recorded'}</span>
                   <Token size="sm" color={COLOR[r.status]} label={WORD[r.status]} />
@@ -104,13 +87,9 @@ export default function DecisionsPage() {
             </VStack>
 
             {open.status === 'pending' && (
-              <VStack gap={3}>
-                <TextArea label="Notes" description="Kept with the decision on the record." value={notes} onChange={setNotes} />
-                {error && <Banner status="error" title={error} />}
-                <HStack gap={2}>
-                  <Button label="Approve" variant="primary" isLoading={busy} onClick={() => decide('approved')} />
-                  <Button label="Reject" variant="secondary" isDisabled={busy} onClick={() => decide('rejected')} />
-                </HStack>
+              <VStack gap={2} align="start">
+                <Text color="secondary">This request waits for a reviewer. The decision is made on the system file, beside the release gate it rests on.</Text>
+                <Button label="Review and decide" variant="primary" href={`/systems/${encodeURIComponent(open.entity_id)}?decide`} />
               </VStack>
             )}
 

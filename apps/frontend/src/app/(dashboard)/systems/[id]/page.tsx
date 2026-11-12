@@ -3,7 +3,7 @@
 import '@/astryx/pages/system-file.css'
 import NextLink from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMediaQuery } from '@astryxdesign/core/hooks'
 import { Avatar } from '@astryxdesign/core/Avatar'
 import { Badge } from '@astryxdesign/core/Badge'
@@ -124,6 +124,16 @@ function SystemFileBody({ id }: { id: string }) {
   }
 
   const trace = useMemo(() => buildTrace(ap.data?.events, approval), [ap.data?.events, approval])
+
+  // Needs you and Decisions send reviewers here with ?decide: the decision is made beside the gate it rests on.
+  const askedToDecide = useRef(typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('decide'))
+  const pendingRequest = gate && approvalStatusOf(gate, approval) === 'pending' ? approval?.request : null
+  useEffect(() => {
+    if (askedToDecide.current && pendingRequest) {
+      askedToDecide.current = false
+      setPanel({ kind: 'decide' })
+    }
+  }, [pendingRequest])
 
   if (loading && !system) {
     return (

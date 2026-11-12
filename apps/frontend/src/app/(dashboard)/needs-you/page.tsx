@@ -16,7 +16,6 @@ import { useOrg } from '@/context/OrgContext'
 import { usePackActions } from '@/lib/api/hooks/usePacks'
 import { usePolicyActions } from '@/lib/api/hooks/usePolicies'
 import { acceptOverride } from '@/lib/api/hooks/useApplicability'
-import { decideRequest } from '@/astryx/data/approvals'
 import { KIND, useNeedsYou, type Item, type Kind } from '@/astryx/data/needsYou'
 
 export default function NeedsYouPage() {
@@ -73,10 +72,6 @@ export default function NeedsYouPage() {
 
   const decide = (item: Item, choice: string) => {
     const [, key] = item.id.split(/:(.+)/)
-    if (item.kind === 'approval') {
-      const d = choice === 'approve' ? 'approved' : 'rejected'
-      return run(item.id, () => decideRequest(key, d, notes.trim()), d === 'approved' ? 'Release approved.' : 'Release rejected.')
-    }
     if (item.kind === 'run') {
       return run(item.id, async () => (await packActions.decideRun(key, choice as 'approve' | 'request_changes' | 'reject', notes.trim() || undefined)).error, 'Decision recorded.')
     }
@@ -140,7 +135,7 @@ export default function NeedsYouPage() {
             {open.kind !== 'policy' && <TextArea label="Notes" description="Kept with the decision on the record." value={notes} onChange={setNotes} />}
             {message?.status === 'error' && <Banner status="error" title={message.text} />}
             <HStack gap={2} wrap="wrap">
-              <Button label={open.kind === 'run' || open.kind === 'policy' ? 'Approve' : 'Approve release'} variant="primary" isLoading={busy === open.id} onClick={() => decide(open, 'approve')} />
+              <Button label="Approve" variant="primary" isLoading={busy === open.id} onClick={() => decide(open, 'approve')} />
               {open.kind === 'run' && <Button label="Request changes" variant="secondary" isDisabled={busy === open.id} onClick={() => decide(open, 'request_changes')} />}
               <Button label={open.kind === 'policy' ? 'Send back' : 'Reject'} variant="secondary" isDisabled={busy === open.id} onClick={() => decide(open, 'reject')} />
             </HStack>
