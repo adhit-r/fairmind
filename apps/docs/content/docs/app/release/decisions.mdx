@@ -1,0 +1,42 @@
+---
+title: Decisions
+description: See every release approval request for your systems and the sealed record of what was decided.
+---
+
+<Access where="Release and operate › Decisions" address="/decisions" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/release/decisions" /></Tab>
+  <Tab value="Try it"><TryIt page="app/release/decisions" /></Tab>
+</Tabs>
+
+## What it is for
+
+This page is the register of release decisions. It lists approval requests, who asked, their status, and the sealed record behind each decision. It is a place to read and audit. It is not where you decide.
+
+Waiting requests are decided on the system file, beside the release gate they rest on. The page sends you there.
+
+## How to use it
+
+1. Open **Decisions**. The list starts on **Pending**.
+2. Use **Filter by status** to switch between **Pending**, **Approved** and **Rejected**. Each option shows its count.
+3. Click a row to open the drawer. Rows show System, Requested by, Status and Updated. Only requests for systems you can see are listed.
+4. For a pending request, press **Review and decide**. This opens the system file with the decision panel.
+5. Read **Decisions** and **Sealed records for this system** in the drawer.
+6. Press **Open the system file** to go to the system.
+
+If the list is empty, the page says that approval requests appear once a system asks for one from its file.
+
+## What's on the page
+
+In the drawer, **Decisions** lists each recorded decision with the decider, the date and any notes. If none exists yet, it says so.
+
+**Sealed records for this system** shows, for each seal: the decision, whether the seal is **Intact** or **Broken**, the gate verdict and confidence stored at the time, the number of evidence items, who sealed it and when, and the first 12 characters of the chain head. A seal is made when a decision is recorded. "Nothing sealed yet" means no decision has been recorded.
+
+A **Broken** seal means the stored record no longer matches its hash. Treat that as an integrity problem, not a display glitch.
+
+Approval is refused by the backend while the linked system has open critical remediation tasks. See [Findings](./findings.mdx).
+
+For the full approval flow, read [Reports and approvals](../../journeys/reports-approvals.mdx). For who may decide and the separation rules, read [Permissions and separation](../../reference/permissions-and-separation.mdx).
+
+<PageAnatomy route="decisions" />

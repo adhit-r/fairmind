@@ -1,0 +1,37 @@
+---
+title: Policies
+description: Keep your organisation's AI policies, who has read them, and whether their rules hold on every system.
+---
+
+<Status state="partial">**Draft a policy with the agent** needs your organisation's own AI model, set up in Settings. Without one the dialog shows an error with a link to Settings. The agent saves a draft only. People review and approve it.</Status>
+
+<Access where="Rules › Policies" address="/policies" change="Organisation mutation access (owner or admin role, or the model:write permission) to enforce rules, draft policies or acknowledge alerts" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/rules/policies" /></Tab>
+  <Tab value="Try it"><TryIt page="app/rules/policies" /></Tab>
+</Tabs>
+
+## What it is for
+
+A policy here is more than a document. It has a status, rules the platform can check, and a record of who acknowledged it. This page shows all of that, and which rules fail on which systems.
+
+## How to use it
+
+1. Open **Policies**. The facts row counts published, in review or approved, drafts, acknowledgements and open alerts.
+2. Use the tabs **All** and **With open alerts** to filter. Each shows a count.
+3. Read the table. Columns are **Policy**, **Status**, **Rules**, **Acknowledged**, **Enforcement** and **Alerts**. Status is Draft, In review, Approved, Published or Retired. **Enforcement** reads Not enforced, Passing, or N failing. The small line under a name gives its version, the version in force if different, and the owner.
+4. Click a policy name to open it.
+5. Press **Enforce rules now** to check every published rule against every system. A banner then reports how many passed, failed, were blocking, or did not apply.
+6. Press **Draft a policy with the agent**. In the dialog, write **What should the policy say?** (at least 10 characters) and press **Draft policy**. The result names the policy, how many rules and controls it maps, and how many suggestions it dropped because the platform cannot check them. Press **Review it** to open the draft, then submit it for approval.
+7. Under **Open alerts**, each failing rule shows **Blocking** or **Warning**, the system, the detail and when it started failing. Press **Open the system**, or **Acknowledge** to record that you have seen it. **All alerts** goes to the full list.
+
+## What's on the page
+
+A blocking rule can stop a release approval. A warning does not. Acknowledging an alert records that someone saw it. It does not make the rule pass.
+
+Policies in review, and policies you have not read, also appear in [Needs you](../home/needs-you.mdx). A policy's own page, reached from its name, shows that policy in full.
+
+With no policies the table says **No policies yet**. If the list cannot load, **Policies could not load** appears with **Try again**.
+
+<PageAnatomy route="policies" />

@@ -1,0 +1,36 @@
+---
+title: Frameworks
+description: See which rules and standards you answer to, how much the installed packs cover, and where each system stands.
+---
+
+<Access where="Rules › Frameworks" address="/frameworks" change="Organisation mutation access (owner or admin role, or the model:write permission) to install packs" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/rules/frameworks" /></Tab>
+  <Tab value="Try it"><TryIt page="app/rules/frameworks" /></Tab>
+</Tabs>
+
+## What it is for
+
+A framework is a regulation or standard, split into requirements. This page shows how many requirements your installed packs cover, and then, for one framework, each requirement against each system that confirmed it. Use it to find gaps before an audit.
+
+## How to use it
+
+1. Open **Frameworks**. The table lists **Framework**, **Pillar**, **Type**, **Covered by installed packs**, **Covered by all packs**, **Packs** and **Waiting**.
+2. Read coverage as "N of M". The first number is requirements covered, the second is the framework's active requirements. **Covered by all packs** shows what you would reach if you installed every pack that applies.
+3. A row with a gap shows **Install all packs**. It installs every pack that covers or tests that framework. The button reads **Installing** while it works.
+4. Press **Show coverage** on a row. The section below shows that framework. The first framework with active requirements is selected when the page opens.
+5. In the coverage grid, requirements are rows grouped by area and systems are columns. Click a system name to open its file. Hover a cell for its meaning.
+6. Press **Open the framework** for the framework's own page, or **Export an auditor pack** to start a pack for it.
+
+## What's on the page
+
+Cell marks: proven, attested, estimated, out of date, fails, open, and not tracked. Attested means a person stated it, and estimated is not measured. The key under the grid lists them.
+
+Only systems that confirmed the framework appear as columns. A note counts those that have not confirmed which frameworks apply and those that are not in scope. Confirm a framework on a system's file, in **Confirm tier and rules**.
+
+If no system has confirmed the framework, the grid is replaced by **No system has confirmed this framework** with **Open AI systems**. If coverage fails to load you get **Coverage could not load** and **Try again**. If an install fails, a banner reads **Install failed** with the reason. An organisation with no frameworks sees **No frameworks are loaded** and **Open the packs hub**.
+
+Related: [Plan](./plan.mdx), [Auditor packs](../records/auditor-packs.mdx), [Evidence model](../../get-started/evidence-model.mdx).
+
+<PageAnatomy route="frameworks" />

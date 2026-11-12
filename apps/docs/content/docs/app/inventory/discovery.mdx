@@ -1,0 +1,43 @@
+---
+title: Discovery
+description: Connect MLflow, GitHub or Hugging Face so FairMind finds AI systems you have not registered.
+---
+
+<Status state="partial">Discovery reads from sources outside FairMind: an MLflow tracking server, GitHub, or Hugging Face. A scan only finds what the address, account and token you give it can reach. It suggests a risk tier and stage; it does not confirm them.</Status>
+
+<Access where="Inventory › Discovery" address="/discovery" change="Organisation mutation access (owner or admin role, or the model:write permission)" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/inventory/discovery" /></Tab>
+  <Tab value="Try it"><TryIt page="app/inventory/discovery" /></Tab>
+</Tabs>
+
+## What it is for
+
+Discovery keeps your inventory from depending on memory. You connect a source. FairMind reads it and lists AI systems it finds. You decide which become registered systems.
+
+## How to use it
+
+1. Open **Discovery**. The line under the heading says how many connectors exist and how many finds are not registered.
+2. Press **Connect a source**. A drawer opens.
+3. Choose the source with the buttons **MLflow**, **GitHub** or **Hugging Face**. The fields change with the choice.
+4. Fill in **Name**, then the source's own fields:
+   - MLflow: **Tracking server address**.
+   - GitHub: **Organisation or user**, and optionally **Repositories**, comma separated. Blank reads them all.
+   - Hugging Face: **Organisation or user on Hugging Face**, and optionally **Name contains**, **Pipeline tag** and **Library**.
+5. Add an **Access token** if the source is private. It is stored on the server and not shown again. Public sources do not need one.
+6. Press **Add connector**. It stays disabled until **Name** has text.
+7. In **Connectors**, press **Sync now** to read a source. The row then shows when it synced and how many items were found, new and updated, or the error if the sync failed. **Remove** deletes the connector.
+8. In **Found, not registered**, press **Register it** to create a system and open its file, or **Ignore** to set it aside.
+
+## What's on the page
+
+Three lists sit under the connectors. **Found, not registered** always shows. **Registered** and **Ignored** show only when they have items. A **Registered** item has **Open system**.
+
+Each item names its source and external id, and what the scan saw. For Hugging Face that is tag, library, licence and downloads. For MLflow it is the number of versions. For GitHub it is the AI libraries, agent configs and model files it spotted. New items also show a suggested risk and stage.
+
+A failed action shows **That did not work** and the reason. If the page cannot load, it shows **Discovery could not load** and **Try again**.
+
+Registering a found system is the same as registering by hand, except FairMind starts with what the scan saw. Confirm tier and frameworks on the system file afterward. See [Register a system](../../journeys/register-system.mdx) and [AI systems](./systems.mdx).
+
+<PageAnatomy route="discovery" />

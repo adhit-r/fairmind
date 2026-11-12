@@ -1,0 +1,38 @@
+---
+title: Evidence
+description: Collect, tag and link the artifacts that back one AI system's release decision.
+---
+
+<Access where="Records › Evidence" address="/evidence" change="Owner or admin role, or the model:write permission" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/records/evidence" /></Tab>
+  <Tab value="Try it"><TryIt page="app/records/evidence" /></Tab>
+</Tabs>
+
+## What it is for
+
+Evidence is what a release decision rests on: test results, monitoring snapshots, written narratives and signed attestations. The page lists the evidence collected for one AI system and shows whether the chain that seals it is intact. For the model behind this, read the [evidence model](../../get-started/evidence-model.mdx).
+
+Evidence is always per system. With no registered system the page says so and offers **Register a system**. Systems that are only placeholders are left out of the selector.
+
+## How to use it
+
+1. Pick the system in **AI system**. Everything below follows that choice.
+2. Read the summary: **Evidence items**, **Chain**, **Last sealed** and **Stale items**. The chain shows the first 16 characters of the head hash and an **Chain intact** or **Chain broken** token. Until a release decision seals the evidence, it reads "Not sealed yet".
+3. Type in **Search evidence** to filter by title, type, folder or tag. **Clear search** resets it.
+4. Select an item's title to open its detail drawer, where you can edit it and link it to controls.
+5. To add evidence, choose **Add evidence**. Pick one of **Narrative**, **File upload** or **Attestation**, give it a short name and a type, add tags and a folder, then save. The **External URL** option appears only when the deployment turns on untrusted external evidence linking.
+6. Choose **Auditor packs** to go to the [packs page](./auditor-packs.mdx).
+
+**Add evidence** and linking are shown only if you are an owner or admin, or hold the `model:write` permission. Everyone else reads the list and the drawer.
+
+## What's on the page
+
+The table has these columns: Evidence (title and type), Confidence as a percentage, Tags (first three, then a count), Folder, Links (how many controls or entities it is linked to), State (**Stale** or Current) and Created.
+
+A warning banner, **Evidence gaps reported**, lists signals the system is missing. It appears only when the API reports gaps.
+
+An older link with `?view=evaluations` opens a different view, **Evaluation runs**, with a **Back to evidence** button. It lists evaluation runs and lets reviewers confirm how each maps to controls. An evaluator catalogue is shown above the runs only to users with the `evaluation:catalog:admin` permission, and only when the deployment enables it.
+
+<PageAnatomy route="evidence" />

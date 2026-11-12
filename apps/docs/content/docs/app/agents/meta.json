@@ -1,0 +1,8 @@
+{
+  "title": "Agents",
+  "defaultOpen": false,
+  "pages": [
+    "autopilot",
+    "ask"
+  ]
+}

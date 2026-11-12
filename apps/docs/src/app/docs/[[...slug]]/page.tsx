@@ -5,6 +5,10 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from 'fumadocs-ui/page';
 import type { Metadata } from 'next';
 import { Status } from '../../../components/status';
+import { Access } from '../../../components/access';
+import { PageAnatomy } from '../../../components/page-anatomy';
+import { TryIt } from '../../../components/try-it';
+import { Watch } from '../../../components/watch';
 import { source } from '../../../lib/source';
 
 type PageProps = {
@@ -34,7 +38,7 @@ export default async function Page({ params }: PageProps) {
         View as Markdown
       </a>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Status }} />
+        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Status, Access, PageAnatomy, Watch, TryIt }} />
       </DocsBody>
     </DocsPage>
   );

@@ -1,0 +1,43 @@
+---
+title: Ask FairMind
+description: Ask a plain-language question about your systems, checks and evidence, and get an answer that links to them.
+---
+
+<Status state="partial">Needs your organisation's own AI provider and model key. Until one is switched on, the page shows only "Connect an AI provider to ask questions".</Status>
+
+<Access where="Agents › Ask FairMind" address="/ask" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/agents/ask" /></Tab>
+  <Tab value="Try it"><TryIt page="app/agents/ask" /></Tab>
+</Tabs>
+
+## What it is for
+
+Ask FairMind answers questions about your estate from your own systems and records. It does not search the web. It uses the provider and model your organisation configured, and names them under the input and under each answer.
+
+## How to use it
+
+1. If you see "Connect an AI provider to ask questions", choose **Open AI provider settings**. This opens [Settings](../settings/settings.mdx) at the AI provider section. Add a key, then return.
+2. Type a question in the input, or select one of the suggestions:
+   - Which AI systems are not ready to release, and why?
+   - What evidence is missing across my systems?
+   - Which release checks are failing?
+   - Which systems have a decision waiting for a person?
+   - What changed in the last week?
+   - Which systems have stale evidence?
+3. Submit. Questions are cut at 2000 characters.
+4. Read the answer. Under it, **Systems it named** links to each system with the reason it was named.
+5. Check the footer: how many systems and runs the answer read, and which provider and model produced it.
+
+Newest questions appear at the top. The history lives in the page only. It is not saved when you leave.
+
+A link with `?q=` asks that question once as soon as the provider is known to be on.
+
+## What's on the page
+
+The suggestions disappear after your first question. If a question fails, the card shows a **No answer** banner with the reason. If the provider cannot load, the page shows "The AI provider could not load" with **Try again**.
+
+Treat answers as a reading aid. Confirm anything that matters on the linked system pages and in [Evidence](../records/evidence.mdx).
+
+<PageAnatomy route="ask" />
