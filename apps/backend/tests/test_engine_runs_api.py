@@ -31,7 +31,7 @@ def test_a_run_is_stored_and_drives_the_evaluation_result(tmp_database):
     system = _system(tmp_database, org_id)
     spec = client.get(f"{PACKS}/evaluations/EV-DAT-01/engine").json()
     assert [s["name"] for s in spec["slots"]] == ["reference", "current"]
-    assert client.get(f"{PACKS}/evaluations/EV-SEC-22/engine").status_code == 404
+    assert client.get(f"{PACKS}/evaluations/EV-XXX-99/engine").status_code == 404
 
     passed = _run(client, system, 0.0)
     assert passed.status_code == 200, passed.text

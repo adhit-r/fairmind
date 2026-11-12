@@ -33,9 +33,9 @@ let index = 0;
         ))}
       </div>
       <ul class="et-legend" aria-label="Engine status">
-        <li><i class="et-swatch" data-engine="exists"></i>{engineLabel.exists} <b>{engineCounts.exists}</b></li>
-        <li><i class="et-swatch" data-engine="partial"></i>{engineLabel.partial} <b>{engineCounts.partial}</b></li>
-        <li><i class="et-swatch" data-engine="none"></i>{engineLabel.none} <b>{engineCounts.none}</b></li>
+        {(['exists', 'partial', 'none'] as const).filter((k) => engineCounts[k]).map((k) => (
+          <li><i class="et-swatch" data-engine={k}></i>{engineLabel[k]} <b>{engineCounts[k]}</b></li>
+        ))}
       </ul>
     </div>
 

@@ -265,8 +265,9 @@ def test_evaluations_filter_by_pillar_and_engine(tmp_database):
     _, client = _org(tmp_database)
     everything = client.get(f"{PACKS}/evaluations").json()
     assert len(everything) == 109
-    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Partial"}).json()
-    assert len(secure) == 1 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
+    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Engine exists"}).json()
+    assert secure and all(e["pillar"] == "SECURE" and e["engine"] == "Engine exists" for e in secure)
+    assert client.get(f"{PACKS}/evaluations", params={"engine": "Partial"}).json() == []
     drift = client.get(f"{PACKS}/evaluations", params={"q": "data drift"}).json()
     assert [e["id"] for e in drift] == ["EV-DAT-01"] and drift[0]["tests"] and drift[0]["installed"] is False
     assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["pack"]["id"] == drift[0]["pack"]["id"]
@@ -674,7 +675,7 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
-    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"] is None  # no engine and no stored results to read
+    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"]["status"] == "not_run"  # engine since Nov 2026, not run yet
     assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"]["status"] == "not_run"  # has an engine, not run yet
 
 
