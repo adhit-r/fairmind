@@ -1,21 +1,21 @@
 WEBVTT
 
 1
-00:00:04.207 --> 00:00:10.052
+00:00:00.400 --> 00:00:06.245
 Settings has a section list on the left. Organisation comes first, with the release gate options.
 
 2
-00:00:10.942 --> 00:00:15.742
+00:00:07.135 --> 00:00:11.935
 AI provider holds the model key used by Ask FairMind and agent steps.
 
 3
-00:00:16.607 --> 00:00:21.791
+00:00:12.800 --> 00:00:17.984
 Team and roles lists members. Owners and admins can invite people and change roles.
 
 4
-00:00:22.656 --> 00:00:26.837
+00:00:18.849 --> 00:00:23.030
 Developers is where you create API keys for CI and the CLI.
 
 5
-00:00:27.724 --> 00:00:31.820
+00:00:23.917 --> 00:00:28.013
 The audit log lists what happened in the organisation, page by page.

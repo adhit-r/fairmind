@@ -1,13 +1,13 @@
 WEBVTT
 
 1
-00:00:06.089 --> 00:00:11.806
+00:00:00.400 --> 00:00:06.117
 Every started workflow is a run. The line under the title says how many are waiting on a person.
 
 2
-00:00:12.685 --> 00:00:18.189
+00:00:06.996 --> 00:00:12.500
 The demo has none yet. A run starts when a workflow is started from a framework or a system.
 
 3
-00:00:19.053 --> 00:00:25.666
+00:00:13.364 --> 00:00:19.977
 Open a run to see its steps, where a person decides, and a ledger whose chain of hashes shows nothing was changed.

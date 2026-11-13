@@ -128,6 +128,16 @@ export async function captureTour(browser: Browser, tour: Tour): Promise<void> {
     const page = await context.newPage()
     await page.goto(`${APP}/dashboard`, { timeout: 60_000 })
     await settle(page)
+    // Open the first page and let it finish loading before filming, so a recording never opens on a blank,
+    // silent screen while a slow host answers.
+    const steps = [...tour.steps]
+    if (steps[0]?.goto) {
+      await page.goto(`${APP}${steps[0].goto}`, { timeout: 60_000 })
+      await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined)
+      await page.locator('main h1').first().waitFor({ timeout: 30_000 }).catch(() => undefined)
+      await page.waitForTimeout(1500)
+      steps[0] = { ...steps[0], goto: undefined }
+    }
     const rec = await recordScreen(page, join(work, 'frames'))
     const cues: { start: number; end: number; text: string; file: string }[] = []
     const shots: { image: string; text: string; box?: Box }[] = []
@@ -152,7 +162,7 @@ export async function captureTour(browser: Browser, tour: Tour): Promise<void> {
       }
     }, [b.x + b.w / 2, b.y + b.h / 2, press] as const)
 
-    for (const [i, step] of tour.steps.entries()) {
+    for (const [i, step] of steps.entries()) {
       try {
         await runStep(page, step, i)
       } catch (e) {

@@ -1,21 +1,21 @@
 WEBVTT
 
 1
-00:00:13.112 --> 00:00:17.741
+00:00:00.400 --> 00:00:05.029
 Auditor packs are frozen snapshots of evidence and decisions, each with a hash.
 
 2
-00:00:20.489 --> 00:00:23.817
+00:00:07.777 --> 00:00:11.105
 Build a pack by choosing a title, frameworks and systems.
 
 3
-00:00:27.431 --> 00:00:30.716
+00:00:14.719 --> 00:00:18.004
 Build pack stays disabled until all three are filled.
 
 4
-00:00:33.113 --> 00:00:35.524
+00:00:20.401 --> 00:00:22.812
 We will not build one in the demo, so cancel.
 
 5
-00:00:37.648 --> 00:00:41.211
+00:00:24.936 --> 00:00:28.499
 An auditor checks a downloaded pack offline with one command.
