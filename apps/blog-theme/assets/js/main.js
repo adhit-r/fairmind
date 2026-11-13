@@ -122,4 +122,11 @@
   };
   addEventListener('scroll', tick, { passive: true });
   tick();
+
+  // Copy link in the share row.
+  $$('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; }
+    catch { b.textContent = 'Copy failed'; }
+    setTimeout(() => { b.textContent = 'Copy link'; }, 2000);
+  }));
 })();
