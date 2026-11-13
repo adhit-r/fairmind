@@ -26,7 +26,7 @@
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
     "astro": "^7.4.8",
-    "posthog-js": "^1.447.5",
+    "posthog-js": "^1.447.7",
     "three": "^0.187.0"
   },
   "overrides": {
