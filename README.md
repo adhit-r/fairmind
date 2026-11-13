@@ -53,7 +53,7 @@ FairMind helps a team get ready for review and shows an auditor the evidence. It
 |---|---|
 | **AI systems** | Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. Each system has one page that walks it through Onboard, Assess, Govern, Remediate and Operate. |
 | **Packs and workflows** | Install packs, start workflow runs, record step outputs, decide at gates. Draft and publish your own version of any workflow. |
-| **Evaluations** | Run 61 of the 109 evaluations: on uploaded files, against your live AI system, or on your agent platform's configuration. Results are stored as measured evidence. |
+| **Evaluations** | Run all 109 evaluations: on uploaded files, against your live AI system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
 | **Release gate** | Five checks (fairness, data governance, human oversight, monitoring, environmental) give `go`, `conditional_go` or `no_go`. Failing blocking policy rules force `no_go`. Approval is refused while critical findings are open. |
 | **Policies** | Write rules mapped to framework controls. Results are evaluated live and count as evidence for those controls. |
 | **Evidence for auditors** | Read the gate per framework clause, export inspection packs, share a read-only auditor link, and verify a pack offline with `fairmind verify`. |
@@ -64,7 +64,7 @@ FairMind helps a team get ready for review and shows an auditor the evidence. It
 | Area | Where it stands |
 |---|---|
 | **Agent steps** | The agent drafts a work step when someone presses *Let the agent do this step* or *Run to the next decision*. It uses your own model (19 providers, key encrypted at rest) or, without one, built-in rules that list what is on file and what is missing. It writes text to the ledger; it does not change anything outside FairMind. |
-| **The other 48 evaluations** | Catalogue entries without an engine. Attach evidence from your own tools; their pages say *Not runnable in FairMind yet*. |
+| **Agent, attack and detector evaluations** | 21 evaluations judge a results file from your own sandbox, drill, attack run or detector. FairMind computes the metric from the raw rows but does not run the scenario or attack itself until sandboxed workers exist. |
 | **Monitoring** | You push snapshots on your schedule (for example `fairmind monitor` in a cron job). FairMind tracks cadence, flags stale snapshots and opens a finding on sustained drift. It does not pull data itself. |
 | **Older pages** | Bias detection, LLM judge, multimodal bias and similar pages from earlier versions remain outside the main navigation. They are not validated. |
 
@@ -222,7 +222,7 @@ It is also listed in [Awesome AI Regulation, Principles & Guidelines](https://gi
 
 ## Contributing
 
-Contributions are welcome, from typo fixes to new evaluation engines. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a [good first issue](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). The 48 evaluations without an engine are a good place to start. Questions go to [Discussions](https://github.com/adhit-r/fairmind/discussions). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Contributions are welcome, from typo fixes to new evaluation engines. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a [good first issue](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Running the agent-scenario and attack evaluations in a sandboxed worker is a good place to start. Questions go to [Discussions](https://github.com/adhit-r/fairmind/discussions). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 
