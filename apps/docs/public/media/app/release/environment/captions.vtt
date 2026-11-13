@@ -1,21 +1,21 @@
 WEBVTT
 
 1
-00:00:12.857 --> 00:00:18.297
+00:00:00.400 --> 00:00:05.840
 Environment scores the energy and carbon use of each AI system into an impact tier.
 
 2
-00:00:21.962 --> 00:00:27.402
+00:00:09.505 --> 00:00:14.945
 The counts show how many systems are proven, estimated, out of date, failing or not assessed.
 
 3
-00:00:30.432 --> 00:00:34.997
+00:00:17.975 --> 00:00:22.540
 Each row shows the latest tier, its confidence, and whether it blocks approval.
 
 4
-00:00:37.949 --> 00:00:42.130
+00:00:25.492 --> 00:00:29.673
 Start an assessment opens a form for that system. We will not save it here.
 
 5
-00:00:45.815 --> 00:00:51.340
+00:00:33.358 --> 00:00:38.883
 Below the list, a table explains how impact tiers are set. The thresholds are provisional.

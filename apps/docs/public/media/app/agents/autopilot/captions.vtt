@@ -1,17 +1,17 @@
 WEBVTT
 
 1
-00:00:22.316 --> 00:00:26.028
+00:00:00.400 --> 00:00:04.112
 Autopilot sets how much agents may do for each AI system.
 
 2
-00:00:29.109 --> 00:00:32.650
+00:00:07.193 --> 00:00:10.734
 The summary counts steps done this week and steps that need a person.
 
 3
-00:00:35.180 --> 00:00:40.321
+00:00:13.264 --> 00:00:18.405
 Recent and active agent runs are listed here. Select one to open it in Runs.
 
 4
-00:00:48.552 --> 00:00:52.243
+00:00:26.636 --> 00:00:30.327
 By system, each row has a mode: Off, Ask first or Run.

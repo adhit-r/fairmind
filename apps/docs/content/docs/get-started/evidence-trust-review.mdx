@@ -6,7 +6,7 @@ description: How Assurance V2 admits signed Evidence Passports, links them, revi
 Assurance V2 is a separate, default-off evidence path alongside the [Evidence Workbench](/docs/journeys/evidence-review). Where Workbench records are mutable, Assurance V2 binds signed evidence to an exact run and keeps the record chain in PostgreSQL.
 
 <Callout type="warn" title="Default off">
-Submission, import, linking, review, and decisions each have their own gate, and every gate defaults to `false`. A `404` from these routes is the expected default state. See [Configuration](/docs/self-host/configuration#assurance-v2-gates).
+Submission, import, linking, review, and decisions each have their own gate, and every gate defaults to `false`. A `404` from these routes is the expected default state.
 </Callout>
 
 ## Record chain
@@ -65,7 +65,3 @@ Freshness is not a score. It says whether one evidence record is still eligible 
 | Governance verdict | `approved`, `conditional`, `review`, `blocked`, `insufficient` |
 
 Only `verified` admissions can become decision evidence. Accepted evidence can still become stale later.
-
-## Evidence basis
-
-Routes and response models are in `apps/backend/src/api/routers/evaluation_workbench.py` and `imported_evidence.py`. Admission, link, and review rules are in `apps/backend/src/application/services/verified_evidence_admission_service.py`, `verified_evidence_link_service.py`, `verified_evidence_review_service.py`, and `imported_evidence_service.py`. Freshness rules are in `apps/backend/src/application/evidence_freshness.py` and migration `013g`.
