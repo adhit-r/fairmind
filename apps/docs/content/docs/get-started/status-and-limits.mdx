@@ -16,7 +16,7 @@ FairMind is alpha (November 2026). The main path works end to end: discover syst
 | --- | --- |
 | AI systems | Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. |
 | Packs and workflows | Install packs, start workflow runs, record step outputs, decide at gates, and publish your own version of a workflow. |
-| Evaluations | Run 61 of the 109 catalogue evaluations: on uploaded files, against your live system, or on your agent platform's configuration. Results are stored as measured evidence. |
+| Evaluations | Run all 109 catalogue evaluations: on uploaded files, against your live system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
 | Release gate | Five checks give `go`, `conditional_go` or `no_go`. Failing blocking policy rules force `no_go`. Approval is refused while critical findings are open. |
 | Policies | Rules mapped to framework controls, evaluated live, counted as evidence for those controls. |
 | Evidence for auditors | The gate per framework clause, inspection packs, a read-only auditor link, and offline verification with `fairmind verify`. |
@@ -27,7 +27,7 @@ FairMind is alpha (November 2026). The main path works end to end: discover syst
 | Area | Where it stands |
 | --- | --- |
 | Agent steps | The agent drafts a workflow step when a person asks. It uses your own model (19 providers, key encrypted at rest) or built-in rules. It writes to the ledger only; it changes nothing outside FairMind. |
-| The other 48 evaluations | Catalogue entries without an engine. Attach evidence from your own tools. |
+| Agent, attack and detector evaluations | 21 evaluations (agent scenarios, kill-switch drills, multi-agent faults, attacks on models, deepfake, voice-clone and phishing results) judge a results file you produce in your own sandbox or tool. FairMind computes the metric from the raw rows but does not run the scenario or attack itself. The CBRN and abuse-material refusal tests run only on a restricted probe set you upload. |
 | Monitoring | You push snapshots on your schedule, for example `fairmind monitor` in a cron job. FairMind flags stale snapshots and opens a finding on sustained drift. It does not pull data. |
 | Catalogue workflows | 86 of the 90 are marked *proposed* until organisations run them in practice. |
 | Older pages | Bias detection, LLM judge, multimodal bias and similar pages from earlier versions sit outside the main navigation and are not validated. LLM judge sends input to an external provider. |
