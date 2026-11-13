@@ -5,7 +5,7 @@ description: Decide how much each AI system lets agents do, and see what the age
 
 <Status state="partial">Agent steps that read or write need your organisation's AI provider. Without one the page shows a warning, **No AI provider is set up**, with a **Set it up in Settings** button. The modes can still be changed.</Status>
 
-<Access where="Agents › Autopilot" address="/autopilot" change="Organisation mutation access to the system" />
+<Access status="partial" where="Agents › Autopilot" address="/autopilot" change="Organisation mutation access to the system" />
 
 <Tabs items={['Watch', 'Try it']}>
   <Tab value="Watch"><Watch page="app/agents/autopilot" /></Tab>
@@ -28,6 +28,12 @@ Autopilot sets, per system, how much room agents get to carry out the steps that
 5. In **Agent runs**, select a row to open it in Runs. **Open all runs** goes to the full list.
 
 If a mode change fails, the error appears under the selector.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/agents/autopilot" />
 
 ## What's on the page
 

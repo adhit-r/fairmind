@@ -5,7 +5,7 @@ description: Connect your agent platform with a read-only key and run configurat
 
 <Status state="partial">Claude Managed Agents is the only platform supported. The page depends on that external provider and on a key you supply. Without a connection, each platform check can still run on an uploaded export.</Status>
 
-<Access where="Testing › Agent audits" address="/agent-audits" change="Owner or admin of the organisation (saving, testing and removing the key)" />
+<Access status="partial" where="Testing › Agent audits" address="/agent-audits" change="Owner or admin of the organisation (saving, testing and removing the key)" />
 
 <Tabs items={['Watch', 'Try it']}>
   <Tab value="Watch"><Watch page="app/testing/agent-audits" /></Tab>
@@ -30,6 +30,12 @@ With a key for the workspace, the audits read agents, environments, vaults, memo
 If the saved key can no longer be decrypted, a warning asks you to enter it again.
 
 Only owners and admins can save, test or disconnect. Other members see the card but the backend refuses the change.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/testing/agent-audits" />
 
 ## What's on the page
 

@@ -5,7 +5,7 @@ description: Check whether each registered system still behaves as it did when r
 
 <Status state="partial">FairMind does not pull data from your systems. You upload snapshots of predictions on your own schedule, for example from a cron job. FairMind compares them with a baseline, flags stale ones, and opens a finding on sustained drift.</Status>
 
-<Access where="Release and operate › Monitoring" address="/monitoring" />
+<Access status="partial" where="Release and operate › Monitoring" address="/monitoring" />
 
 <Tabs items={['Watch', 'Try it']}>
   <Tab value="Watch"><Watch page="app/release/monitoring" /></Tab>
@@ -25,6 +25,12 @@ Monitoring answers one question: is each registered system still behaving the wa
 5. Read **Alerts** on the right. Press **See all alerts** for the full list.
 
 If you have no registered systems, the page offers **Go to Discovery**.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/release/monitoring" />
 
 ## What's on the page
 

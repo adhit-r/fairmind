@@ -5,7 +5,7 @@ description: Connect MLflow, GitHub or Hugging Face so FairMind finds AI systems
 
 <Status state="partial">Discovery reads from sources outside FairMind: an MLflow tracking server, GitHub, or Hugging Face. A scan only finds what the address, account and token you give it can reach. It suggests a risk tier and stage; it does not confirm them.</Status>
 
-<Access where="Inventory › Discovery" address="/discovery" change="Organisation mutation access (owner or admin role, or the model:write permission)" />
+<Access status="partial" where="Inventory › Discovery" address="/discovery" change="Organisation mutation access (owner or admin role, or the model:write permission)" />
 
 <Tabs items={['Watch', 'Try it']}>
   <Tab value="Watch"><Watch page="app/inventory/discovery" /></Tab>
@@ -29,6 +29,12 @@ Discovery keeps your inventory from depending on memory. You connect a source. F
 6. Press **Add connector**. It stays disabled until **Name** has text.
 7. In **Connectors**, press **Sync now** to read a source. The row then shows when it synced and how many items were found, new and updated, or the error if the sync failed. **Remove** deletes the connector.
 8. In **Found, not registered**, press **Register it** to create a system and open its file, or **Ignore** to set it aside.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/inventory/discovery" />
 
 ## What's on the page
 

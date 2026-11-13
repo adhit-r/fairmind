@@ -5,7 +5,7 @@ description: Browse the evaluation catalogue, see which checks can run, and read
 
 <Status state="partial">Of the catalogue, only the evaluations marked Runnable have an engine behind them. The rest are listed so you can see the scope, and you attach evidence from your own tools. This page lists and explains evaluations. It does not start one; the Open to run button leads to the evaluation's own page.</Status>
 
-<Access where="Testing › Evaluations" address="/evaluations" />
+<Access status="partial" where="Testing › Evaluations" address="/evaluations" />
 
 <Tabs items={['Watch', 'Try it']}>
   <Tab value="Watch"><Watch page="app/testing/evaluations" /></Tab>
@@ -28,6 +28,12 @@ The line under the title gives live counts: how many evaluations there are, how 
 6. In the panel, read **Results by system**. Each system name links to its file. Press **Open to run** (or **Open details** when no engine exists) to go to the evaluation page.
 
 If a request fails, a banner offers **Try again**.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/testing/evaluations" />
 
 ## What's on the page
 

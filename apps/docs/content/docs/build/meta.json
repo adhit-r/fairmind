@@ -1,4 +1,10 @@
 {
   "title": "Build with FairMind",
-  "pages": ["python-sdk", "cli", "mcp-server", "release-gate-in-ci"]
+  "pages": [
+    "python-sdk",
+    "cli",
+    "mcp-server",
+    "release-gate-in-ci"
+  ],
+  "defaultOpen": false
 }

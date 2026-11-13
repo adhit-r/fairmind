@@ -5,6 +5,32 @@ description: An open-source AI assurance workbench for models and agents. It tur
 
 <Status state="partial">Alpha, November 2026. The main path works end to end; see [Status and limits](/docs/get-started/status-and-limits).</Status>
 
+<HomeHero />
+
+<DemoStrip />
+
+## Where to start
+
+<Cards>
+  <Card title="Start here" href="/docs/get-started/quickstart" description="Quickstart, core concepts, the evidence model and what works today." />
+  <Card title="The app" href="/docs/app" description="Every page in the menu, with a recording and a click-through." />
+  <Card title="Journeys" href="/docs/journeys/register-system" description="Register a system, review evidence, fix and retest, release." />
+  <Card title="Build with FairMind" href="/docs/build/python-sdk" description="Python SDK, CLI, MCP server and the release gate in CI." />
+  <Card title="Self-host" href="/docs/self-host/deployment" description="Deployment, configuration, sign-in and roles, the operator runbook." />
+  <Card title="Reference" href="/docs/reference/api" description="The API, permissions and separation, the EU AI Act crosswalk." />
+</Cards>
+
+## By role
+
+| You are | Start with |
+| --- | --- |
+| A compliance or risk lead | [Frameworks](/docs/app/rules/frameworks), [Plan](/docs/app/rules/plan), [Decisions](/docs/app/release/decisions), [Auditor packs](/docs/app/records/auditor-packs) |
+| An ML or platform engineer | [Python SDK](/docs/build/python-sdk), [CLI](/docs/build/cli), [Release gate in CI](/docs/build/release-gate-in-ci), [Evaluations](/docs/app/testing/evaluations) |
+| An auditor | [Evidence](/docs/app/records/evidence), [Auditor packs](/docs/app/records/auditor-packs), [Evidence model](/docs/get-started/evidence-model) |
+| Running FairMind yourself | [Deployment](/docs/self-host/deployment), [Configuration](/docs/self-host/configuration), [Operator runbook](/docs/self-host/operator-runbook) |
+
+## What FairMind is
+
 FairMind keeps an AI system, its tests, evidence, risks, remediation and approvals in one reviewable record. It answers one question for a release: **may this system ship, and what is the evidence?**
 
 One rule runs through the product: an evaluation result is evidence for a decision, never the decision itself. A person decides.
@@ -32,15 +58,3 @@ One rule runs through the product: an evaluation result is evidence for a decisi
 - Not a certification. It produces no compliance certificate, automatic approval or "verified" badge.
 - Not a runtime guardrail. It assesses systems; it does not sit in the request path.
 - Not a sandbox. Evaluation engines run inside the backend; uploaded model files are inspected, never executed.
-
-## See it first
-
-**Try the demo** on the [sign-in page](https://app.fairmind.xyz/login) opens a demo organisation, read-only, with no account needed. [The app](/docs/app) section walks through every page of it, each with a narrated recording and a click-through you can step through here.
-
-<Cards>
-  <Card title="The app, page by page" href="/docs/app" description="Every page in the menu: what it is for, how to use it, a recording and a click-through." />
-  <Card title="Quickstart" href="/docs/get-started/quickstart" description="From an API key to your first verdict in a few minutes." />
-  <Card title="Core concepts" href="/docs/get-started/core-concepts" description="Systems, evaluations, evidence, controls and the gate." />
-  <Card title="Govern your first agent" href="/docs/journeys/govern-your-first-agent" description="Connect an agent platform, run evaluations, read the gate." />
-  <Card title="Python SDK" href="/docs/build/python-sdk" description="Typed client for the gate, evaluations and evidence." />
-</Cards>
