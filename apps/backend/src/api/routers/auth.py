@@ -116,6 +116,8 @@ class RefreshResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    # Refresh tokens rotate: the one just used is spent; use this one next time.
+    refresh_token: Optional[str] = None
 
 
 class CreateAPIKeyRequest(BaseModel):
@@ -158,7 +160,7 @@ async def _issue_session(user, response: Optional[Response]) -> LoginResponse:
     """Tokens for a signed-in user: the refresh token also goes into the fm_refresh cookie."""
     # Create tokens using new JWT infrastructure
     access_token = str(auth_manager.create_access_token(user))
-    refresh_token = str(auth_manager.create_refresh_token(user))
+    refresh_token = str(await auth_manager.issue_refresh_token(user))
     
     # Ensure they are not byte string representations like "b'...'"
     if access_token.startswith("b'") and access_token.endswith("'"):
@@ -352,17 +354,18 @@ async def signup(payload: SignupRequest, response: Response):
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-async def refresh_token(request: Request, refresh_data: RefreshRequest = RefreshRequest()):
-    """A new access token for a refresh token from the body or the fm_refresh cookie."""
+async def refresh_token(request: Request, response: Response, refresh_data: RefreshRequest = RefreshRequest()):
+    """Spend a refresh token (body or fm_refresh cookie) for a new access token and a new refresh token."""
     try:
         token = refresh_data.refresh_token or request.cookies.get(REFRESH_COOKIE)
         if not token:
             raise TokenMissingException("No refresh token")
-        access_token = await auth_manager.refresh_access_token(token)
-        
+        access_token, next_refresh = await auth_manager.refresh_session(token)
+        _set_refresh_cookie(response, next_refresh)
         return RefreshResponse(
             access_token=access_token,
-            expires_in=auth_manager.access_token_expire_minutes * 60
+            expires_in=auth_manager.access_token_expire_minutes * 60,
+            refresh_token=next_refresh,
         )
         
     except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
@@ -632,7 +635,7 @@ async def authentik_oauth_callback(
 
         # Create tokens for FairMind
         access_token = str(auth_manager.create_access_token(user))
-        refresh_token = str(auth_manager.create_refresh_token(user))
+        refresh_token = str(await auth_manager.issue_refresh_token(user))
 
         # Ensure they are not byte string representations
         if access_token.startswith("b'") and access_token.endswith("'"):

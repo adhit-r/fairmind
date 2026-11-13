@@ -366,6 +366,13 @@ export class ApiClient {
         if (typeof window !== 'undefined') {
           window.localStorage.setItem('access_token', nextToken)
         }
+        // Refresh tokens rotate: the one just sent is spent. The HttpOnly cookie
+        // carries the new one; a session that still held a token in the page (from
+        // before the cookie) keeps the new one in memory, never in localStorage.
+        if (payload.refresh_token && this.refreshToken) {
+          this.refreshToken = payload.refresh_token
+          if (typeof window !== 'undefined') window.localStorage.removeItem('refresh_token')
+        }
         return true
       } catch {
         if (this.sessionEpoch === refreshEpoch) this.clearSession()

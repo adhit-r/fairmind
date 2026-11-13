@@ -13,7 +13,8 @@
     "test:reviewed-external-linking": "NEXT_PUBLIC_ASSURANCE_UNTRUSTED_EXTERNAL_EVIDENCE_LINKING_ENABLED=true playwright test tests/governance-assurance.spec.ts --grep 'offers the reviewed external URL'",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug"
+    "test:debug": "playwright test --debug",
+    "lint": "eslint src"
   },
   "dependencies": {
     "@alcyone-labs/zod-to-json-schema": "^4.0.10",
@@ -75,6 +76,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.6.2",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.4.5",
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.5.3"

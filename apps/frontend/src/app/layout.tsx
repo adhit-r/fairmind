@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Inter, Figtree, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
+import { headers } from "next/headers"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 
@@ -52,11 +53,13 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Reading the request renders every page per request, which the CSP nonce needs (src/proxy.ts).
+  await headers()
   return (
     <html lang="en">
       <body className={`${inter.variable} ${figtree.variable} ${mono.variable} font-sans`}>

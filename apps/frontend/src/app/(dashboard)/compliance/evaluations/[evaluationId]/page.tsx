@@ -305,7 +305,7 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
             </span>
           )}
           {from === 'connection' && connection && (
-            <span className={`text-xs ${MUTED}`}>FairMind lists the platform's agents, environments, vaults, memory stores, deployments and recent sessions with read-only calls when you run.</span>
+            <span className={`text-xs ${MUTED}`}>FairMind lists the platform&apos;s agents, environments, vaults, memory stores, deployments and recent sessions with read-only calls when you run.</span>
           )}
           {spec.judge && (
             <span className={`text-xs ${MUTED}`}>Uses your model from organization settings, AI provider, when one is set.</span>

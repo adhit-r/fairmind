@@ -138,7 +138,7 @@ export default function RegistrationsPage() {
                     </div>
                     {req.message && (
                       <p className="mt-3 border-l border-[var(--fm-line)] pl-3 text-sm italic text-gray-700">
-                        "{req.message}"
+                        &ldquo;{req.message}&rdquo;
                       </p>
                     )}
                     {req.review_notes && (

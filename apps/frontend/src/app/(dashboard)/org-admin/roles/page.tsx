@@ -177,7 +177,7 @@ export default function OrgRolesPage() {
             </p>
             <p>
               <strong className="text-black">Custom Roles</strong> allow you to define
-              permissions specific to your organization's needs.
+              permissions specific to your organization&apos;s needs.
             </p>
             <p>
               <strong className="text-black">Permissions</strong> determine what actions

@@ -197,3 +197,33 @@ async def test_access_tokens_stop_on_the_next_request(db, monkeypatch):
     await org_management.remove_member(org, member_row, SimpleNamespace(client=None, headers={}), admin)
     with pytest.raises(InvalidTokenException, match="signed out"):
         await auth_manager.verify_token(token)
+
+
+
+@pytest.mark.asyncio
+async def test_refresh_tokens_rotate_and_a_reused_one_ends_every_session(db):
+    """Each refresh spends its token; presenting a spent one again signs the user out everywhere (audit S2)."""
+    user_id = _user(db)
+    first = await auth_manager.issue_refresh_token(await auth_manager.get_user_by_id(user_id))
+
+    access, second = await auth_manager.refresh_session(first)
+    assert access and second and second != first
+    _, third = await auth_manager.refresh_session(second)
+
+    await auth_manager.refresh_session(first)  # a second tab within the grace window: no alarm
+    with db.begin() as conn:  # age the first use past the grace window
+        conn.execute(text("UPDATE refresh_tokens SET used_at = now() - interval '1 hour'"))
+    with pytest.raises(InvalidTokenException, match="signed out"):
+        await auth_manager.refresh_session(first)  # copied token used again
+    [row] = _rows(db, f"SELECT token_version FROM users WHERE id = '{user_id}'")
+    assert row["token_version"] == 1
+    with pytest.raises(InvalidTokenException, match="signed out"):
+        await auth_manager.refresh_session(third)  # the legitimate chain ended too
+
+
+@pytest.mark.asyncio
+async def test_a_refresh_token_from_before_rotation_refreshes_once_into_a_rotating_one(db):
+    user_id = _user(db)
+    legacy = auth_manager.create_refresh_token(await auth_manager.get_user_by_id(user_id))  # no jti
+    _, rotated = await auth_manager.refresh_session(legacy)
+    assert auth_manager.jwt_manager.verify_token(rotated).get("jti")
