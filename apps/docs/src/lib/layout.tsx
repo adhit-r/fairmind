@@ -5,15 +5,16 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       title: (
         <span className="docs-brand">
-          <span className="docs-brand-mark" aria-hidden="true" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.svg" alt="" width={28} height={28} />
           <span>FairMind</span>
+          <span className="docs-brand-pill">Docs</span>
         </span>
       ),
-      transparentMode: 'top',
     },
     links: [
-      { text: 'Try the demo', url: 'https://app.fairmind.xyz/login', external: true },
       { text: 'Website', url: 'https://fairmind.xyz', external: true },
+      { type: 'button', text: 'Try the demo', url: 'https://app.fairmind.xyz/login', external: true },
     ],
     githubUrl: 'https://github.com/adhit-r/fairmind',
   };

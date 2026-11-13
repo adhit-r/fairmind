@@ -6,13 +6,10 @@
     "...get-started",
     "---The app---",
     "...app",
-    "---Journeys---",
-    "...journeys",
-    "---Build with FairMind---",
-    "...build",
-    "---Self-host---",
-    "...self-host",
-    "---Reference---",
-    "...reference"
+    "---More---",
+    "journeys",
+    "build",
+    "self-host",
+    "reference"
   ]
 }

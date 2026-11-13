@@ -1,4 +1,10 @@
 {
   "title": "Self-host",
-  "pages": ["deployment", "configuration", "authentication-rbac", "operator-runbook"]
+  "pages": [
+    "deployment",
+    "configuration",
+    "authentication-rbac",
+    "operator-runbook"
+  ],
+  "defaultOpen": false
 }

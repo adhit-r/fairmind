@@ -5,7 +5,7 @@ description: Keep your organisation's AI policies, who has read them, and whethe
 
 <Status state="partial">**Draft a policy with the agent** needs your organisation's own AI model, set up in Settings. Without one the dialog shows an error with a link to Settings. The agent saves a draft only. People review and approve it.</Status>
 
-<Access where="Rules › Policies" address="/policies" change="Organisation mutation access (owner or admin role, or the model:write permission) to enforce rules, draft policies or acknowledge alerts" />
+<Access status="partial" where="Rules › Policies" address="/policies" change="Organisation mutation access (owner or admin role, or the model:write permission) to enforce rules, draft policies or acknowledge alerts" />
 
 <Tabs items={['Watch', 'Try it']}>
   <Tab value="Watch"><Watch page="app/rules/policies" /></Tab>
@@ -25,6 +25,12 @@ A policy here is more than a document. It has a status, rules the platform can c
 5. Press **Enforce rules now** to check every published rule against every system. A banner then reports how many passed, failed, were blocking, or did not apply.
 6. Press **Draft a policy with the agent**. In the dialog, write **What should the policy say?** (at least 10 characters) and press **Draft policy**. The result names the policy, how many rules and controls it maps, and how many suggestions it dropped because the platform cannot check them. Press **Review it** to open the draft, then submit it for approval.
 7. Under **Open alerts**, each failing rule shows **Blocking** or **Warning**, the system, the detail and when it started failing. Press **Open the system**, or **Acknowledge** to record that you have seen it. **All alerts** goes to the full list.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/rules/policies" />
 
 ## What's on the page
 

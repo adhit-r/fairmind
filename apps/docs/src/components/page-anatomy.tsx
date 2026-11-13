@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { ReactNode } from 'react'
 
 /**
  * What an app page holds, read from outline.json, which `npm run outline` captures from the running app on the demo
@@ -28,38 +29,20 @@ export function PageAnatomy({ route }: { route: string }) {
   const requests = r.requests.filter(q => !COMMON_REQUESTS.has(q))
   const heading = r.headings.find(h => h.startsWith('h1: '))?.slice(4) ?? r.title
 
+  const row = (label: string, value: ReactNode) => (
+    <tr><th scope="row">{label}</th><td>{value}</td></tr>
+  )
   return (
-    <div className="fm-anatomy">
-      <div>
-        <p className="k">Address</p>
-        <p className="mono">{r.path}</p>
-        <p className="k gap">Page title</p>
-        <p>{heading}</p>
-        {regions.length > 0 && (<>
-          <p className="k gap">Sections</p>
-          <ul>{regions.map(x => <li key={x}>{x}</li>)}</ul>
-        </>)}
-        {r.emptyStates.length > 0 && (<>
-          <p className="k gap">When there is nothing yet</p>
-          <ul>{r.emptyStates.map(x => <li key={x}>{x}</li>)}</ul>
-        </>)}
-      </div>
-      <div>
-        {r.tables.map(t => (
-          <div key={t.name}>
-            <p className="k">Table: {t.name}</p>
-            <p className="dim">{t.headers.join(' · ')}</p>
-          </div>
-        ))}
-        {controls.length > 0 && (<>
-          <p className="k">Controls</p>
-          <p className="dim">{controls.map(c => c.replace(/^[a-z]+: /, '')).join(' · ')}</p>
-        </>)}
-        {requests.length > 0 && (<>
-          <p className="k gap">API it calls</p>
-          <ul className="mono plain">{requests.map(q => <li key={q}>{q}</li>)}</ul>
-        </>)}
-      </div>
-    </div>
+    <table className="fm-anatomy not-prose">
+      <tbody>
+        {row('Address', <span className="mono">{r.path}</span>)}
+        {row('Page title', heading)}
+        {regions.length > 0 && row('Sections', regions.join(' · '))}
+        {r.tables.map(t => row(t.name ? `Table: ${t.name}` : 'Table columns', t.headers.join(' · ')))}
+        {controls.length > 0 && row('Controls', controls.map(c => c.replace(/^[a-z]+: /, '')).join(' · '))}
+        {r.emptyStates.length > 0 && row('When there is nothing yet', r.emptyStates.join(' '))}
+        {requests.length > 0 && row('API it calls', <span className="mono api">{requests.map(q => <span key={q}>{q}</span>)}</span>)}
+      </tbody>
+    </table>
   )
 }

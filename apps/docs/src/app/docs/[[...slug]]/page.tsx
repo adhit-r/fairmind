@@ -9,6 +9,8 @@ import { Access } from '../../../components/access';
 import { PageAnatomy } from '../../../components/page-anatomy';
 import { TryIt } from '../../../components/try-it';
 import { Watch } from '../../../components/watch';
+import { TourSteps } from '../../../components/tour-steps';
+import { DemoStrip, HomeHero } from '../../../components/home';
 import { source } from '../../../lib/source';
 
 type PageProps = {
@@ -25,6 +27,15 @@ export default async function Page({ params }: PageProps) {
   return (
     <DocsPage
       toc={page.data.toc}
+      tableOfContent={{
+        style: 'clerk',
+        footer: (
+          <div className="fm-rail">
+            <a className="pill" href="https://app.fairmind.xyz/login">Open the demo ↗</a>
+            <a className="pill" href={`${page.url === '/docs' ? '/docs/index' : page.url}.mdx`}>View as Markdown</a>
+          </div>
+        ),
+      }}
       editOnGithub={{
         owner: 'adhit-r',
         repo: 'fairmind',
@@ -32,14 +43,21 @@ export default async function Page({ params }: PageProps) {
         path: `apps/docs/content/docs/${page.file.path}`,
       }}
     >
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription>{page.data.description}</DocsDescription>
-      <a className="doc-md-link" href={`${page.url === '/docs' ? '/docs/index' : page.url}.mdx`}>
-        View as Markdown
-      </a>
+      {/* The front page opens with its own hero instead of the title block. */}
+      {page.url !== '/docs' && (
+        <>
+          <DocsTitle>{page.data.title}</DocsTitle>
+          <DocsDescription>{page.data.description}</DocsDescription>
+        </>
+      )}
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Status, Access, PageAnatomy, Watch, TryIt }} />
+        <MDX components={{ ...defaultMdxComponents, Step, Steps, Tab, Tabs, Status, Access, PageAnatomy, Watch, TryIt, TourSteps, HomeHero, DemoStrip }} />
       </DocsBody>
+      <footer className="fm-footer">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <span><img src="/logo-mark.svg" alt="" width={18} height={18} /> FairMind · AGPL-3.0</span>
+        <a href="https://github.com/adhit-r/fairmind">GitHub</a>
+      </footer>
     </DocsPage>
   );
 }
