@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#fcfcfb"/>
+<rect x="0" y="0" width="1200" height="8" fill="#0b6b52"/>
+<g transform="translate(96 96) scale(1.25)">  <circle cx="32" cy="32" r="28" fill="#ffffff"/>
+  <circle cx="32" cy="32" r="27" fill="none" stroke="#ff6b35" stroke-width="4"/>
+  <g fill="none" stroke="#15171a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 18v24"/>
+    <path d="M19 25h26"/>
+    <path d="M14.5 36.5 19 25l4.5 11.5"/>
+    <path d="M40.5 36.5 45 25l4.5 11.5"/>
+    <path d="M14.5 36.5a4.5 4.5 0 0 0 9 0"/>
+    <path d="M40.5 36.5a4.5 4.5 0 0 0 9 0"/>
+    <path d="M25 46h14"/>
+  </g>
+  <path d="M43.5 20.5 29.2 34.8" stroke="#1f9d7a" stroke-width="3.2" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="3.2" fill="#1f9d7a"/></g>
+<text x="190" y="148" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="26" font-weight="600" fill="#45474b">FairMind</text>
+<text x="96" y="330" font-family="Georgia, 'Times New Roman', serif" font-size="96" font-weight="600" fill="#1c1d1f" letter-spacing="-2">Chain of Custody</text>
+<text x="96" y="400" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="32" fill="#45474b">Guides to AI regulation, security and safety,</text>
+<text x="96" y="446" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="32" fill="#45474b">with the sources attached.</text>
+<line x1="96" y1="530" x2="1104" y2="530" stroke="#e7e7e3" stroke-width="2"/>
+<text x="96" y="576" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" fill="#0b6b52" font-weight="600">blog.fairmind.xyz</text>
+</svg>
