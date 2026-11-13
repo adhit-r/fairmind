@@ -1,0 +1,25 @@
+WEBVTT
+
+1
+00:00:36.801 --> 00:00:42.412
+Policies shows your organisation policies, who has acknowledged them and whether their rules hold.
+
+2
+00:00:46.795 --> 00:00:49.270
+Filter to the policies with an open alert.
+
+3
+00:00:54.126 --> 00:00:55.491
+Back to all policies.
+
+4
+00:01:02.028 --> 00:01:06.124
+Enforce rules now checks every published rule against every system.
+
+5
+00:01:08.867 --> 00:01:14.051
+The agent can draft a policy from a short brief. It saves a draft for people to review.
+
+6
+00:01:18.404 --> 00:01:21.668
+We stop before drafting, because this demo is read-only.

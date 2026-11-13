@@ -1,0 +1,21 @@
+WEBVTT
+
+1
+00:00:33.179 --> 00:00:39.942
+The catalogue lists every evaluation, grouped by pillar. The counts under the title say how many can run today.
+
+2
+00:00:45.400 --> 00:00:50.904
+The list starts on runnable evaluations only. Those are the ones with an engine behind them.
+
+3
+00:00:54.902 --> 00:00:59.723
+Switch the engine filter to see the entries that are listed but have no engine yet.
+
+4
+00:01:02.127 --> 00:01:07.759
+Click an evaluation name to open its panel with the metric, threshold and results by system.
+
+5
+00:01:12.419 --> 00:01:16.238
+Each system shows its latest result and the evidence it came from.

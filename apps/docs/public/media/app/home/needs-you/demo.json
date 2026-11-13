@@ -1,0 +1,53 @@
+{
+  "title": "Find what waits on you",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Needs you lists everything that waits on a person, in one place."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The filter shows how many items there are of each type.",
+      "box": {
+        "x": 348,
+        "y": 164,
+        "w": 29,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Pick a type to narrow the list. Here, release decisions waiting for a reviewer.",
+      "box": {
+        "x": 403,
+        "y": 164,
+        "w": 119,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Each row says what waits and who asked, with one action beside it.",
+      "box": {
+        "x": 535,
+        "y": 239,
+        "w": 390,
+        "h": 24
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "Go back to everything. The count in the menu matches this list.",
+      "box": {
+        "x": 348,
+        "y": 164,
+        "w": 28,
+        "h": 20
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 28
+}

@@ -6,8 +6,8 @@ export default tour({
   steps: [
     { goto: '/needs-you', say: 'Needs you lists everything that waits on a person, in one place.' },
     { point: text(/^All \d+/), say: 'The filter shows how many items there are of each type.' },
-    { click: text(/^Policy approval \d+/), say: 'Pick a type to narrow the list.' },
-    { click: text(/^All \d+/), say: 'Go back to all of them.' },
-    { point: role('button', /^(Review|Decide|Acknowledge|Accept lower tier)$/, 0), say: 'Each row has one button. What it does depends on the type of item.' },
+    { click: text(/^Release approval \d+/), say: 'Pick a type to narrow the list. Here, release decisions waiting for a reviewer.' },
+    { point: text(/^Release decision for/), say: 'Each row says what waits and who asked, with one action beside it.' },
+    { click: text(/^All \d+/), say: 'Go back to everything. The count in the menu matches this list.' },
   ],
 })

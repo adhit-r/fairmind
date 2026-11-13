@@ -12,6 +12,7 @@ import { chromium } from 'playwright-core'
 import { APP, CHROME, demoContext } from './run'
 
 const DOCS = fileURLToPath(new URL('..', import.meta.url))
+const PACE_MS = Number(process.env['FAIRMIND_PACE_MS'] ?? 9000)
 
 // Every page in the menu, read from its source as text (importing it would pull in the app's icon library).
 const MENU = [...new Set([...readFileSync(join(DOCS, '../frontend/src/astryx/nav.ts'), 'utf8').matchAll(/href: '(\/[^']*)'/g)].map(m => m[1]!))]
@@ -44,7 +45,8 @@ const READ = `(() => {
   }))
   const emptyStates = uniq([...main.querySelectorAll('[class*="empty" i], [data-empty]')].filter(visible)
     .map(el => (el.querySelector('h1, h2, h3, h4, strong') || el).innerText.replace(/\\s+/g, ' ').trim()).filter(t => t && t.length < 120))
-  return { title: document.title.split(' · ')[0].split(' | ')[0], headings, regions, controls, tables, emptyStates }
+  const h1 = main.querySelector('h1')
+  return { title: (h1 && name(h1)) || document.title.split(' · ')[0].split(' | ')[0], headings, regions, controls, tables, emptyStates }
 })()`
 
 async function main(): Promise<void> {
@@ -78,7 +80,9 @@ async function main(): Promise<void> {
       calls = []
       await page.goto(`${APP}${path}`)
       await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined)
-      await page.waitForTimeout(800)
+      // The page sets its title and fills its sections after its data arrives: wait for its heading.
+      await page.locator('main h1').first().waitFor({ timeout: 15_000 }).catch(() => undefined)
+      await page.waitForTimeout(2500)
       const read = await page.evaluate(READ) as Record<string, any>
       const isData = (t: string): boolean => [...names].some(n => t.includes(n))
       const plain = (xs: string[]) => [...new Set(xs.filter(x => !isData(x)).map(x => x.replace(/^([a-z0-9]+: )?(.*)$/, (_m, k = '', t) => k + t.replace(/\d+/g, 'N'))))]
@@ -88,6 +92,8 @@ async function main(): Promise<void> {
         emptyStates: plain(read.emptyStates), requests: [...new Set(calls)].sort(),
       }
       console.log(`  ${path}`)
+      // A page makes about 13 API calls and the server allows 100 a minute per client: pace the visits.
+      await page.waitForTimeout(PACE_MS)
     }
     for (const href of MENU) await visit(href)
     // One system's file, opened from the board on Home, stands for every /systems/{id} page.

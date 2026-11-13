@@ -1,0 +1,53 @@
+{
+  "title": "Read the whole estate on one board",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Home shows every registered AI system against every release check."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The board is live. It re-reads the release gates every minute, and this button reads them now.",
+      "box": {
+        "x": 524,
+        "y": 171,
+        "w": 28,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "The header also links to the full list of AI systems.",
+      "box": {
+        "x": 1121,
+        "y": 106,
+        "w": 131,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Click any cell to see what is behind it: the state, how it is known, and the evidence.",
+      "box": {
+        "x": 758,
+        "y": 323,
+        "w": 75,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "From the drawer you can go straight to the system file.",
+      "box": {
+        "x": 861,
+        "y": 329,
+        "w": 399,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 60
+}

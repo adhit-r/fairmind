@@ -1,0 +1,43 @@
+{
+  "title": "Read a release decision and its sealed record",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Decisions lists every release approval request for your systems."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The filter switches between pending, approved and rejected. Each shows its count.",
+      "box": {
+        "x": 336,
+        "y": 180,
+        "w": 88,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Click a request to open it.",
+      "box": {
+        "x": 353,
+        "y": 290,
+        "w": 880,
+        "h": 49
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "A pending request is decided on the system file, beside the release gate, by someone other than the person who asked.",
+      "box": {
+        "x": 821,
+        "y": 200,
+        "w": 143,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 25
+}

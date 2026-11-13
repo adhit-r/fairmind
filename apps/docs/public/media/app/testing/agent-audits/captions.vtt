@@ -1,0 +1,21 @@
+WEBVTT
+
+1
+00:00:24.078 --> 00:00:31.353
+Agent audits reads your agent platform with a read-only key. Claude Managed Agents is the only platform today.
+
+2
+00:00:36.018 --> 00:00:40.135
+This is where you would save the key. It is encrypted and never shown again.
+
+3
+00:00:43.279 --> 00:00:49.146
+Below the connection are the checks. Each one says whether it reads the platform or an uploaded file.
+
+4
+00:00:52.036 --> 00:00:55.087
+Open a check to see the latest result for each system.
+
+5
+00:00:58.081 --> 00:01:03.052
+Run leads to the evaluation page, where the check is started on a registered system.

@@ -33,9 +33,9 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 export async function demoContext(browser: Browser): Promise<BrowserContext> {
   const context = await browser.newContext({ viewport: VIEW, deviceScaleFactor: 1.5, locale: 'en-GB' })
   const page = await context.newPage()
-  await page.goto(`${APP}/login`)
-  await page.getByRole('button', { name: 'Try the demo' }).click({ timeout: 15_000 })
-  await page.waitForURL(/\/dashboard/, { timeout: 30_000 })
+  await page.goto(`${APP}/login`, { timeout: 60_000 })
+  await page.getByRole('button', { name: 'Try the demo' }).click({ timeout: 45_000 })
+  await page.waitForURL(/\/dashboard/, { timeout: 60_000 })
   await page.close()
   return context
 }
@@ -68,7 +68,7 @@ async function locate(page: Page, t: Target): Promise<Locator> {
     : 'text' in t ? page.getByText(t.text)
       : page.locator(t.css)
   const l = t.nth !== undefined ? base.nth(t.nth) : base.first()
-  await l.waitFor({ state: 'visible', timeout: 10_000 })
+  await l.waitFor({ state: 'visible', timeout: 25_000 }) // the 2 GB production host can take a while
   return l
 }
 
@@ -126,7 +126,7 @@ export async function captureTour(browser: Browser, tour: Tour): Promise<void> {
     context = await demoContext(browser)
     await context.addInitScript({ content: CURSOR_SCRIPT })
     const page = await context.newPage()
-    await page.goto(`${APP}/dashboard`)
+    await page.goto(`${APP}/dashboard`, { timeout: 60_000 })
     await settle(page)
     const rec = await recordScreen(page, join(work, 'frames'))
     const cues: { start: number; end: number; text: string; file: string }[] = []
@@ -162,7 +162,7 @@ export async function captureTour(browser: Browser, tour: Tour): Promise<void> {
 
     async function runStep(p: Page, step: Step, i: number): Promise<void> {
       if (step.goto) {
-        await p.goto(`${APP}${step.goto}`)
+        await p.goto(`${APP}${step.goto}`, { timeout: 60_000 })
         await settle(p)
       }
       if (step.scroll) {
@@ -235,7 +235,12 @@ async function main(): Promise<void> {
   const failed: string[] = []
   try {
     for (const t of chosen) {
-      try { await captureTour(browser, t) } catch (e) { failed.push((e as Error).message); console.error(`✗ ${(e as Error).message}`) }
+      try { await captureTour(browser, t) } catch (e) {
+        const msg = (e as Error).message.startsWith('tour ') ? (e as Error).message : `tour ${t.page}: ${(e as Error).message}`
+        failed.push(msg); console.error(`✗ ${msg}`)
+      }
+      // Each tour signs in and opens a few pages; the server allows 100 API calls a minute per client.
+      await sleep(Number(process.env['FAIRMIND_PACE_MS'] ?? 20000))
     }
   } finally {
     await browser.close()
