@@ -1,0 +1,42 @@
+---
+title: Agent audits
+description: Connect your agent platform with a read-only key and run configuration checks on your agents.
+---
+
+<Status state="partial">Claude Managed Agents is the only platform supported. The page depends on that external provider and on a key you supply. Without a connection, each platform check can still run on an uploaded export.</Status>
+
+<Access where="Testing › Agent audits" address="/agent-audits" change="Owner or admin of the organisation (saving, testing and removing the key)" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/testing/agent-audits" /></Tab>
+  <Tab value="Try it"><TryIt page="app/testing/agent-audits" /></Tab>
+</Tabs>
+
+## What it is for
+
+These are checks on how your agents are set up: tools, MCP servers, memory, sessions and network reach. FairMind reads the configuration of your agent workspace and records a result per system. It does not change anything on the platform.
+
+With a key for the workspace, the audits read agents, environments, vaults, memory stores, deployments and recent sessions using read-only calls. The key is encrypted and never shown again.
+
+## How to use it
+
+1. Open **Agent audits**. The top card shows the connection state: **Connected**, **Key unreadable** or **Not connected**.
+2. Paste the key into **API key** and press **Save key**. The button stays disabled until the key is at least eight characters. Use **How to get a key** if you need one.
+3. Press **Test connection**. A banner reports what was read, for example counts of agents or memory stores, or why the call failed.
+4. Under **Audit checks**, click a check name to expand it and see the latest result per system. Each system links to its file.
+5. Press **Run** on a check to open that evaluation's page and run it on a registered system.
+6. Press **Disconnect** to remove the stored key.
+
+If the saved key can no longer be decrypted, a warning asks you to enter it again.
+
+Only owners and admins can save, test or disconnect. Other members see the card but the backend refuses the change.
+
+## What's on the page
+
+The checks table has columns Check, Reads, Latest result, Systems and Action. **Reads** says whether a check uses the connected platform or an uploaded file. One check, for an uploaded file, works without any connection.
+
+The set of checks is a fixed list. If one is not in your organisation's catalogue, a line below the table names it.
+
+For the evaluation mechanics see [Evaluations](./evaluations.mdx). For how results become evidence see [Evidence review](../../journeys/evidence-review.mdx).
+
+<PageAnatomy route="agent-audits" />

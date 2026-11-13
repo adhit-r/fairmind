@@ -1,0 +1,63 @@
+{
+  "title": "Find your way around FairMind",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "FairMind opens on Home. Down the left edge, seven icons stand for the groups of pages."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "Choosing a group opens its first page and lists the rest in the panel beside it. Inventory holds your AI systems and what discovery found.",
+      "box": {
+        "x": 7,
+        "y": 136,
+        "w": 64,
+        "h": 64
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Testing holds the evaluations you choose, the runs, and agent audits.",
+      "box": {
+        "x": 7,
+        "y": 273,
+        "w": 64,
+        "h": 64
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Search reaches every page and every system. Command K opens it from anywhere.",
+      "box": {
+        "x": 88,
+        "y": 73,
+        "w": 207,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "Type a system or a page name and pick it to go straight there.",
+      "box": {
+        "x": 88,
+        "y": 73,
+        "w": 207,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-6.jpg",
+      "text": "In the demo, everything can be opened and nothing can be changed.",
+      "box": {
+        "x": 88,
+        "y": 73,
+        "w": 207,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 97
+}

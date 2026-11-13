@@ -1,0 +1,53 @@
+{
+  "title": "See how an auditor pack is built and shared",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Auditor packs are frozen snapshots of evidence and decisions, each with a hash."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "Build a pack by choosing a title, frameworks and systems.",
+      "box": {
+        "x": 1153,
+        "y": 106,
+        "w": 99,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Build pack stays disabled until all three are filled.",
+      "box": {
+        "x": 392,
+        "y": 269,
+        "w": 496,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "We will not build one in the demo, so cancel.",
+      "box": {
+        "x": 724,
+        "y": 636,
+        "w": 68,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "An auditor checks a downloaded pack offline with one command.",
+      "box": {
+        "x": 991,
+        "y": 106,
+        "w": 154,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 44
+}

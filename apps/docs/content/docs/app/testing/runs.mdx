@@ -1,0 +1,40 @@
+---
+title: Runs
+description: Follow each workflow run, decide at its gates, record step output, and read its tamper-evident ledger.
+---
+
+<Access where="Testing › Runs" address="/runs" change="Owner or admin of the organisation" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/testing/runs" /></Tab>
+  <Tab value="Try it"><TryIt page="app/testing/runs" /></Tab>
+</Tabs>
+
+## What it is for
+
+A run is one started workflow. This page lists every run in your organisation and lets you work the ones that are waiting on a person: decide at an approval gate, or supply the output of a step. The menu shows a live count of runs.
+
+A run never starts here. It starts from a framework or from a system. If there are none, the page says so and offers **Open frameworks**.
+
+## How to use it
+
+1. Open **Runs**. The line under the title gives the number of runs and how many are waiting on a person.
+2. Use **Filter by status** to narrow the list. Only statuses that exist in your runs appear: Queued, Running, Waiting, Blocked, Done, Failed.
+3. Click a run. The detail opens beside the list and the address gains a `?run=` value, so you can share the link.
+4. If the run shows **Needs a decision**, add optional **Notes (optional)**, then choose one of the decision buttons. The buttons offered come from the step: **Approve**, **Request changes** or **Reject**. Nothing changes in your systems until you decide.
+5. If the run shows **This step needs output**, either press **Let the agent draft this step**, or write **What you did and found**, choose a branch under **Where next** if the step has more than one, and press **Record and continue**.
+6. Read **Steps** and **Ledger** to see where the run is and what has been recorded.
+
+Deciding and recording output need owner or admin rights. Other members can read the page. The backend refuses the change otherwise.
+
+## What's on the page
+
+The detail shows status, workflow version, start and update times, the current step, the approval on record, and a link to the system file. **Steps** marks each step done, current or not reached, and flags steps where a person decides.
+
+The **Ledger** is an ordered list of events. Each row shows its number, event kind, step, the previous hash and its own hash, shortened to eight characters. The token beside the heading reads **Chain intact** or **Chain broken**, which is the result of FairMind checking the hash chain. A broken chain means an event was changed or removed.
+
+The agent draft is written to the ledger with who did it. It does not decide anything; every decision still waits for a person. See [Status and limits](../../get-started/status-and-limits.mdx).
+
+**Open the full run page** leads to the older, longer run view.
+
+<PageAnatomy route="runs" />

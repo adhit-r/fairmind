@@ -1,0 +1,63 @@
+{
+  "title": "Find a system and open it",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "AI systems lists everything found and registered, by where it came from and how far along it is."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The columns run from found, to registered, to approved and watched.",
+      "box": {
+        "x": 504,
+        "y": 207,
+        "w": 272,
+        "h": 88
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Search by name, source or kind.",
+      "box": {
+        "x": 1045,
+        "y": 164,
+        "w": 198,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Click an item to open its details.",
+      "box": {
+        "x": 512,
+        "y": 304,
+        "w": 256,
+        "h": 33
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "A found system can be registered from here. A registered one offers Open the system file instead.",
+      "box": {
+        "x": 841,
+        "y": 295,
+        "w": 419,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-6.jpg",
+      "text": "To find more systems, use discovery.",
+      "box": {
+        "x": 1100,
+        "y": 106,
+        "w": 152,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 60
+}

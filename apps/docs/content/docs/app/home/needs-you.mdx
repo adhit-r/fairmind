@@ -1,0 +1,44 @@
+---
+title: Needs you
+description: Work through everything that waits on a person, in one list.
+---
+
+<Access where="Home › Needs you" address="/needs-you" change="Organisation mutation access (owner or admin role, or the model:write permission), except acknowledging a policy" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/home/needs-you" /></Tab>
+  <Tab value="Try it"><TryIt page="app/home/needs-you" /></Tab>
+</Tabs>
+
+## What it is for
+
+This is the inbox for decisions, sign-offs and things to read. The list is the same one that drives the count beside **Needs you** in the menu, so the two agree. After you act, the list and the count reload.
+
+## How to use it
+
+1. Open **Needs you**. Each row shows a type, a title, a detail line, who is involved, and a button.
+2. Use **Filter by type** to narrow the list. The options are **All** and one per type, each with a count.
+3. Press the row's button. What it does depends on the type:
+
+| Type | Button | What happens |
+| --- | --- | --- |
+| Release approval | **Review** | Opens the system file with the decision panel. |
+| Workflow run | **Decide**, or **Open run** | **Decide** opens a panel when the run waits on an approval. Otherwise it opens the run. |
+| Plan task | **Open plan** | Opens [Plan](../rules/plan.mdx). |
+| Tier sign-off | **Accept lower tier** | Accepts a tier that was set below the suggested one. |
+| Read a policy | **Acknowledge** | Records that you read a published policy. |
+| Policy approval | **Review** | Opens a panel with **Approve** and **Send back**. |
+| Policy alert | **Acknowledge**, **Open system** | Acknowledges an open rule failure, or goes to the system. |
+
+4. In the panel, write **Notes** if you want the reason kept with the decision. Policy approvals have no notes field. Then choose **Approve**, **Request changes** (workflow runs only) or **Reject** (**Send back** for a policy).
+5. A banner confirms the result, or shows the server's message if it was refused.
+
+## What's on the page
+
+Rows come from several places: approval requests for your systems, workflow runs waiting on a person, plan tasks in **Needs you** or **In review**, systems whose tier was lowered and not yet accepted, policies you have not acknowledged, policies in review, and open policy alerts.
+
+The server enforces who may act. Accepting a lower tier is refused for the person who lowered it, and the page shows the refusal as written. Release decisions are made on the system file, not here. See [Permissions and separation](../../reference/permissions-and-separation.mdx) and [Reports and approvals](../../journeys/reports-approvals.mdx).
+
+If a list fails to load, a banner reads **Some lists could not load** with **Try again**, and the rest still show. When nothing waits, the page says **Nothing waits on you**.
+
+<PageAnatomy route="needs-you" />

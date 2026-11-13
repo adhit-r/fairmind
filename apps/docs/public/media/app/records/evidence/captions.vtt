@@ -1,0 +1,21 @@
+WEBVTT
+
+1
+00:00:04.765 --> 00:00:08.242
+Evidence is collected per AI system. Pick the system here.
+
+2
+00:00:09.132 --> 00:00:12.183
+Choose a system to see what backs its release decision.
+
+3
+00:00:13.049 --> 00:00:19.385
+Here, the sentiment classifier, which has a fairness test, its model card and an accuracy run on file.
+
+4
+00:00:20.247 --> 00:00:25.623
+The summary shows how many items exist, whether the chain is sealed, and how many are stale.
+
+5
+00:00:26.498 --> 00:00:31.319
+Select an item to open it: what it is, where it came from, and how much it counts.

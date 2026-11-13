@@ -1,0 +1,42 @@
+---
+title: System file
+description: Open one AI system to see its release gate, what it still needs, and to request or record the release decision.
+---
+
+<Access where="Inventory › AI systems › one system" address="/systems/{id}" change="Organisation mutation access (owner or admin role, or the model:write permission) to confirm the tier, record evidence, run tests or decide" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/inventory/system-file" /></Tab>
+  <Tab value="Try it"><TryIt page="app/inventory/system-file" /></Tab>
+</Tabs>
+
+## What it is for
+
+The system file is where one system's evidence, release gate and decision come together. Reviewers decide here, beside the gate the decision rests on. Open it from [AI systems](./systems.mdx), from a row on [Home](../home/home.mdx), or from a link in [Needs you](../home/needs-you.mdx).
+
+If the system is not in your organisation, the page says **This system is not in your estate** and links back to **AI systems**.
+
+## How to use it
+
+1. Read the header: name, the gate verdict, risk tier, owner and frameworks. On a narrow screen, **Details** opens the side panel.
+2. In **What it is**, check the tier. Press **Confirm tier and rules**, or **Change tier or rules** once confirmed. If a person set the tier below the suggested one, **Accept the lower tier** appears for a second person.
+3. In **Release gate**, read the verdict, the confidence and one bar per check. **Why this verdict** lists the reasons. **Policy rules** shows which rules block release and which only warn.
+4. Press **How the verdict was reached** for the full explanation.
+5. In **What it needs**, take the listed steps. Each is marked **Agent** or **Person** and shows how much confidence it adds. Buttons depend on the step: **Run the test**, **Record a snapshot**, **Attest**, **Open assessment**, **Record evidence**.
+6. To ask for a release decision, press **Request release decision**. After a rejection the button reads **Request a new decision**.
+7. A reviewer then presses **Decide**. The **Release decision** panel has **Notes**, or **Conditions** when the gate reads conditional go, then **Approve release**, **Reject** or **Cancel**.
+8. Use the tabs **System file**, **Requirements** and **Record** to move between the gate, the framework requirements, and the sealed decisions.
+
+**Approve release** is disabled when the verdict is no go. On a conditional go it needs text in **Conditions**.
+
+## What's on the page
+
+The side panel holds **Details**, **Decisions and seals**, **Findings** and **Evidence**, with links to **Open findings**, **Remediation**, **Evidence** and **Audit reports**.
+
+Below the gate are shortcuts: **Run a fairness test**, **Record a monitoring snapshot**, **Monitoring cadence**, **Fairness target**, **Stored analyses**, **Open plan**, **Run an evaluation**, **Frameworks**, **Workflow runs** and **Monitoring**.
+
+**Release autopilot** sets the mode to **Off**, **Ask first** or **Run**. In **Run**, measurable steps run on a schedule and people still sign. **Agent and people trace** lists autopilot steps and decisions, newest first.
+
+A seal is taken when a decision is recorded, and shows as intact or broken. Attested checks count as attested, not measured. See [Evidence model](../../get-started/evidence-model.mdx) and [Reports and approvals](../../journeys/reports-approvals.mdx).
+
+<PageAnatomy route="systems.file" />

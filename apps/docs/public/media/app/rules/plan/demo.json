@@ -1,0 +1,33 @@
+{
+  "title": "Set up the governance plan",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "The plan turns your frameworks into controls and tracks each one from to do to proven."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "Until there is a plan, this page asks about your organisation and how it uses AI.",
+      "box": {
+        "x": 390,
+        "y": 195,
+        "w": 116,
+        "h": 68
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Describe it in your own words. FairMind proposes the frameworks and controls, and a person accepts the plan. The demo stops here, because it is read-only.",
+      "box": {
+        "x": 390,
+        "y": 430,
+        "w": 252,
+        "h": 104
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 29
+}

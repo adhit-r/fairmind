@@ -1,0 +1,43 @@
+---
+title: Home
+description: See every registered AI system against every release check on one live board.
+---
+
+<Access where="Home › Home" address="/dashboard" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/home/home" /></Tab>
+  <Tab value="Try it"><TryIt page="app/home/home" /></Tab>
+</Tabs>
+
+## What it is for
+
+Home is the estate at a glance. The page heading is **AI estate**. Under it is one line that says how many AI systems are registered. The board below is one row per system and one column per release check, so you can see which systems are ready and which are not.
+
+It is read-only. Nothing on this page changes a record. To act on a cell you follow a link to the system file or to another page.
+
+## How to use it
+
+1. Open **Home**. If no system is registered, the board says so and offers **Register systems** and **Find unregistered AI**.
+2. Read the counts at the top of the board: how many cells are proven, how many releases wait for a decision, how many checks are out of date and how many fail.
+3. Find a system. Rows are grouped as **Needs attention**, **Being checked** and **Approved and watched**. A row goes to **Needs attention** when any of its checks fails or is out of date, or when a decision is pending.
+4. Click a cell to open a drawer. It shows what the state means, how FairMind knows it (the evidence class), the confidence, and the evidence id if one exists.
+5. From the drawer, choose **Open the evidence**, **Open the system file**, or **Decide now** (only on a pending decision).
+6. Click a system name to open its file directly.
+7. Use **Open AI systems** or **Find unregistered AI** in the page header to move on.
+
+Under the board, **Where the systems are** counts systems by lifecycle stage: Onboard, Assess, Govern, Remediate, Operate. Each count links to **AI systems** filtered to that stage.
+
+## What's on the page
+
+The columns are grouped as Data, Test, Release and Operate: **Data governance**, **Fairness**, **Human oversight**, **Environment**, **Decision** and **Monitoring**, then **Confidence** as a bar and a number. **Environment** appears only when the organisation weighs energy use in its release gate.
+
+A cell is one of: proven, attested, estimated, out of date, failing, or nothing on file. A decision cell reads approved, waiting for a reviewer, rejected or not requested. The key under the board lists the marks. Attested means a person stated it. It is not the same as measured.
+
+The board is live. It re-reads every system's release gate each minute and shows the time of the last check. **Check now** reads again at once.
+
+If the gates cannot load, the board shows **The board could not load** with the reason and **Try again**. It never fills in numbers it does not have.
+
+Related: [Needs you](./needs-you.mdx), [AI systems](../inventory/systems.mdx), [Register a system](../../journeys/register-system.mdx).
+
+<PageAnatomy route="dashboard" />

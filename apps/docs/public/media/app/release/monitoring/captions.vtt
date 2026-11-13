@@ -1,0 +1,13 @@
+WEBVTT
+
+1
+00:00:05.452 --> 00:00:10.231
+Monitoring shows whether each registered system still behaves as it did at release.
+
+2
+00:00:11.134 --> 00:00:16.318
+Each system shows its latest snapshot, its drift scores, and the cadence it is held to.
+
+3
+00:00:17.189 --> 00:00:27.322
+Open policy alerts and findings from the monitoring watch collect here. Snapshots are uploaded from the system file; FairMind does not pull data from your systems.
