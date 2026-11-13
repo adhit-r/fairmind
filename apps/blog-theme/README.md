@@ -6,7 +6,7 @@ The theme for blog.fairmind.xyz: a dense reference portal of AI regulation guide
 
 ```bash
 cd apps/blog-theme
-npx gscan --v6 .
+npx gscan .
 zip -r ../../chain-of-custody.zip . -x 'mockup/*' 'README.md' 'DESIGN.md' '.*' '.impeccable/*'
 ```
 
