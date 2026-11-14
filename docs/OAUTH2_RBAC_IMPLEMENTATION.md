@@ -228,7 +228,7 @@ authentik_refresh_token_ttl: int = 604800  # 7 days
    - OAuth2 application configured in Authentik with:
      - Client ID: `fairmind-frontend`
      - Client Secret: (set in env var `AUTHENTIK_OAUTH_CLIENT_SECRET`)
-     - Redirect URI: `http://localhost:3000/auth/callback`
+     - Redirect URI: `http://localhost:3000/callback`
    - JWKS endpoint available: `${AUTHENTIK_SERVER_URL}/application/o/connect/jwks/`
 
 2. **Environment Variables**:
@@ -240,7 +240,7 @@ AUTHENTIK_ISSUER=https://authentik.example.com
 AUTHENTIK_AUDIENCE=fairmind-frontend
 AUTHENTIK_OAUTH_CLIENT_ID=fairmind-frontend
 AUTHENTIK_OAUTH_CLIENT_SECRET=your-secret-here
-AUTHENTIK_OAUTH_REDIRECT_URI=http://localhost:3000/auth/callback
+AUTHENTIK_OAUTH_REDIRECT_URI=http://localhost:3000/callback
 ```
 
 3. **Database**:
@@ -259,7 +259,7 @@ echo "State: $STATE"
 
 Get authorization code from Authentik (in browser):
 ```
-https://authentik.example.com/application/o/authorize/?client_id=fairmind-frontend&response_type=code&scope=openid&state=$STATE&redirect_uri=http://localhost:3000/auth/callback
+https://authentik.example.com/application/o/authorize/?client_id=fairmind-frontend&response_type=code&scope=openid&state=$STATE&redirect_uri=http://localhost:3000/callback
 ```
 
 Then validate the code:

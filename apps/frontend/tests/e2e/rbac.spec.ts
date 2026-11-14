@@ -99,7 +99,7 @@ test.describe('OAuth2 Login Flow', () => {
     await page.click('button:has-text("Login with Authentik")');
 
     // Simulate OAuth callback
-    await page.goto(`${BASE_URL}/auth/callback?code=test-code&state=test-state`);
+    await page.goto(`${BASE_URL}/callback?code=test-code&state=test-state`);
 
     // Check localStorage for token
     const token = await page.evaluate(() => localStorage.getItem('access_token'));
@@ -112,7 +112,7 @@ test.describe('OAuth2 Login Flow', () => {
     await page.click('button:has-text("Login with Authentik")');
 
     // Simulate OAuth callback
-    await page.goto(`${BASE_URL}/auth/callback?code=test-code&state=test-state`);
+    await page.goto(`${BASE_URL}/callback?code=test-code&state=test-state`);
 
     // Should redirect to dashboard
     await page.waitForURL(`${BASE_URL}/dashboard`);

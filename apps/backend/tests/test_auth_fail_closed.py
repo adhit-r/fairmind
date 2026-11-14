@@ -29,7 +29,7 @@ def test_authentik_callback_missing_any_client_setting_never_calls_authentik(mon
     monkeypatch.setattr(auth.settings, "authentik_server_url", "https://sso.corp.example.com")
     monkeypatch.setattr(auth.settings, "authentik_oauth_client_id", "fairmind")
     monkeypatch.setattr(auth.settings, "authentik_oauth_client_secret", "configured")
-    monkeypatch.setattr(auth.settings, "authentik_oauth_redirect_uri", "https://app.corp.example.com/auth/callback")
+    monkeypatch.setattr(auth.settings, "authentik_oauth_redirect_uri", "https://app.corp.example.com/callback")
     # Left out of the environment, the setting keeps its declared default.
     monkeypatch.setattr(auth.settings, unset, Settings.model_fields[unset].default)
     post = AsyncMock()
