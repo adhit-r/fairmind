@@ -4044,6 +4044,25 @@ class GovernanceIntegration(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 
+class GovernanceIntegrationRun(Base):
+    """One read of a connector (manual, scheduled or an upload): its monitoring history."""
+
+    __tablename__ = "governance_integration_runs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False, index=True)
+    trigger = Column(String, nullable=False)  # manual | schedule | upload
+    started_at = Column(String, nullable=False)
+    finished_at = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # ok | failed
+    found = Column(Integer, nullable=True)
+    created = Column(Integer, nullable=True)
+    updated = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    new_names_json = Column(Text, nullable=False, default="[]")
+
+
 class GovernanceDiscoveredAsset(Base):
     """Something an integration found that may become a governed system."""
 

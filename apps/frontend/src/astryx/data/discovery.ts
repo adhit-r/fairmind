@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiClient, type ApiResponse } from '@/lib/api/api-client'
-import type { DiscoveredAsset, Integration, IntegrationKind } from '@/lib/api/hooks/useIntegrations'
+import type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun } from '@/lib/api/hooks/useIntegrations'
 
-export type { DiscoveredAsset, Integration, IntegrationKind }
+export type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun }
 
 const BASE = '/api/v1/integrations'
 
@@ -25,9 +25,24 @@ export interface SourceField {
   optional?: boolean
 }
 
+/** The places AI shows up in an organisation; each source watches one of them. */
+export const LANES = [
+  { key: 'code', label: 'Code and models' },
+  { key: 'vendor', label: 'AI vendor accounts' },
+  { key: 'cloud', label: 'Cloud' },
+  { key: 'signin', label: 'Sign-in and workplace' },
+  { key: 'traffic', label: 'Gateways and traffic' },
+  { key: 'mcp', label: 'MCP servers' },
+] as const
+export type LaneKey = (typeof LANES)[number]['key']
+
 export interface SourceSpec {
   label: string
-  group: string
+  /** Two or three letters shown in the source's tile. */
+  mark: string
+  lane: LaneKey
+  /** Read-only access the person grants, as the vendor names it. */
+  permissions: string[]
   /** What the connector reads, in one line, shown in the drawer. */
   reads: string
   fields: SourceField[]
@@ -47,7 +62,9 @@ const MS_FIELDS: SourceField[] = [
 export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   github: {
     label: 'GitHub',
-    group: 'Code and models',
+    mark: 'GH',
+    lane: 'code',
+    permissions: ['Contents: read', 'Metadata: read'],
     reads: 'Repositories that use LLM SDKs or ML libraries, AI coding-agent files and MCP server configs.',
     fields: [
       { key: 'owner', label: 'Organisation or user' },
@@ -59,7 +76,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   mlflow: {
     label: 'MLflow',
-    group: 'Code and models',
+    mark: 'ML',
+    lane: 'code',
+    permissions: ['Read registered models'],
     reads: 'Registered models, their versions and stages.',
     fields: [{ key: 'tracking_uri', label: 'Tracking server address' }],
     token: 'Access token',
@@ -68,7 +87,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   huggingface: {
     label: 'Hugging Face',
-    group: 'Code and models',
+    mark: 'HF',
+    lane: 'code',
+    permissions: ['Read access token (private models only)'],
     reads: 'Models published by an organisation or user.',
     fields: [
       { key: 'owner', label: 'Organisation or user on Hugging Face' },
@@ -82,7 +103,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   anthropic: {
     label: 'Anthropic API',
-    group: 'AI vendors',
+    mark: 'An',
+    lane: 'vendor',
+    permissions: ['Admin API key (read calls only)'],
     reads: 'Every API key in the organisation, the models and tokens each used in 30 days, and Claude Code use.',
     fields: [],
     token: 'Admin API key',
@@ -90,7 +113,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   claude_enterprise: {
     label: 'Claude Enterprise',
-    group: 'AI vendors',
+    mark: 'CE',
+    lane: 'vendor',
+    permissions: ['read:compliance_org_data', 'read:compliance_user_data'],
     reads: 'Claude organisations, how many people use them, and shared projects.',
     fields: [],
     token: 'Compliance Access Key',
@@ -98,7 +123,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   openai: {
     label: 'OpenAI API',
-    group: 'AI vendors',
+    mark: 'OA',
+    lane: 'vendor',
+    permissions: ['Admin API key (read calls only)'],
     reads: 'Every project API key, its owner, and the models and requests it made in 30 days.',
     fields: [],
     token: 'Admin API key',
@@ -106,7 +133,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   aws: {
     label: 'AWS',
-    group: 'Cloud',
+    mark: 'AWS',
+    lane: 'cloud',
+    permissions: ['bedrock:List*', 'bedrock-agentcore:ListAgentRuntimes', 'cloudwatch:ListMetrics', 'sagemaker:ListEndpoints', 'sagemaker:ListModelPackageGroups'],
     reads: 'Bedrock models in use, custom models, agents and AgentCore runtimes, and SageMaker endpoints and registries.',
     fields: [
       { key: 'access_key_id', label: 'Access key ID' },
@@ -119,7 +148,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   azure: {
     label: 'Azure',
-    group: 'Cloud',
+    mark: 'Az',
+    lane: 'cloud',
+    permissions: ['Reader role on each subscription'],
     reads: 'Model deployments in Azure OpenAI and AI Foundry, and Machine Learning workspaces.',
     fields: [...MS_FIELDS, { key: 'subscription_ids', label: 'Subscription IDs', description: 'Separated by commas. The app needs the Reader role on each.' }],
     token: 'Client secret',
@@ -127,7 +158,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   gcp: {
     label: 'Google Cloud',
-    group: 'Cloud',
+    mark: 'GC',
+    lane: 'cloud',
+    permissions: ['roles/aiplatform.viewer'],
     reads: 'Vertex AI models, endpoints and Agent Engine agents.',
     fields: [
       { key: 'project_id', label: 'Project ID' },
@@ -138,7 +171,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   okta: {
     label: 'Okta',
-    group: 'Sign-in',
+    mark: 'Ok',
+    lane: 'signin',
+    permissions: ['Read-only admin API token'],
     reads: 'AI services set up for single sign-on, with sign-ins and people in the last 30 days.',
     fields: [{ key: 'domain', label: 'Okta domain', description: 'For example acme.okta.com' }],
     token: 'API token',
@@ -146,7 +181,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   entra: {
     label: 'Microsoft Entra ID',
-    group: 'Sign-in',
+    mark: 'En',
+    lane: 'signin',
+    permissions: ['Application.Read.All', 'Directory.Read.All'],
     reads: 'AI services among enterprise apps, and how many people consented to them without an admin.',
     fields: MS_FIELDS,
     token: 'Client secret',
@@ -154,7 +191,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   m365_copilot: {
     label: 'Microsoft 365 Copilot',
-    group: 'Microsoft 365',
+    mark: 'M365',
+    lane: 'signin',
+    permissions: ['LicenseAssignment.Read.All', 'Reports.Read.All', 'CopilotPackages.Read.All'],
     reads: 'Copilot licences, active users per app, and Copilot agents in the tenant.',
     fields: MS_FIELDS,
     token: 'Client secret',
@@ -162,7 +201,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   litellm: {
     label: 'LiteLLM gateway',
-    group: 'Gateways and logs',
+    mark: 'LL',
+    lane: 'traffic',
+    permissions: ['Master key or an admin key'],
     reads: 'Every virtual key routed through the gateway, with its team, models and spend.',
     fields: [{ key: 'base_url', label: 'Gateway address' }],
     token: 'Master key',
@@ -170,14 +211,18 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
   },
   proxy_logs: {
     label: 'Proxy or firewall logs',
-    group: 'Gateways and logs',
+    mark: 'Log',
+    lane: 'traffic',
+    permissions: ['A log export that names the destination host'],
     reads: 'Traffic to known AI services in an uploaded log export (CSV, JSON lines or plain text). The file is not kept.',
     fields: [],
     token: null,
   },
   mcp_registry: {
     label: 'MCP registry',
-    group: 'MCP',
+    mark: 'MCP',
+    lane: 'mcp',
+    permissions: ['Read access, if the registry is private'],
     reads: 'MCP servers approved in a registry that follows the MCP Registry API.',
     fields: [
       { key: 'registry_url', label: 'Registry address' },
@@ -191,6 +236,79 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
 
 export const SOURCE_LABEL: Record<string, string> = Object.fromEntries(Object.entries(SOURCES).map(([k, s]) => [k, s.label]))
 export const MAX_LOG_BYTES = 20 * 1024 * 1024
+
+export const SCHEDULES = [
+  { minutes: 0, label: 'Manual' },
+  { minutes: 60, label: 'Hourly' },
+  { minutes: 360, label: 'Every 6 hours' },
+  { minutes: 1440, label: 'Daily' },
+] as const
+
+export type Health = 'live' | 'overdue' | 'failing' | 'manual' | 'waiting' | 'upload'
+export const HEALTH_LABEL: Record<Health, string> = {
+  live: 'Live',
+  overdue: 'Overdue',
+  failing: 'Failing',
+  manual: 'Manual',
+  waiting: 'Waiting for first read',
+  upload: 'Reads uploads',
+}
+
+/** Whether a connector is watching as planned, from its schedule and its last run. */
+export function healthOf(i: Integration, now = Date.now()): Health {
+  const last = i.recentRuns?.[0]
+  if (last?.status === 'failed') return 'failing'
+  if (i.kind === 'proxy_logs') return 'upload'
+  if (!i.scheduleMinutes) return last ? 'manual' : 'waiting'
+  if (!i.lastSyncedAt) return 'waiting'
+  // The server checks for due schedules every few minutes; allow that much before calling it late.
+  const late = i.nextSyncAt ? now - new Date(i.nextSyncAt).getTime() > 15 * 60 * 1000 : false
+  return late ? 'overdue' : 'live'
+}
+
+export function ago(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return 'never'
+  const s = Math.round((now - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.round(s / 60)} min ago`
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`
+  return `${Math.round(s / 86400)} d ago`
+}
+
+export function until(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return ''
+  const s = Math.round((new Date(iso).getTime() - now) / 1000)
+  if (s <= 60) return 'due now'
+  if (s < 3600) return `in ${Math.round(s / 60)} min`
+  if (s < 86400) return `in ${Math.round(s / 3600)} h`
+  return `in ${Math.round(s / 86400)} d`
+}
+
+export interface Preview {
+  found: number
+  byKind: Record<string, number>
+  sample: { name: string; kind: string; tier: string }[]
+}
+
+type NewIntegration = { kind: IntegrationKind; name: string; config: Record<string, unknown>; token?: string }
+
+/** Read a source with the given access without saving anything. */
+export async function previewSource(body: NewIntegration): Promise<Preview> {
+  return unwrap(await apiClient.post<Preview>(`${BASE}/preview`, body))
+}
+
+/** Create a connector and return it, without reloading any list (the connect page navigates away). */
+export async function createSource(body: NewIntegration): Promise<Integration> {
+  return unwrap(await apiClient.post<Integration>(BASE, body))
+}
+
+export async function syncSource(id: string) {
+  return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/sync`, {}))
+}
+
+export async function uploadLogs(id: string, text: string) {
+  return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/upload`, { text }))
+}
 
 function unwrap<T>(res: ApiResponse<T>): T {
   if (res.success && res.data !== undefined) return res.data
@@ -224,7 +342,11 @@ export function useDiscovery() {
     void refresh()
   }, [refresh])
 
-  const create = async (body: { kind: IntegrationKind; name: string; config: Record<string, unknown>; token?: string }) => {
+  const setSchedule = async (id: string, minutes: number) => {
+    unwrap(await apiClient.patch<Integration>(`${BASE}/${id}`, { schedule_minutes: minutes }))
+    await refresh()
+  }
+  const create = async (body: NewIntegration) => {
     unwrap(await apiClient.post<Integration>(BASE, body))
     await refresh()
   }
@@ -234,7 +356,7 @@ export function useDiscovery() {
   }
   const sync = async (id: string) => {
     try {
-      return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/sync`, {}))
+      return await syncSource(id)
     } finally {
       await refresh()
     }
@@ -246,7 +368,7 @@ export function useDiscovery() {
   }
   const upload = async (id: string, text: string) => {
     try {
-      return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/upload`, { text }))
+      return await uploadLogs(id, text)
     } finally {
       await refresh()
     }
@@ -256,7 +378,7 @@ export function useDiscovery() {
     await refresh()
   }
 
-  return { integrations, discovered, loading, error, refresh, create, remove, sync, upload, promote, ignore }
+  return { integrations, discovered, loading, error, refresh, create, remove, sync, upload, setSchedule, promote, ignore }
 }
 
 export function when(iso: string | null | undefined): string {

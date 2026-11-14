@@ -177,6 +177,8 @@ class Settings(BaseSettings):
     policy_alert_interval_seconds: int = 900
     # How often the release autopilot runs systems set to run; 0 turns the schedule off (Run now still works).
     autopilot_interval_seconds: int = 3600
+    # How often discovery connectors are checked for a due schedule; 0 turns scheduled discovery off.
+    discovery_check_interval_seconds: int = 300
     admin_email: str = "admin@fairmind.ai"
     
     # Error Tracking

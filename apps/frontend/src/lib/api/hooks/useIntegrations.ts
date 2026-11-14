@@ -31,6 +31,23 @@ export interface Integration {
   lastSyncedAt: string | null
   lastSync: { found?: number; created?: number; updated?: number; error?: string; at: string } | null
   createdAt: string
+  /** 0 = only when someone presses Sync now. Optional for the legacy page, which predates monitoring. */
+  scheduleMinutes?: number
+  nextSyncAt?: string | null
+  recentRuns?: IntegrationRun[]
+}
+
+export interface IntegrationRun {
+  id: string
+  trigger: 'manual' | 'schedule' | 'upload'
+  startedAt: string
+  finishedAt: string
+  status: 'ok' | 'failed'
+  found: number | null
+  created: number | null
+  updated: number | null
+  error: string | null
+  newNames: string[]
 }
 
 export interface DiscoveredAsset {

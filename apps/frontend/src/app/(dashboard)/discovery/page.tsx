@@ -1,192 +1,313 @@
 'use client'
 
-import '@/astryx/pages/systems.css'
-import { useRouter } from 'next/navigation'
-import { useRef, useState, type FormEvent } from 'react'
+import '@/astryx/pages/discovery.css'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
-import { Drawer } from '@astryxdesign/core/Drawer'
 import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { HStack, VStack } from '@astryxdesign/core/Layout'
-import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Selector } from '@astryxdesign/core/Selector'
-import { TextInput } from '@astryxdesign/core/TextInput'
+import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Token } from '@astryxdesign/core/Token'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { KIND_LABEL, MAX_LOG_BYTES, SOURCE_LABEL, SOURCES, useDiscovery, when, type DiscoveredAsset, type Integration, type IntegrationKind } from '@/astryx/data/discovery'
+import { SourceMark, detail, where } from '@/astryx/DiscoveryParts'
+import {
+  HEALTH_LABEL,
+  KIND_LABEL,
+  LANES,
+  MAX_LOG_BYTES,
+  SCHEDULES,
+  SOURCES,
+  SOURCE_LABEL,
+  ago,
+  healthOf,
+  until,
+  useDiscovery,
+  type Health,
+  type Integration,
+  type IntegrationKind,
+  type IntegrationRun,
+  type LaneKey,
+} from '@/astryx/data/discovery'
 
+type D = ReturnType<typeof useDiscovery>
 const KINDS = Object.keys(SOURCES) as IntegrationKind[]
+const laneOf = (kind: string): LaneKey | undefined => SOURCES[kind as IntegrationKind]?.lane
 
-type Sync = NonNullable<Integration['lastSync']>
-function syncLine(s: Sync | null | undefined, kind: IntegrationKind): string {
-  if (!s) return kind === 'proxy_logs' ? 'No logs uploaded yet' : 'Not synced yet'
-  if (s.error) return `Last sync failed: ${s.error}`
-  return `${kind === 'proxy_logs' ? 'Read' : 'Synced'} ${when(s.at)} · ${s.found ?? 0} found, ${s.created ?? 0} new, ${s.updated ?? 0} updated`
+/** Re-render on a timer so "3 min ago" and live status stay true while the page is open. */
+function useNow(ms: number) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), ms)
+    return () => clearInterval(t)
+  }, [ms])
+  return now
 }
 
-/** What a connector reads, from its stored config. */
-function where(i: Integration): string {
-  const c = i.config as Record<string, string | undefined>
-  switch (i.kind) {
-    case 'mlflow':
-      return c.tracking_uri ?? ''
-    case 'github':
-      return `github.com/${c.owner ?? ''}`
-    case 'huggingface':
-      return `huggingface.co/${c.owner ?? ''}`
-    case 'aws':
-      return `AWS ${c.regions || 'us-east-1'}`
-    case 'azure':
-      return `Azure subscriptions ${c.subscription_ids ?? ''}`
-    case 'gcp':
-      return `Google Cloud ${c.project_id ?? ''} · ${c.locations || 'us-central1'}`
-    case 'okta':
-      return c.domain ?? ''
-    case 'litellm':
-      return c.base_url ?? ''
-    case 'mcp_registry':
-      return c.registry_url ?? ''
-    case 'proxy_logs':
-      return 'Uploaded log exports; the files are not kept'
-    default:
-      return `${SOURCES[i.kind]?.label ?? i.kind} organisation`
-  }
-}
+/* ------------------------------------------------------------------ Overview */
 
-const num = (v: unknown) => (typeof v === 'number' ? v.toLocaleString('en-GB') : null)
-const list = (v: unknown) => (Array.isArray(v) && v.length ? v.slice(0, 4).join(', ') : null)
-
-/** What the scan saw in an item, from its stored metadata. */
-function detail(a: DiscoveredAsset): string {
-  const m = a.metadata
-  if (a.source === 'huggingface') {
-    return [m.pipeline_tag, m.library, m.license && `licence ${m.license}`, typeof m.downloads === 'number' && `${m.downloads.toLocaleString('en-GB')} downloads`].filter(Boolean).join(' · ')
-  }
-  if (a.source === 'mlflow') {
-    const n = (m.versions?.length ?? 0) as number
-    return `${n} version${n === 1 ? '' : 's'}${m.description ? ` · ${m.description}` : ''}`
-  }
-  if (a.source === 'github' && a.kind !== 'mcp_server') {
-    const sig = m.signals as { llm_sdks?: string[]; ml_libraries?: string[]; agent_configs?: string[]; model_files?: string[]; mcp_servers?: string[] } | undefined
-    return [...(sig?.llm_sdks ?? []), ...(sig?.ml_libraries ?? []), ...(sig?.agent_configs ?? []), ...(sig?.model_files ?? []), ...(sig?.mcp_servers ?? []).map((n) => `MCP ${n}`)].slice(0, 6).join(' · ')
-  }
-  // Newer sources: show the facts that are present, most telling first.
-  const parts = [
-    m.service && m.service !== a.name ? m.service : m.vendor,
-    m.model && `model ${m.model}`,
-    list(m.models_last_30_days) && `models ${list(m.models_last_30_days)}`,
-    num(m.requests_last_30_days) && `${num(m.requests_last_30_days)} requests in 30 days`,
-    num(m.tokens_last_30_days) && `${num(m.tokens_last_30_days)} tokens in 30 days`,
-    num(m.requests) && `${num(m.requests)} requests in the log`,
-    num(m.distinct_users) && `${num(m.distinct_users)} people`,
-    num(m.distinct_users_30_days) && `${num(m.distinct_users_30_days)} people signed in`,
-    m.self_consent_only && `${m.users_who_consented} people consented without an admin`,
-    num(m.active_users_90_days) && `${num(m.active_users_90_days)} active people in 90 days`,
-    num(m.users) && `${num(m.users)} people`,
-    m.transport && `${m.transport}${m.url ? ` ${m.url}` : m.command ? ` ${m.command}` : ''}`,
-    m.repo && a.kind === 'mcp_server' && `in ${m.repo}`,
-    m.project && `project ${m.project}`,
-    m.workspace && `workspace ${m.workspace}`,
-    m.region,
-    m.status,
-  ]
-  return parts.filter(Boolean).slice(0, 5).join(' · ')
-}
-
-function AddConnector({ onCreate, onDone }: { onCreate: ReturnType<typeof useDiscovery>['create']; onDone: () => void }) {
-  const [kind, setKind] = useState<IntegrationKind>('github')
-  const [v, setV] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const set = (k: string) => (value: string) => setV((p) => ({ ...p, [k]: value }))
-  const f = (k: string) => (v[k] ?? '').trim()
-  const spec = SOURCES[kind]
-  const ready = Boolean(f('name')) && spec.fields.every((x) => x.optional || f(x.key)) && (!spec.token || spec.tokenOptional || Boolean(f('token')))
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setErr(null)
-    try {
-      await onCreate({
-        kind,
-        name: f('name'),
-        config: Object.fromEntries(spec.fields.map((x) => [x.key, f(x.key)])),
-        token: f('token') || undefined,
-      })
-      setV({})
-      onDone()
-    } catch (x) {
-      setErr(x instanceof Error ? x.message : 'Could not add the connector')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function Areas({ d, lane, onLane }: { d: D; lane: LaneKey | null; onLane: (l: LaneKey | null) => void }) {
   return (
-    <form onSubmit={submit} className="dsc-form">
-      <Selector
-        label="Source"
-        value={kind}
-        onChange={(k: string) => setKind(k as IntegrationKind)}
-        options={KINDS.map((k) => ({ value: k, label: `${SOURCES[k].group} · ${SOURCES[k].label}` }))}
-      />
-      <Text color="secondary">{spec.reads}</Text>
-      <TextInput label="Name" value={v.name ?? ''} onChange={set('name')} isRequired />
-      {spec.fields.map((x) => (
-        <TextInput key={`${kind}-${x.key}`} label={x.label} description={x.description} value={v[x.key] ?? ''} onChange={set(x.key)} isRequired={!x.optional} isOptional={x.optional} />
-      ))}
-      {spec.token && (
-        <TextInput
-          label={spec.token}
-          description={spec.tokenDescription}
-          type="password"
-          value={v.token ?? ''}
-          onChange={set('token')}
-          isRequired={!spec.tokenOptional}
-          isOptional={spec.tokenOptional}
-          autoComplete="off"
-        />
-      )}
-      {err && <Banner status="error" title="That did not work" description={err} />}
-      <HStack>
-        <Button variant="primary" label={busy ? 'Adding' : 'Add connector'} isDisabled={busy || !ready} onClick={() => void submit({ preventDefault() {} } as FormEvent)} />
-      </HStack>
-    </form>
+    <section className="fm-card" aria-labelledby="areas-title">
+      <VStack gap={3}>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={2}>
+          <Heading level={2} id="areas-title">
+            Where AI can show up
+          </Heading>
+          <Text color="secondary" size="sm">
+            Solid: watched · Dashed: not watched
+          </Text>
+        </HStack>
+        <div className="dv-lanes">
+          {LANES.map((l) => {
+            const kinds = KINDS.filter((k) => SOURCES[k].lane === l.key)
+            const connected = new Set(d.integrations.filter((i) => SOURCES[i.kind]?.lane === l.key).map((i) => i.kind))
+            // MCP servers also come from MCP configs in GitHub repos.
+            const found =
+              l.key === 'mcp'
+                ? d.discovered.filter((a) => a.kind === 'mcp_server').length
+                : d.discovered.filter((a) => laneOf(a.source) === l.key && a.kind !== 'mcp_server').length
+            const watched = connected.size > 0 || (l.key === 'mcp' && d.integrations.some((i) => i.kind === 'github'))
+            return (
+              <button
+                key={l.key}
+                type="button"
+                className={`dv-lane${watched ? '' : ' off'}${lane === l.key ? ' on' : ''}`}
+                aria-pressed={lane === l.key}
+                onClick={() => onLane(lane === l.key ? null : l.key)}
+              >
+                <span className="hd">
+                  <span>{l.label}</span>
+                  <span className="ct">{watched ? `${found} found` : 'Not watched'}</span>
+                </span>
+                <span className="dv-marks">
+                  {kinds.map((k) => (
+                    <SourceMark key={k} kind={k} ghost={!connected.has(k)} size="sm" />
+                  ))}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </VStack>
+    </section>
   )
 }
 
-const GROUPS = [
-  { key: 'new', title: 'Found, not registered' },
-  { key: 'promoted', title: 'Registered' },
-  { key: 'ignored', title: 'Ignored' },
-] as const
+function Flow({ d }: { d: D }) {
+  const n = (s: string) => d.discovered.filter((a) => a.status === s).length
+  const [reg, wait, ign] = [n('promoted'), n('new'), n('ignored')]
+  if (reg + wait + ign === 0) return null
+  return (
+    <section className="fm-card" aria-labelledby="flow-title">
+      <VStack gap={2}>
+        <HStack hAlign="between">
+          <Heading level={2} id="flow-title">
+            From found to governed
+          </Heading>
+          <Text color="secondary" size="sm">
+            {reg + wait + ign} items
+          </Text>
+        </HStack>
+        <div className="dv-flow" role="img" aria-label={`${reg} registered, ${wait} waiting, ${ign} ignored`}>
+          {reg > 0 && <span style={{ flex: reg, background: 'var(--color-text-primary)' }} />}
+          {wait > 0 && <span style={{ flex: wait, background: 'var(--color-text-warning)' }} />}
+          {ign > 0 && <span style={{ flex: ign, background: 'var(--color-border)' }} />}
+        </div>
+        <div className="dv-legend">
+          <span><i className="dv-key" style={{ background: 'var(--color-text-primary)' }} /><b>{reg}</b> registered</span>
+          <span><i className="dv-key" style={{ background: 'var(--color-text-warning)' }} /><b>{wait}</b> waiting for you</span>
+          <span><i className="dv-key" style={{ background: 'var(--color-border)' }} /><b>{ign}</b> ignored</span>
+        </div>
+      </VStack>
+    </section>
+  )
+}
 
-export default function DiscoveryPage() {
+function Waiting({ d, lane, busyId, run }: { d: D; lane: LaneKey | null; busyId: string | null; run: (id: string, fn: () => Promise<void>) => void }) {
   const router = useRouter()
   const { refreshSystems } = useSystemContext()
+  const rows = d.discovered.filter((a) => a.status === 'new' && (!lane || (lane === 'mcp' ? a.kind === 'mcp_server' : laneOf(a.source) === lane && a.kind !== 'mcp_server')))
+  const laneLabel = lane ? LANES.find((l) => l.key === lane)?.label : null
+  return (
+    <section className="fm-card" aria-labelledby="wait-title">
+      <VStack gap={1}>
+        <Heading level={2} id="wait-title">
+          Waiting for you ({rows.length}){laneLabel ? ` · ${laneLabel}` : ''}
+        </Heading>
+        {rows.length === 0 && (
+          <Text color="secondary">{lane ? 'Nothing waiting from this area.' : 'Nothing waiting. Connectors on a schedule keep looking.'}</Text>
+        )}
+        {rows.map((a) => (
+          <div key={a.id} className="dv-row">
+            <SourceMark kind={a.source} />
+            <div>
+              <div>
+                <span className="nm">{a.name}</span> <Token size="sm" label={KIND_LABEL[a.kind] ?? a.kind} />
+              </div>
+              <div className="sub">
+                {SOURCE_LABEL[a.source] ?? a.source} · found {ago(a.discoveredAt)}
+              </div>
+              <div className="dv-chips">
+                {detail(a)
+                  .split(' · ')
+                  .filter(Boolean)
+                  .map((c) => (
+                    <span key={c} className="dv-chip">
+                      {c}
+                    </span>
+                  ))}
+                <span className={`dv-chip ${a.suggestedTier}`}>{a.suggestedTier} risk suggested</span>
+              </div>
+            </div>
+            <HStack gap={2}>
+              <Button
+                size="sm"
+                variant="primary"
+                label="Register"
+                isDisabled={busyId !== null}
+                onClick={() =>
+                  run(a.id, async () => {
+                    const out = await d.promote(a.id)
+                    await refreshSystems()
+                    router.push(`/systems/${encodeURIComponent(out.systemId)}`)
+                  })
+                }
+              />
+              <Button size="sm" variant="ghost" label="Ignore" isDisabled={busyId !== null} onClick={() => run(a.id, () => d.ignore(a.id))} />
+            </HStack>
+          </div>
+        ))}
+      </VStack>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ Sources */
+
+function RunStrip({ runs }: { runs: IntegrationRun[] }) {
+  const shown = [...runs].reverse() // oldest left, newest right
+  const max = Math.max(1, ...shown.map((r) => r.found ?? 0))
+  return (
+    <div className="dv-runs" role="img" aria-label={`Last ${shown.length} reads, ${shown.filter((r) => r.status === 'failed').length} failed`}>
+      {shown.length === 0 && <span className="empty" style={{ height: 4, width: 60 }} />}
+      {shown.map((r) => (
+        <span
+          key={r.id}
+          className={r.status === 'failed' ? 'failed' : r.created ? 'new' : r.found ? '' : 'empty'}
+          style={{ height: r.status === 'failed' ? 10 : Math.max(4, Math.round(((r.found ?? 0) / max) * 32)) }}
+          title={`${new Date(r.finishedAt).toLocaleString('en-GB')} · ${r.trigger} · ${r.status === 'failed' ? r.error : `${r.found} found, ${r.created} new`}`}
+        />
+      ))}
+    </div>
+  )
+}
+
+function lastChange(i: Integration): { text: string; err?: boolean } | null {
+  const r = i.recentRuns?.[0]
+  if (!r) return null
+  if (r.status === 'failed') return { text: r.error ?? 'The last read failed', err: true }
+  if (r.created) return { text: `${r.created} new: ${r.newNames.slice(0, 3).join(', ')}${r.created > 3 ? ', and more' : ''}` }
+  return { text: `No change · ${r.found ?? 0} known` }
+}
+
+function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; run: (id: string, fn: () => Promise<void>) => void; onUpload: (id: string) => void }) {
+  const now = useNow(30_000)
+  const { refresh } = d
+  // Scheduled reads land on the server; pick them up while this view is open.
+  useEffect(() => {
+    const t = setInterval(() => void refresh(), 60_000)
+    return () => clearInterval(t)
+  }, [refresh])
+  const health = d.integrations.map((i) => healthOf(i, now))
+  const count = (h: Health) => health.filter((x) => x === h).length
+  if (d.integrations.length === 0) {
+    return <EmptyState title="No sources connected" description="Connect a source and FairMind keeps reading it on the schedule you pick." actions={<Button variant="primary" label="Connect a source" href="/discovery/connect" />} />
+  }
+  return (
+    <section className="fm-card" aria-labelledby="src-title">
+      <VStack gap={2}>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={2}>
+          <Heading level={2} id="src-title">
+            Connected sources
+          </Heading>
+          <div className="dv-summary">
+            {(['live', 'failing', 'overdue', 'manual', 'waiting', 'upload'] as Health[])
+              .filter((h) => count(h) > 0)
+              .map((h) => (
+                <span key={h} className="dv-pill">
+                  <i className={`dv-dot ${h}`} />
+                  <b>{count(h)}</b>
+                  {HEALTH_LABEL[h].toLowerCase()}
+                </span>
+              ))}
+          </div>
+        </HStack>
+        {d.integrations.map((i, idx) => {
+          const h = health[idx]
+          const change = lastChange(i)
+          return (
+            <div key={i.id} className="dv-src">
+              <HStack gap={3} vAlign="start">
+                <SourceMark kind={i.kind} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>{i.name}</div>
+                  <div className="meta">{where(i)}</div>
+                  {change && <div className={`dv-change${change.err ? ' err' : ''}`}>{change.text}</div>}
+                </div>
+              </HStack>
+              <div className="meta">
+                <div>
+                  <i className={`dv-dot ${h}`} />
+                  <b>{HEALTH_LABEL[h]}</b>
+                </div>
+                <div>Last fetched {ago(i.lastSyncedAt, now)}</div>
+                <div>{i.kind === 'proxy_logs' ? (i.lastSyncedAt ? 'Upload a newer export to read again' : 'Upload an export to read it') : i.scheduleMinutes ? `Next read ${until(i.nextSyncAt, now)}` : 'Reads only when you sync'}</div>
+              </div>
+              <VStack gap={2}>
+                <RunStrip runs={i.recentRuns ?? []} />
+                {i.kind !== 'proxy_logs' && (
+                  <Selector
+                    label={`How often to read ${i.name}`}
+                    isLabelHidden
+                    size="sm"
+                    value={String(i.scheduleMinutes ?? 0)}
+                    options={SCHEDULES.map((s) => ({ value: String(s.minutes), label: s.label }))}
+                    onChange={(v: string) => run(i.id, () => d.setSchedule(i.id, Number(v)))}
+                  />
+                )}
+              </VStack>
+              <HStack gap={2}>
+                {i.kind === 'proxy_logs' ? (
+                  <Button size="sm" variant="secondary" label={busyId === i.id ? 'Reading' : 'Upload logs'} isDisabled={busyId !== null} onClick={() => onUpload(i.id)} />
+                ) : (
+                  <Button size="sm" variant="secondary" label={busyId === i.id ? 'Reading' : 'Sync now'} isDisabled={busyId !== null} onClick={() => run(i.id, async () => void (await d.sync(i.id)))} />
+                )}
+                <Button size="sm" variant="ghost" label="Remove" isDisabled={busyId !== null} onClick={() => run(i.id, () => d.remove(i.id))} />
+              </HStack>
+            </div>
+          )
+        })}
+      </VStack>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ Page */
+
+function DiscoveryView() {
+  const router = useRouter()
+  const params = useSearchParams()
+  const view = params.get('view') === 'sources' ? 'sources' : 'overview'
   const d = useDiscovery()
-  const [adding, setAdding] = useState(false)
+  const [lane, setLane] = useState<LaneKey | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [synced, setSynced] = useState<Record<string, Sync | null>>({})
   const fileInput = useRef<HTMLInputElement>(null)
   const uploadFor = useRef<string | null>(null)
-
-  function readLogs(file: File | undefined) {
-    const id = uploadFor.current
-    if (fileInput.current) fileInput.current.value = ''
-    if (!file || !id) return
-    if (file.size > MAX_LOG_BYTES) {
-      setError('That log file is over 20 MB. Export a shorter period or only the destination host column.')
-      return
-    }
-    void run(id, async () => {
-      const r = await d.upload(id, await file.text())
-      setSynced((p) => ({ ...p, [id]: r }))
-    })
-  }
 
   async function run(id: string, fn: () => Promise<void>) {
     setBusyId(id)
@@ -200,6 +321,20 @@ export default function DiscoveryPage() {
     }
   }
 
+  function readLogs(file: File | undefined) {
+    const id = uploadFor.current
+    if (fileInput.current) fileInput.current.value = ''
+    if (!file || !id) return
+    if (file.size > MAX_LOG_BYTES) {
+      setError('That log file is over 20 MB. Export a shorter period or only the destination host column.')
+      return
+    }
+    void run(id, async () => void (await d.upload(id, await file.text())))
+  }
+
+  const failing = d.integrations.filter((i) => healthOf(i) === 'failing').length
+  const waiting = d.discovered.filter((a) => a.status === 'new').length
+
   return (
     <div className="fm-page">
       <VStack gap={5}>
@@ -209,133 +344,48 @@ export default function DiscoveryPage() {
             <Text color="secondary">
               {d.loading
                 ? 'Reading connectors'
-                : `${d.integrations.length} connector${d.integrations.length === 1 ? '' : 's'}, ${d.discovered.filter((a) => a.status === 'new').length} found and not registered`}
+                : `${d.integrations.length} source${d.integrations.length === 1 ? '' : 's'} watched · ${d.discovered.length} found · ${waiting} waiting for you`}
             </Text>
           </VStack>
           <HStack gap={2}>
             <Button label="See AI systems" variant="secondary" href="/systems" />
-            <Button label="Connect a source" variant="primary" onClick={() => setAdding(true)} />
+            <Button label="Connect a source" variant="primary" href="/discovery/connect" />
           </HStack>
         </HStack>
+
+        <TabList value={view} onChange={(v) => router.replace(v === 'sources' ? '/discovery?view=sources' : '/discovery')} hasDivider aria-label="Discovery view">
+          <Tab value="overview" label={`Overview${waiting ? ` ${waiting}` : ''}`} />
+          <Tab value="sources" label={`Sources${failing ? ` · ${failing} failing` : ''}`} />
+        </TabList>
 
         {error && <Banner status="error" title="That did not work" description={error} isDismissable onDismiss={() => setError(null)} />}
 
         {d.loading ? (
           <VStack gap={2} aria-busy="true">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height={72} />
+              <Skeleton key={i} height={96} />
             ))}
           </VStack>
         ) : d.error ? (
           <EmptyState title="Discovery could not load" description={d.error} actions={<Button label="Try again" onClick={() => void d.refresh()} />} />
+        ) : view === 'sources' ? (
+          <Sources
+            d={d}
+            busyId={busyId}
+            run={run}
+            onUpload={(id) => {
+              uploadFor.current = id
+              fileInput.current?.click()
+            }}
+          />
         ) : (
           <>
-            <section className="fm-card" aria-labelledby="conn-title">
-              <div className="dsc-card">
-                <Heading level={2} id="conn-title">
-                  Connectors
-                </Heading>
-                {d.integrations.length === 0 ? (
-                  <EmptyState title="No sources connected" description="Connect code, model registries, AI vendor accounts, clouds, sign-in providers or gateways, and FairMind reads the AI systems in them." actions={<Button variant="primary" label="Connect a source" onClick={() => setAdding(true)} />} />
-                ) : (
-                  d.integrations.map((i) => (
-                    <div key={i.id} className="dsc-row">
-                      <div>
-                        <div className="nm">
-                          {i.name} <Token size="sm" label={SOURCE_LABEL[i.kind] ?? i.kind} />
-                        </div>
-                        <div className="sub">{where(i)}</div>
-                      </div>
-                      <div className="sub">{syncLine(i.id in synced ? synced[i.id] : i.lastSync, i.kind)}</div>
-                      <HStack gap={2}>
-                        {i.kind === 'proxy_logs' ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            label={busyId === i.id ? 'Reading' : 'Upload logs'}
-                            isDisabled={busyId !== null}
-                            onClick={() => {
-                              uploadFor.current = i.id
-                              fileInput.current?.click()
-                            }}
-                          />
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            label={busyId === i.id ? 'Syncing' : 'Sync now'}
-                            isDisabled={busyId !== null}
-                            onClick={() =>
-                              run(i.id, async () => {
-                                const r = await d.sync(i.id)
-                                setSynced((p) => ({ ...p, [i.id]: r }))
-                              })
-                            }
-                          />
-                        )}
-                        <Button size="sm" variant="ghost" label="Remove" isDisabled={busyId !== null} onClick={() => run(i.id, () => d.remove(i.id))} />
-                      </HStack>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            {GROUPS.map((g) => {
-              const rows = d.discovered.filter((a) => a.status === g.key)
-              if (rows.length === 0 && g.key !== 'new') return null
-              return (
-                <section key={g.key} className="fm-card" aria-labelledby={`g-${g.key}`}>
-                  <div className="dsc-card">
-                    <Heading level={2} id={`g-${g.key}`}>
-                      {g.title} ({rows.length})
-                    </Heading>
-                    {rows.length === 0 && <Text color="secondary">Nothing found and waiting. Sync a connector to look again.</Text>}
-                    {rows.map((a) => (
-                      <div key={a.id} className="dsc-row">
-                        <div>
-                          <div className="nm">
-                            {a.name} <Token size="sm" label={KIND_LABEL[a.kind] ?? a.kind} />
-                          </div>
-                          <div className="sub">
-                            {SOURCE_LABEL[a.source] ?? a.source} · {a.externalId}
-                          </div>
-                        </div>
-                        <div className="sub">
-                          {detail(a)}
-                          {g.key === 'new' && ` · suggested ${a.suggestedTier} risk, ${a.suggestedStage} stage`}
-                        </div>
-                        <HStack gap={2}>
-                          {g.key === 'new' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                label="Register it"
-                                isDisabled={busyId !== null}
-                                onClick={() =>
-                                  run(a.id, async () => {
-                                    const out = await d.promote(a.id)
-                                    await refreshSystems()
-                                    router.push(`/systems/${encodeURIComponent(out.systemId)}`)
-                                  })
-                                }
-                              />
-                              <Button size="sm" variant="ghost" label="Ignore" isDisabled={busyId !== null} onClick={() => run(a.id, () => d.ignore(a.id))} />
-                            </>
-                          )}
-                          {g.key === 'promoted' && a.systemId && <Button size="sm" variant="secondary" label="Open system" href={`/systems/${encodeURIComponent(a.systemId)}`} />}
-                        </HStack>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )
-            })}
+            <Areas d={d} lane={lane} onLane={setLane} />
+            <Flow d={d} />
+            <Waiting d={d} lane={lane} busyId={busyId} run={run} />
           </>
         )}
       </VStack>
-
       <input
         ref={fileInput}
         type="file"
@@ -344,12 +394,14 @@ export default function DiscoveryPage() {
         aria-label="Log file to read"
         onChange={(e) => readLogs(e.target.files?.[0])}
       />
-      <Drawer isOpen={adding} onOpenChange={setAdding} label="Connect a source" width={480} padding={5}>
-        <VStack gap={4}>
-          <Heading level={2}>Connect a source</Heading>
-          <AddConnector onCreate={d.create} onDone={() => setAdding(false)} />
-        </VStack>
-      </Drawer>
     </div>
+  )
+}
+
+export default function DiscoveryPage() {
+  return (
+    <Suspense fallback={null}>
+      <DiscoveryView />
+    </Suspense>
   )
 }
