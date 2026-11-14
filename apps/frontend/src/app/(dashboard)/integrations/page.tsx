@@ -11,13 +11,13 @@ import { cn } from '@/lib/utils'
 const field =
   'h-9 w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[13.5px] outline-none focus:border-[var(--fm-ink)]'
 const label = 'block text-[12px] font-medium text-[var(--fm-ink2)]'
-const KIND_LABEL: Record<DiscoveredAsset['kind'], string> = {
+const KIND_LABEL: Record<string, string> = {
   ml_model: 'ML model',
   llm_app: 'LLM application',
   ai_assisted_dev: 'AI-assisted development',
 }
-const KIND_NAME: Record<IntegrationKind, string> = { mlflow: 'MLflow registry', github: 'GitHub org', huggingface: 'Hugging Face' }
-const SOURCE_LABEL: Record<IntegrationKind, string> = { mlflow: 'MLflow', github: 'GitHub', huggingface: 'Hugging Face' }
+const KIND_NAME: Record<string, string> = { mlflow: 'MLflow registry', github: 'GitHub org', huggingface: 'Hugging Face' }
+const SOURCE_LABEL: Record<string, string> = { mlflow: 'MLflow', github: 'GitHub', huggingface: 'Hugging Face' }
 const STAGE_LABEL = Object.fromEntries(STAGES.map((s) => [s.key, s.label]))
 
 function when(iso: string | null) {
