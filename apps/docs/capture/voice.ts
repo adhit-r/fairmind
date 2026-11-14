@@ -15,11 +15,11 @@ const PY = process.env['HYPERFRAMES_PYTHON'] ?? join(TTS, 'venv/bin/python')
 const VOICE = 'af_heart'
 const HYPERFRAMES = 'hyperframes@0.9.39'
 
-// How the voice should say names it would otherwise mispronounce. Captions keep the real spelling.
+// How the voice should say words it would otherwise mispronounce. Captions keep the real spelling. Most acronyms
+// (AI, API, LLM, DPDP, CSV, JSON) need nothing: the phonemizer spells them out. Never space out a leading "A": a lone
+// "A" is read as the article, so "A I" came out as "uh-eye". Check a new entry with kokoro_onnx's Tokenizer().phonemize.
 const SAY: [RegExp, string][] = [
-  [/\bFairMind\b/g, 'Fair Mind'], [/\bLLM\b/g, 'L L M'], [/\bAI\b/g, 'A I'],
-  [/\bDPO\b/g, 'D P O'], [/\bAPI\b/g, 'A P I'], [/\bDPDP\b/g, 'D P D P'],
-  [/\bROPA\b/g, 'ropa'], [/\bJSON\b/g, 'jay-son'], [/\bCSV\b/g, 'C S V'], [/\be-mail\b/g, 'email'],
+  [/\bCLI\b/g, 'C L I'], [/\bCI\b/g, 'C I'], [/\be-mail\b/g, 'email'],
 ]
 const spoken = (text: string): string => SAY.reduce((t, [re, to]) => t.replace(re, to), text)
 
