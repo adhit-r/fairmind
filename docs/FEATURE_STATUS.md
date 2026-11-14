@@ -111,7 +111,7 @@ The live navigation is the AppShell LIBRARY list plus the system-file stage spin
 | `/admin/users`, `/admin/roles` | Partial (always empty; static table) | `apps/backend/src/api/routers/auth.py:824-850`, `apps/frontend/src/app/(dashboard)/admin/roles/page.tsx:19` |
 | Change password while signed in | Planned (button only re-saves preferences) | `apps/frontend/src/app/(dashboard)/settings/page.tsx:220,243` |
 | User preferences | Partial (in memory; autoRefresh key mismatch) | `apps/backend/src/domain/settings/services/settings_service.py:19,32` |
-| SSO (Authentik, opt-in) | Partial (redirect URI points to missing `/auth/callback`) | `apps/frontend/src/lib/api/hooks/useAuthentik.ts:100` |
+| SSO (Authentik, opt-in) | Partial (redirect URI fixed to `/callback`) | `apps/frontend/src/lib/api/hooks/useAuthentik.ts:100` |
 | Access requests (admin review) | Partial (review works; nothing submits) | `apps/backend/api/routes/registration.py:49` |
 | API keys | BE only | `apps/backend/src/api/routers/auth.py:674,739,771` |
 | Approval workflows and decision history | BE only | `apps/backend/api/routes/ai_governance.py:1640,1678,1714,1998` |

@@ -116,7 +116,7 @@ export function useAuth() {
    * Handle OAuth2 callback after Authentik redirect
    * Exchanges authorization code for tokens
    *
-   * Called from /auth/callback page
+   * Called from /callback page
    * Validates PKCE state parameter and exchanges code for tokens via backend
    */
   const handleAuthenticCallback = async (code: string, state: string) => {
