@@ -5,16 +5,19 @@ import { useParams, useRouter } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 import ReactFlow, { Background, Controls } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { needsPerson, usePackActions, useRun, useWorkflow, versionName } from '@/lib/api/hooks/usePacks'
+import { needsPerson, usePackActions, useRun, useWorkflow, useWorkflowVersions, versionName } from '@/lib/api/hooks/usePacks'
 import { FitWhenReady, KIND_LABEL, KindIcon, flowGraph, nodeTypes, type NodeState } from '@/components/packs/flow'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, StatusPill, StagePill, cap, when } from '@/components/packs/parts'
+import { useSystemContext } from '@/components/workflow/SystemContext'
 import { cn } from '@/lib/utils'
 
 export default function WorkflowPage() {
   const { workflowId } = useParams<{ workflowId: string }>()
   const router = useRouter()
   const { startRun, createDraft } = usePackActions()
+  const { selectedSystem } = useSystemContext()
   const wf = useWorkflow(workflowId)
+  const versions = useWorkflowVersions(workflowId)
   const run = useRun(wf.data?.latestRun?.id)
   const [overlay, setOverlay] = useState(true)
   const [starting, setStarting] = useState(false)
@@ -38,7 +41,7 @@ export default function WorkflowPage() {
     if (!wf.data) return
     setStarting(true)
     setFailure(null)
-    const res = await startRun(wf.data.id)
+    const res = await startRun(wf.data.id, selectedSystem.id || undefined)
     setStarting(false)
     wf.reload()
     if (res.error || !res.data) setFailure(res.error ?? 'The run could not be started.')
@@ -205,6 +208,40 @@ export default function WorkflowPage() {
                     <td className="py-[10px] pr-3">{needsPerson(s) ? <Pill tone="you">Yes</Pill> : <Pill>No</Pill>}</td>
                     <td className="max-w-[220px] py-[10px] pr-3">{s.failure ?? <span className="text-[var(--fm-ink3)]">Not set</span>}</td>
                     <td className="max-w-[220px] py-[10px]">{s.output ?? <span className="text-[var(--fm-ink3)]">None</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="versions-h" className="pk-card px-6 py-5">
+        <h2 id="versions-h" className="m-0 mb-2 text-base font-semibold text-[var(--fm-ink)]">Version history</h2>
+        {versions.loading && !versions.data ? (
+          <p className={`m-0 text-[13px] ${MUTED}`}>Loading versions…</p>
+        ) : versions.error ? (
+          <p className={`m-0 text-[13px] ${MUTED}`}>Versions could not be loaded. {versions.error}</p>
+        ) : !versions.data || versions.data.length === 0 ? (
+          <p className={`m-0 text-[13px] ${MUTED}`}>No versions have been published yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-left text-[13px] text-[var(--fm-ink)]">
+              <thead>
+                <tr className={LABEL}>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Version</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Status</th>
+                  <th scope="col" className="py-2 pr-3 font-semibold">Published</th>
+                  <th scope="col" className="py-2 font-semibold">Author</th>
+                </tr>
+              </thead>
+              <tbody>
+                {versions.data.map((v) => (
+                  <tr key={v.version} className={cn('border-t align-top', LINE)}>
+                    <td className="py-[10px] pr-3 font-semibold">{versionName(v.label)}</td>
+                    <td className="py-[10px] pr-3">{cap(v.status)}</td>
+                    <td className="py-[10px] pr-3">{v.publishedAt ? when(v.publishedAt) : v.createdAt ? when(v.createdAt) : <span className="text-[var(--fm-ink3)]">Not published</span>}</td>
+                    <td className="py-[10px]">{v.publishedBy ?? v.createdBy ?? <span className="text-[var(--fm-ink3)]">Not set</span>}</td>
                   </tr>
                 ))}
               </tbody>
