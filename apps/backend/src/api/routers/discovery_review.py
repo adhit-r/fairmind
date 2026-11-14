@@ -40,7 +40,6 @@ public_router = APIRouter(tags=["owner-check-public"])
 
 OWNER_LINK_DAYS = 14
 _TIER_ORDER = ["low", "medium", "high", "critical"]
-_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # Names too common to say two sightings are the same thing.
 _STOP = {"default", "defaultproject", "main", "test", "testing", "dev", "prod", "production", "staging", "api", "app", "key", "apikey", "secretkey", "mykey", "new", "demo"}
 _INDIA_REGIONS = {"ap-south-1", "ap-south-2", "centralindia", "southindia", "westindia", "jioindiawest", "jioindiacentral", "asia-south1", "asia-south2"}
@@ -83,8 +82,12 @@ def _keys(a: Dict[str, Any]) -> List[Tuple[str, str, str]]:
 
 
 def _email(value: Any) -> Optional[str]:
+    """A plausible email address, lower-cased, or None. Checked without a regex: values come from sources and forms."""
     v = str(value or "").strip().lower()
-    return v if _EMAIL.match(v) else None
+    if len(v) > 320 or any(ch.isspace() for ch in v) or v.count("@") != 1:
+        return None
+    local, domain = v.split("@")
+    return v if local and "." in domain and not domain.startswith(".") and not domain.endswith(".") else None
 
 
 def group_assets(assets: List[Dict[str, Any]], splits: Set[str]) -> List[Dict[str, Any]]:

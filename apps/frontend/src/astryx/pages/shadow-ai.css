@@ -27,7 +27,7 @@
 .sh-cf { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
 .sh-cf i { width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--color-text-primary); }
 .sh-cf.confirmed i { background: var(--color-text-primary); }
-.sh-cf.likely i { background: linear-gradient(90deg, var(--color-text-primary) 50%, transparent 50%); }
+.sh-cf.likely i { box-shadow: inset 3px 0 0 var(--color-text-primary); }
 .sh-scale { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; min-width: 260px; }
 .sh-scale span { padding-top: 6px; border-top: 4px solid var(--color-border); font-size: 12px; color: var(--color-text-secondary); }
 .sh-scale span.on { border-color: var(--color-text-primary); color: var(--color-text-primary); font-weight: 600; }

@@ -47,6 +47,7 @@ export function DiscoveryFlow({ d, onReview }: { d: D; onReview: () => void }) {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
+  const [now] = useState(() => Date.now()) // "today" as of opening the view, read once
   const scroller = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
 
@@ -98,7 +99,7 @@ export function DiscoveryFlow({ d, onReview }: { d: D; onReview: () => void }) {
     d.discovered.reduce<Record<string, number>>((m, a) => ({ ...m, [a.kind]: (m[a.kind] ?? 0) + 1 }), {}),
   ).sort((a, b) => b[1] - a[1])
   const today = d.discovered
-    .filter((a) => Date.now() - new Date(a.discoveredAt).getTime() < 86_400_000)
+    .filter((a) => now - new Date(a.discoveredAt).getTime() < 86_400_000)
     .sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt))
     .slice(0, 4)
 

@@ -75,7 +75,7 @@
 .fl-changed { font-size: 13px; color: var(--color-text-warning); font-weight: 600; }
 .fl-zoom { font-size: 12px; color: var(--color-text-secondary); min-width: 38px; text-align: center; }
 .fl-err { padding: 8px 16px; font-size: 13px; color: var(--color-text-error); border-bottom: 1px solid var(--color-border); }
-.fl-scroll { height: min(78vh, 900px); min-height: 520px; overflow: auto; cursor: grab; background-color: var(--color-background-muted); background-image: radial-gradient(color-mix(in srgb, var(--color-text-primary) 12%, transparent) 1px, transparent 1px); background-size: 20px 20px; touch-action: none; }
+.fl-scroll { height: min(78vh, 900px); min-height: 520px; overflow: auto; cursor: grab; background-color: var(--color-background-muted); touch-action: none; }
 .fl-scroll:active { cursor: grabbing; }
 .fl-canvas { position: relative; transform-origin: 0 0; }
 .fl-col { position: absolute; top: 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-secondary); }
