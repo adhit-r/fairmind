@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
+import { API_ENDPOINTS } from '../endpoints'
 import type { CellState } from '@/components/ui/matrix'
 
 const GOV = '/api/v1/ai-governance'
@@ -171,6 +172,16 @@ export interface PolicyRuleFailure {
   ruleId: string
   ruleTitle: string
   detail: string
+}
+
+/** The live policy gate for a system: allowed is false while a blocking rule fails. */
+export interface PolicyGate {
+  systemId: string
+  allowed: boolean
+  blocking: PolicyRuleFailure[]
+  warnings: PolicyRuleFailure[]
+  runId: string
+  evaluatedAt: string
 }
 
 export interface FairnessRunSummary {
@@ -373,6 +384,8 @@ export interface SystemFile {
   risks: RiskStatus | null
   reports: AuditReport[]
   gate: ReleaseGate | null
+  /** The live policy gate, evaluated when the file loads. */
+  policyGate: PolicyGate | null
   fairnessRuns: FairnessRunSummary[]
   monitoringRuns: MonitoringRunSummary[]
   monitoringPolicy: MonitoringPolicy | null
@@ -392,7 +405,7 @@ export interface SystemFileView {
 /** System file state keyed by organisation and system. */
 export type SystemFileState = EvaluationScopeState<SystemFileView>
 
-const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
+const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, policyGate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
 const PENDING: SystemFileView = { file: EMPTY_FILE, loading: true, error: null }
 
 export const systemFileScopeKey = (organizationId: string | null | undefined, systemId: string | undefined) =>
@@ -420,13 +433,14 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     return
   }
   const q = `system_id=${encodeURIComponent(systemId)}`
-  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
+  const [evidence, approval, remediation, risks, reports, gate, policyGate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
     get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
     get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
     get<RemediationStatus>(`${GOV}/remediation?${q}`),
     get<RiskStatus>(`${GOV}/dashboard/risk?${q}`),
     get<AuditReport[]>(`${GOV}/reports?${q}`),
     get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
+    get<PolicyGate>(API_ENDPOINTS.aiGovernance.policyGate(systemId)),
     get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
     get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
     get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
@@ -441,6 +455,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     risks: unwrap(risks, null),
     reports: unwrap(reports, []),
     gate: unwrap(gate, null),
+    policyGate: unwrap(policyGate, null),
     fairnessRuns: unwrap(fairnessRuns, []),
     monitoringRuns: unwrap(monitoringRuns, []),
     monitoringPolicy: unwrap(monitoringPolicy, null),
