@@ -1,16 +1,30 @@
+import { Route, ScrollText } from 'lucide-react'
+import { SOURCE_LOGO } from '@/astryx/sourceLogos'
 import { SOURCES, type DiscoveredAsset, type Integration, type IntegrationKind } from '@/astryx/data/discovery'
 
-/** A source's tile: its letters in a small square. Dashed when the source is not connected. */
+const GENERIC = { proxy_logs: ScrollText, litellm: Route } as const
+
+/** A source's tile: the vendor's mark in ink where one is available, otherwise its letters. Dashed when not connected. */
 export function SourceMark({ kind, ghost, size }: { kind: IntegrationKind; ghost?: boolean; size?: 'sm' }) {
   const s = SOURCES[kind]
+  const px = size === 'sm' ? 13 : 16
+  const logo = SOURCE_LOGO[kind]
+  const Icon = GENERIC[kind as keyof typeof GENERIC]
   return (
     <span className={`dv-mark${size ? ` ${size}` : ''}${ghost ? ' ghost' : ''}`} title={s?.label} aria-hidden="true">
-      {s?.mark ?? kind.slice(0, 2)}
+      {logo ? (
+        <svg viewBox="0 0 24 24" width={px} height={px} fill="currentColor">
+          <path d={logo} />
+        </svg>
+      ) : Icon ? (
+        <Icon size={px} strokeWidth={1.75} />
+      ) : (
+        s?.mark ?? kind.slice(0, 2)
+      )}
     </span>
   )
 }
 
-/** What a connector reads, from its stored config. */
 export function where(i: Integration): string {
   const c = i.config as Record<string, string | undefined>
   switch (i.kind) {
