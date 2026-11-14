@@ -11,13 +11,12 @@ import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { Selector } from '@astryxdesign/core/Selector'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Tab, TabList } from '@astryxdesign/core/TabList'
-import { Token } from '@astryxdesign/core/Token'
-import { useSystemContext } from '@/components/workflow/SystemContext'
-import { SourceMark, detail, where } from '@/astryx/DiscoveryParts'
+import { SourceMark, where } from '@/astryx/DiscoveryParts'
+import { CandidatePanel, WaitingList } from '@/astryx/DiscoveryReview'
+import { useCandidates, type Candidate } from '@/astryx/data/review'
 import { DiscoveryFlow } from '@/astryx/DiscoveryFlow'
 import {
   HEALTH_LABEL,
-  KIND_LABEL,
   LANES,
   MAX_LOG_BYTES,
   SCHEDULES,
@@ -37,6 +36,7 @@ import {
 type D = ReturnType<typeof useDiscovery>
 const KINDS = Object.keys(SOURCES) as IntegrationKind[]
 const laneOf = (kind: string): LaneKey | undefined => SOURCES[kind as IntegrationKind]?.lane
+const inLane = (c: Candidate, lane: LaneKey | null) => !lane || (lane === 'mcp' ? c.kind === 'mcp_server' || c.sources.includes('mcp_registry') : c.sources.some((s) => laneOf(s) === lane))
 
 /** Re-render on a timer so "3 min ago" and live status stay true while the page is open. */
 function useNow(ms: number) {
@@ -123,65 +123,6 @@ function Flow({ d }: { d: D }) {
           <span><i className="dv-key" style={{ background: 'var(--color-text-warning)' }} /><b>{wait}</b> waiting for you</span>
           <span><i className="dv-key" style={{ background: 'var(--color-border)' }} /><b>{ign}</b> ignored</span>
         </div>
-      </VStack>
-    </section>
-  )
-}
-
-function Waiting({ d, lane, busyId, run }: { d: D; lane: LaneKey | null; busyId: string | null; run: (id: string, fn: () => Promise<void>) => void }) {
-  const router = useRouter()
-  const { refreshSystems } = useSystemContext()
-  const rows = d.discovered.filter((a) => a.status === 'new' && (!lane || (lane === 'mcp' ? a.kind === 'mcp_server' : laneOf(a.source) === lane && a.kind !== 'mcp_server')))
-  const laneLabel = lane ? LANES.find((l) => l.key === lane)?.label : null
-  return (
-    <section className="fm-card" aria-labelledby="wait-title">
-      <VStack gap={1}>
-        <Heading level={2} id="wait-title">
-          Waiting for you ({rows.length}){laneLabel ? ` · ${laneLabel}` : ''}
-        </Heading>
-        {rows.length === 0 && (
-          <Text color="secondary">{lane ? 'Nothing waiting from this area.' : 'Nothing waiting. Connectors on a schedule keep looking.'}</Text>
-        )}
-        {rows.map((a) => (
-          <div key={a.id} className="dv-row">
-            <SourceMark kind={a.source} />
-            <div>
-              <div>
-                <span className="nm">{a.name}</span> <Token size="sm" label={KIND_LABEL[a.kind] ?? a.kind} />
-              </div>
-              <div className="sub">
-                {SOURCE_LABEL[a.source] ?? a.source} · found {ago(a.discoveredAt)}
-              </div>
-              <div className="dv-chips">
-                {detail(a)
-                  .split(' · ')
-                  .filter(Boolean)
-                  .map((c) => (
-                    <span key={c} className="dv-chip">
-                      {c}
-                    </span>
-                  ))}
-                <span className={`dv-chip ${a.suggestedTier}`}>{a.suggestedTier} risk suggested</span>
-              </div>
-            </div>
-            <HStack gap={2}>
-              <Button
-                size="sm"
-                variant="primary"
-                label="Register"
-                isDisabled={busyId !== null}
-                onClick={() =>
-                  run(a.id, async () => {
-                    const out = await d.promote(a.id)
-                    await refreshSystems()
-                    router.push(`/systems/${encodeURIComponent(out.systemId)}`)
-                  })
-                }
-              />
-              <Button size="sm" variant="ghost" label="Ignore" isDisabled={busyId !== null} onClick={() => run(a.id, () => d.ignore(a.id))} />
-            </HStack>
-          </div>
-        ))}
       </VStack>
     </section>
   )
@@ -303,8 +244,13 @@ function DiscoveryView() {
   const router = useRouter()
   const params = useSearchParams()
   const v = params.get('view')
-  const view = v === 'sources' || v === 'flow' ? v : 'overview'
+  const view = v === 'sources' || v === 'flow' || v === 'waiting' ? v : 'overview'
   const d = useDiscovery()
+  const c = useCandidates()
+  const picked = params.get('c')
+  const selected = view === 'waiting' ? (c.candidates.find((x) => x.id === picked)?.id ?? c.candidates[0]?.id ?? null) : null
+  const openCandidate = (id: string) => router.replace(`/discovery?view=waiting&c=${encodeURIComponent(id)}`)
+  const changed = () => void Promise.all([c.refresh(), d.refresh()])
   const [lane, setLane] = useState<LaneKey | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -316,6 +262,7 @@ function DiscoveryView() {
     setError(null)
     try {
       await fn()
+      void c.refresh() // a read may add sightings to what is waiting
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
@@ -335,7 +282,7 @@ function DiscoveryView() {
   }
 
   const failing = d.integrations.filter((i) => healthOf(i) === 'failing').length
-  const waiting = d.discovered.filter((a) => a.status === 'new').length
+  const waiting = c.candidates.length
 
   return (
     <div className="fm-page">
@@ -346,7 +293,7 @@ function DiscoveryView() {
             <Text color="secondary">
               {d.loading
                 ? 'Reading connectors'
-                : `${d.integrations.length} source${d.integrations.length === 1 ? '' : 's'} watched · ${d.discovered.length} found · ${waiting} waiting for you`}
+                : `${d.integrations.length} source${d.integrations.length === 1 ? '' : 's'} watched · ${d.discovered.length} sightings · ${waiting} waiting for you`}
             </Text>
           </VStack>
           <HStack gap={2}>
@@ -356,7 +303,8 @@ function DiscoveryView() {
         </HStack>
 
         <TabList value={view} onChange={(t) => router.replace(t === 'overview' ? '/discovery' : `/discovery?view=${t}`)} hasDivider aria-label="Discovery view">
-          <Tab value="overview" label={`Overview${waiting ? ` ${waiting}` : ''}`} />
+          <Tab value="overview" label="Overview" />
+          <Tab value="waiting" label={`Waiting${waiting ? ` ${waiting}` : ''}`} />
           <Tab value="flow" label="Flow" />
           <Tab value="sources" label={`Sources${failing ? ` · ${failing} failing` : ''}`} />
         </TabList>
@@ -375,7 +323,18 @@ function DiscoveryView() {
           d.integrations.length === 0 ? (
             <EmptyState title="No sources connected" description="Connect a source and its reads appear here as a flow into your inventory." actions={<Button variant="primary" label="Connect a source" href="/discovery/connect" />} />
           ) : (
-            <DiscoveryFlow d={d} onReview={() => router.replace('/discovery')} />
+            <DiscoveryFlow d={d} onReview={() => router.replace('/discovery?view=waiting')} />
+          )
+        ) : view === 'waiting' ? (
+          c.loading ? (
+            <Skeleton height={320} />
+          ) : c.error ? (
+            <EmptyState title="What is waiting could not load" description={c.error} actions={<Button label="Try again" onClick={() => void c.refresh()} />} />
+          ) : (
+            <div className="dv-split">
+              <WaitingList candidates={c.candidates} selected={selected} onPick={openCandidate} />
+              {selected ? <CandidatePanel key={selected} id={selected} onChanged={changed} /> : <EmptyState title="Nothing waiting" description="Connectors on a schedule keep looking." />}
+            </div>
           )
         ) : view === 'sources' ? (
           <Sources
@@ -391,7 +350,11 @@ function DiscoveryView() {
           <>
             <Areas d={d} lane={lane} onLane={setLane} />
             <Flow d={d} />
-            <Waiting d={d} lane={lane} busyId={busyId} run={run} />
+            <WaitingList
+              candidates={c.candidates.filter((x) => inLane(x, lane))}
+              onPick={openCandidate}
+              title={`Waiting for you (${c.candidates.filter((x) => inLane(x, lane)).length})${lane ? ` · ${LANES.find((l) => l.key === lane)?.label}` : ''}`}
+            />
           </>
         )}
       </VStack>

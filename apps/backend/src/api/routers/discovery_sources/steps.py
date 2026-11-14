@@ -5,7 +5,7 @@ source that has more than one, which stops that part of the read.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # kind -> [(key, title, call)]
 STEPS: Dict[str, List[tuple]] = {
@@ -22,8 +22,8 @@ STEPS: Dict[str, List[tuple]] = {
     ],
     "azure": [("deployments", "Model deployments", "Microsoft.CognitiveServices/accounts/deployments"), ("workspaces", "ML workspaces", "Microsoft.MachineLearningServices/workspaces")],
     "gcp": [("endpoints", "Endpoints", "aiplatform endpoints.list"), ("models", "Model registry", "aiplatform models.list"), ("agents", "Agent Engine", "aiplatform reasoningEngines.list")],
-    "okta": [("sso", "AI apps in single sign-on", "GET /api/v1/apps + /api/v1/logs")],
-    "entra": [("apps", "AI enterprise apps and consents", "GET /servicePrincipals + /oauth2PermissionGrants")],
+    "okta": [("sso", "AI apps in single sign-on", "GET /api/v1/apps + /api/v1/logs"), ("people", "Teams and leavers, for Shadow AI", "GET /api/v1/users")],
+    "entra": [("apps", "AI enterprise apps and consents", "GET /servicePrincipals + /oauth2PermissionGrants"), ("people", "Teams and turned-off accounts, for Shadow AI", "GET /users")],
     "m365_copilot": [("usage", "Licences and usage", "GET /subscribedSkus + copilot/reports"), ("agents", "Copilot agents", "GET /copilot/admin/catalog/packages")],
     "litellm": [("keys", "Virtual keys", "GET /key/list + /v1/models")],
     "proxy_logs": [("traffic", "AI traffic in the log", "Uploaded export")],
@@ -58,8 +58,8 @@ def disabled(config: Dict[str, Any], key: str) -> bool:
     return key in (config.get("disabled_steps") or [])
 
 
-def summarise(kind: str, found: List[Dict[str, Any]], new_ids: set, config: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Per step: how many items, how many new, and a few examples (new ones first)."""
+def summarise(kind: str, found: List[Dict[str, Any]], new_ids: set, config: Dict[str, Any], counts: Optional[Dict[str, int]] = None) -> List[Dict[str, Any]]:
+    """Per step: how many items, how many new, and a few examples (new ones first). counts covers steps that read facts, not items."""
     out = []
     for key, title, call in STEPS.get(kind, []):
         items = [i for i in found if step_of(kind, i) == key]
@@ -67,7 +67,7 @@ def summarise(kind: str, found: List[Dict[str, Any]], new_ids: set, config: Dict
         out.append(
             {
                 "key": key,
-                "found": len(items),
+                "found": (counts or {}).get(key, len(items)),
                 "created": sum(1 for i in items if i["external_id"] in new_ids),
                 "off": disabled(config, key),
                 "samples": [{"id": i["external_id"], "name": i["name"], "new": i["external_id"] in new_ids} for i in items[:SAMPLES]],

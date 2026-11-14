@@ -4089,6 +4089,106 @@ class GovernanceDiscoveredAsset(Base):
     )
 
 
+class GovernanceSourceFacts(Base):
+    """Directory facts a sign-in source read on its last run: each person's team and whether they left."""
+
+    __tablename__ = "governance_source_facts"
+
+    integration_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    source = Column(String, nullable=False)
+    facts_json = Column(Text, nullable=False, default="{}")
+    read_at = Column(String, nullable=False)
+
+
+class GovernanceDiscoverySplit(Base):
+    """A discovered asset a person said is not part of the system it was merged into."""
+
+    __tablename__ = "governance_discovery_splits"
+
+    asset_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    split_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceOwnerCheck(Base):
+    """A question sent to the likely owner of a discovered system. Only the link token's SHA-256 is stored."""
+
+    __tablename__ = "governance_owner_checks"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    anchor_asset_id = Column(String, nullable=False, index=True)
+    email = Column(String, nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)
+    expires_at = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    answered_at = Column(String, nullable=True)
+    answers_json = Column(Text, nullable=True)
+
+
+class GovernanceDiscoveryDecision(Base):
+    """What a person decided about a discovered system, with its conditions: the audit record."""
+
+    __tablename__ = "governance_discovery_decisions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    anchor_asset_id = Column(String, nullable=False, index=True)
+    decision = Column(String, nullable=False)  # approve | conditions | retire
+    system_id = Column(String, nullable=True)
+    risk_tier = Column(String, nullable=True)
+    owner = Column(String, nullable=True)
+    conditions_json = Column(Text, nullable=False, default="[]")
+    members_json = Column(Text, nullable=False, default="[]")
+    review_due = Column(String, nullable=True)
+    decided_by = Column(String, nullable=True)
+    decided_at = Column(String, nullable=False)
+
+
+class GovernanceApprovedAiTool(Base):
+    """An organisation's stance on a known AI service (catalog key): approved, approved for some teams, or not allowed."""
+
+    __tablename__ = "governance_approved_ai_tools"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    service_key = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # approved | limited | not_allowed
+    teams_json = Column(Text, nullable=False, default="[]")  # for limited: the teams it is approved for
+    sso_required = Column(Boolean, nullable=False, default=False)  # company accounts sign in through SSO only
+    note = Column(Text, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_governance_approved_ai_tools_org_service", "org_id", "service_key", unique=True),
+    )
+
+
+class GovernanceShadowState(Base):
+    """What has happened to one Shadow AI finding: when it was first seen and whether a person handled it."""
+
+    __tablename__ = "governance_shadow_states"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    finding_key = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="open")  # open | expected
+    reason = Column(Text, nullable=True)
+    first_seen = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
+    nudged_at = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_governance_shadow_states_org_key", "org_id", "finding_key", unique=True),
+    )
+
+
 class PackInstall(Base):
     """An agentic pack an organization has switched on."""
 

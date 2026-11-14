@@ -226,6 +226,34 @@ def test_okta_ai_apps_with_signins(fake_http):
     fake_http(handler)
     [a] = run(okta.sync({"domain": "acme.okta.com"}, "tok"))
     assert a["metadata"]["service"] == "ChatGPT" and a["metadata"]["distinct_users_30_days"] == 2
+    assert a["metadata"]["sso_users"] == ["x@acme.com", "y@acme.com"]
+
+
+def test_okta_people_include_leavers(fake_http):
+    def handler(r):
+        if r.url.path == "/api/v1/users":
+            if "DEPROVISIONED" in q(r).get("search", [""])[0]:
+                return (200, [{"status": "DEPROVISIONED", "statusChanged": "2026-11-01T00:00:00.000Z", "profile": {"email": "Carol@acme.com", "department": "Data"}}])
+            return (200, [{"status": "ACTIVE", "profile": {"login": "bob@acme.com", "department": "Finance"}}])
+        return (404, {})
+
+    fake_http(handler)
+    out = run(okta.facts({"domain": "acme.okta.com"}, "tok"))
+    assert out["people"]["carol@acme.com"] == {"team": "Data", "status": "deprovisioned", "status_changed": "2026-11-01T00:00:00.000Z"}
+    assert out["people"]["bob@acme.com"]["team"] == "Finance" and "deprovisioned" in out["left_statuses"]
+
+
+def test_entra_people_turned_off(fake_http):
+    def handler(r):
+        if t := ms_token(r):
+            return t
+        if r.url.path.endswith("/users"):
+            return (200, {"value": [{"userPrincipalName": "Dan@acme.com", "department": "Sales", "accountEnabled": False}, {"mail": "eve@acme.com", "accountEnabled": True}]})
+        return (404, {})
+
+    fake_http(handler)
+    out = run(entra.facts({"tenant_id": "t", "client_id": "c"}, "s"))
+    assert out["people"]["dan@acme.com"]["status"] == "disabled" and out["people"]["eve@acme.com"] == {"team": "", "status": "active", "status_changed": None}
 
 
 def test_entra_flags_self_consent(fake_http):

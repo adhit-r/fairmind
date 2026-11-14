@@ -19,6 +19,7 @@ from .catalog import asset_kind, by_app_name
 VENDOR = "Okta"
 MAX_APPS = 2000
 MAX_EVENTS_COUNTED = 1000
+MAX_PEOPLE = 20000
 
 
 async def _pages(client: httpx.AsyncClient, url: str, cap: int, params: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -72,6 +73,8 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                         "sso_sign_ins_30_days": len(events),
                         "sso_sign_ins_capped": len(events) >= MAX_EVENTS_COUNTED,
                         "distinct_users_30_days": len(users),
+                        # Who signed in through the company app: Shadow AI compares this with traffic.
+                        "sso_users": sorted(u.lower() for u in users),
                         "signal": "single sign-on",
                     },
                     tier="low" if s.category == "dev" else "medium",
@@ -79,3 +82,25 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                 )
             )
     return found
+
+
+def _person(u: Dict[str, Any]) -> Dict[str, Any]:
+    p = u.get("profile") or {}
+    return {"team": p.get("department") or "", "status": str(u.get("status") or "").lower(), "status_changed": u.get("statusChanged")}
+
+
+async def facts(config: Dict[str, Any], token: Optional[str]) -> Dict[str, Any]:
+    """Each person's team and status, including people who left (DEPROVISIONED), keyed by lower-case email."""
+    domain = need(config, "domain", "Okta domain").removeprefix("https://").rstrip("/")
+    base = public_url(f"https://{domain}", "Okta domain")
+    api_token = need_token(token, "Okta API token")
+    people: Dict[str, Dict[str, Any]] = {}
+    async with httpx.AsyncClient(base_url=base, headers={"Authorization": f"SSWS {api_token}", "Accept": "application/json"}, timeout=TIMEOUT_S) as client:
+        # The plain list leaves out deprovisioned people; they come from a second, filtered read.
+        listed = await _pages(client, "/api/v1/users", MAX_PEOPLE, {"limit": 200})
+        left = await _pages(client, "/api/v1/users", MAX_PEOPLE, {"limit": 200, "search": 'status eq "DEPROVISIONED"'})
+    for u in listed + left:
+        email = str((u.get("profile") or {}).get("email") or (u.get("profile") or {}).get("login") or "").lower()
+        if email:
+            people[email] = _person(u)
+    return {"people": people, "left_statuses": ["deprovisioned", "suspended"]}

@@ -424,6 +424,8 @@ _CONNECTORS = {
     "proxy_logs": _sync_upload_only,
     "mcp_registry": mcp_registry.sync,
 }
+# Sign-in sources also read directory facts (team, left or not) for Shadow AI, as the "people" step.
+_FACTS = {"okta": okta.facts, "entra": entra.facts}
 MAX_LOG_BYTES = 20 * 1024 * 1024
 
 
@@ -608,6 +610,7 @@ def delete_integration(integration_id: str, http: Request, db: Session = Depends
     _get_integration(db, org, integration_id)
     db.execute(text("DELETE FROM governance_discovered_assets WHERE integration_id = :id AND status = 'new'"), {"id": integration_id})
     db.execute(text("DELETE FROM governance_integration_runs WHERE integration_id = :id"), {"id": integration_id})
+    db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": integration_id})
     db.execute(text("DELETE FROM governance_integrations WHERE id = :id AND org_id = :org"), {"id": integration_id, "org": org})
     db.commit()
     return None
@@ -722,14 +725,38 @@ async def _run(db: Session, org: str, row: Any, trigger: str) -> Dict[str, Any]:
         db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": row[0]})
     # Connectors skip turned-off steps; this also drops anything a connector returned for one anyway.
     found = [i for i in found if not read_steps.disabled(config, read_steps.step_of(kind, i))]
-    return _finish(db, org, row, trigger, started, found, config)
+    counts = await _read_facts(db, org, row, config, token)
+    return _finish(db, org, row, trigger, started, found, config, counts)
 
 
-def _finish(db: Session, org: str, row: Any, trigger: str, started: str, found: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
+async def _read_facts(db: Session, org: str, row: Any, config: Dict[str, Any], token: Optional[str]) -> Dict[str, int]:
+    """Read and keep a sign-in source's directory facts. Turning the step off deletes what was kept."""
+    kind = row[2]
+    if kind not in _FACTS:
+        return {}
+    if read_steps.disabled(config, "people"):
+        db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
+        return {}
+    try:
+        facts = await _FACTS[kind](config, token)
+    except Exception:  # enrichment only: the apps were read; keep the facts from the last good read
+        logger.warning("Directory facts could not be read for %s (%s)", kind, row[0], exc_info=True)
+        return {}
+    db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
+    db.execute(
+        text("INSERT INTO governance_source_facts (integration_id, org_id, source, facts_json, read_at) VALUES (:id, :org, :src, :facts, :now)"),
+        {"id": row[0], "org": org, "src": kind, "facts": json.dumps(facts), "now": _now()},
+    )
+    return {"people": len(facts.get("people") or {})}
+
+
+def _finish(
+    db: Session, org: str, row: Any, trigger: str, started: str, found: List[Dict[str, Any]], config: Dict[str, Any], counts: Optional[Dict[str, int]] = None
+) -> Dict[str, Any]:
     now = _now()
     created, updated, new_items = _upsert(db, org, row[0], row[2], found, now)
     summary = {"found": len(found), "created": created, "updated": updated, "at": now}
-    steps = read_steps.summarise(row[2], found, {i["external_id"] for i in new_items}, config)
+    steps = read_steps.summarise(row[2], found, {i["external_id"] for i in new_items}, config, counts)
     _record(db, org, row, trigger, started, summary, new_items, steps)
     return summary
 
@@ -883,17 +910,36 @@ def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Sessio
     asset = _asset_out(_get_asset(db, org, asset_id))
     if asset["status"] == "promoted" and asset["systemId"]:
         return {"systemId": asset["systemId"], "alreadyPromoted": True}
+    system_id = create_system(db, org, asset, owner=body.owner, tier=body.risk_tier, stage=body.lifecycle_stage, business_line=body.business_line)
+    db.commit()
+    return {"systemId": system_id, "alreadyPromoted": False}
+
+
+def create_system(
+    db: Session,
+    org: str,
+    asset: Dict[str, Any],
+    *,
+    owner: Optional[str] = None,
+    tier: Optional[str] = None,
+    stage: Optional[str] = None,
+    business_line: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+    name: Optional[str] = None,
+) -> str:
+    """Insert a governed system for a discovered asset and mark the asset promoted. The caller commits."""
     integration = _get_integration(db, org, asset["integrationId"])
     meta = dict(asset["metadata"])
     meta.pop("applicability", None)  # written only by PUT /systems/{id}/applicability
-    business_line = body.business_line if body.business_line is not None else meta.get("business_line") or ""
+    business_line = business_line if business_line is not None else meta.get("business_line") or ""
     meta.update(
         {
             "source": asset["source"],
             "external_id": asset["externalId"],
             "asset_kind": asset["kind"],
             "business_line": business_line,
-            "discovered_asset_id": asset_id,
+            "discovered_asset_id": asset["id"],
+            **(extra or {}),
         }
     )
     system_id = str(uuid.uuid4())
@@ -907,20 +953,19 @@ def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Sessio
             "id": system_id,
             "org": org,
             "ws": _workspace_for(db, org, integration),
-            "name": asset["name"],
-            "owner": body.owner or meta.get("owner") or integration[3],
-            "tier": body.risk_tier or asset["suggestedTier"],
-            "stage": body.lifecycle_stage or asset["suggestedStage"],
+            "name": name or asset["name"],
+            "owner": owner or meta.get("owner") or integration[3],
+            "tier": tier or asset["suggestedTier"],
+            "stage": stage or asset["suggestedStage"],
             "meta": json.dumps(meta),
             "now": now,
         },
     )
     db.execute(
         text("UPDATE governance_discovered_assets SET status = 'promoted', system_id = :sid, updated_at = :now WHERE id = :id"),
-        {"sid": system_id, "now": now, "id": asset_id},
+        {"sid": system_id, "now": now, "id": asset["id"]},
     )
-    db.commit()
-    return {"systemId": system_id, "alreadyPromoted": False}
+    return system_id
 
 
 @router.post("/discovered/{asset_id}/ignore", dependencies=[Depends(org_mutator)])

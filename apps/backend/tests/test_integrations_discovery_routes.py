@@ -159,5 +159,5 @@ def test_scope_validation(client):  # noqa: F811
     iid = _add(client, "github", owner="acme")
     assert client.patch(f"/api/v1/integrations/{iid}", json={"disabled_steps": ["repos", "mcp"]}).status_code == 400
     assert client.patch(f"/api/v1/integrations/{iid}", json={"disabled_steps": ["nope"]}).status_code == 422
-    one = _add(client, "okta", domain="acme.okta.com")
-    assert client.patch(f"/api/v1/integrations/{one}", json={"disabled_steps": ["sso"]}).status_code == 400
+    one = _add(client, "litellm", base_url="https://gw.example.com")
+    assert client.patch(f"/api/v1/integrations/{one}", json={"disabled_steps": ["keys"]}).status_code == 400
