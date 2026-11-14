@@ -56,7 +56,7 @@ def q(request):
 
 
 def ms_token(request):
-    if "login.microsoftonline.com" in request.url.host:
+    if request.url.host == "login.microsoftonline.com":
         return (200, {"access_token": "t", "expires_in": 3600})
     return None
 
@@ -85,11 +85,11 @@ def test_proxy_logs_formats():
 
 
 def test_mcp_config_keeps_env_names_not_values():
-    cfg = json.dumps({"mcpServers": {"db": {"command": "npx", "args": ["-y", "pg-mcp"], "env": {"PG_PASSWORD": "s3cret"}}, "docs": {"url": "https://mcp.example.com"}}})
+    cfg = json.dumps({"mcpServers": {"db": {"command": "npx", "args": ["-y", "pg-mcp"], "env": {"DB_REGION": "env-value-must-not-be-kept"}}, "docs": {"url": "https://mcp.example.com"}}})
     servers = mcp_servers_in(cfg)
-    assert servers["db"] == {"transport": "stdio", "url": "", "command": "npx -y pg-mcp", "env_keys": ["PG_PASSWORD"]}
+    assert servers["db"] == {"transport": "stdio", "url": "", "command": "npx -y pg-mcp", "env_keys": ["DB_REGION"]}
     assert servers["docs"]["transport"] == "http"
-    assert "s3cret" not in json.dumps(servers)
+    assert "env-value-must-not-be-kept" not in json.dumps(servers)
     assert mcp_servers_in("not json") == {}
 
 

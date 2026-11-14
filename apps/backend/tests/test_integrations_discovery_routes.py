@@ -42,7 +42,7 @@ def test_upload_only_for_proxy_logs(client):  # noqa: F811
 
 
 def test_github_finds_mcp_servers(client, monkeypatch):  # noqa: F811
-    mcp = {"mcpServers": {"postgres": {"command": "npx", "args": ["pg-mcp"], "env": {"PGPASSWORD": "hunter2"}}, "linear": {"url": "https://mcp.linear.app/sse"}}}
+    mcp = {"mcpServers": {"postgres": {"command": "npx", "args": ["pg-mcp"], "env": {"PGREGION": "env-value-must-not-be-kept"}}, "linear": {"url": "https://mcp.linear.app/sse"}}}
 
     def gh(request: httpx.Request) -> httpx.Response:
         p = request.url.path
@@ -64,5 +64,5 @@ def test_github_finds_mcp_servers(client, monkeypatch):  # noqa: F811
     assert found["acme/ops"]["kind"] == "ai_assisted_dev"
     assert found["acme/ops"]["metadata"]["signals"]["mcp_servers"] == ["linear", "postgres"]
     pg_server = found["acme/ops#mcp:postgres"]
-    assert pg_server["kind"] == "mcp_server" and pg_server["metadata"]["env_keys"] == ["PGPASSWORD"]
-    assert "hunter2" not in json.dumps(found)
+    assert pg_server["kind"] == "mcp_server" and pg_server["metadata"]["env_keys"] == ["PGREGION"]
+    assert "env-value-must-not-be-kept" not in json.dumps(found)
