@@ -91,13 +91,16 @@ async function recordScreen(page: Page, dir: string) {
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 92, maxWidth: VIEW.width * 1.5, maxHeight: VIEW.height * 1.5, everyNthFrame: 1 })
   return {
     now: () => Date.now() / 1000 - t0,
-    async stop(out: string): Promise<number> {
-      const end = Date.now() / 1000 - t0
+    /** Writes the film from `from` seconds on (the frame showing at `from` opens it) and returns its length. */
+    async stop(out: string, from = 0): Promise<number> {
+      const end = Date.now() / 1000 - t0 - from
       await cdp.send('Page.stopScreencast').catch(() => undefined)
       if (!frames.length) throw new Error('no frames recorded')
-      const list = [`file '${frames[0]!.file}'`, `duration ${frames[0]!.t.toFixed(3)}`]
-      frames.forEach((f, i) => list.push(`file '${f.file}'`, `duration ${Math.max((frames[i + 1]?.t ?? end) - f.t, 1 / FPS).toFixed(3)}`))
-      list.push(`file '${frames[frames.length - 1]!.file}'`)
+      const shown = frames.filter(f => f.t <= from).length - 1
+      const kept = frames.slice(Math.max(shown, 0)).map((f, k) => ({ file: f.file, t: k === 0 && shown >= 0 ? 0 : f.t - from }))
+      const list = [`file '${kept[0]!.file}'`, `duration ${Math.max(kept[0]!.t, 0).toFixed(3)}`]
+      kept.forEach((f, i) => list.push(`file '${f.file}'`, `duration ${Math.max((kept[i + 1]?.t ?? end) - f.t, 1 / FPS).toFixed(3)}`))
+      list.push(`file '${kept[kept.length - 1]!.file}'`)
       writeFileSync(join(dir, 'list.txt'), list.join('\n'))
       ffmpeg(['-f', 'concat', '-safe', '0', '-i', join(dir, 'list.txt'), '-vf', `scale=1440:900:flags=lanczos,fps=${FPS}`,
         '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-pix_fmt', 'yuv420p', out])
@@ -216,7 +219,10 @@ export async function captureTour(browser: Browser, tour: Tour): Promise<void> {
     await cursor(false)
     await page.screenshot({ path: join(out, 'end.jpg'), type: 'jpeg', quality: 82, scale: 'css' })
     await sleep(1200)
-    const total = await rec.stop(join(work, 'silent.mp4'))
+    // Finding the first step's target on a slow host takes seconds of filming: start the video 0.4 s before the first word.
+    const lead = Math.max((cues[0]?.start ?? 0) - 0.4, 0)
+    for (const c of cues) { c.start -= lead; c.end -= lead }
+    const total = await rec.stop(join(work, 'silent.mp4'), lead)
 
     // Narration placed at each step's start, mixed into one track, then muxed with the picture.
     const inputs = cues.flatMap(c => ['-i', c.file])
