@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from . import TIMEOUT_S, asset, get_json, need_token
+from .steps import disabled
 
 BASE = "https://api.anthropic.com"
 VENDOR = "Claude Enterprise"
@@ -38,7 +39,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
     async with httpx.AsyncClient(base_url=BASE, headers=headers, timeout=TIMEOUT_S) as client:
         orgs = await _paged(client, "/v1/compliance/organizations", 50)
         names = {o.get("uuid"): o.get("name") for o in orgs}
-        for o in orgs:
+        for o in [] if disabled(config, "orgs") else orgs:
             users = await _paged(client, f"/v1/compliance/organizations/{o['uuid']}/users", MAX_USERS)
             found.append(
                 asset(
@@ -51,7 +52,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                 )
             )
         # Shared projects are team knowledge bases and instructions; private ones belong to one person.
-        for p in await _paged(client, "/v1/compliance/apps/projects", MAX_PROJECTS * 3):
+        for p in [] if disabled(config, "projects") else await _paged(client, "/v1/compliance/apps/projects", MAX_PROJECTS * 3):
             if p.get("is_private") or p.get("deleted_at"):
                 continue
             found.append(
@@ -65,6 +66,6 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                     tier="low",
                 )
             )
-            if len(found) >= MAX_PROJECTS + len(orgs):
+            if len(found) >= MAX_PROJECTS + (0 if disabled(config, "orgs") else len(orgs)):
                 break
     return found

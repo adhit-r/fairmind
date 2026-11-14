@@ -15,7 +15,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -40,6 +40,7 @@ from api.routes.discovery_sources import (
     openai_admin,
     proxy_logs,
 )
+from api.routes.discovery_sources import steps as read_steps
 from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
 
@@ -63,6 +64,9 @@ def _ensure_tables() -> None:
     # Outside development scripts/setup_db.py creates these tables before start.
     if settings.is_development:
         Base.metadata.create_all(bind=db_manager.engine)
+        # create_all never adds a column to a table that exists; scripts/setup_db.py does that elsewhere.
+        with db_manager.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE governance_integration_runs ADD COLUMN IF NOT EXISTS steps_json TEXT"))
     _tables_ready = True
 
 
@@ -208,6 +212,10 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
             full = repo["full_name"]
             root = await _github_json(client, f"/repos/{full}/contents/") or []
             names = {e.get("name", "") for e in root if isinstance(e, dict)}
+            mcp = {} if read_steps.disabled(config, "mcp") else await _github_mcp_servers(client, full, names)
+            found.extend(_mcp_assets(full, repo, owner, mcp))
+            if read_steps.disabled(config, "repos"):
+                continue  # MCP configs only; no manifests read
             agent_files = sorted(names & _AGENT_FILES)
             model_files = sorted(n for n in names if _MODEL_FILES.search(n))
             deps_text = ""
@@ -217,8 +225,6 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
                     r = await client.get(entry["download_url"])
                     if r.status_code < 400:
                         deps_text += "\n" + r.text[:20000]
-            mcp = await _github_mcp_servers(client, full, names)
-            found.extend(_mcp_assets(full, repo, owner, mcp))
             llm = sorted({m.group(0).lower() for m in _LLM_DEPS.finditer(deps_text)})
             ml = sorted({m.group(0).lower() for m in _ML_DEPS.finditer(deps_text)})
             if llm:
@@ -418,6 +424,8 @@ _CONNECTORS = {
     "proxy_logs": _sync_upload_only,
     "mcp_registry": mcp_registry.sync,
 }
+# Sign-in sources also read directory facts (team, left or not) for Shadow AI, as the "people" step.
+_FACTS = {"okta": okta.facts, "entra": entra.facts}
 MAX_LOG_BYTES = 20 * 1024 * 1024
 
 
@@ -433,6 +441,16 @@ class IntegrationCreate(BaseModel):
     token: Optional[str] = None
 
 
+# How often a connector is re-read on its own; 0 means only when someone presses Sync now.
+SCHEDULES = (0, 60, 360, 1440)
+RUNS_SHOWN = 20
+
+
+class IntegrationPatch(BaseModel):
+    schedule_minutes: Optional[int] = None
+    disabled_steps: Optional[List[str]] = None
+
+
 class LogUpload(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_LOG_BYTES)
 
@@ -445,22 +463,61 @@ class PromoteRequest(BaseModel):
 
 
 _INTEGRATION_COLS = "id, org_id, kind, name, config_json, token, last_synced_at, last_sync_summary, created_at"
+_RUN_COLS = "id, integration_id, trigger, started_at, finished_at, status, found, created, updated, error, new_names_json, steps_json"
 _ASSET_COLS = (
     "id, org_id, integration_id, source, external_id, name, kind, metadata_json, "
     "suggested_tier, suggested_stage, status, system_id, discovered_at, updated_at"
 )
 
 
-def _integration_out(row: Any) -> Dict[str, Any]:
+def _schedule(config: Dict[str, Any]) -> int:
+    try:
+        minutes = int(config.get("schedule_minutes") or 0)
+    except (TypeError, ValueError):
+        return 0
+    return minutes if minutes in SCHEDULES else 0
+
+
+def _next_sync(config: Dict[str, Any], last: Optional[str]) -> Optional[str]:
+    minutes = _schedule(config)
+    if not minutes:
+        return None
+    if not last:
+        return _now()
+    return (datetime.fromisoformat(last) + timedelta(minutes=minutes)).isoformat()
+
+
+def _integration_out(row: Any, runs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    config = _load_json_value(row[4], {})
     return {
         "id": row[0],
         "kind": row[2],
         "name": row[3],
-        "config": _load_json_value(row[4], {}),
+        "config": config,
         "hasToken": bool(row[5]),
         "lastSyncedAt": row[6],
         "lastSync": _load_json_value(row[7], {}) or None,
         "createdAt": row[8],
+        "scheduleMinutes": _schedule(config),
+        "nextSyncAt": _next_sync(config, row[6]),
+        "steps": read_steps.definitions(row[2], config),
+        "recentRuns": runs or [],
+    }
+
+
+def _run_out(row: Any) -> Dict[str, Any]:
+    return {
+        "id": row[0],
+        "trigger": row[2],
+        "startedAt": row[3],
+        "finishedAt": row[4],
+        "status": row[5],
+        "found": row[6],
+        "created": row[7],
+        "updated": row[8],
+        "error": row[9],
+        "newNames": _load_json_value(row[10], []),
+        "steps": _load_json_value(row[11], []),
     }
 
 
@@ -500,11 +557,21 @@ def _get_integration(db: Session, org_id: str, integration_id: str) -> Any:
 @router.get("")
 def list_integrations(http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
+    org = _caller_org(http)
     rows = db.execute(
         text(f"SELECT {_INTEGRATION_COLS} FROM governance_integrations WHERE org_id = :org ORDER BY created_at DESC"),
-        {"org": _caller_org(http)},
+        {"org": org},
     ).fetchall()
-    return [_integration_out(r) for r in rows]
+    # ponytail: newest runs for the whole org in one query, trimmed per connector here; window it in SQL if run counts grow large.
+    runs: Dict[str, List[Dict[str, Any]]] = {}
+    for r in db.execute(
+        text(f"SELECT {_RUN_COLS} FROM governance_integration_runs WHERE org_id = :org ORDER BY started_at DESC LIMIT 2000"),
+        {"org": org},
+    ).fetchall():
+        bucket = runs.setdefault(r[1], [])
+        if len(bucket) < RUNS_SHOWN:
+            bucket.append(_run_out(r))
+    return [_integration_out(r, runs.get(r[0])) for r in rows]
 
 
 @router.post("", status_code=201, dependencies=[Depends(org_mutator)])
@@ -512,6 +579,10 @@ def create_integration(body: IntegrationCreate, http: Request, db: Session = Dep
     _ensure_tables()
     if body.kind == "mlflow":
         _public_tracking_uri(body.config)
+    if body.kind == "proxy_logs":
+        body.config.pop("schedule_minutes", None)  # read from uploads, never on a timer
+    elif "schedule_minutes" in body.config and _schedule(body.config) != body.config["schedule_minutes"]:
+        raise HTTPException(status_code=422, detail=f"schedule_minutes must be one of {list(SCHEDULES)}")
     row_id = str(uuid.uuid4())
     db.execute(
         text(
@@ -538,14 +609,17 @@ def delete_integration(integration_id: str, http: Request, db: Session = Depends
     org = _caller_org(http)
     _get_integration(db, org, integration_id)
     db.execute(text("DELETE FROM governance_discovered_assets WHERE integration_id = :id AND status = 'new'"), {"id": integration_id})
+    db.execute(text("DELETE FROM governance_integration_runs WHERE integration_id = :id"), {"id": integration_id})
+    db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": integration_id})
     db.execute(text("DELETE FROM governance_integrations WHERE id = :id AND org_id = :org"), {"id": integration_id, "org": org})
     db.commit()
     return None
 
 
-def _upsert(db: Session, org: str, integration_id: str, kind: str, found: List[Dict[str, Any]], now: str) -> Tuple[int, int]:
+def _upsert(db: Session, org: str, integration_id: str, kind: str, found: List[Dict[str, Any]], now: str) -> Tuple[int, int, List[Dict[str, Any]]]:
     """Insert new discovered assets and refresh known ones. Promoted or ignored assets keep their status."""
     created = updated = 0
+    new_items: List[Dict[str, Any]] = []
     for item in found:
         existing = db.execute(
             text("SELECT id, status FROM governance_discovered_assets WHERE integration_id = :iid AND external_id = :ext"),
@@ -590,7 +664,147 @@ def _upsert(db: Session, org: str, integration_id: str, kind: str, found: List[D
                 },
             )
             created += 1
-    return created, updated
+            new_items.append(item)
+    return created, updated, new_items
+
+
+def _record(
+    db: Session, org: str, row: Any, trigger: str, started: str, summary: Dict[str, Any], new_items: List[Dict[str, Any]], steps: Optional[List[Dict[str, Any]]] = None
+) -> None:
+    """One line of the connector's monitoring history, and its latest state on the connector row."""
+    ok = "error" not in summary
+    db.execute(
+        text(
+            "INSERT INTO governance_integration_runs (id, org_id, integration_id, trigger, started_at, finished_at, status, "
+            "found, created, updated, error, new_names_json, steps_json) VALUES (:id, :org, :iid, :trigger, :started, :finished, :status, "
+            ":found, :created, :updated, :error, :names, :steps)"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "org": org,
+            "iid": row[0],
+            "trigger": trigger,
+            "started": started,
+            "finished": summary["at"],
+            "status": "ok" if ok else "failed",
+            "found": summary.get("found"),
+            "created": summary.get("created"),
+            "updated": summary.get("updated"),
+            "error": summary.get("error"),
+            "names": json.dumps([i["name"] for i in new_items[:10]]),
+            "steps": json.dumps(steps or []),
+        },
+    )
+    # A failed run keeps last_synced_at, so "last fetched" stays the last time data actually arrived.
+    sets = "last_synced_at = :now, last_sync_summary = :summary" if ok else "last_sync_summary = :summary"
+    db.execute(text(f"UPDATE governance_integrations SET {sets} WHERE id = :id"), {"now": summary["at"], "summary": json.dumps(summary), "id": row[0]})
+    db.commit()
+
+
+async def _fetch(kind: str, config: Dict[str, Any], token: Optional[str], label: str) -> List[Dict[str, Any]]:
+    try:
+        return await _CONNECTORS[kind](config, token)
+    except HTTPException:
+        raise
+    except Exception as exc:  # a vendor response shaped differently than documented; never echoes the token
+        logger.exception("Discovery read failed for %s (%s)", kind, label)
+        raise HTTPException(status_code=502, detail=f"The source answered in a way FairMind could not read ({type(exc).__name__})") from None
+
+
+async def _run(db: Session, org: str, row: Any, trigger: str) -> Dict[str, Any]:
+    """Read a connector once and record the run. Raises the connector's HTTPException after recording a failure."""
+    # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
+    kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
+    started = _now()
+    try:
+        found = await _fetch(kind, config, token, row[0])
+    except HTTPException as exc:
+        _record(db, org, row, trigger, started, {"error": str(exc.detail), "at": _now()}, [])
+        raise
+    if bool(row[5]) and decrypt(row[5]) is None:
+        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": row[0]})
+    # Connectors skip turned-off steps; this also drops anything a connector returned for one anyway.
+    found = [i for i in found if not read_steps.disabled(config, read_steps.step_of(kind, i))]
+    counts = await _read_facts(db, org, row, config, token)
+    return _finish(db, org, row, trigger, started, found, config, counts)
+
+
+async def _read_facts(db: Session, org: str, row: Any, config: Dict[str, Any], token: Optional[str]) -> Dict[str, int]:
+    """Read and keep a sign-in source's directory facts. Turning the step off deletes what was kept."""
+    kind = row[2]
+    if kind not in _FACTS:
+        return {}
+    if read_steps.disabled(config, "people"):
+        db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
+        return {}
+    try:
+        facts = await _FACTS[kind](config, token)
+    except Exception:  # enrichment only: the apps were read; keep the facts from the last good read
+        logger.warning("Directory facts could not be read for %s (%s)", kind, row[0], exc_info=True)
+        return {}
+    db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
+    db.execute(
+        text("INSERT INTO governance_source_facts (integration_id, org_id, source, facts_json, read_at) VALUES (:id, :org, :src, :facts, :now)"),
+        {"id": row[0], "org": org, "src": kind, "facts": json.dumps(facts), "now": _now()},
+    )
+    return {"people": len(facts.get("people") or {})}
+
+
+def _finish(
+    db: Session, org: str, row: Any, trigger: str, started: str, found: List[Dict[str, Any]], config: Dict[str, Any], counts: Optional[Dict[str, int]] = None
+) -> Dict[str, Any]:
+    now = _now()
+    created, updated, new_items = _upsert(db, org, row[0], row[2], found, now)
+    summary = {"found": len(found), "created": created, "updated": updated, "at": now}
+    steps = read_steps.summarise(row[2], found, {i["external_id"] for i in new_items}, config, counts)
+    _record(db, org, row, trigger, started, summary, new_items, steps)
+    return summary
+
+
+@router.post("/preview", dependencies=[Depends(org_mutator)])
+async def preview_integration(body: IntegrationCreate):
+    """Read a source with the given access without saving anything: what connecting it would find."""
+    if body.kind == "proxy_logs":
+        raise HTTPException(status_code=400, detail="Proxy logs are previewed by uploading a file after connecting")
+    if body.kind == "mlflow":
+        _public_tracking_uri(body.config)
+    found = await _fetch(body.kind, body.config, body.token, "preview")
+    by_kind: Dict[str, int] = {}
+    for item in found:
+        by_kind[item["kind"]] = by_kind.get(item["kind"], 0) + 1
+    return {
+        "found": len(found),
+        "byKind": by_kind,
+        "sample": [{"name": i["name"], "kind": i["kind"], "tier": i["suggested_tier"]} for i in found[:8]],
+    }
+
+
+@router.patch("/{integration_id}", dependencies=[Depends(org_mutator)])
+def update_integration(integration_id: str, body: IntegrationPatch, http: Request, db: Session = Depends(get_db)):
+    """Change how often a source is read, or which of its steps are read."""
+    _ensure_tables()
+    org = _caller_org(http)
+    row = _get_integration(db, org, integration_id)
+    config = _load_json_value(row[4], {})
+    if body.schedule_minutes is not None:
+        if body.schedule_minutes not in SCHEDULES:
+            raise HTTPException(status_code=422, detail=f"schedule_minutes must be one of {list(SCHEDULES)}")
+        if row[2] == "proxy_logs" and body.schedule_minutes:
+            raise HTTPException(status_code=400, detail="Proxy logs are read from uploads, not on a schedule")
+        config["schedule_minutes"] = body.schedule_minutes
+    if body.disabled_steps is not None:
+        keys = [k for k, _, _ in read_steps.STEPS.get(row[2], [])]
+        unknown = sorted(set(body.disabled_steps) - set(keys))
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"Unknown steps for {row[2]}: {', '.join(unknown)}")
+        if len(keys) < 2 and body.disabled_steps:
+            raise HTTPException(status_code=400, detail="This source has one step; set its schedule to Manual to stop reading it")
+        if set(keys) <= set(body.disabled_steps):
+            raise HTTPException(status_code=400, detail="Keep at least one step on; set the schedule to Manual to stop reading the source")
+        config["disabled_steps"] = sorted(set(body.disabled_steps))
+    db.execute(text("UPDATE governance_integrations SET config_json = :c WHERE id = :id"), {"c": json.dumps(config), "id": integration_id})
+    db.commit()
+    return _integration_out(_get_integration(db, org, integration_id))
 
 
 @router.post("/{integration_id}/sync", dependencies=[Depends(org_mutator)])
@@ -598,38 +812,7 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
     """Pull the source and upsert discovered assets. Promoted or ignored assets keep their status."""
     _ensure_tables()
     org = _caller_org(http)
-    row = _get_integration(db, org, integration_id)
-    # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
-    kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
-    now = _now()
-    legacy_plaintext = bool(row[5]) and decrypt(row[5]) is None
-    try:
-        try:
-            found = await _CONNECTORS[kind](config, token)
-        except HTTPException:
-            raise
-        except Exception as exc:  # a vendor response shaped differently than documented; never echoes the token
-            logger.exception("Discovery sync failed for %s integration %s", kind, integration_id)
-            raise HTTPException(status_code=502, detail=f"The source answered in a way FairMind could not read ({type(exc).__name__})") from None
-    except HTTPException as exc:
-        db.execute(
-            text("UPDATE governance_integrations SET last_sync_summary = :summary WHERE id = :id"),
-            {"summary": json.dumps({"error": str(exc.detail), "at": now}), "id": integration_id},
-        )
-        db.commit()
-        raise
-
-    if legacy_plaintext:
-        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": integration_id})
-
-    created, updated = _upsert(db, org, integration_id, kind, found, now)
-    summary = {"found": len(found), "created": created, "updated": updated, "at": now}
-    db.execute(
-        text("UPDATE governance_integrations SET last_synced_at = :now, last_sync_summary = :summary WHERE id = :id"),
-        {"now": now, "summary": json.dumps(summary), "id": integration_id},
-    )
-    db.commit()
-    return summary
+    return await _run(db, org, _get_integration(db, org, integration_id), "manual")
 
 
 @router.post("/{integration_id}/upload", dependencies=[Depends(org_mutator)])
@@ -640,16 +823,37 @@ def upload_logs(integration_id: str, body: LogUpload, http: Request, db: Session
     row = _get_integration(db, org, integration_id)
     if row[2] != "proxy_logs":
         raise HTTPException(status_code=400, detail="Only a proxy logs connector takes an upload")
-    now = _now()
-    found = proxy_logs.parse(body.text)
-    created, updated = _upsert(db, org, integration_id, row[2], found, now)
-    summary = {"found": len(found), "created": created, "updated": updated, "at": now}
-    db.execute(
-        text("UPDATE governance_integrations SET last_synced_at = :now, last_sync_summary = :summary WHERE id = :id"),
-        {"now": now, "summary": json.dumps(summary), "id": integration_id},
-    )
-    db.commit()
-    return summary
+    started = _now()
+    return _finish(db, org, row, "upload", started, proxy_logs.parse(body.text), _load_json_value(row[4], {}))
+
+
+async def sweep(session_factory: Any, limit: int = 20) -> int:
+    """Re-read every connector whose schedule is due. Run by the app's discovery loop; returns how many ran."""
+    db = session_factory()
+    ran = 0
+    try:
+        rows = db.execute(text(f"SELECT {_INTEGRATION_COLS} FROM governance_integrations WHERE kind <> 'proxy_logs'")).fetchall()
+        now = datetime.now(timezone.utc)
+        def is_due(r: Any) -> bool:
+            config = _load_json_value(r[4], {})
+            if not _schedule(config):
+                return False
+            return not r[6] or datetime.fromisoformat(_next_sync(config, r[6])) <= now  # never read yet: due now
+
+        due = [r for r in rows if is_due(r)]
+        due.sort(key=lambda r: r[6] or "")  # longest waiting first
+        for row in due[:limit]:
+            try:
+                await _run(db, row[1], row, "schedule")
+            except HTTPException:
+                pass  # recorded on the connector; the next one still runs
+            except Exception:
+                db.rollback()
+                logger.exception("Scheduled discovery failed for integration %s", row[0])
+            ran += 1
+    finally:
+        db.close()
+    return ran
 
 
 @router.get("/discovered")
@@ -706,17 +910,36 @@ def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Sessio
     asset = _asset_out(_get_asset(db, org, asset_id))
     if asset["status"] == "promoted" and asset["systemId"]:
         return {"systemId": asset["systemId"], "alreadyPromoted": True}
+    system_id = create_system(db, org, asset, owner=body.owner, tier=body.risk_tier, stage=body.lifecycle_stage, business_line=body.business_line)
+    db.commit()
+    return {"systemId": system_id, "alreadyPromoted": False}
+
+
+def create_system(
+    db: Session,
+    org: str,
+    asset: Dict[str, Any],
+    *,
+    owner: Optional[str] = None,
+    tier: Optional[str] = None,
+    stage: Optional[str] = None,
+    business_line: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+    name: Optional[str] = None,
+) -> str:
+    """Insert a governed system for a discovered asset and mark the asset promoted. The caller commits."""
     integration = _get_integration(db, org, asset["integrationId"])
     meta = dict(asset["metadata"])
     meta.pop("applicability", None)  # written only by PUT /systems/{id}/applicability
-    business_line = body.business_line if body.business_line is not None else meta.get("business_line") or ""
+    business_line = business_line if business_line is not None else meta.get("business_line") or ""
     meta.update(
         {
             "source": asset["source"],
             "external_id": asset["externalId"],
             "asset_kind": asset["kind"],
             "business_line": business_line,
-            "discovered_asset_id": asset_id,
+            "discovered_asset_id": asset["id"],
+            **(extra or {}),
         }
     )
     system_id = str(uuid.uuid4())
@@ -730,20 +953,19 @@ def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Sessio
             "id": system_id,
             "org": org,
             "ws": _workspace_for(db, org, integration),
-            "name": asset["name"],
-            "owner": body.owner or meta.get("owner") or integration[3],
-            "tier": body.risk_tier or asset["suggestedTier"],
-            "stage": body.lifecycle_stage or asset["suggestedStage"],
+            "name": name or asset["name"],
+            "owner": owner or meta.get("owner") or integration[3],
+            "tier": tier or asset["suggestedTier"],
+            "stage": stage or asset["suggestedStage"],
             "meta": json.dumps(meta),
             "now": now,
         },
     )
     db.execute(
         text("UPDATE governance_discovered_assets SET status = 'promoted', system_id = :sid, updated_at = :now WHERE id = :id"),
-        {"sid": system_id, "now": now, "id": asset_id},
+        {"sid": system_id, "now": now, "id": asset["id"]},
     )
-    db.commit()
-    return {"systemId": system_id, "alreadyPromoted": False}
+    return system_id
 
 
 @router.post("/discovered/{asset_id}/ignore", dependencies=[Depends(org_mutator)])

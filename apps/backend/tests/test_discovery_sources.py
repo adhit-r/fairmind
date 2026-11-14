@@ -226,6 +226,34 @@ def test_okta_ai_apps_with_signins(fake_http):
     fake_http(handler)
     [a] = run(okta.sync({"domain": "acme.okta.com"}, "tok"))
     assert a["metadata"]["service"] == "ChatGPT" and a["metadata"]["distinct_users_30_days"] == 2
+    assert a["metadata"]["sso_users"] == ["x@acme.com", "y@acme.com"]
+
+
+def test_okta_people_include_leavers(fake_http):
+    def handler(r):
+        if r.url.path == "/api/v1/users":
+            if "DEPROVISIONED" in q(r).get("search", [""])[0]:
+                return (200, [{"status": "DEPROVISIONED", "statusChanged": "2026-11-01T00:00:00.000Z", "profile": {"email": "Carol@acme.com", "department": "Data"}}])
+            return (200, [{"status": "ACTIVE", "profile": {"login": "bob@acme.com", "department": "Finance"}}])
+        return (404, {})
+
+    fake_http(handler)
+    out = run(okta.facts({"domain": "acme.okta.com"}, "tok"))
+    assert out["people"]["carol@acme.com"] == {"team": "Data", "status": "deprovisioned", "status_changed": "2026-11-01T00:00:00.000Z"}
+    assert out["people"]["bob@acme.com"]["team"] == "Finance" and "deprovisioned" in out["left_statuses"]
+
+
+def test_entra_people_turned_off(fake_http):
+    def handler(r):
+        if t := ms_token(r):
+            return t
+        if r.url.path.endswith("/users"):
+            return (200, {"value": [{"userPrincipalName": "Dan@acme.com", "department": "Sales", "accountEnabled": False}, {"mail": "eve@acme.com", "accountEnabled": True}]})
+        return (404, {})
+
+    fake_http(handler)
+    out = run(entra.facts({"tenant_id": "t", "client_id": "c"}, "s"))
+    assert out["people"]["dan@acme.com"]["status"] == "disabled" and out["people"]["eve@acme.com"] == {"team": "", "status": "active", "status_changed": None}
 
 
 def test_entra_flags_self_consent(fake_http):
@@ -286,3 +314,23 @@ def test_mcp_registry_pages_and_falls_back(fake_http):
     fake_http(handler)
     found = run(mcp_registry.sync({"registry_url": "https://registry.acme.com"}, None))
     assert [(a["name"], a["metadata"]["transport"]) for a in found] == [("CRM", "remote"), ("io.acme/docs", "local")]
+
+
+def test_steps_classify_and_summarise():
+    from api.routes.discovery_sources import steps
+
+    items = [
+        {"external_id": "anthropic:k1", "name": "bot", "kind": "llm_app", "metadata": {}},
+        {"external_id": "anthropic:claude-code", "name": "Claude Code", "kind": "ai_assisted_dev", "metadata": {}},
+    ]
+    out = steps.summarise("anthropic", items, {"anthropic:claude-code"}, {"disabled_steps": []})
+    assert [(s["key"], s["found"], s["created"]) for s in out] == [("keys", 1, 0), ("claude_code", 1, 1)]
+    assert steps.step_of("aws", {"external_id": "x", "kind": "ml_model", "metadata": {"service": "SageMaker endpoint"}}) == "sagemaker"
+    assert steps.step_of("aws", {"external_id": "x", "kind": "agent", "metadata": {"service": "Bedrock Agents"}}) == "agents"
+    assert set(steps.STEPS) == {k for k in __import__("api.routes.integrations", fromlist=["_CONNECTORS"])._CONNECTORS}
+
+
+def test_anthropic_skips_claude_code_when_off(fake_http):
+    calls = fake_http(lambda r: (200, {"data": [], "has_more": False}))
+    run(anthropic_admin.sync({"disabled_steps": ["claude_code"]}, "k"))
+    assert not any(c.url.path.endswith("/claude_code") for c in calls)

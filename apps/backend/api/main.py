@@ -50,6 +50,7 @@ logger = get_logger("main")
 # Postgres advisory lock keys for the timed sweeps below (any distinct bigints).
 _AUTOPILOT_LOCK = 7_310_001
 _POLICY_ALERT_LOCK = 7_310_002
+_DISCOVERY_LOCK = 7_310_003
 
 
 async def _exclusively(key: int, work) -> bool:
@@ -87,6 +88,19 @@ async def _autopilot_loop(interval: int) -> None:
             await _exclusively(_AUTOPILOT_LOCK, lambda: sweep(orm_db_manager.SessionLocal))
         except Exception as e:  # a failed sweep must not stop the next one
             logger.warning(f"Autopilot sweep failed: {e}")
+
+
+async def _discovery_loop(interval: int) -> None:
+    """Re-read discovery connectors whose schedule is due, so the inventory keeps watching on its own."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.integrations import sweep
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(_DISCOVERY_LOCK, lambda: sweep(orm_db_manager.SessionLocal))
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Discovery sweep failed: {e}")
 
 
 async def _policy_alert_loop(interval: int) -> None:
@@ -186,6 +200,9 @@ async def lifespan(app: FastAPI):
     policy_alerts = None
     if settings.policy_alert_interval_seconds > 0:
         policy_alerts = asyncio.create_task(_policy_alert_loop(settings.policy_alert_interval_seconds))
+    discovery = None
+    if settings.discovery_check_interval_seconds > 0:
+        discovery = asyncio.create_task(_discovery_loop(settings.discovery_check_interval_seconds))
     autopilot = None
     if settings.autopilot_interval_seconds > 0:
         autopilot = asyncio.create_task(_autopilot_loop(settings.autopilot_interval_seconds))
@@ -205,6 +222,8 @@ async def lifespan(app: FastAPI):
         policy_alerts.cancel()
     if autopilot:
         autopilot.cancel()
+    if discovery:
+        discovery.cancel()
     
     # Close database connections
     try:
@@ -625,6 +644,9 @@ _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-co
 _include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
 _include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations"], required=False)
+_include_router("api.routes.discovery_review", prefix="/api/v1", tags=["discovery-review"], required=False)
+_include_router("api.routes.discovery_review", prefix="/api/v1/public", tags=["owner-check-public"], attr="public_router", required=False)
+_include_router("api.routes.shadow_ai", prefix="/api/v1", tags=["shadow-ai"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)

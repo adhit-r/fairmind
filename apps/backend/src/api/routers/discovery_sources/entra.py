@@ -20,6 +20,7 @@ GRAPH = "https://graph.microsoft.com/v1.0"
 VENDOR = "Microsoft Graph"
 MAX_SPS = 20000
 MAX_GRANTS = 50000
+MAX_PEOPLE = 50000
 SELECT = "id,appId,displayName,publisherName,appOwnerOrganizationId,createdDateTime,accountEnabled,servicePrincipalType,tags"
 
 
@@ -86,3 +87,21 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
     finally:
         await client.aclose()
     return found
+
+
+async def facts(config: Dict[str, Any], token: Optional[str]) -> Dict[str, Any]:
+    """Each person's department and whether their account is turned off, keyed by lower-case email."""
+    client = await graph_client(config, token)
+    try:
+        users = await odata_pages(
+            client, f"{GRAPH}/users", VENDOR, MAX_PEOPLE, params={"$select": "mail,userPrincipalName,department,accountEnabled", "$top": 999}
+        )
+    finally:
+        await client.aclose()
+    people: Dict[str, Dict[str, Any]] = {}
+    for u in users:
+        email = str(u.get("mail") or u.get("userPrincipalName") or "").lower()
+        if email:
+            # Graph does not say when an account was turned off without audit logs, so there is no date.
+            people[email] = {"team": u.get("department") or "", "status": "active" if u.get("accountEnabled", True) else "disabled", "status_changed": None}
+    return {"people": people, "left_statuses": ["disabled"]}

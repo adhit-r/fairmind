@@ -19,7 +19,7 @@ from .catalog import SERVICES, asset_kind, by_host
 
 _HOST = re.compile(r"(?<![\w.-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}(?![\w-])", re.I)
 _USER_KEYS = ("user", "username", "user_name", "userName", "src_user", "login", "email", "client_ip", "src_ip", "source_ip", "clientIP")
-MAX_USERS_LISTED = 25
+MAX_USERS_LISTED = 2000  # Shadow AI matches these against sign-ins; a log export rarely names more
 
 
 def _user_of(row: Dict[str, Any]) -> Optional[str]:
@@ -55,7 +55,7 @@ def _rows(text: str) -> Iterable[tuple]:
 
 def parse(text: str) -> List[Dict[str, Any]]:
     hits: Dict[str, int] = defaultdict(int)
-    users: Dict[str, Set[str]] = defaultdict(set)
+    users: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
     hosts: Dict[str, Set[str]] = defaultdict(set)
     total = 0
     for line, user in _rows(text):
@@ -68,12 +68,13 @@ def parse(text: str) -> List[Dict[str, Any]]:
                 hits[s.key] += 1
                 hosts[s.key].add(m.group(0).lower())
                 if user:
-                    users[s.key].add(user)
+                    users[s.key][user] += 1
     by_key = {s.key: s for s in SERVICES}
     out = []
     for key, n in sorted(hits.items(), key=lambda kv: -kv[1]):
         s = by_key[key]
-        u = sorted(users[key])
+        per_user = users[key]
+        u = sorted(per_user)
         out.append(
             asset(
                 f"service:{key}",
@@ -86,6 +87,7 @@ def parse(text: str) -> List[Dict[str, Any]]:
                     "hosts": sorted(hosts[key]),
                     "distinct_users": len(u) if u else None,
                     "users": u[:MAX_USERS_LISTED],
+                    "requests_by_user": {name: per_user[name] for name in u[:MAX_USERS_LISTED]},
                     "log_records_read": total,
                     "signal": "network traffic",
                 },

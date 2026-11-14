@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from . import TIMEOUT_S, asset, microsoft_token, need, need_token, odata_pages
+from .steps import disabled
 
 ARM = "https://management.azure.com"
 VENDOR = "Azure"
@@ -37,7 +38,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
         bearer = await microsoft_token(client, tenant, client_id, secret, f"{ARM}/.default")
         client.headers["Authorization"] = f"Bearer {bearer}"
         for sub in subs:
-            accounts = await odata_pages(
+            accounts = [] if disabled(config, "deployments") else await odata_pages(
                 client, f"{ARM}/subscriptions/{sub}/providers/Microsoft.CognitiveServices/accounts", VENDOR, MAX_PER_LIST,
                 params={"api-version": COG_API},
             )
@@ -73,7 +74,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                             stage="operate",
                         )
                     )
-            workspaces = await odata_pages(
+            workspaces = [] if disabled(config, "workspaces") else await odata_pages(
                 client, f"{ARM}/subscriptions/{sub}/providers/Microsoft.MachineLearningServices/workspaces", VENDOR, MAX_PER_LIST,
                 params={"api-version": ML_API},
             )

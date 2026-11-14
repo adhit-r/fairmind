@@ -25,6 +25,7 @@ import { useAIProvider, useRuns } from '@/lib/api/hooks/usePacks'
 import { useNeedsYou } from './data/needsYou'
 import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
 import { useRisks } from '@/lib/api/hooks/useRisks'
+import { useShadowAI } from './data/review'
 import { fairmindTheme } from './theme'
 import { ALL, NAV, SETTINGS, groupOf, isOn, type Place } from './nav'
 
@@ -35,6 +36,7 @@ function useNavCounts(): Partial<Record<NonNullable<Place['count']>, number>> {
   const runs = useRuns().data ?? []
   const { discovered, loading: discoveryLoading } = useIntegrations()
   const { summary: risks } = useRisks()
+  const shadow = useShadowAI()
   return {
     // The same list the Needs you page shows, so the badge and the page agree.
     ...(needsYou.loading ? {} : { needs: needsYou.items.length }),
@@ -42,10 +44,11 @@ function useNavCounts(): Partial<Record<NonNullable<Place['count']>, number>> {
     runs: runs.filter((r) => r.status === 'running' || r.status === 'queued').length,
     ...(discoveryLoading ? {} : { found: discovered.length }),
     ...(risks ? { findings: risks.open } : {}),
+    ...(shadow.data ? { shadow: shadow.data.findings.filter((f) => f.status === 'open').length } : {}),
   }
 }
 
-const HOT: Array<NonNullable<Place['count']>> = ['needs', 'found', 'findings']
+const HOT: Array<NonNullable<Place['count']>> = ['needs', 'found', 'findings', 'shadow']
 
 function OrgName() {
   const { organizations, selectedOrg, selectOrg } = useOrg()

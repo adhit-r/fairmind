@@ -16,6 +16,7 @@ import jwt
 from fastapi import HTTPException
 
 from . import TIMEOUT_S, asset, get_json, need, need_token, post_form
+from .steps import disabled
 
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 VENDOR = "Google Cloud"
@@ -63,9 +64,13 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
             base = f"https://{loc}-aiplatform.googleapis.com/v1/projects/{project}/locations/{loc}"
             meta = {"cloud": "gcp", "project": project, "region": loc, "signal": "cloud inventory"}
             deployed = set()
-            for e in await _list(client, f"{base}/endpoints", "endpoints"):
+            # Endpoints are read even when their step is off: they tell which registry models are deployed.
+            endpoints = await _list(client, f"{base}/endpoints", "endpoints") if not (disabled(config, "endpoints") and disabled(config, "models")) else []
+            for e in endpoints:
                 models = e.get("deployedModels") or []
                 deployed.update(m.get("model") for m in models)
+                if disabled(config, "endpoints"):
+                    continue
                 found.append(
                     asset(
                         e["name"],
@@ -76,7 +81,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                         stage="operate" if models else "onboard",
                     )
                 )
-            for m in await _list(client, f"{base}/models", "models"):
+            for m in [] if disabled(config, "models") else await _list(client, f"{base}/models", "models"):
                 found.append(
                     asset(
                         m["name"],
@@ -87,7 +92,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                         stage="operate" if m["name"] in deployed else "assess",
                     )
                 )
-            for r in await _list(client, f"{base}/reasoningEngines", "reasoningEngines"):
+            for r in [] if disabled(config, "agents") else await _list(client, f"{base}/reasoningEngines", "reasoningEngines"):
                 found.append(
                     asset(
                         r["name"],
