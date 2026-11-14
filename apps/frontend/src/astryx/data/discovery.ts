@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiClient, type ApiResponse } from '@/lib/api/api-client'
-import type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun } from '@/lib/api/hooks/useIntegrations'
+import type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun, IntegrationStep, RunStep } from '@/lib/api/hooks/useIntegrations'
 
-export type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun }
+export type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun, IntegrationStep, RunStep }
 
 const BASE = '/api/v1/integrations'
 
@@ -346,6 +346,10 @@ export function useDiscovery() {
     unwrap(await apiClient.patch<Integration>(`${BASE}/${id}`, { schedule_minutes: minutes }))
     await refresh()
   }
+  /** Which steps of a source are not read. Saves one source; the caller refreshes once after a batch. */
+  const setScope = async (id: string, disabledSteps: string[]) => {
+    unwrap(await apiClient.patch<Integration>(`${BASE}/${id}`, { disabled_steps: disabledSteps }))
+  }
   const create = async (body: NewIntegration) => {
     unwrap(await apiClient.post<Integration>(BASE, body))
     await refresh()
@@ -378,7 +382,7 @@ export function useDiscovery() {
     await refresh()
   }
 
-  return { integrations, discovered, loading, error, refresh, create, remove, sync, upload, setSchedule, promote, ignore }
+  return { integrations, discovered, loading, error, refresh, create, remove, sync, upload, setSchedule, setScope, promote, ignore }
 }
 
 export function when(iso: string | null | undefined): string {

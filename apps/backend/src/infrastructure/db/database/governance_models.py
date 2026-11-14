@@ -4061,6 +4061,7 @@ class GovernanceIntegrationRun(Base):
     updated = Column(Integer, nullable=True)
     error = Column(Text, nullable=True)
     new_names_json = Column(Text, nullable=False, default="[]")
+    steps_json = Column(Text, nullable=True)  # per step: found, created, off, a few samples
 
 
 class GovernanceDiscoveredAsset(Base):

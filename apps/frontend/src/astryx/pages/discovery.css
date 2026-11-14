@@ -69,3 +69,70 @@
   .dv-row { grid-template-columns: auto minmax(0, 1fr); }
   .dv-row > :last-child { grid-column: 1 / -1; }
 }
+/* Flow canvas */
+.fl-wrap { padding: 0; overflow: hidden; }
+.fl-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--color-border); }
+.fl-changed { font-size: 13px; color: var(--color-text-warning); font-weight: 600; }
+.fl-zoom { font-size: 12px; color: var(--color-text-secondary); min-width: 38px; text-align: center; }
+.fl-err { padding: 8px 16px; font-size: 13px; color: var(--color-text-error); border-bottom: 1px solid var(--color-border); }
+.fl-scroll { height: min(78vh, 900px); min-height: 520px; overflow: auto; cursor: grab; background-color: var(--color-background-muted); background-image: radial-gradient(color-mix(in srgb, var(--color-text-primary) 12%, transparent) 1px, transparent 1px); background-size: 20px 20px; touch-action: none; }
+.fl-scroll:active { cursor: grabbing; }
+.fl-canvas { position: relative; transform-origin: 0 0; }
+.fl-col { position: absolute; top: 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-secondary); }
+.fl-col.fl-static { position: static; display: block; margin-top: 16px; }
+.fl-edges { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.fl-e { fill: none; stroke: var(--color-text-secondary); stroke-linecap: round; stroke-width: 2; }
+.fl-e.thin { stroke-width: 1.5; }
+.fl-e.dead { stroke: var(--color-border); stroke-width: 1.5; stroke-dasharray: 4 5; }
+.fl-e.flow { stroke: var(--color-background-card); stroke-width: 2; stroke-dasharray: 2 10; animation: fl-flow 1.2s linear infinite; }
+@keyframes fl-flow { to { stroke-dashoffset: -24; } }
+@media (prefers-reduced-motion: reduce) { .fl-e.flow { animation: none; } }
+.fl-node { position: absolute; box-sizing: border-box; padding: 14px; background: var(--color-background-card); border: 1px solid var(--color-border); border-radius: 14px; color: var(--color-text-primary); text-align: left; font: inherit; }
+button.fl-node { cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; }
+.fl-node:hover { border-color: color-mix(in srgb, var(--color-text-primary) 30%, transparent); }
+.fl-node.sel { outline: 2px solid var(--color-text-primary); outline-offset: -1px; }
+.fl-node.bad { border-color: var(--color-error); }
+.fl-step.off { opacity: 0.5; }
+.fl-step.stale { background: var(--color-background-muted); }
+.fl-port { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--color-background-card); border: 2px solid var(--color-text-secondary); box-sizing: border-box; }
+.fl-port.out { right: -6px; }
+.fl-port.in { left: -6px; }
+.fl-row { display: flex; gap: 12px; align-items: center; }
+.fl-row.end { justify-content: space-between; align-items: flex-end; }
+.fl-row.between { justify-content: space-between; gap: 8px; }
+.fl-col2 { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fl-title { font-size: 14px; font-weight: 600; }
+.fl-sub { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+.fl-link { border: 0; background: transparent; padding: 0; display: flex; align-items: center; gap: 8px; color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.fl-badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--color-background-muted); }
+.fl-badge.bad { background: var(--color-error-muted); color: var(--color-text-error); }
+.fl-switch { width: 34px; height: 20px; flex: none; border-radius: 999px; border: 0; padding: 0; position: relative; background: var(--color-border); cursor: pointer; }
+.fl-switch.on { background: var(--color-text-primary); }
+.fl-switch > span { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-background-card); transition: left 0.15s; }
+.fl-switch.on > span { left: 17px; }
+.fl-samples { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.fl-sample { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; line-height: 1.35; }
+.fl-sample .nm { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-sample .dt { color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+.fl-foot { position: absolute; left: 14px; right: 14px; bottom: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-tierbar { display: flex; height: 8px; gap: 2px; border-radius: 4px; overflow: hidden; margin-top: 14px; }
+.fl-tierbar .t-critical, .fl-tierbar .t-high { background: var(--color-error); }
+.fl-tierbar .t-medium { background: var(--color-text-secondary); }
+.fl-tierbar .t-low { background: var(--color-border); }
+.fl-tiers { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--color-text-secondary); margin-top: 8px; }
+.fl-tiers b { color: var(--color-text-primary); font-weight: 600; }
+.fl-tiers b.hot { color: var(--color-text-error); }
+.fl-big { font-size: 40px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+.fl-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.fl-kinds > div { background: var(--color-background-muted); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
+.fl-kinds b { font-size: 18px; font-weight: 600; }
+.fl-kinds span { font-size: 11px; color: var(--color-text-secondary); }
+.fl-arrival { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--color-border); font-size: 13px; }
+.fl-arrival .nm { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-inv-cta { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; }
+.fl-inv-cta > * { flex: 1; }
+.fl-insp { overflow: hidden; }
+.fl-insp-err { margin-top: 8px; font-size: 12px; color: var(--color-text-error); }
+.fl-h { font-size: 12px; font-weight: 600; margin: 12px 0 4px; }
+.fl-what { font-size: 13px; padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-insp .dv-perms { max-height: 74px; overflow: hidden; }

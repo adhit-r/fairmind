@@ -120,3 +120,44 @@ def test_sweep_runs_only_due_schedules(client, monkeypatch):  # noqa: F811
     assert asyncio.run(integrations.sweep(session_factory)) == 0  # not due again for an hour
     runs = {c["id"]: c["recentRuns"] for c in client.get("/api/v1/integrations").json()}
     assert [r["trigger"] for r in runs[due]] == ["schedule"]
+
+
+def test_runs_record_steps_and_scope_skips_a_step(client, monkeypatch):  # noqa: F811
+    mcp = {"mcpServers": {"linear": {"url": "https://mcp.linear.app/sse"}}}
+    seen = []
+
+    def gh(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        p = request.url.path
+        if p == "/orgs/acme/repos":
+            return httpx.Response(200, json=[{"name": "ops", "full_name": "acme/ops", "html_url": "https://github.com/acme/ops"}])
+        if p == "/repos/acme/ops/contents/":
+            return httpx.Response(200, json=[{"name": ".mcp.json"}, {"name": "CLAUDE.md"}])
+        if p == "/repos/acme/ops/contents/.mcp.json":
+            return httpx.Response(200, json={"download_url": "https://raw.example.com/ops/.mcp.json"})
+        if request.url.host == "raw.example.com":
+            return httpx.Response(200, text=json.dumps(mcp))
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(integrations.httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(gh)))
+    iid = _add(client, "github", owner="acme")
+    client.post(f"/api/v1/integrations/{iid}/sync")
+    [conn] = client.get("/api/v1/integrations").json()
+    assert [(s["key"], s["on"], s["toggleable"]) for s in conn["steps"]] == [("repos", True, True), ("mcp", True, True)]
+    steps = {s["key"]: s for s in conn["recentRuns"][0]["steps"]}
+    assert steps["repos"]["found"] == 1 and steps["mcp"]["samples"] == [{"id": "acme/ops#mcp:linear", "name": "linear", "new": True}]
+
+    assert client.patch(f"/api/v1/integrations/{iid}", json={"disabled_steps": ["mcp"]}).json()["steps"][1]["on"] is False
+    seen.clear()
+    assert client.post(f"/api/v1/integrations/{iid}/sync").json()["found"] == 1
+    assert "/repos/acme/ops/contents/.mcp.json" not in seen  # the turned-off step is not read at all
+    steps = {s["key"]: s for s in client.get("/api/v1/integrations").json()[0]["recentRuns"][0]["steps"]}
+    assert steps["mcp"]["off"] is True and steps["mcp"]["found"] == 0
+
+
+def test_scope_validation(client):  # noqa: F811
+    iid = _add(client, "github", owner="acme")
+    assert client.patch(f"/api/v1/integrations/{iid}", json={"disabled_steps": ["repos", "mcp"]}).status_code == 400
+    assert client.patch(f"/api/v1/integrations/{iid}", json={"disabled_steps": ["nope"]}).status_code == 422
+    one = _add(client, "okta", domain="acme.okta.com")
+    assert client.patch(f"/api/v1/integrations/{one}", json={"disabled_steps": ["sso"]}).status_code == 400

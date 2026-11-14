@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional
 from fastapi import HTTPException
 
 from . import asset, need, need_token
+from .steps import disabled
 
 logger = logging.getLogger(__name__)
 MAX_PER_CALL = 200
@@ -122,11 +123,14 @@ def _scan(config: Dict[str, Any], secret: str) -> List[Dict[str, Any]]:
                                    {**meta, "service": "SageMaker model registry", "description": g.get("ModelPackageGroupDescription") or "",
                                     "created_at": _iso(g.get("CreationTime"))}))
 
-        read(region, "cloudwatch", "Bedrock invocation metrics", invoked_models)
-        read(region, "bedrock", "Bedrock models", custom_models)
-        read(region, "bedrock-agent", "Bedrock agents", agents)
-        read(region, "bedrock-agentcore-control", "AgentCore runtimes", runtimes)
-        read(region, "sagemaker", "SageMaker", sagemaker)
+        if not disabled(config, "bedrock"):
+            read(region, "cloudwatch", "Bedrock invocation metrics", invoked_models)
+            read(region, "bedrock", "Bedrock models", custom_models)
+        if not disabled(config, "agents"):
+            read(region, "bedrock-agent", "Bedrock agents", agents)
+            read(region, "bedrock-agentcore-control", "AgentCore runtimes", runtimes)
+        if not disabled(config, "sagemaker"):
+            read(region, "sagemaker", "SageMaker", sagemaker)
 
     if denied:
         logger.warning("AWS discovery skipped: %s", "; ".join(denied))

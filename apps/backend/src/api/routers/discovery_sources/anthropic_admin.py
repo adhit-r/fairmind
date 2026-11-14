@@ -14,6 +14,7 @@ import httpx
 from fastapi import HTTPException
 
 from . import TIMEOUT_S, asset, get_json, need_token
+from .steps import disabled
 
 BASE = "https://api.anthropic.com"
 VENDOR = "Anthropic"
@@ -89,10 +90,11 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
     key = need_token(token, "Anthropic Admin API key")
     headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
     async with httpx.AsyncClient(base_url=BASE, headers=headers, timeout=TIMEOUT_S) as client:
-        workspaces = {w["id"]: w.get("name") for w in await _cursor_list(client, "/v1/organizations/workspaces", 1000)}
-        keys = await _cursor_list(client, "/v1/organizations/api_keys", MAX_KEYS, status="active")
+        read_keys = not disabled(config, "keys")
+        workspaces = {w["id"]: w.get("name") for w in await _cursor_list(client, "/v1/organizations/workspaces", 1000)} if read_keys else {}
+        keys = await _cursor_list(client, "/v1/organizations/api_keys", MAX_KEYS, status="active") if read_keys else []
         try:
-            usage = await _usage_by_key(client)
+            usage = await _usage_by_key(client) if read_keys else {}
         except HTTPException:
             usage = {}  # usage is enrichment; the key list is the inventory
         found: List[Dict[str, Any]] = []
@@ -122,7 +124,7 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                 )
             )
         try:
-            cc = await _claude_code(client)
+            cc = None if disabled(config, "claude_code") else await _claude_code(client)
         except HTTPException:
             cc = None
         if cc:

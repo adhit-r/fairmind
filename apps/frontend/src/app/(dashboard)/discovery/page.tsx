@@ -14,6 +14,7 @@ import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Token } from '@astryxdesign/core/Token'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { SourceMark, detail, where } from '@/astryx/DiscoveryParts'
+import { DiscoveryFlow } from '@/astryx/DiscoveryFlow'
 import {
   HEALTH_LABEL,
   KIND_LABEL,
@@ -301,7 +302,8 @@ function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; ru
 function DiscoveryView() {
   const router = useRouter()
   const params = useSearchParams()
-  const view = params.get('view') === 'sources' ? 'sources' : 'overview'
+  const v = params.get('view')
+  const view = v === 'sources' || v === 'flow' ? v : 'overview'
   const d = useDiscovery()
   const [lane, setLane] = useState<LaneKey | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -353,8 +355,9 @@ function DiscoveryView() {
           </HStack>
         </HStack>
 
-        <TabList value={view} onChange={(v) => router.replace(v === 'sources' ? '/discovery?view=sources' : '/discovery')} hasDivider aria-label="Discovery view">
+        <TabList value={view} onChange={(t) => router.replace(t === 'overview' ? '/discovery' : `/discovery?view=${t}`)} hasDivider aria-label="Discovery view">
           <Tab value="overview" label={`Overview${waiting ? ` ${waiting}` : ''}`} />
+          <Tab value="flow" label="Flow" />
           <Tab value="sources" label={`Sources${failing ? ` · ${failing} failing` : ''}`} />
         </TabList>
 
@@ -368,6 +371,12 @@ function DiscoveryView() {
           </VStack>
         ) : d.error ? (
           <EmptyState title="Discovery could not load" description={d.error} actions={<Button label="Try again" onClick={() => void d.refresh()} />} />
+        ) : view === 'flow' ? (
+          d.integrations.length === 0 ? (
+            <EmptyState title="No sources connected" description="Connect a source and its reads appear here as a flow into your inventory." actions={<Button variant="primary" label="Connect a source" href="/discovery/connect" />} />
+          ) : (
+            <DiscoveryFlow d={d} onReview={() => router.replace('/discovery')} />
+          )
         ) : view === 'sources' ? (
           <Sources
             d={d}

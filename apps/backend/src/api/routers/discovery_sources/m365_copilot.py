@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 from . import asset, get_json, odata_pages
+from .steps import disabled
 from .entra import graph_client
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,10 @@ APPS = {
     "loopCopilotLastActivityDate": "Loop",
 }
 MAX_USERS = 50000
+
+
+class _Skip(Exception):
+    """A step turned off in the source's scope."""
 MAX_AGENTS = 1000
 
 
@@ -42,7 +47,10 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
     readable = 0
     meta: Dict[str, Any] = {"vendor": "Microsoft", "product": "Microsoft 365 Copilot", "signal": "vendor admin API"}
     try:
+        read_usage, read_agents = not disabled(config, "usage"), not disabled(config, "agents")
         try:
+            if not read_usage:
+                raise _Skip
             skus = (await get_json(client, f"{GRAPH}/subscribedSkus", VENDOR) or {}).get("value", [])
             readable += 1
             copilot = [s for s in skus if COPILOT_SKU.search(s.get("skuPartNumber") or "")]
@@ -52,8 +60,12 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
             ]
         except HTTPException as exc:
             denied.append(f"licences ({exc.detail})")
+        except _Skip:
+            pass
 
         try:
+            if not read_usage:
+                raise _Skip
             users = await odata_pages(
                 client, f"{GRAPH}/copilot/reports/getMicrosoft365CopilotUsageUserDetail(period='D90')", VENDOR, MAX_USERS,
                 params={"$format": "application/json"},
@@ -65,11 +77,15 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
             meta["active_users_by_app"] = {label: sum(1 for u in users if u.get(field)) for field, label in APPS.items()}
         except HTTPException as exc:
             denied.append(f"usage report ({exc.detail})")
+        except _Skip:
+            pass
 
         if meta.get("licences") or meta.get("active_users_90_days"):
             found.append(asset("m365-copilot", "Microsoft 365 Copilot", "ai_service", meta, stage="operate"))
 
         try:
+            if not read_agents:
+                raise _Skip
             packages = await odata_pages(client, f"{GRAPH}/copilot/admin/catalog/packages", VENDOR, MAX_AGENTS)
             readable += 1
             for p in packages:
@@ -96,10 +112,12 @@ async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, A
                 )
         except HTTPException as exc:
             denied.append(f"agents ({exc.detail})")
+        except _Skip:
+            pass
     finally:
         await client.aclose()
     if denied:
         logger.warning("Microsoft 365 Copilot discovery skipped: %s", "; ".join(denied))
-    if not readable:
+    if not readable and denied:
         raise HTTPException(status_code=403, detail="Microsoft Graph allowed none of the reads: " + "; ".join(denied))
     return found

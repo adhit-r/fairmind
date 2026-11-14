@@ -34,7 +34,25 @@ export interface Integration {
   /** 0 = only when someone presses Sync now. Optional for the legacy page, which predates monitoring. */
   scheduleMinutes?: number
   nextSyncAt?: string | null
+  /** What a read of this source is made of; a step can be turned off when there is more than one. */
+  steps?: IntegrationStep[]
   recentRuns?: IntegrationRun[]
+}
+
+export interface IntegrationStep {
+  key: string
+  title: string
+  call: string
+  on: boolean
+  toggleable: boolean
+}
+
+export interface RunStep {
+  key: string
+  found: number
+  created: number
+  off: boolean
+  samples: { id: string; name: string; new: boolean }[]
 }
 
 export interface IntegrationRun {
@@ -48,6 +66,7 @@ export interface IntegrationRun {
   updated: number | null
   error: string | null
   newNames: string[]
+  steps?: RunStep[]
 }
 
 export interface DiscoveredAsset {

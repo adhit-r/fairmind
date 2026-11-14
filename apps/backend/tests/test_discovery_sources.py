@@ -286,3 +286,23 @@ def test_mcp_registry_pages_and_falls_back(fake_http):
     fake_http(handler)
     found = run(mcp_registry.sync({"registry_url": "https://registry.acme.com"}, None))
     assert [(a["name"], a["metadata"]["transport"]) for a in found] == [("CRM", "remote"), ("io.acme/docs", "local")]
+
+
+def test_steps_classify_and_summarise():
+    from api.routes.discovery_sources import steps
+
+    items = [
+        {"external_id": "anthropic:k1", "name": "bot", "kind": "llm_app", "metadata": {}},
+        {"external_id": "anthropic:claude-code", "name": "Claude Code", "kind": "ai_assisted_dev", "metadata": {}},
+    ]
+    out = steps.summarise("anthropic", items, {"anthropic:claude-code"}, {"disabled_steps": []})
+    assert [(s["key"], s["found"], s["created"]) for s in out] == [("keys", 1, 0), ("claude_code", 1, 1)]
+    assert steps.step_of("aws", {"external_id": "x", "kind": "ml_model", "metadata": {"service": "SageMaker endpoint"}}) == "sagemaker"
+    assert steps.step_of("aws", {"external_id": "x", "kind": "agent", "metadata": {"service": "Bedrock Agents"}}) == "agents"
+    assert set(steps.STEPS) == {k for k in __import__("api.routes.integrations", fromlist=["_CONNECTORS"])._CONNECTORS}
+
+
+def test_anthropic_skips_claude_code_when_off(fake_http):
+    calls = fake_http(lambda r: (200, {"data": [], "has_more": False}))
+    run(anthropic_admin.sync({"disabled_steps": ["claude_code"]}, "k"))
+    assert not any(c.url.path.endswith("/claude_code") for c in calls)

@@ -9,18 +9,29 @@ const minsAhead = (m: number) => new Date(Date.now() + m * 60_000).toISOString()
 const run = (id: string, m: number, status: 'ok' | 'failed', found: number, created: number, names: string[] = [], error: string | null = null) => ({
   id, trigger: 'schedule', startedAt: minsAgo(m), finishedAt: minsAgo(m), status, found, created, updated: found - created, error, newNames: names,
 })
+const step = (key: string, title: string, call: string, toggleable: boolean, on = true) => ({ key, title, call, on, toggleable })
+const ran = (key: string, found: number, created: number, samples: [string, string, boolean][]) => ({ key, found, created, off: false, samples: samples.map(([id, name, n]) => ({ id, name, new: n })) })
 const integrations = [
   {
     id: 'i-okta', kind: 'okta', name: 'Company Okta', config: { domain: 'acme.okta.com', schedule_minutes: 60 }, hasToken: true,
     lastSyncedAt: minsAgo(12), lastSync: null, createdAt: minsAgo(3000), scheduleMinutes: 60, nextSyncAt: minsAhead(48),
-    recentRuns: [run('r3', 12, 'ok', 4, 1, ['Perplexity']), run('r2', 72, 'ok', 3, 0), run('r1', 132, 'ok', 3, 3)],
+    steps: [step('sso', 'AI apps in single sign-on', 'GET /api/v1/apps + /api/v1/logs', false)],
+    recentRuns: [
+      { ...run('r3', 12, 'ok', 4, 1, ['Perplexity']), steps: [ran('sso', 4, 1, [['okta:p', 'Perplexity', true], ['okta:a1', 'ChatGPT Enterprise', false]])] },
+      run('r2', 72, 'ok', 3, 0),
+      run('r1', 132, 'ok', 3, 3),
+    ],
   },
   {
     id: 'i-aws', kind: 'aws', name: 'Prod AWS', config: { access_key_id: 'AKIA', schedule_minutes: 1440 }, hasToken: true,
     lastSyncedAt: minsAgo(1500), lastSync: null, createdAt: minsAgo(3000), scheduleMinutes: 1440, nextSyncAt: minsAgo(60),
-    recentRuns: [run('a2', 30, 'failed', 0, 0, [], 'AWS rejected the credentials (InvalidClientTokenId)'), run('a1', 1500, 'ok', 6, 6)],
+    steps: [step('bedrock', 'Bedrock models', 'cloudwatch:ListMetrics', true), step('agents', 'Agents', 'bedrock-agent:ListAgents', true), step('sagemaker', 'SageMaker', 'sagemaker:ListEndpoints', true)],
+    recentRuns: [
+      run('a2', 30, 'failed', 0, 0, [], 'AWS rejected the credentials (InvalidClientTokenId)'),
+      { ...run('a1', 1500, 'ok', 6, 6), steps: [ran('bedrock', 4, 4, [['b1', 'anthropic.claude-opus', true]]), ran('agents', 2, 2, [['aws:x', 'claims-agent', true]]), ran('sagemaker', 0, 0, [])] },
+    ],
   },
-  { id: 'i-logs', kind: 'proxy_logs', name: 'Zscaler export', config: {}, hasToken: false, lastSyncedAt: null, lastSync: null, createdAt: minsAgo(10), scheduleMinutes: 0, nextSyncAt: null, recentRuns: [] },
+  { id: 'i-logs', kind: 'proxy_logs', name: 'Zscaler export', config: {}, hasToken: false, lastSyncedAt: null, lastSync: null, createdAt: minsAgo(10), scheduleMinutes: 0, nextSyncAt: null, steps: [step('traffic', 'AI traffic in the log', 'Uploaded export', false)], recentRuns: [] },
 ]
 const asset = (id: string, source: string, name: string, kind: string, status: string, metadata: Record<string, unknown>) => ({
   id, integrationId: 'i-okta', source, externalId: id, name, kind, metadata, suggestedTier: 'medium', suggestedStage: 'onboard', status, systemId: null, discoveredAt: minsAgo(12),
@@ -52,6 +63,10 @@ test.describe('Discovery', () => {
       if (path === `${BASE}/preview`) {
         previewed = req.postDataJSON()
         return json(route, { found: 9, byKind: { llm_app: 7, agent: 2 }, sample: [{ name: 'anthropic.claude-opus', kind: 'llm_app', tier: 'medium' }, { name: 'claims-agent', kind: 'agent', tier: 'high' }] })
+      }
+      if (path === `${BASE}/i-aws` && req.method() === 'PATCH') {
+        patched = req.postDataJSON()
+        return json(route, integrations[1])
       }
       if (path === `${BASE}/i-okta` && req.method() === 'PATCH') {
         patched = req.postDataJSON()
@@ -121,5 +136,22 @@ test.describe('Discovery', () => {
     expect(created).toMatchObject({ kind: 'aws', name: 'AWS', token: 'secret-value', config: { access_key_id: 'AKIAEXAMPLE', schedule_minutes: 60 } })
     expect(JSON.stringify((created as { config: unknown }).config)).not.toContain('secret-value')
     expect(synced).toEqual(['i-new'])
+  })
+
+  test('flow shows each step with what it fetched, and saves a scope change', async ({ page }) => {
+    await page.goto('/discovery?view=flow')
+    const okta = page.locator('.fl-step', { hasText: 'AI apps in single sign-on' })
+    await expect(okta.getByText('Perplexity')).toBeVisible()
+    await expect(okta.locator('.fl-badge')).toHaveText('4')
+    const bedrock = page.locator('.fl-step', { hasText: 'Bedrock models' })
+    await expect(bedrock.getByText('Not reached · last good read')).toBeVisible()
+    await expect(bedrock.getByText('anthropic.claude-opus')).toBeVisible()
+    await page.locator('.fl-src', { hasText: 'Prod AWS' }).click()
+    await expect(page.locator('.fl-insp').getByText(/InvalidClientTokenId/)).toBeVisible()
+    await expect(okta.getByRole('switch')).toHaveCount(0) // a one-step source has nothing to switch off
+    await page.getByRole('switch', { name: 'Stop reading SageMaker from Prod AWS' }).click()
+    await expect(page.getByText('1 step off in 1 source')).toBeVisible()
+    await page.getByRole('button', { name: 'Save scope' }).click()
+    await expect.poll(() => patched).toEqual({ disabled_steps: ['sagemaker'] })
   })
 })
