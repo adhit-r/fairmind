@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FairMind data sheet</title>
+<link rel="stylesheet" href="../kit/brand.css">
+<link rel="stylesheet" href="sheet.css">
+<style>
+  body { font-size: 8.6pt; line-height: 1.36; }
+  .title { padding-top: 5mm; display: flex; justify-content: space-between; align-items: flex-end; gap: 8mm; }
+  .title h1 { font-size: 20pt; }
+  .title p { margin: 0; max-width: 88mm; color: var(--ink2); font-size: 9pt; }
+  .figs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4mm; margin-top: 4mm; }
+  .figs div { border-top: 1px solid var(--ink); padding-top: 1.8mm; }
+  .figs b { display: block; font-size: 21pt; font-weight: 600; letter-spacing: -0.035em; line-height: 1.05;
+    font-variant-numeric: tabular-nums; }
+  .figs span { display: block; font-size: 7.6pt; color: var(--ink2); line-height: 1.25; margin-top: .6mm; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; margin-top: 5mm; }
+  .blk + .blk { margin-top: 4mm; }
+  th, td { padding: 1.15mm 2mm 1.15mm 0; }
+  td:first-child { font-weight: 600; }
+  td.num { width: 11mm; text-align: right; padding-right: 3mm; }
+  .w24 td:first-child { width: 24mm; }
+  .w30 td:first-child { width: 27mm; }
+  td .muted { font-weight: 400; }
+  .verd { display: flex; gap: 4mm; }
+  .status { margin-top: 4mm; margin-bottom: 2mm; display: grid; grid-template-columns: 1.6fr 1.2fr .8fr; gap: 6mm; padding: 3mm 4.4mm; }
+  .status .label { margin-bottom: 1mm !important; }
+</style>
+</head>
+<body>
+<section class="page">
+  <header class="mast">
+    <div class="brand"><img src="assets/logo-mark.svg" alt="">FairMind</div>
+    <div class="meta"><b>Data sheet</b><br>Alpha, November 2026</div>
+  </header>
+
+  <div class="title">
+    <div>
+      <div class="label"><span class="dot"></span>Reference</div>
+      <h1>Numbers and capabilities</h1>
+    </div>
+    <p>An open-source AI assurance workbench for models and agents. It turns governance frameworks into controls, collects
+      evaluation evidence, and gates releases.</p>
+  </div>
+
+  <div class="figs">
+    <div><b>109</b><span>evaluations in the catalogue, in 4 pillars</span></div>
+    <div><b>51</b><span>frameworks, standards and risk lists</span></div>
+    <div><b>539</b><span>requirements</span></div>
+    <div><b>922</b><span>crosswalk links</span></div>
+    <div><b>29</b><span>common controls</span></div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="blk">
+        <div class="label"><span class="dot"></span>Catalogue</div>
+        <table>
+          <thead><tr><th style="width:33mm">Item</th><th style="text-align:right;padding-right:3mm">Count</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Evaluations</td><td class="num">109</td><td>Pillars: Govern, Evaluate, Secure, Comply</td></tr>
+            <tr><td>Frameworks, standards, risk lists</td><td class="num">51</td><td>539 requirements, 922 crosswalk links, 29 common controls</td></tr>
+            <tr><td>Catalogue workflows</td><td class="num">90</td><td>86 marked proposed until organisations run them</td></tr>
+            <tr><td>Packs</td><td class="num">21</td><td></td></tr>
+            <tr><td>Bundles</td><td class="num">8</td><td></td></tr>
+            <tr><td>Model providers</td><td class="num">19</td><td>For agent steps, key encrypted at rest; or built-in rules</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="blk">
+        <div class="label"><span class="dot"></span>How evaluations run</div>
+        <table class="w30">
+          <tbody>
+            <tr><td>Uploaded files</td><td>Model files are inspected, never executed</td></tr>
+            <tr><td>Live system</td><td>Behaviour tests against your running system</td></tr>
+            <tr><td>Agent platform</td><td>Configuration audits</td></tr>
+            <tr><td>Your own results</td><td>From your sandbox, drills and detectors. For 21 agent, attack and detector evaluations FairMind
+              computes the metric but does not run the scenario.</td></tr>
+            <tr><td>Your own evaluator</td><td>Evidence Passport: subject, evaluator and metric versions, threshold, artifact digest,
+              result and limitations</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="blk">
+        <div class="label"><span class="dot"></span>Evidence and audit</div>
+        <table class="w30">
+          <tbody>
+            <tr><td>Ledger</td><td>Hash-chained run ledger; chain state on the run page</td></tr>
+            <tr><td>Auditor</td><td>Gate per framework clause, inspection packs, read-only auditor link</td></tr>
+            <tr><td>Verify</td><td>Offline with <code>fairmind verify</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <div class="blk">
+        <div class="label"><span class="dot"></span>Release gate</div>
+        <table class="w24">
+          <tbody>
+            <tr><td>Checks (5)</td><td>Fairness, data governance, human oversight, monitoring, environmental</td></tr>
+            <tr><td>Check states</td><td><b>Proven</b>: measured or tool-estimated, confidence 0.70 or more. <b>Attested</b>: anything
+              else on file. <b>Open</b>: nothing on file, or a stale monitoring snapshot.</td></tr>
+            <tr><td>Verdicts</td><td><div class="verd"><span class="v go">go</span><span class="v cgo">conditional_go</span><span class="v nogo">no_go</span></div></td></tr>
+            <tr><td>Rules</td><td>Failing blocking policy rules force <code>no_go</code>. A measured fairness failure never passes as a plain
+              <code>go</code>. Approval is refused while critical findings are open.</td></tr>
+            <tr><td>Decision</td><td>A person approves or rejects; someone other than the requester</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="blk">
+        <div class="label"><span class="dot"></span>Integrations</div>
+        <table class="w24">
+          <tbody>
+            <tr><td>CLI</td><td><code>pipx install fairmind-cli</code></td></tr>
+            <tr><td>GitHub Action</td><td><code>fairmind gate</code> in CI returns the verdict</td></tr>
+            <tr><td>Python SDK</td><td><code>pip install fairmind</code></td></tr>
+            <tr><td>MCP server</td><td><code>pip install fairmind-mcp</code></td></tr>
+            <tr><td>Access</td><td>One API for all four, with an API key</td></tr>
+            <tr><td>Discovery</td><td>MLflow, GitHub, Hugging Face Hub, promoted from a review queue</td></tr>
+            <tr><td>Monitoring</td><td>You push snapshots, e.g. <code>fairmind monitor</code> in cron</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="blk">
+        <div class="label"><span class="dot"></span>Frameworks</div>
+        <table class="w24">
+          <tbody>
+            <tr><td>Lead set</td><td>EU AI Act, ISO/IEC 42001, NIST AI RMF, RBI FREE-AI</td></tr>
+            <tr><td>With guides</td><td>OWASP LLM Top 10, OWASP Agentic Top 10, OWASP MCP Top 10, MITRE ATLAS, AIUC-1,
+              NIST AI 600-1, ISO/IEC 42005, CSA MAESTRO</td></tr>
+            <tr><td>AIUC-1</td><td>Catalogue evaluations map to its requirements</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="status panel">
+    <div><span class="label" style="margin:0"><span class="dot"></span>Status</span>Alpha, November 2026. The main path works end to end.
+      A person starts every workflow run.</div>
+    <div><span class="label" style="margin:0">Is not</span>A certification, a runtime guardrail or a sandbox.</div>
+    <div><span class="label" style="margin:0">Licence</span>Open source, AGPL-3.0.</div>
+  </div>
+
+  <footer class="foot">
+    <div><span>Open source, AGPL-3.0</span><span>fairmind.xyz</span><span>docs.fairmind.xyz</span><span>app.fairmind.xyz</span><span>github.com/adhit-r/fairmind</span></div>
+    <div class="pg">1 / 1</div>
+  </footer>
+</section>
+</body>
+</html>

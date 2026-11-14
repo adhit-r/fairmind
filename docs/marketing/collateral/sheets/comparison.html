@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FairMind comparison</title>
+<link rel="stylesheet" href="../kit/brand.css">
+<link rel="stylesheet" href="sheet.css">
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  .page { width: 297mm; height: 210mm; padding: 12mm 16mm 10mm; }
+  .title { padding-top: 5mm; display: flex; justify-content: space-between; align-items: flex-end; gap: 10mm; }
+  .title h1 { font-size: 24pt; max-width: 170mm; }
+  .title p { margin: 0; max-width: 78mm; color: var(--ink2); font-size: 9.4pt; }
+  .cmp { margin-top: 6mm; table-layout: fixed; }
+  .cmp th, .cmp td { padding: 2.3mm 4mm 2.3mm 0; font-size: 9.2pt; }
+  .cmp th { padding-top: 2mm; padding-bottom: 2mm; border-top: 2px solid transparent; vertical-align: bottom; }
+  .cmp col.need { width: 56mm; } .cmp col.a { width: 42mm; } .cmp col.b { width: 44mm; }
+  .cmp td:first-child { font-weight: 600; }
+  .cmp td.other { color: var(--ink2); }
+  .cmp .fm { padding-left: 4mm; background: var(--bg); }
+  .cmp th.fm { color: var(--ink); border-top-color: var(--brand); }
+  .cmp .fm code { background: #fff; }
+  .cmp .verds { display: inline-flex; gap: 3.5mm; margin-left: 1mm; }
+  .cmp tbody tr:last-child td { border-bottom: 0; }
+  .cmp tbody tr:last-child td.fm { padding-bottom: 3mm; }
+  .note { font-size: 7.8pt; color: var(--ink3); margin-top: 2mm; }
+  .close { margin-top: auto; margin-bottom: 4mm; padding-top: 4.4mm; border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: 1fr 110mm; gap: 12mm; align-items: start; }
+  .close .big { font-size: 12.5pt; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+  .cta { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+  .cta div { border-top: 1px solid var(--ink); padding-top: 1.8mm; }
+  .cta b { display: block; font-size: 11pt; font-weight: 600; letter-spacing: -0.015em; margin-top: .4mm; }
+  .cta span.muted { font-size: 8pt; }
+</style>
+</head>
+<body>
+<section class="page">
+  <header class="mast">
+    <div class="brand"><img src="assets/logo-mark.svg" alt="">FairMind</div>
+    <div class="meta"><b>Comparison by category</b><br>Alpha, November 2026</div>
+  </header>
+
+  <div class="title">
+    <div>
+      <div class="label"><span class="dot"></span>Where FairMind fits</div>
+      <h1>Evaluators test. GRC suites file. FairMind decides, with people.</h1>
+    </div>
+    <p>FairMind is an open-source AI assurance workbench for models and agents. An evaluation result is evidence for a decision,
+      never the decision itself. A person decides.</p>
+  </div>
+
+  <table class="cmp">
+    <colgroup><col class="need"><col class="a"><col class="b"><col></colgroup>
+    <thead><tr><th>Need</th><th>Evaluation tools</th><th>GRC suites</th><th class="fm">FairMind</th></tr></thead>
+    <tbody>
+      <tr><td>Run a fairness or safety test</td><td class="other">Yes, deeply</td><td class="other">No</td>
+        <td class="fm">109 catalogue evaluations; or bring results as an Evidence Passport</td></tr>
+      <tr><td>Map evidence to framework requirements</td><td class="other">No</td><td class="other">Yes, by questionnaire</td>
+        <td class="fm">Yes: 51 frameworks, standards and risk lists, 922 crosswalk links, human-accepted mappings</td></tr>
+      <tr><td>Human approval before anything changes</td><td class="other">Not in scope</td><td class="other">Sign-off on documents</td>
+        <td class="fm">A gate step in workflows; decided by someone other than the requester</td></tr>
+      <tr><td>Tamper-evident record</td><td class="other">Logs</td><td class="other">Audit log</td>
+        <td class="fm">Hash-chained run ledger, chain state on the run page</td></tr>
+      <tr><td>A verdict your pipeline can read</td><td class="other">Thresholds in code</td><td class="other">No</td>
+        <td class="fm"><code>fairmind gate</code> in the CLI and GitHub Actions: <span class="verds"><span class="v go">go</span><span class="v cgo">conditional_go</span><span class="v nogo">no_go</span></span></td></tr>
+      <tr><td>Govern agents, tools and MCP servers</td><td class="other">Some red-teaming</td><td class="other">Rarely</td>
+        <td class="fm">OWASP Agentic and MCP Top 10, AIUC-1 coverage</td></tr>
+      <tr><td>Certification</td><td class="other">No</td><td class="other">No</td>
+        <td class="fm">No. Readiness and evidence only</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Generalised across categories. Your tools may differ.</p>
+
+  <div class="close">
+    <div class="big">Keep the evaluators you trust. Keep the GRC suite your auditors know. FairMind is the layer between them.</div>
+    <div class="cta">
+      <div><span class="label" style="margin:0"><span class="dot"></span>Try the live demo</span><b>app.fairmind.xyz</b>
+        <span class="muted">Read-only, with public data</span></div>
+      <div><span class="label" style="margin:0">Read the code</span><b>github.com/adhit-r/fairmind</b>
+        <span class="muted">Open source, AGPL-3.0</span></div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <div><span>Open source, AGPL-3.0</span><span>fairmind.xyz</span><span>docs.fairmind.xyz</span><span>app.fairmind.xyz</span></div>
+    <div class="pg">Alpha, November 2026</div>
+  </footer>
+</section>
+</body>
+</html>

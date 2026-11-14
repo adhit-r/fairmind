@@ -1,0 +1,59 @@
+/* Shared layout for FairMind print sheets. Each .page is one fixed sheet; @page has no margin so the
+   page box is exact and nothing reflows across a break. */
+@page { size: A4; margin: 0; }
+html, body { background: #fff; }
+body { font-size: 9.3pt; line-height: 1.4; color: var(--ink); }
+.page { width: 210mm; height: 297mm; padding: 13mm 14mm 11mm; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; break-after: page; background: #fff; }
+.page:last-child { break-after: auto; }
+@media screen { body { background: var(--bg); } .page { margin: 0 auto; } }
+
+/* masthead and footer */
+.mast { display: flex; align-items: center; justify-content: space-between; padding-bottom: 4.2mm;
+  border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 2.4mm; font-weight: 600; font-size: 13pt; letter-spacing: -0.02em; }
+.brand img { width: 8.4mm; height: 8.4mm; }
+.mast .meta { text-align: right; font-size: 8pt; color: var(--ink2); line-height: 1.35; }
+.mast .meta b { color: var(--ink); font-weight: 600; }
+.foot { margin-top: auto; padding-top: 3.2mm; border-top: 1px solid var(--line); display: flex;
+  justify-content: space-between; gap: 6mm; font-size: 7.6pt; color: var(--ink2); }
+.foot span + span::before { content: ""; display: inline-block; width: 1px; height: 7pt; background: rgba(21,23,26,.18);
+  margin: 0 2.2mm; vertical-align: -1px; }
+.foot .pg { color: var(--ink3); white-space: nowrap; }
+
+/* type */
+.label { font-size: 7.4pt; letter-spacing: .14em; display: flex; align-items: center; gap: 1.6mm; margin-bottom: 2mm; }
+.label .dot { width: 5px; height: 5px; }
+h1 { font-size: 23pt; line-height: 1.08; letter-spacing: -0.035em; }
+h2 { font-size: 12.5pt; line-height: 1.2; letter-spacing: -0.02em; margin-bottom: 2.2mm; }
+h3 { font-size: 9.8pt; letter-spacing: -0.01em; margin-bottom: .8mm; }
+p { margin: 0 0 1.6mm; }
+.lede { font-size: 11pt; line-height: 1.45; color: var(--ink2); max-width: 160mm; }
+.muted { color: var(--ink2); }
+.small { font-size: 8.2pt; }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; }
+code { background: var(--bg); border-radius: 4px; padding: .2mm 1mm; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding-left: 3.2mm; position: relative; margin-bottom: 1.1mm; }
+ul.plain li::before { content: ""; position: absolute; left: 0; top: .62em; width: 1.3mm; height: 1px; background: var(--ink3); }
+
+/* structure */
+.section { padding-top: 4mm; }
+.rule { border-top: 1px solid var(--line); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; }
+.panel { background: var(--bg); border-radius: 10px; padding: 4mm 4.4mm; }
+.box { border: 1px solid var(--line); border-radius: 10px; padding: 4mm 4.4mm; }
+
+/* tables */
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; vertical-align: top; padding: 1.7mm 2.4mm 1.7mm 0; border-bottom: 1px solid var(--line); }
+th { font-size: 7.2pt; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink3); }
+td.num { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+
+/* verdict marks: status colours, small */
+.v { display: inline-flex; align-items: center; gap: 1.4mm; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: .92em; font-weight: 600; white-space: nowrap; }
+.v::before { content: ""; width: 2mm; height: 2mm; border-radius: 50%; background: currentColor; }
+.v.go { color: var(--go); } .v.cgo { color: var(--amber); } .v.nogo { color: var(--red); }
