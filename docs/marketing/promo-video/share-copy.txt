@@ -1,0 +1,24 @@
+LinkedIn post (suggested)
+-------------------------
+Every AI release comes down to one question: may this system ship, and what is the evidence?
+
+FairMind is an open-source AI assurance workbench for models and agents. It finds the AI you have not registered, shows every system against every release check, runs evaluations, keeps each result as evidence with where it came from, and scores a release gate check by check.
+
+One rule runs through it: an evaluation result is evidence for a decision, never the decision itself. A person decides, and it is someone other than the person who asked.
+
+The one-minute tour above is the real app, recorded on a read-only demo filled with public data: three Hugging Face distilbert models, a fairness test of the SST-2 sentiment model on the Equity Evaluation Corpus, its model card and an accuracy run.
+
+Try the demo: https://app.fairmind.xyz/login
+Code (AGPL-3.0): https://github.com/adhit-r/fairmind
+
+#AIGovernance #ResponsibleAI #OpenSource #AIAssurance #MLOps
+
+Short version (X / Bluesky / Mastodon)
+--------------------------------------
+May this AI system ship, and what is the evidence? FairMind keeps the system, its tests, its evidence and the release decision in one reviewable record. Open source. Try the read-only demo: https://app.fairmind.xyz/login
+
+Upload notes
+------------
+- Feed: renders/fairmind-promo-4x5.mp4 (1080x1350, 63s). Page/website/YouTube: renders/fairmind-promo-16x9.mp4 (1920x1080).
+- Captions: all words are on screen, so it reads muted. For LinkedIn's caption upload use renders/fairmind-promo.srt (rename to fairmind-promo_en.srt if LinkedIn asks for a language suffix).
+- Thumbnail: frame 0 is already the opening question; renders/fairmind-promo-4x5.jpg and -16x9.jpg are the same frame for editors that take a custom cover.

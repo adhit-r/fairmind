@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:03,180
+May this AI system ship?
+
+2
+00:00:03,180 --> 00:00:05,700
+May this AI system ship? And what is the evidence?
+
+3
+00:00:05,800 --> 00:00:09,400
+FairMind answers it with one reviewable record.
+
+4
+00:00:09,500 --> 00:00:17,300
+Find the AI you have not registered. Discovery reads MLflow, GitHub and Hugging Face.
+
+5
+00:00:17,390 --> 00:00:25,000
+Every system, against every release check. Live. Click a cell to see what is behind it.
+
+6
+00:00:25,110 --> 00:00:32,850
+109 evaluations. 104 can run today. Each with its metric, its threshold and its engine.
+
+7
+00:00:32,950 --> 00:00:40,700
+Every result becomes evidence. Where it came from, and how much it counts.
+
+8
+00:00:40,790 --> 00:00:48,550
+A release gate scores every check. And explains how the verdict was reached.
+
+9
+00:00:48,630 --> 00:00:55,850
+The result is evidence. A person decides. Someone other than the person who asked.
+
+10
+00:00:56,100 --> 00:01:03,000
+FairMind. Open-source AI assurance for models and agents. Try the live demo: app.fairmind.xyz. AGPL-3.0, github.com/adhit-r/fairmind
