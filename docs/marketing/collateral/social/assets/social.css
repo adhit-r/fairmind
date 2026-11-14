@@ -1,0 +1,17 @@
+/* Shared layout bits for social collateral. Tokens come from brand.css. */
+@import url("brand.css");
+html, body { width: 100%; height: 100%; overflow: hidden; }
+.frame { position: relative; width: 100%; height: 100%; background: var(--bg); }
+.eyebrow { display: flex; align-items: center; gap: .6em; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink3); }
+.eyebrow::before { content: ""; width: .5em; height: .5em; border-radius: 50%; background: var(--brand); flex: none; }
+.brand { display: flex; align-items: center; gap: .5em; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+.brand img { width: 1.6em; height: 1.6em; display: block; }
+.muted { color: var(--ink2); }
+.faint { color: var(--ink3); }
+/* A card that crops a real screenshot: set --x --y (source px), --s (scale) on the card. */
+.shot { position: absolute; overflow: hidden; background: #fff; border-radius: 22px;
+  box-shadow: var(--shadow); outline: 1px solid var(--line); }
+.shot img { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; max-width: none;
+  transform-origin: 0 0; transform: scale(var(--s, 1)) translate(calc(var(--x, 0) * -1px), calc(var(--y, 0) * -1px)); }
+.tnum { font-variant-numeric: tabular-nums; }
