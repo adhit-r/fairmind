@@ -1,3 +1,8 @@
 # Docs recordings and step images (apps/docs/README.md); demo.json and captions stay text.
 apps/docs/public/media/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
 apps/docs/public/media/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+# The promo video's renders, clips, music and fonts.
+docs/marketing/promo-video/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+docs/marketing/promo-video/**/*.mp3 filter=lfs diff=lfs merge=lfs -text
+docs/marketing/promo-video/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+docs/marketing/promo-video/**/*.woff2 filter=lfs diff=lfs merge=lfs -text
