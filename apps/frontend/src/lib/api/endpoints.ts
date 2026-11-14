@@ -255,6 +255,7 @@ export const API_ENDPOINTS = {
     systemTarget: (systemId: string) => `/api/v1/packs/ai-systems/${systemId}/target`,
     systemTargetTest: (systemId: string) => `/api/v1/packs/ai-systems/${systemId}/target/test`,
     workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,
+    workflowVersions: (workflowId: string) => `/api/v1/packs/workflows/${encodeURIComponent(workflowId)}/versions`,
     startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
     draft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft`,
     publishDraft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft/publish`,
