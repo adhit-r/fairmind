@@ -247,8 +247,13 @@ def run_mitigation_suite(
     pue: float = methods.DEFAULT_PUE,
     config_overrides_path: pathlib.Path | None = None,
     target_region: str = REGION_SHIFT_TARGET,
+    iteration: int = 1,
 ) -> list[dict[str, str]]:
-    """Run every applicable mitigation for the selected workloads."""
+    """Run every applicable mitigation for the selected workloads.
+
+    ``iteration`` numbers a repeat of the whole suite so run ids stay unique
+    when the caller runs it several times for variance.
+    """
 
     modules = load_workloads()
     workload_ids = resolve_workload_ids(workload, modules)
@@ -274,7 +279,7 @@ def run_mitigation_suite(
     def next_run_id() -> str:
         nonlocal pair_index
         pair_index += 1
-        return f"{run_label}-m{pair_index:02d}"
+        return f"{run_label}-i{iteration:02d}-m{pair_index:02d}"
 
     for workload_id in workload_ids:
         module = modules[workload_id]

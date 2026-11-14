@@ -44,7 +44,7 @@ async def test_fairness_evidence_profile_route_exposes_missing_evidence_as_unkno
     )
     monkeypatch.setattr(real_ai_bom, "ai_bom_service", StubAIBOMService(document))
 
-    response = await real_ai_bom.get_fairness_evidence_profile("bom-loan-001")
+    response = real_ai_bom.get_fairness_evidence_profile("bom-loan-001")
     profile = response.data
     component = profile["components"][0]
 
@@ -189,7 +189,7 @@ async def test_fairness_evidence_profile_route_preserves_component_metadata(monk
     )
     monkeypatch.setattr(real_ai_bom, "ai_bom_service", StubAIBOMService(document))
 
-    response = await real_ai_bom.get_fairness_evidence_profile("bom-hiring-001")
+    response = real_ai_bom.get_fairness_evidence_profile("bom-hiring-001")
     profile = response.data
     component = profile["components"][0]
 
@@ -261,7 +261,7 @@ async def test_fairness_evidence_profile_route_surfaces_disconnected_monitor(mon
     )
     monkeypatch.setattr(real_ai_bom, "ai_bom_service", StubAIBOMService(document))
 
-    response = await real_ai_bom.get_fairness_evidence_profile("bom-monitor-001")
+    response = real_ai_bom.get_fairness_evidence_profile("bom-monitor-001")
     component = response.data["components"][0]
 
     assert response.success is True

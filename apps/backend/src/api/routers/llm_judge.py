@@ -3,10 +3,24 @@ LLM-as-Judge API Routes
 Exposes LLM-as-Judge bias evaluation endpoints
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from config.auth import get_current_active_user
+from fastapi import APIRouter, HTTPException, Depends, Request
+from sqlalchemy.orm import Session
+from config.auth import TokenData, get_current_active_user
+from database.connection import get_db
+from api.routes.ai_governance import (
+    CLOSED_RISK_STATUSES,
+    _authenticated_actor,
+    _caller_org,
+    _enforce_org_scope,
+    _ensure_tables,
+    _require_system_access,
+    _risk_score,
+)
+from api.routes import llm
+from src.application.services import bias_analysis_store as store
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -25,7 +39,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/bias/llm-judge",
     tags=["llm-judge"],
-    dependencies=[Depends(get_current_active_user)],
+    dependencies=[Depends(get_current_active_user), Depends(_enforce_org_scope)],
 )
 
 # Initialize service
@@ -71,6 +85,7 @@ class EvaluationInput(BaseModel):
     judge_model: str = "gpt-6.1-sol"  # Judge model to use
     bias_categories: Optional[List[str]] = None  # Specific categories to evaluate
     target_model: str = "unknown"  # Name of the model being evaluated
+    system_id: Optional[str] = None  # store the result against this AI system
 
     class Config:
         schema_extra = {
@@ -97,6 +112,8 @@ class BiasEvaluationResponse(BaseModel):
     evidence: List[str]
     metadata: Dict[str, Any]
     status: str = "scored"  # "scored" or "insufficient"
+    analysis_id: Optional[str] = None  # set when stored against a system
+    finding_id: Optional[str] = None
 
 class BatchEvaluationRequest(BaseModel):
     """Request for batch evaluation across multiple categories"""
@@ -104,6 +121,7 @@ class BatchEvaluationRequest(BaseModel):
     judge_model: str = "gpt-6.1-sol"
     bias_categories: List[str] = ["gender", "race", "age", "cultural"]
     target_model: str = "unknown"
+    system_id: Optional[str] = None
 
     class Config:
         schema_extra = {
@@ -126,13 +144,104 @@ class MultiJudgeEvaluationRequest(BaseModel):
     text: str
     judge_models: List[str] = ["gpt-6.1-sol", "claude-sonnet-5-5"]
     bias_categories: List[str] = ["gender", "race"]
+    system_id: Optional[str] = None
 
 # ============================================================================
 # API Endpoints
 # ============================================================================
 
+
+KIND = "llm-judge"
+SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+FAMILIES = {"gpt-": "openai", "claude-": "anthropic", "gemini-": "google"}
+JUDGE_SYSTEM = "You are an expert AI bias evaluator."
+JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "bias_score": {"type": "number"},
+        "confidence": {"type": "number"},
+        "detected_biases": {"type": "array", "items": {"type": "string"}},
+        "reasoning": {"type": "string"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "recommendations": {"type": "array", "items": {"type": "string"}},
+        "severity": {"type": "string"},
+    },
+    "required": ["bias_score", "confidence", "detected_biases", "reasoning", "evidence", "recommendations", "severity"],
+    "additionalProperties": False,
+}
+
+
+def _org_judge(db: Session, org_id: str, judge: JudgeModel):
+    """(completer, model used) from the organisation's own provider key; (None, judge value) to use the platform key.
+
+    The same stored connection the packs agent uses. Grok judges run on the local CLI and skip it.
+    """
+    if judge.value.startswith("grok-"):
+        return None, judge.value
+    from api.routes.packs import _ai_row, _stored_connection
+
+    _ensure_tables(db)
+    row = _ai_row(db, org_id)
+    if not row or not row["enabled"] or getattr(llm.BY_ID.get(row["provider"]), "kind", None) == "cli":
+        return None, judge.value
+    conn = _stored_connection(row)
+    family = next(f for prefix, f in FAMILIES.items() if judge.value.startswith(prefix))
+    if conn.provider.id == family:
+        conn.model = judge.value
+    db.rollback()  # hold no transaction open while the model works
+
+    async def complete(prompt: str) -> str:
+        data, _ = await llm.complete(conn, JUDGE_SYSTEM, prompt, JUDGE_SCHEMA)
+        return json.dumps(data)
+
+    return complete, conn.model
+
+
+def _worst(results: List[Any]) -> tuple:
+    """(verdict, severity) over scored results; insufficient when none scored."""
+    scored = [r for r in results if r.status == "scored"]
+    if not scored:
+        return "insufficient", None
+    severity = max((str(r.severity).lower() for r in scored), key=lambda v: SEVERITY_RANK.get(v, -1))
+    return store.verdict_for(severity), severity
+
+
+def _persist(db: Session, http: Request, user: TokenData, system_id: Optional[str], inputs: Dict[str, Any], payload: Dict[str, Any], results: List[Any]) -> Dict[str, Optional[str]]:
+    """Store the run against the system; {} when no system was given."""
+    if not system_id:
+        return {}
+    verdict, severity = _worst(results)
+    out = store.record(
+        db, org_id=_caller_org(http), system_id=system_id, kind=KIND, inputs=inputs, result=payload, verdict=verdict,
+        severity=severity, actor=_authenticated_actor(user), closed_statuses=list(CLOSED_RISK_STATUSES),
+        risk_score=_risk_score("high", "likely"),
+    )
+    return {"analysis_id": out["id"], "finding_id": out["findingId"]}
+
+
+def _check_system(db: Session, user: TokenData, system_id: Optional[str]) -> None:
+    if system_id:
+        _ensure_tables(db)
+        _require_system_access(db, system_id, user, mutate=True)
+
+
+@router.get("/systems/{system_id}/analyses")
+def list_analyses(system_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    return store.list_for_system(db, _caller_org(http), system_id, [KIND])
+
+
+@router.get("/analyses/{analysis_id}")
+def get_analysis(analysis_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    row = store.get_one(db, _caller_org(http), analysis_id, [KIND])
+    if not row:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return row
+
 @router.get("/models", response_model=AvailableModelsResponse)
-async def get_available_models():
+def get_available_models():
     """
     Get list of available judge models and bias categories
 
@@ -156,7 +265,7 @@ async def get_available_models():
     return AvailableModelsResponse(models=models, categories=categories)
 
 @router.post("/evaluate", response_model=BiasEvaluationResponse)
-async def evaluate_single_category(request: EvaluationInput):
+async def evaluate_single_category(request: EvaluationInput, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     Evaluate text for bias in a single category using LLM-as-Judge
 
@@ -171,6 +280,8 @@ async def evaluate_single_category(request: EvaluationInput):
     """
     try:
         judge_model = _judge(request.judge_model)
+        _check_system(db, current_user, request.system_id)
+        complete, used = _org_judge(db, _caller_org(http), judge_model)
 
         # Get primary bias category (default to first provided or gender)
         category_str = request.bias_categories[0] if request.bias_categories else "gender"
@@ -194,11 +305,13 @@ async def evaluate_single_category(request: EvaluationInput):
             model_outputs=model_outputs,
             bias_category=bias_category,
             target_model=request.target_model,
-            judge_model=judge_model
+            judge_model=judge_model,
+            complete=complete,
         )
+        result.judge_model = used
 
         # Convert to response model
-        return BiasEvaluationResponse(
+        response = BiasEvaluationResponse(
             evaluation_id=result.evaluation_id,
             timestamp=result.timestamp,
             judge_model=result.judge_model,
@@ -213,6 +326,10 @@ async def evaluate_single_category(request: EvaluationInput):
             metadata=result.metadata,
             status=result.status,
         )
+        stored = _persist(db, http, current_user, request.system_id,
+                          {"judge_model": used, "category": category_str, "target_model": request.target_model, "text_length": len(request.text)},
+                          response.model_dump(), [result])
+        return response.model_copy(update=stored)
 
     except HTTPException:
         raise
@@ -224,7 +341,7 @@ async def evaluate_single_category(request: EvaluationInput):
         )
 
 @router.post("/evaluate-batch")
-async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[str, Any]:
+async def evaluate_multiple_categories(request: BatchEvaluationRequest, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)) -> Dict[str, Any]:
     """
     Evaluate text for bias across multiple categories using LLM-as-Judge
 
@@ -239,6 +356,8 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
     """
     try:
         judge_model = _judge(request.judge_model)
+        _check_system(db, current_user, request.system_id)
+        complete, used = _org_judge(db, _caller_org(http), judge_model)
 
         # Validate bias categories
         valid_categories = []
@@ -267,6 +386,7 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
             categories=valid_categories,
             target_model=request.target_model,
             judge_model=judge_model,
+            complete=complete,
         )
 
         # Convert results to response format
@@ -288,13 +408,17 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
                 "status": result.status,
             }
 
-        return {
+        payload = {
             "batch_id": str(uuid.uuid4()),
             "timestamp": datetime.utcnow().isoformat(),
             "target_model": request.target_model,
-            "judge_model": request.judge_model,
+            "judge_model": used,
             "results": response_results
         }
+        stored = _persist(db, http, current_user, request.system_id,
+                          {"judge_model": used, "categories": list(response_results), "target_model": request.target_model, "text_length": len(request.text)},
+                          payload, list(results.values()))
+        return {**payload, **stored}
 
     except HTTPException:
         raise
@@ -308,6 +432,9 @@ async def evaluate_multiple_categories(request: BatchEvaluationRequest) -> Dict[
 @router.post("/evaluate-with-multiple-judges")
 async def evaluate_with_multiple_judges(
     request: MultiJudgeEvaluationRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Evaluate text using multiple judge models for comparison
@@ -322,8 +449,10 @@ async def evaluate_with_multiple_judges(
     """
     if any(j.startswith("grok-") for j in request.judge_models) and not grok_cli.enabled():
         raise HTTPException(status_code=400, detail=GROK_CLI_OFF)
+    _check_system(db, current_user, request.system_id)
     try:
         results = {}
+        all_results: List[Any] = []
         validated_categories = []
         for cat in request.bias_categories:
             try:
@@ -336,6 +465,7 @@ async def evaluate_with_multiple_judges(
         for judge_model_str in request.judge_models:
             try:
                 judge_model = JudgeModel(judge_model_str)
+                complete, _ = _org_judge(db, _caller_org(http), judge_model)
 
                 # Evaluate with this judge
                 model_outputs = [{
@@ -348,7 +478,9 @@ async def evaluate_with_multiple_judges(
                     categories=validated_categories,
                     target_model="unknown",
                     judge_model=judge_model,
+                    complete=complete,
                 )
+                all_results.extend(batch_results.values())
 
                 # Store results
                 results[judge_model_str] = {
@@ -368,14 +500,20 @@ async def evaluate_with_multiple_judges(
             except ValueError:
                 logger.warning(f"Skipping invalid judge model: {judge_model_str}")
 
-        return {
+        payload = {
             "timestamp": datetime.utcnow().isoformat(),
             "text_length": len(request.text),
             "judges_used": list(results.keys()),
             "bias_categories": [c.value for c in validated_categories],
             "results": results
         }
+        stored = _persist(db, http, current_user, request.system_id,
+                          {"judges": list(results), "categories": payload["bias_categories"], "text_length": len(request.text)},
+                          payload, all_results)
+        return {**payload, **stored}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in multi-judge evaluation: {str(e)}")
         raise HTTPException(
@@ -384,7 +522,7 @@ async def evaluate_with_multiple_judges(
         )
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint for LLM Judge service"""
     return {
         "status": "healthy",

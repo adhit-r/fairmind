@@ -1,11 +1,9 @@
 {
-  "title": "Engineering reference",
+  "title": "Reference",
   "pages": [
     "api",
-    "authentication-rbac",
     "permissions-and-separation",
-    "configuration",
-    "eu-ai-act-crosswalk",
-    "deployment"
-  ]
+    "eu-ai-act-crosswalk"
+  ],
+  "defaultOpen": false
 }

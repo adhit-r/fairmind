@@ -1,0 +1,45 @@
+---
+title: AI systems
+description: Find every AI system by where it came from and how far it has got, then register or open it.
+---
+
+<Access where="Inventory › AI systems" address="/systems" change="Organisation mutation access (owner or admin role, or the model:write permission) to register or ignore a found system" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/inventory/systems" /></Tab>
+  <Tab value="Try it"><TryIt page="app/inventory/systems" /></Tab>
+</Tabs>
+
+## What it is for
+
+This page lists every AI system FairMind knows about, in one grid. Rows are the source it came from. Columns are how far along it is. It shows registered systems and systems that [Discovery](./discovery.mdx) found but nobody has registered yet.
+
+## How to use it
+
+1. Open **AI systems**. The three columns are **Found, not registered**, **Registered, being checked** and **Approved and watched**. Each shows a count.
+2. Read the rows. Each source gets a row: **Added by hand**, GitHub, MLflow or Hugging Face, with its system count. A column shows four items per source. Press **Show N more** to see the rest, and **Show fewer** to fold them again.
+3. Type in **Search systems** to filter by name, source or kind.
+4. Click any item to open a drawer. It shows the source and kind. For a found item it also shows where it was found and the suggested risk and stage. For a registered system it shows owner, risk, stage and the gate verdict.
+5. For a found item, press **Register it** to create a system from it. FairMind then opens the new system file. Press **Ignore** to drop it from the found list.
+6. For a registered system, press **Open the system file**.
+7. To register by hand or by CSV, use **Register systems** in the header. To find more, use **Find unregistered AI**.
+
+A small mark on each registered item shows its state: approved, a failing check, a check out of date, waiting for a reviewer, ready for a decision, or checks still open. The mark is read from the release gate, not typed in.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/inventory/systems" />
+
+## What's on the page
+
+A link from [Home](../home/home.mdx) such as `?stage=assess` filters the grid to one lifecycle stage. A **Stage** chip and **Clear stage** appear when a filter is on.
+
+Systems with the source `fallback` are not shown. If an action fails, the drawer shows **That did not work** with the server's reason, for example when you lack mutation access.
+
+With nothing found or registered, the page reads **No AI systems yet** and offers **Register systems** and **Find unregistered AI**. If the lists cannot load, it reads **AI systems could not load** with the reason and **Try again**.
+
+Related: [System file](./system-file.mdx), [Register a system](../../journeys/register-system.mdx).
+
+<PageAnatomy route="systems" />

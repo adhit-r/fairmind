@@ -162,7 +162,6 @@ export default function RemediationPage() {
       evidenceNeeded: '',
       retestRequired: true,
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryDescription, queryPriority, queryRiskId, queryTitle, querySource, selectedSystem.id])
 
   const linkedRiskTitle = useMemo(() => {

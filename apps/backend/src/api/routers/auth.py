@@ -2,7 +2,7 @@
 Authentication routes for JWT-based security and Authentik OAuth2 integration.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Query, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
@@ -11,13 +11,13 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
 import httpx
-import re
 import secrets
 import time
 import uuid
 
 from config.auth import (
-    auth_manager, 
+    auth_manager,
+    revoke_user_sessions,
     get_current_user, 
     get_current_active_user,
     User, 
@@ -41,6 +41,7 @@ from config.jwt_models import (
 )
 from config.settings import settings
 from config.authentik_config import get_authentik_config
+from config.turnstile import require_turnstile
 
 logger = logging.getLogger("fairmind.auth")
 
@@ -86,13 +87,37 @@ class LoginResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Browsers send the fm_refresh cookie instead; the CLI, SDK and MCP send it here.
+    refresh_token: Optional[str] = None
+
+
+# The browser's refresh token lives in this HttpOnly cookie, out of reach of page
+# scripts, so an XSS cannot read and replay a 30-day credential (audit S2, S3).
+# Path /api covers the backend's own /api/v1/auth/* and the frontend proxy's
+# /api/proxy/api/v1/auth/*; SameSite=Strict keeps other sites from sending it.
+REFRESH_COOKIE = "fm_refresh"
+
+
+def _set_refresh_cookie(response: Optional[Response], token: str) -> None:
+    if response is None:
+        return
+    response.set_cookie(
+        REFRESH_COOKIE,
+        token,
+        max_age=auth_manager.refresh_token_expire_days * 86400,
+        httponly=True,
+        secure=settings.is_production,
+        samesite="strict",
+        path="/api",
+    )
 
 
 class RefreshResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    # Refresh tokens rotate: the one just used is spent; use this one next time.
+    refresh_token: Optional[str] = None
 
 
 class CreateAPIKeyRequest(BaseModel):
@@ -131,8 +156,49 @@ class AuthentikCallbackResponse(BaseModel):
 
 
 
-@router.post("/login", response_model=LoginResponse)
-async def login(login_data: LoginRequest):
+async def _issue_session(user, response: Optional[Response]) -> LoginResponse:
+    """Tokens for a signed-in user: the refresh token also goes into the fm_refresh cookie."""
+    # Create tokens using new JWT infrastructure
+    access_token = str(auth_manager.create_access_token(user))
+    refresh_token = str(await auth_manager.issue_refresh_token(user))
+    
+    # Ensure they are not byte string representations like "b'...'"
+    if access_token.startswith("b'") and access_token.endswith("'"):
+         access_token = access_token[2:-1]
+    if refresh_token.startswith("b'") and refresh_token.endswith("'"):
+         refresh_token = refresh_token[2:-1]
+    
+    # Cache user session
+    session_key = f"session:{user.id}"
+    await cache_manager.set(
+        session_key,
+        {
+            "user_id": user.id,
+            "email": user.email,
+            "role": user.role.value,
+            "last_login": datetime.utcnow().isoformat()
+        },
+        ttl=86400  # 24 hours
+    )
+    
+    response_data = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "expires_in": auth_manager.access_token_expire_minutes * 60,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "role": user.role.value,
+            "org_id": user.org_id,
+        }
+    }
+    _set_refresh_cookie(response, response_data["refresh_token"])
+    return LoginResponse(**response_data)
+
+
+@router.post("/login", response_model=LoginResponse, dependencies=[Depends(require_turnstile)])
+async def login(login_data: LoginRequest, response: Response = None):
     logger.info(f"Login attempt for: {login_data.email}")
     """
     Authenticate user and return JWT tokens using new JWT infrastructure.
@@ -175,44 +241,8 @@ async def login(login_data: LoginRequest):
                 detail="Invalid email or password"
             )
         
-        # Create tokens using new JWT infrastructure
-        access_token = str(auth_manager.create_access_token(user))
-        refresh_token = str(auth_manager.create_refresh_token(user))
-        
-        # Ensure they are not byte string representations like "b'...'"
-        if access_token.startswith("b'") and access_token.endswith("'"):
-             access_token = access_token[2:-1]
-        if refresh_token.startswith("b'") and refresh_token.endswith("'"):
-             refresh_token = refresh_token[2:-1]
-        
-        # Cache user session
-        session_key = f"session:{user.id}"
-        await cache_manager.set(
-            session_key,
-            {
-                "user_id": user.id,
-                "email": user.email,
-                "role": user.role.value,
-                "last_login": datetime.utcnow().isoformat()
-            },
-            ttl=86400  # 24 hours
-        )
-        
         logger.info(f"User logged in successfully: {user.email}")
-        
-        response_data = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "expires_in": auth_manager.access_token_expire_minutes * 60,
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "role": user.role.value,
-                "org_id": user.org_id,
-            }
-        }
-        return LoginResponse(**response_data)
+        return await _issue_session(user, response)
         
     except HTTPException:
         raise
@@ -230,11 +260,37 @@ async def login(login_data: LoginRequest):
         )
 
 
+
+def _is_demo_user(email: Optional[str]) -> bool:
+    demo = (settings.demo_user_email or "").strip().lower()
+    return bool(demo) and (email or "").lower() == demo
+
+
+@router.post("/demo", response_model=LoginResponse)
+async def demo_login(response: Response):
+    """Signs a visitor in to the public demo organisation, read-only.
+
+    No human check: the account holds only demo data and can change nothing, so a
+    bot gains nothing a visitor does not; the rate limit still applies. The docs
+    recorder signs in here too.
+
+    Off (404) unless DEMO_USER_EMAIL names an existing, active user. The account
+    has no known password; DemoReadOnlyMiddleware refuses every change made as it.
+    """
+    email = settings.demo_user_email
+    user = await auth_manager.get_user_by_email(email) if email else None
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="The demo is not available.")
+    return await _issue_session(user, response)
+
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
-    org_name: str
+    # Signup is by invitation only; a new organisation comes from an approved
+    # access request (POST /api/v1/register), never from this endpoint.
+    invitation_token: str
 
 
 def _check_password_length(password: str) -> None:
@@ -243,27 +299,38 @@ def _check_password_length(password: str) -> None:
         raise HTTPException(status_code=422, detail="Password must be 12 to 72 bytes long")
 
 
-@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
-async def signup(payload: SignupRequest):
-    """Self-serve signup: creates a new organization owned by the new user."""
+@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_turnstile)])
+async def signup(payload: SignupRequest, response: Response):
+    """Create an account for someone holding an invitation, then sign them in.
+
+    The account is created without an organization; the invitee then accepts the
+    invitation (POST /organizations/invitations/{token}/accept). Holding the
+    token, which only went to that address, is what verifies the email.
+    """
     from config.database import get_db_transaction
 
     _check_password_length(payload.password)
-    name, org_name = payload.name.strip(), payload.org_name.strip()
-    if not name or not org_name:
-        raise HTTPException(status_code=422, detail="Name and organization are required")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Name is required")
 
     user_id = str(uuid.uuid4())
-    org_id = str(uuid.uuid4())
-    slug_base = re.sub(r"[^a-z0-9]+", "-", org_name.lower()).strip("-") or "org"
     try:
         async with get_db_transaction() as db:
+            invitation = await db.fetch_one(
+                "SELECT id FROM org_invitations WHERE token = :token AND status = 'pending' "
+                "AND expires_at > now() AND lower(email) = lower(:email)",
+                {"token": payload.invitation_token, "email": payload.email},
+            )
+            if not invitation:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This invitation is invalid, expired, or for a different email address",
+                )
             if await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": payload.email}):
                 raise HTTPException(status_code=409, detail="An account with this email already exists")
-            # The signer owns their organisation through org_members; the global role
-            # stays analyst, since admin is the platform operator.
-            # users and organizations reference each other, so create the user first,
-            # then the organization it owns, then point the user at it.
+            # The global role stays analyst, since admin is the platform operator;
+            # org rights come from org_members when the invitation is accepted.
             await db.execute(
                 "INSERT INTO users (id, email, username, name, password_hash, role, roles, is_active) "
                 "VALUES (:id, :email, :username, :name, :pw, 'analyst', CAST(:roles AS jsonb), TRUE)",
@@ -276,39 +343,29 @@ async def signup(payload: SignupRequest):
                     "roles": '["analyst"]',
                 },
             )
-            await db.execute(
-                "INSERT INTO organizations (id, name, slug, owner_id, is_active) "
-                "VALUES (:id, :name, :slug, :owner, TRUE)",
-                {"id": org_id, "name": org_name, "slug": f"{slug_base}-{secrets.token_hex(3)}", "owner": user_id},
-            )
-            await db.execute(
-                "UPDATE users SET org_id = :org, primary_org_id = :org WHERE id = :id",
-                {"org": org_id, "id": user_id},
-            )
-            await db.execute(
-                "INSERT INTO org_members (id, org_id, user_id, role, status, joined_at) "
-                "VALUES (:id, :org, :user, 'owner', 'active', now())",
-                {"id": str(uuid.uuid4()), "org": org_id, "user": user_id},
-            )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Signup error: {e}")
         raise HTTPException(status_code=500, detail="Signup failed")
 
-    logger.info(f"Self-serve signup: user={user_id} org={org_id}")
-    return await login(LoginRequest(email=payload.email, password=payload.password))
+    logger.info(f"Signup by invitation: user={user_id}")
+    return await login(LoginRequest(email=payload.email, password=payload.password), response)
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-async def refresh_token(refresh_data: RefreshRequest):
-    """Refresh access token using refresh token with new JWT infrastructure."""
+async def refresh_token(request: Request, response: Response, refresh_data: RefreshRequest = RefreshRequest()):
+    """Spend a refresh token (body or fm_refresh cookie) for a new access token and a new refresh token."""
     try:
-        access_token = await auth_manager.refresh_access_token(refresh_data.refresh_token)
-        
+        token = refresh_data.refresh_token or request.cookies.get(REFRESH_COOKIE)
+        if not token:
+            raise TokenMissingException("No refresh token")
+        access_token, next_refresh = await auth_manager.refresh_session(token)
+        _set_refresh_cookie(response, next_refresh)
         return RefreshResponse(
             access_token=access_token,
-            expires_in=auth_manager.access_token_expire_minutes * 60
+            expires_in=auth_manager.access_token_expire_minutes * 60,
+            refresh_token=next_refresh,
         )
         
     except (TokenExpiredException, InvalidTokenException, TokenMissingException) as e:
@@ -329,18 +386,21 @@ async def refresh_token(refresh_data: RefreshRequest):
 
 @router.post("/logout")
 async def logout(
+    response: Response,
     current_user: TokenData = Depends(get_current_active_user),
     credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer())
 ):
     """Logout user and revoke tokens using new JWT infrastructure."""
+    response.delete_cookie(REFRESH_COOKIE, path="/api")
     try:
-        # Revoke the current token
+        # Revoke the current token, and end every session of this user: their refresh
+        # tokens stop working (the blacklist alone needs Redis, which production lacks).
         if credentials and credentials.credentials:
             await auth_manager.revoke_token(credentials.credentials)
-        
-        # Remove user session from cache
-        session_key = f"session:{current_user.user_id}"
-        await cache_manager.delete(session_key)
+        # Many visitors share the demo account: one signing out must not end the others' sessions.
+        if not _is_demo_user(current_user.email):
+            await revoke_user_sessions(current_user.user_id)
+            await cache_manager.delete(f"session:{current_user.user_id}")
         
         logger.info(f"User logged out successfully: {current_user.email}")
         
@@ -391,7 +451,7 @@ def _reset_rate_limited(*keys: str) -> bool:
     return False
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(require_turnstile)])
 async def request_password_reset(payload: PasswordResetRequest, request: Request):
     """Email a single-use reset link. The answer is the same whether or not the account exists."""
     from config.database import get_db_connection
@@ -443,7 +503,9 @@ async def reset_password(payload: PasswordResetConfirm):
             raise invalid
         # Compare-and-set on the old hash: of two concurrent uses of one token, only one lands.
         changed = await db.fetch_one(
-            "UPDATE users SET password_hash = :new WHERE id = :id AND password_hash = :old RETURNING id",
+            # Bumping token_version signs out every existing session along with the old password.
+            "UPDATE users SET password_hash = :new, token_version = COALESCE(token_version, 0) + 1 "
+            "WHERE id = :id AND password_hash = :old RETURNING id",
             {
                 "new": auth_manager.get_password_hash(payload.password),
                 "id": claims["sub"],
@@ -459,7 +521,8 @@ async def reset_password(payload: PasswordResetConfirm):
 @router.post("/callback", response_model=AuthentikCallbackResponse)
 async def authentik_oauth_callback(
     code: str = Query(..., description="Authorization code from Authentik"),
-    state: str = Query(..., description="State parameter for CSRF protection")
+    state: str = Query(..., description="State parameter for CSRF protection"),
+    response: Response = None,
 ):
     """
     Handle Authentik OAuth2 callback.
@@ -508,7 +571,7 @@ async def authentik_oauth_callback(
         # Exchange authorization code for access token
         token_url = f"{settings.authentik_server_url}/application/o/token/"
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10) as client:
             token_response = await client.post(
                 token_url,
                 data={
@@ -556,40 +619,23 @@ async def authentik_oauth_callback(
                 detail="Invalid Authentik token"
             )
 
-        # Extract user info from token
-        role_info = authentik_config.extract_role_info(payload)
-
-        # Create or update user in database
-        # For now, we'll use the existing user creation flow
-        # In production, this would sync with the User model
-        user = User(
-            id=payload.get("sub", payload.get("user_id", "authentik-" + secrets.token_hex(8))),
-            email=payload.get("email", ""),
-            username=payload.get("preferred_username", payload.get("email", "").split("@")[0]),
-            role=UserRole.VIEWER,  # Default role, should be mapped from Authentik groups
-            is_active=True,
-            created_at=datetime.utcnow(),
-            permissions=[]  # Will be computed from roles
-        )
-
-        # Map Authentik roles to FairMind roles
-        if "admin" in role_info.get("roles", []):
-            user.role = UserRole.ADMIN
-            user.permissions = ["*"]
-        elif "analyst" in role_info.get("roles", []):
-            user.role = UserRole.ANALYST
-            user.permissions = [
-                "model:read", "model:write",
-                "dataset:read", "dataset:write",
-                "analysis:run", "analysis:read"
-            ]
-        else:
-            user.role = UserRole.VIEWER
-            user.permissions = ["model:read", "dataset:read"]
+        # The IdP proves who the person is; FairMind decides what they may do.
+        # Sign them in as their existing account (made by an invitation or an
+        # approved access request), with the platform role and org memberships
+        # stored here. IdP groups grant nothing: a group could otherwise make
+        # anyone added to it an admin of every tenant.
+        email = (payload.get("email") or "").strip()
+        user = await auth_manager.get_user_by_email(email) if email else None
+        if not user or not user.is_active:
+            logger.warning("Authentik sign-in refused: no active FairMind account for this email")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No FairMind account uses this email. Ask your organisation admin for an invitation, or request access.",
+            )
 
         # Create tokens for FairMind
         access_token = str(auth_manager.create_access_token(user))
-        refresh_token = str(auth_manager.create_refresh_token(user))
+        refresh_token = str(await auth_manager.issue_refresh_token(user))
 
         # Ensure they are not byte string representations
         if access_token.startswith("b'") and access_token.endswith("'"):
@@ -605,8 +651,6 @@ async def authentik_oauth_callback(
                 "user_id": user.id,
                 "email": user.email,
                 "role": user.role.value,
-                "roles": role_info.get("roles", []),
-                "groups": role_info.get("groups", []),
                 "last_login": datetime.utcnow().isoformat()
             },
             ttl=86400  # 24 hours
@@ -614,6 +658,7 @@ async def authentik_oauth_callback(
 
         logger.info(f"User authenticated via Authentik: {user.email}")
 
+        _set_refresh_cookie(response, refresh_token)
         return AuthentikCallbackResponse(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -623,8 +668,6 @@ async def authentik_oauth_callback(
                 "email": user.email,
                 "username": user.username,
                 "role": user.role.value,
-                "roles": role_info.get("roles", []),
-                "groups": role_info.get("groups", [])
             }
         )
 
@@ -800,7 +843,7 @@ async def revoke_api_key(
 
 
 @router.post("/users", status_code=status.HTTP_501_NOT_IMPLEMENTED)
-async def create_user():
+def create_user():
     """Not implemented. Accounts come from signup (POST /api/v1/auth/register), approved
     access requests (POST /api/v1/registrations/{id}/approve) and organisation
     invitations (POST /api/v1/organizations/{org_id}/members/invite)."""
@@ -880,364 +923,3 @@ async def auth_health_check():
             "error": "Health check failed; see the server log",
             "timestamp": datetime.utcnow().isoformat()
         }
-
-
-# OAuth2 Organization RBAC Endpoints
-
-class OAuth2ValidateRequest(BaseModel):
-    """Request model for OAuth2 token validation endpoint."""
-    code: str
-    state: str
-    code_verifier: Optional[str] = None
-
-
-class OAuth2ValidateResponse(BaseModel):
-    """Response model for OAuth2 token validation."""
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    expires_in: int
-    user: dict
-
-
-class OAuth2SyncUserRequest(BaseModel):
-    """Request model for OAuth2 user sync endpoint."""
-    access_token: str
-    org_id: Optional[str] = None
-
-
-class OAuth2SyncUserResponse(BaseModel):
-    """Response model for OAuth2 user sync."""
-    user_id: str
-    email: str
-    username: str
-    roles: list
-    org_id: Optional[str]
-
-
-class OAuth2RefreshRequest(BaseModel):
-    """Request model for OAuth2 refresh token endpoint."""
-    refresh_token: str
-
-
-@router.post("/oauth2/validate", response_model=OAuth2ValidateResponse)
-async def oauth2_validate(
-    request: OAuth2ValidateRequest,
-    x_client_ip: Optional[str] = None,
-):
-    """
-    Validate OAuth2 authorization code and return JWT tokens.
-
-    This endpoint exchanges an OAuth2 authorization code for JWT tokens
-    (access and refresh). Called after user authenticates with Authentik.
-
-    Process:
-    1. Validate state parameter against session (CSRF protection)
-    2. Exchange code for tokens via Authentik token endpoint
-    3. Validate JWT signature with JWKS (RS256)
-    4. Extract claims: user ID, email, groups (roles), org assignment
-    5. Check if user exists in FairMind users table:
-       - If exists: UPDATE roles, last_login, last_ip
-       - If new: INSERT new user with authentik_id, roles from Authentik groups
-    6. Return { access_token, refresh_token, user: { id, email, roles, org_id } }
-
-    Args:
-        code: Authorization code from Authentik
-        state: State parameter for CSRF protection
-        code_verifier: PKCE code verifier (optional)
-        x_client_ip: Client IP address (from header)
-
-    Returns:
-        Access token, refresh token, and user information
-
-    Raises:
-        400: Invalid authorization code or missing parameters
-        403: Invalid or expired state parameter (CSRF check failed)
-        502: Failed to connect to Authentik or JWKS validation failed
-        500: Server error during validation
-    """
-    try:
-        from src.services.oauth2_service import oauth2_service
-
-        # Validate input
-        if not request.code or not request.state:
-            logger.warning("OAuth2 validate: missing code or state")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing authorization code or state",
-            )
-
-        logger.info(f"OAuth2 validate request: code={request.code[:10]}..., state={request.state[:10]}...")
-
-        # Exchange authorization code for tokens
-        try:
-            token_data = await oauth2_service.exchange_code_for_tokens(
-                code=request.code,
-                state=request.state,
-                code_verifier=request.code_verifier,
-            )
-        except ValueError as e:
-            if "Invalid or expired state" in str(e):
-                logger.warning(f"OAuth2 validate: CSRF validation failed - {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid or expired state parameter (CSRF check failed)",
-                )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e),
-            )
-
-        # Validate and extract claims from token
-        access_token = token_data.get("access_token")
-        if not access_token:
-            logger.error("OAuth2 validate: no access token in Authentik response")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="No access token received from authentication server",
-            )
-
-        # Extract claims from token
-        claims = await oauth2_service.extract_claims(access_token)
-        if not claims:
-            logger.error("OAuth2 validate: token validation failed")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to validate authentication token",
-            )
-
-        # Sync user to database
-        user_data = await oauth2_service.sync_user_from_authentik(
-            claims=claims,
-            ip_address=x_client_ip,
-        )
-        if not user_data:
-            logger.error("OAuth2 validate: user sync failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to sync user to database",
-            )
-
-        # Create FairMind JWT tokens for the user
-        try:
-            # Create a temporary User object for token generation
-            user = User(
-                id=user_data.get("user_id"),
-                email=user_data.get("email"),
-                username=user_data.get("username"),
-                role=UserRole.ADMIN if "admin" in user_data.get("roles", [])
-                    else UserRole.ANALYST if "analyst" in user_data.get("roles", [])
-                    else UserRole.VIEWER,
-                is_active=True,
-                created_at=datetime.utcnow(),
-                permissions=[]
-            )
-
-            # Generate FairMind JWT tokens
-            fairmind_access_token = str(auth_manager.create_access_token(user))
-            fairmind_refresh_token = str(auth_manager.create_refresh_token(user))
-
-            # Clean up byte string representations
-            if fairmind_access_token.startswith("b'") and fairmind_access_token.endswith("'"):
-                fairmind_access_token = fairmind_access_token[2:-1]
-            if fairmind_refresh_token.startswith("b'") and fairmind_refresh_token.endswith("'"):
-                fairmind_refresh_token = fairmind_refresh_token[2:-1]
-
-            # Cache user session
-            session_key = f"session:{user_data.get('user_id')}"
-            await cache_manager.set(
-                session_key,
-                {
-                    "user_id": user_data.get("user_id"),
-                    "email": user_data.get("email"),
-                    "roles": user_data.get("roles", []),
-                    "last_login": datetime.utcnow().isoformat(),
-                },
-                ttl=86400,  # 24 hours
-            )
-
-            logger.info(f"OAuth2 validate success: user={user_data.get('email')}")
-
-            return OAuth2ValidateResponse(
-                access_token=fairmind_access_token,
-                refresh_token=fairmind_refresh_token,
-                expires_in=auth_manager.access_token_expire_minutes * 60,
-                user={
-                    "id": user_data.get("user_id"),
-                    "email": user_data.get("email"),
-                    "username": user_data.get("username"),
-                    "roles": user_data.get("roles", []),
-                    "org_id": user_data.get("org_id"),
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"OAuth2 validate: failed to create tokens - {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create authentication tokens",
-            )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"OAuth2 validate error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Authentication validation failed",
-        )
-
-
-@router.post("/oauth2/sync-user", response_model=OAuth2SyncUserResponse)
-async def oauth2_sync_user(
-    request: OAuth2SyncUserRequest,
-    x_client_ip: Optional[str] = None,
-):
-    """
-    Sync user from OAuth2 token and create/update in database.
-
-    This endpoint validates an OAuth2 access token from Authentik
-    and creates or updates the corresponding user in the FairMind database.
-
-    Process:
-    1. Validate JWT with JWKS
-    2. Extract claims
-    3. UPDATE user in DB with fresh data from Authentik
-    4. Return synced user object
-
-    Args:
-        access_token: OAuth2 access token from Authentik (JWT)
-        org_id: Optional organization ID to assign user to
-        x_client_ip: Client IP address (from header)
-
-    Returns:
-        User ID, email, username, roles, and organization assignment
-
-    Raises:
-        401: Invalid or expired token
-        404: Organization not found (if org_id provided)
-        500: Server error during sync
-    """
-    try:
-        from src.services.oauth2_service import oauth2_service
-
-        if not request.access_token:
-            logger.warning("OAuth2 sync-user: missing access_token")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing access token",
-            )
-
-        logger.info(f"OAuth2 sync-user request: token={request.access_token[:10]}...")
-
-        # Extract claims from token
-        claims = await oauth2_service.extract_claims(request.access_token)
-        if not claims:
-            logger.warning("OAuth2 sync-user: token validation failed")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-            )
-
-        # Sync user to database
-        user_data = await oauth2_service.sync_user_from_authentik(
-            claims=claims,
-            ip_address=x_client_ip,
-        )
-        if not user_data:
-            logger.error("OAuth2 sync-user: user sync failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to sync user to database",
-            )
-
-        logger.info(f"OAuth2 sync-user success: user={user_data.get('email')}")
-
-        return OAuth2SyncUserResponse(
-            user_id=user_data.get("user_id"),
-            email=user_data.get("email"),
-            username=user_data.get("username"),
-            roles=user_data.get("roles", []),
-            org_id=user_data.get("org_id"),
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"OAuth2 sync-user error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="User sync failed",
-        )
-
-
-@router.post("/oauth2/refresh", response_model=RefreshResponse)
-async def oauth2_refresh(request: OAuth2RefreshRequest):
-    """
-    Refresh access token using OAuth2 refresh token.
-
-    This endpoint calls the Authentik refresh endpoint with a valid refresh token
-    to obtain a new access token (and optionally a new refresh token).
-
-    Process:
-    1. Call Authentik refresh endpoint: POST ${AUTHENTIK_SERVER_URL}/application/o/token/
-    2. Return { access_token, refresh_token }
-
-    Args:
-        refresh_token: Valid refresh token
-
-    Returns:
-        New access token and expiration
-
-    Raises:
-        401: Invalid or expired refresh token
-        500: Server error during token refresh
-    """
-    try:
-        from src.services.oauth2_service import oauth2_service
-
-        if not request.refresh_token:
-            logger.warning("OAuth2 refresh: missing refresh_token")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Missing refresh token",
-            )
-
-        logger.info("OAuth2 refresh request: attempting token refresh")
-
-        # Call Authentik refresh endpoint
-        try:
-            token_data = await oauth2_service.refresh_token(request.refresh_token)
-        except ValueError as e:
-            logger.warning(f"OAuth2 refresh: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=str(e),
-            )
-
-        # Extract tokens from response
-        access_token = token_data.get("access_token")
-        refresh_token = token_data.get("refresh_token", request.refresh_token)
-
-        if not access_token:
-            logger.error("OAuth2 refresh: no access token in response")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to obtain new access token",
-            )
-
-        logger.info("OAuth2 refresh success: tokens refreshed")
-
-        return RefreshResponse(
-            access_token=access_token,
-            expires_in=auth_manager.access_token_expire_minutes * 60,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"OAuth2 refresh error: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Token refresh failed",
-        )

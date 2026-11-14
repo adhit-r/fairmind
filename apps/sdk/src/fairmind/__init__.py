@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 
-from .client import FairMind, FairMindError  # noqa: E402
+from .client import FairMind, FairMindError, verify_pack  # noqa: E402
 from .types import (  # noqa: E402
     Attestation,
     Clause,
@@ -18,6 +18,7 @@ from .types import (  # noqa: E402
 __all__ = [
     "FairMind",
     "FairMindError",
+    "verify_pack",
     "Attestation",
     "Clause",
     "ClauseMap",

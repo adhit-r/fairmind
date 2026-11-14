@@ -37,24 +37,16 @@ def _ensure_tables(db: Session) -> None:
     if _tables_ready:
         return
     import database.governance_models  # noqa: F401
+    from config.settings import settings
     from database.connection import Base, db_manager
 
-    Base.metadata.create_all(bind=db_manager.engine)
-
-    # Ensure all required columns exist on approval_requests (may be missing on older DBs).
-    for col_def in [
-        ("ai_system_id", "TEXT"),
-        ("decision", "TEXT"),
-        ("decided_by", "TEXT"),
-        ("decided_at", "TEXT"),
-    ]:
-        try:
-            db.execute(text(
-                f"ALTER TABLE governance_approval_requests ADD COLUMN {col_def[0]} {col_def[1]}"
-            ))
-        except Exception:
-            pass  # Column already exists.
-    db.commit()
+    # Outside development scripts/setup_db.py creates these tables and columns
+    # before start; here an older local database catches up.
+    if settings.is_development:
+        Base.metadata.create_all(bind=db_manager.engine)
+        for name in ("ai_system_id", "decision", "decided_by", "decided_at"):
+            db.execute(text(f"ALTER TABLE governance_approval_requests ADD COLUMN IF NOT EXISTS {name} TEXT"))
+        db.commit()
     _tables_ready = True
 
 
@@ -171,7 +163,7 @@ class ApprovalActionRequest(BaseModel):
 
 
 @router.post("/requests")
-async def create_approval_request(
+def create_approval_request(
     request: ApprovalRequestCreate,
     db: Session = Depends(get_db),
 ):
@@ -272,7 +264,7 @@ async def create_approval_request(
 
 
 @router.get("/requests")
-async def list_approval_requests(
+def list_approval_requests(
     status: Optional[str] = Query(default=None),
     ai_system_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
@@ -303,7 +295,7 @@ async def list_approval_requests(
 
 
 @router.get("/requests/{request_id}")
-async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
+def get_approval_request(request_id: str, db: Session = Depends(get_db)):
     """Get an approval request with its decision history."""
     _ensure_tables(db)
     row = db.execute(
@@ -319,7 +311,7 @@ async def get_approval_request(request_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/requests/{request_id}/approve")
-async def approve_request(
+def approve_request(
     request_id: str,
     body: ApprovalActionRequest,
     db: Session = Depends(get_db),
@@ -396,7 +388,7 @@ async def approve_request(
 
 
 @router.post("/requests/{request_id}/reject")
-async def reject_request(
+def reject_request(
     request_id: str,
     body: ApprovalActionRequest,
     db: Session = Depends(get_db),

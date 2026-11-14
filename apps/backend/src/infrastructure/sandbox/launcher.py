@@ -32,6 +32,7 @@ NAME_PREFIX = "fm-sbx-"
 HARD_OUTPUT_CAP = 64 * 1024
 _DOCKER_TIMEOUT = 30  # seconds for info, inspect, rm and ps calls
 _MAX_INT = 2**53  # metrics stay exact as JSON numbers and as floats downstream
+_VMSTAT = "/proc/vmstat"  # the kernel's count of every OOM kill on the host, memory-cgroup kills included
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _REPOSITORY = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+")
@@ -377,6 +378,7 @@ class SandboxLauncher:
         name = NAME_PREFIX + uuid.uuid4().hex
         argv = build_argv(self._config, digest, limits, name)
         deadline = time.monotonic() + limits.duration_seconds
+        oom_kills = _host_oom_kills()
         process = subprocess.Popen(
             argv, env=self._env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
         )
@@ -395,7 +397,8 @@ class SandboxLauncher:
                 code = process.wait(timeout=max(0.1, deadline - time.monotonic()))
             except subprocess.TimeoutExpired:
                 return SandboxResult("timeout")
-            if self._oom_killed(name):
+            kernel_oom = code == 137 and oom_kills is not None and (_host_oom_kills() or 0) > oom_kills
+            if kernel_oom or self._oom_killed(name):
                 return SandboxResult("oom")
             if code != 0:
                 return SandboxResult("crashed")
@@ -414,6 +417,26 @@ class SandboxLauncher:
     def _oom_killed(self, name: str) -> bool:
         inspected = self._docker("inspect", "--format", "{{.State.OOMKilled}}", name)
         return inspected.returncode == 0 and inspected.stdout.strip() == "true"
+
+
+def _host_oom_kills() -> int | None:
+    """The kernel's OOM kill counter, or None where /proc/vmstat is unreadable.
+
+    Docker's OOMKilled comes from containerd's TaskOOM event, which is sometimes never sent: on
+    Docker 28.0.4 with containerd 2.4.2, 8 of 360 memory-cgroup kills logged by the kernel had no
+    oom event and OOMKilled stayed false. The kernel counter counts every kill. One sandbox runs at
+    a time, so a SIGKILL exit (137) while it rose is that sandbox's OOM kill; RLIMIT_CPU's SIGKILL
+    does not raise it.
+    """
+    try:
+        with open(_VMSTAT) as stats:
+            for line in stats:
+                key, _, value = line.partition(" ")
+                if key == "oom_kill":
+                    return int(value)
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def _feed(process: subprocess.Popen[bytes], payload: bytes) -> None:

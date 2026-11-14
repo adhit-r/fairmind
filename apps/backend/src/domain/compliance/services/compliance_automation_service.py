@@ -32,6 +32,7 @@ class ComplianceAutomationService:
             asyncio.get_running_loop()
             self.scheduler.start()
             self._scheduler_started = True
+            self.reload_schedules()
             logger.info("Compliance Automation Scheduler started")
         except RuntimeError:
             logger.warning("Could not start compliance scheduler: no running event loop")
@@ -47,6 +48,36 @@ class ComplianceAutomationService:
         except Exception as e:
             logger.error(f"Error stopping compliance scheduler: {e}")
 
+    @staticmethod
+    def _trigger(frequency: str) -> CronTrigger:
+        if frequency == "weekly":
+            return CronTrigger(day_of_week="mon", hour=0, minute=0)  # Monday midnight
+        if frequency == "monthly":
+            return CronTrigger(day=1, hour=0, minute=0)  # 1st of month
+        return CronTrigger(hour=0, minute=0)  # daily, and the fallback
+
+    def _add_job(self, schedule_id: str, frequency: str) -> None:
+        self.scheduler.add_job(
+            self.generate_automated_report,
+            trigger=self._trigger(frequency),
+            args=[schedule_id],
+            id=schedule_id,
+            replace_existing=True,
+        )
+
+    def reload_schedules(self) -> int:
+        """Re-register every active schedule row; the scheduler is in-memory, so a restart would otherwise drop them."""
+        try:
+            with db_manager.get_session() as db:
+                rows = db.query(ComplianceSchedule).filter(ComplianceSchedule.is_active == True).all()  # noqa: E712
+                for row in rows:
+                    self._add_job(row.id, row.frequency)
+                logger.info(f"Reloaded {len(rows)} active compliance schedules")
+                return len(rows)
+        except Exception as e:
+            logger.error(f"Could not reload compliance schedules: {e}", exc_info=True)
+            return 0
+
     async def create_schedule(
         self,
         db: Session,
@@ -59,19 +90,7 @@ class ComplianceAutomationService:
         """Create a new compliance report schedule"""
         await self.start_scheduler()
         
-        # Calculate next run based on frequency
-        now = datetime.utcnow()
-        next_run = now + timedelta(days=1) # Default to tomorrow
-        
-        if frequency == "daily":
-            trigger = CronTrigger(hour=0, minute=0) # Midnight
-        elif frequency == "weekly":
-            trigger = CronTrigger(day_of_week='mon', hour=0, minute=0) # Monday midnight
-        elif frequency == "monthly":
-            trigger = CronTrigger(day=1, hour=0, minute=0) # 1st of month
-        else:
-            # Default fallback
-            trigger = CronTrigger(hour=0, minute=0)
+        next_run = datetime.utcnow() + timedelta(days=1)  # Default to tomorrow
 
         schedule_id = str(uuid.uuid4())
         
@@ -90,17 +109,42 @@ class ComplianceAutomationService:
         db.commit()
         db.refresh(schedule)
         
-        # Add job to scheduler
-        self.scheduler.add_job(
-            self.generate_automated_report,
-            trigger=trigger,
-            args=[schedule_id],
-            id=schedule_id,
-            replace_existing=True
-        )
+        self._add_job(schedule_id, frequency)
         
         logger.info(f"Created compliance schedule {schedule_id} for {framework}")
         return schedule
+
+    @staticmethod
+    def _compliance_from_evidence(db: Session, schedule: ComplianceSchedule, system_name: str) -> Dict[str, Any]:
+        """Requirements read from the release gate over the evidence stored for the governance system of this name.
+
+        Pass only on proven evidence, Fail when measured checks fail, Attested when only a statement is on file,
+        Not assessed (evidence False) when nothing is stored. The overall status is Compliant only if every one passes.
+        """
+        from src.application.services.fairness_run_service import release_gate
+
+        system = db.execute(
+            text("SELECT id, risk_tier FROM governance_ai_systems WHERE org_id = :org AND lower(name) = lower(:name) LIMIT 1"),
+            {"org": str(schedule.org_id), "name": system_name},
+        ).fetchone()
+        records = []
+        if system:
+            for r in db.execute(
+                text("SELECT id, evidence_type, content_json, confidence, metadata_json, created_at FROM governance_evidence WHERE system_id = :id"),
+                {"id": system[0]},
+            ).fetchall():
+                load = lambda v: v if isinstance(v, dict) else (json.loads(v) if v else {})
+                records.append({"id": r[0], "evidenceType": r[1], "content": load(r[2]), "confidence": r[3], "metadata": load(r[4]), "created_at": r[5]})
+        from src.application.services.environmental_service import environmental_gate_enabled
+
+        gate = release_gate(system[1] if system else "high", records, include_environmental=environmental_gate_enabled(db, str(schedule.org_id)))
+        requirements = []
+        for c in gate["checks"]:
+            status = "Fail" if c.get("fails") else {"proven": "Pass", "attested": "Attested"}.get(c["state"], "Not assessed")
+            requirements.append({"name": c["label"], "status": status, "evidence": c["state"] != "open"})
+        statuses = {r["status"] for r in requirements}
+        overall = "Non-Compliant" if "Fail" in statuses else "Compliant" if statuses == {"Pass"} else "Not assessed"
+        return {"framework": schedule.framework, "status": overall, "requirements": requirements}
 
     async def generate_automated_report(self, schedule_id: str):
         """Generate and send a scheduled report"""
@@ -129,30 +173,16 @@ class ComplianceAutomationService:
                 )
 
                 generated_reports = []
-                overall_violations = 0
-                critical_violations = 0
+                passed = total = 0
 
                 for model in models:
                     # 2. Run compliance checks / Generate Report
                     # We'll generate a compliance certificate for each model
 
-                    model_data = {
-                        "name": model.name,
-                        "version": model.version,
-                        "model_type": model.model_type,
-                        "author": model.author or "Unknown"
-                    }
-
-                    # Mock compliance data - in real world this comes from recent tests
-                    compliance_data = {
-                        "framework": schedule.framework,
-                        "status": "Compliant" if (model.fairness_score or 0) > 0.8 else "Non-Compliant",
-                        "requirements": [
-                            {"name": "Bias Assessment", "status": "Pass" if (model.bias_score or 1) < 0.2 else "Fail", "evidence": True},
-                            {"name": "Data Privacy", "status": "Pass", "evidence": True},
-                            {"name": "Transparency", "status": "Pass", "evidence": True}
-                        ]
-                    }
+                    model_data = {"name": model.name, "version": model.version}
+                    compliance_data = self._compliance_from_evidence(db, schedule, model.name)
+                    passed += sum(1 for r in compliance_data["requirements"] if r["status"] == "Pass")
+                    total += len(compliance_data["requirements"])
 
                     try:
                         report_path = await self.report_generator.generate_compliance_certificate(
@@ -167,10 +197,7 @@ class ComplianceAutomationService:
                 if schedule.recipients:
                     try:
                         # Calculate metrics
-                        overall_score = (
-                            sum((m.fairness_score or 0) for m in models) / len(models) * 100
-                            if models else 0
-                        )
+                        overall_score = passed / total * 100 if total else 0
 
                         compliance_status = "compliant" if overall_score > 80 else (
                             "partial" if overall_score > 60 else "non_compliant"

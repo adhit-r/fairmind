@@ -15,12 +15,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from api.routes import registration
-from config.auth import UserRole, require_admin
+from config.auth import UserRole, auth_manager, require_admin
 from tests import pg
 from tests.auth_helpers import make_token_data
 
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "016_registration_requests.sql"
 ADMIN_ID = "platform-operator"
+
+
+class _Row(dict):
+    """A row like the `databases` Record the app gets: indexable, but no .get()."""
+
+    def get(self, *_args, **_kwargs):
+        raise AttributeError("get")
 
 
 class _Db:
@@ -31,7 +38,7 @@ class _Db:
 
     async def fetch_all(self, query, params=None):
         with self.engine.begin() as conn:
-            return [dict(r) for r in conn.execute(text(query), params or {}).mappings().all()]
+            return [_Row(r) for r in conn.execute(text(query), params or {}).mappings().all()]
 
     async def fetch_one(self, query, params=None):
         rows = await self.fetch_all(query, params)
@@ -59,6 +66,8 @@ def env(monkeypatch):
     monkeypatch.setattr(registration, "get_db_transaction", connection)
     email = AsyncMock()
     monkeypatch.setattr(registration, "email_service", email)
+    # Submissions share the per-process rate limit with password resets; start each test clean.
+    monkeypatch.setattr("src.api.routers.auth._reset_requests", {})
 
     app = FastAPI()
     app.include_router(registration.router, prefix="/api/v1")
@@ -112,13 +121,33 @@ def test_approval_creates_a_new_org_owned_by_the_requester(env):
     [member] = _rows(engine, "SELECT * FROM org_members")
     assert user["email"] == "new@corp.example.com" and user["id"] == body["user_id"]
     assert user["role"] == "analyst"  # the requested 'admin' is not granted
-    assert not user["password_hash"]  # no usable password until set via invite/reset
+    assert user["password_hash"]  # a random one nobody knows, so reset links work
     assert str(user["org_id"]) == str(user["primary_org_id"]) == str(org["id"]) == body["org_id"]
     assert org["name"] == "Corp" and str(org["owner_id"]) == user["id"]
     assert (member["user_id"], member["role"], member["status"]) == (user["id"], "owner", "active")
     [req] = _rows(engine, "SELECT * FROM registration_requests")
     assert (req["status"], str(req["org_id"]), req["reviewed_by"]) == ("approved", body["org_id"], ADMIN_ID)
-    email.send_approval_email.assert_called_once_with("new@corp.example.com", "New Person", "Corp")
+    [call] = email.send_approval_email.call_args_list
+    to, name, org_name, url, _minutes = call.args
+    assert (to, name, org_name) == ("new@corp.example.com", "New Person", "Corp")
+    # The email's link sets the first password: a reset token bound to this user's hash.
+    from urllib.parse import parse_qs, urlsplit
+
+    assert urlsplit(url).path == "/reset-password"
+    fragment = parse_qs(urlsplit(url).fragment)
+    assert fragment["welcome"] == ["1"]  # the page greets a new account, not a reset
+    claims = auth_manager.read_password_reset_token(fragment["token"][0])
+    assert claims["sub"] == user["id"]
+    assert claims["pwd"] == auth_manager.password_fingerprint(user["password_hash"])
+
+
+def test_submissions_are_rate_limited_per_ip(env):
+    client, _, email = env
+    for i in range(5):
+        _submit(client, email=f"person{i}@corp.example.com")
+    response = client.post("/api/v1/register", json={"email": "x@corp.example.com", "name": "X", "org_name": "Y"})
+    assert response.status_code == 429
+    assert email.send_registration_request_to_admin.call_count == 5
 
 
 def test_approval_refuses_an_email_that_already_has_an_account(env):
@@ -165,3 +194,24 @@ def test_deny_marks_the_request_and_creates_nothing(env):
     assert _rows(engine, "SELECT id FROM organizations") == []
     email.send_denial_email.assert_called_once_with("new@corp.example.com", "New Person", "Corp", "not a customer")
     assert client.post(f"/api/v1/registrations/{request_id}/approve", json={}).status_code == 409
+
+
+def test_admin_lists_pending_requests(env):
+    client, _, _ = env
+    request_id = _submit(client, message="Pilot for our credit models")
+
+    response = client.get("/api/v1/registrations?status_filter=pending")
+
+    assert response.status_code == 200, response.text
+    [row] = response.json()["requests"]
+    assert (row["id"], row["status"], row["message"]) == (request_id, "pending", "Pilot for our credit models")
+
+
+def test_a_second_request_for_the_same_email_looks_the_same_and_adds_nothing(env):
+    client, engine, email = env
+    first = _submit(client, email="Same@corp.example.com")
+    second = _submit(client, email="same@corp.example.com")  # 201 either way, not 409
+
+    assert second == first
+    assert len(_rows(engine, "SELECT id FROM registration_requests")) == 1
+    assert email.send_registration_request_to_admin.call_count == 1

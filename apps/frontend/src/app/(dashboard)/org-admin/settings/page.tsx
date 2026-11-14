@@ -121,7 +121,7 @@ export default function OrgSettingsPage() {
         {/* Header */}
         <div className="mb-8 border-b border-[var(--fm-line)] pb-6">
           <h1 className="text-[30px] font-semibold tracking-[-.03em] text-black">Organization Settings</h1>
-          <p className="mt-2 text-gray-600">Manage your organization's information</p>
+          <p className="mt-2 text-gray-600">Manage your organization&apos;s information</p>
         </div>
 
         {/* Error Message */}

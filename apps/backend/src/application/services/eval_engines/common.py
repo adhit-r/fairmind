@@ -35,6 +35,7 @@ class Param:
     kind: str = "text"  # text | number | json
     default: Any = None
     required: bool = False
+    options: Tuple[str, ...] = ()  # a text param limited to these values, shown as a choice
 
 
 # (system, user, JSON schema) -> the organisation's model's JSON answer; raises EngineError
@@ -56,6 +57,8 @@ class Engine:
     platform_method: str = ""
     judge: bool = False  # the platform check asks the organisation's model
     live: str = ""  # "" reads uploaded files; "target" calls the AI system under test; "agent" calls FairMind's own agent
+    # Reads inputs from FairMind's own stored results: (db session, org id, system id) -> files, added to any uploads.
+    collect: Optional[Callable[[Any, str, str], Dict[str, bytes]]] = None
 
     def spec(self) -> Dict[str, Any]:
         return {

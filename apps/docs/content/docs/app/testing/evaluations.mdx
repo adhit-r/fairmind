@@ -1,0 +1,46 @@
+---
+title: Evaluations
+description: Browse the evaluation catalogue, see which checks can run, and read the latest result for each system.
+---
+
+<Status state="partial">Of the catalogue, only the evaluations marked Runnable have an engine behind them. The rest are listed so you can see the scope, and you attach evidence from your own tools. This page lists and explains evaluations. It does not start one; the Open to run button leads to the evaluation's own page.</Status>
+
+<Access status="partial" where="Testing › Evaluations" address="/evaluations" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/testing/evaluations" /></Tab>
+  <Tab value="Try it"><TryIt page="app/testing/evaluations" /></Tab>
+</Tabs>
+
+## What it is for
+
+The catalogue is the list of every check FairMind knows about, grouped by pillar: Govern, Evaluate, Secure and Comply. Each entry states what it measures, the metric, the threshold, and what it applies to. Use this page to find the check you need and to see where results already exist.
+
+The line under the title gives live counts: how many evaluations there are, how many can run today, how many sit in installed packs, and how many have results on at least one system. For the current split, see [Status and limits](../../get-started/status-and-limits.mdx).
+
+## How to use it
+
+1. Open **Evaluations**. The list starts on **Runnable** only, because an evaluation with no engine is listed but hidden by default.
+2. Type in **Search** to match an ID, name, what it measures, or what it applies to.
+3. Narrow with the **Pillar** control. Switch **Engine** to **Not built yet** or **All** to see entries without an engine. Switch **Packs** to **Installed** to limit the list to installed packs.
+4. Click a pillar heading to collapse or expand its rows.
+5. Click an evaluation name to open the detail panel on the right. Use **Close** to dismiss it.
+6. In the panel, read **Results by system**. Each system name links to its file. Press **Open to run** (or **Open details** when no engine exists) to go to the evaluation page.
+
+If a request fails, a banner offers **Try again**.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/testing/evaluations" />
+
+## What's on the page
+
+The table has five columns: Evaluation, Measures, Metric and threshold, Engine, and Latest result. An empty field reads "Not stated". The latest result shows a status word, plus the number of systems it covers. "Not recorded" means FairMind does not record results for that evaluation.
+
+The detail panel adds the pillar, the pack and whether it is installed, and one result per system with its detail text and an evidence ID with a date.
+
+Results here are the latest per system. Full history sits with the evidence; see [Evidence review](../../journeys/evidence-review.mdx).
+
+<PageAnatomy route="evaluations" />

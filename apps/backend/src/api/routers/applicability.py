@@ -107,13 +107,13 @@ def _save(db: Session, http: Request, actor: str, system_id: str, *, tier: str, 
 
 
 @router.post("/applicability/suggest", dependencies=[Depends(org_member)])
-async def suggest_applicability(body: ApplicabilityAnswers):
+def suggest_applicability(body: ApplicabilityAnswers):
     """Stateless: the onboard form calls it on every answer, before the system exists."""
     return suggest(body.model_dump())
 
 
 @router.put("/systems/{system_id}/applicability")
-async def confirm_applicability(
+def confirm_applicability(
     system_id: str,
     body: ApplicabilityConfirmRequest,
     http: Request,
@@ -141,7 +141,7 @@ async def confirm_applicability(
 
 
 @router.post("/systems/{system_id}/applicability/accept-override")
-async def accept_applicability_override(
+def accept_applicability_override(
     system_id: str,
     body: ApplicabilityAcceptRequest,
     http: Request,

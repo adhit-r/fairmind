@@ -1,0 +1,43 @@
+{
+  "title": "Connect a source to find unregistered AI",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Discovery reads your MLflow, GitHub and Hugging Face sources and lists AI systems you have not registered."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "Connect a source to start.",
+      "box": {
+        "x": 1117,
+        "y": 106,
+        "w": 135,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Choose the kind of source. The fields change to match it.",
+      "box": {
+        "x": 900,
+        "y": 64,
+        "w": 70,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Adding the connector saves it. This demo is read-only, so we stop here.",
+      "box": {
+        "x": 821,
+        "y": 416,
+        "w": 118,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 29
+}

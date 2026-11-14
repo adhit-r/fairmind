@@ -1,10 +1,23 @@
 # Single-box production stack for Lightsail. Database, auth and realtime stay on Neon.
 # Cloudflare Tunnel routes app.fairmind.xyz (see tunnel.yml); Next.js forwards /api/proxy/* to the backend.
 services:
+  # Brings the schema up to date (scripts/setup_db.py) and verifies it before the
+  # backend starts; a failed migration or verify keeps the old backend running.
+  migrate:
+    build: ../../apps/backend
+    image: fairmind-backend
+    env_file: backend.env
+    command: ["python", "scripts/setup_db.py"]
+    networks: [app]
+    restart: "no"
+
   backend:
     build: ../../apps/backend
     image: fairmind-backend
     env_file: backend.env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       # Only the frontend's proxy is trusted to say who the caller is (X-Forwarded-For);
       # rate limits and the audit trail read the address uvicorn derives from it.
@@ -24,6 +37,8 @@ services:
         NEXT_PUBLIC_AUTHENTIK_URL: ${NEXT_PUBLIC_AUTHENTIK_URL:-}
         NEXT_PUBLIC_AUTHENTIK_CLIENT_ID: ${NEXT_PUBLIC_AUTHENTIK_CLIENT_ID:-}
         NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI: ${NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI:-}
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+        NEXT_PUBLIC_DEMO: ${NEXT_PUBLIC_DEMO:-}
     image: fairmind-frontend
     env_file: frontend.env
     environment:

@@ -1,0 +1,84 @@
+{
+ "merged_prs": 174,
+ "opened_by": {
+  "rajarshi1": 1,
+  "adhit-r": 168,
+  "app/dependabot": 4,
+  "IG-ABHINAV": 1
+ },
+ "merged_by": {
+  "adhit-r": 174
+ },
+ "approving_reviews_per_pr": {
+  "0": 173,
+  "1": 1
+ },
+ "review_events_by_author": {
+  "adhit-r:COMMENTED": 2,
+  "github-advanced-security:COMMENTED": 6,
+  "adhit-r:DISMISSED": 1,
+  "adhit-r:APPROVED": 1
+ },
+ "comments_by_author": {
+  "safedep": 174,
+  "adhit-r": 14,
+  "rajarshi1": 1,
+  "chatgpt-codex-connector": 335,
+  "netlify": 131,
+  "gitguardian": 3,
+  "dependabot": 5,
+  "github-advanced-security": 1,
+  "github-actions": 2
+ },
+ "lines_added": 184545,
+ "lines_deleted": 80154,
+ "additions_median": 189.5,
+ "additions_p90": 2884,
+ "minutes_to_merge": {
+  "median": 48.2,
+  "p25": 6.7,
+  "under_5": 37
+ },
+ "backend_job_minutes_median": 12.2,
+ "merged_faster_than_backend_job": 53,
+ "prs_by_area": {
+  "backend": 70,
+  "frontend": 32,
+  "website, docs site": 19,
+  "CI, workflows, tooling": 16,
+  "documentation": 12,
+  "other": 11,
+  "research, papers": 9,
+  "SDK, CLI, MCP": 5
+ },
+ "gate": {
+  "before": {
+   "none": 1,
+   "passed": 101,
+   "pending": 24,
+   "failing": 5,
+   "merged": 131,
+   "pending_then_failed": 9
+  },
+  "after": {
+   "passed": 21,
+   "pending": 19,
+   "none": 3,
+   "merged": 43,
+   "pending_then_failed": 4
+  }
+ },
+ "merged_with_failed_or_soon_failing_check": 18,
+ "bypassed_failure_causes": {
+  "not the backend job": 1,
+  "break on main: SQLite-only SQL": 2,
+  "flaky: evidence revalidation": 10,
+  "flaky: concurrency timeout": 1,
+  "regression in the change": 1,
+  "break on main: changed golden values": 3
+ },
+ "merged_while_running": 43,
+ "merged_while_running_not_touching_tested_code": 26,
+ "prs_with_commits_after_open": 54,
+ "commits_after_open": 118
+}

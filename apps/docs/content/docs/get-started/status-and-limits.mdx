@@ -1,0 +1,83 @@
+---
+title: Status and limits
+description: What works today, what is partly done and what is not built, so you never rely on more than FairMind can show.
+---
+
+FairMind is alpha (November 2026). The main path works end to end: discover systems, run workflows and evaluations, gate a release, and hand an auditor a verifiable pack. Every page in these docs carries one of these labels:
+
+<Status state="shipped" />
+<Status state="partial" />
+<Status state="alpha" />
+<Status state="not-built" />
+
+## Works today
+
+| Area | What you can do |
+| --- | --- |
+| AI systems | Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. |
+| Packs and workflows | Install packs, start workflow runs, record step outputs, decide at gates, and publish your own version of a workflow. |
+| Evaluations | Run all 109 catalogue evaluations: on uploaded files, against your live system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
+| Release gate | Five checks give `go`, `conditional_go` or `no_go`. Failing blocking policy rules force `no_go`. Approval is refused while critical findings are open. |
+| Policies | Rules mapped to framework controls, evaluated live, counted as evidence for those controls. |
+| Evidence for auditors | The gate per framework clause, inspection packs, a read-only auditor link, and offline verification with `fairmind verify`. |
+| CI and agents | CLI, GitHub Action, Python SDK and MCP server, with an API key. |
+
+## Partly done
+
+| Area | Where it stands |
+| --- | --- |
+| Agent steps | The agent drafts a workflow step when a person asks. It uses your own model (19 providers, key encrypted at rest) or built-in rules. It writes to the ledger only; it changes nothing outside FairMind. |
+| Agent, attack and detector evaluations | 21 evaluations (agent scenarios, kill-switch drills, multi-agent faults, attacks on models, deepfake, voice-clone and phishing results) judge a results file you produce in your own sandbox or tool. FairMind computes the metric from the raw rows but does not run the scenario or attack itself. The CBRN and abuse-material refusal tests run only on a restricted probe set you upload. |
+| Monitoring | You push snapshots on your schedule, for example `fairmind monitor` in a cron job. FairMind flags stale snapshots and opens a finding on sustained drift. It does not pull data. |
+| Catalogue workflows | 86 of the 90 are marked *proposed* until organisations run them in practice. |
+| Older pages | Bias detection, LLM judge, multimodal bias and similar pages from earlier versions sit outside the main navigation and are not validated. LLM judge sends input to an external provider. |
+
+## Not built yet
+
+- **Automatic workflow starts.** The catalogue lists schedules and triggers, but a person starts every run.
+- **Sandboxed evaluation workers.** Engines run inside the backend process. Uploaded model files are inspected, never loaded or executed.
+- **Runtime guardrails.** FairMind assesses systems; it does not sit in the request path.
+- **Certification.** No compliance certificate, automatic approval or "FairMind Verified" claim.
+
+## Assurance V2 boundary
+
+<Status state="alpha" />
+
+Assurance V2 is the evidence-control foundation of the AI assurance control plane. It ships as default-off primitives, not as an end-to-end evaluation product. Each capability needs `ASSURANCE_V2_ENABLED` plus its own gate, each switched on by whoever runs FairMind.
+
+What exists behind the gates:
+
+- Versioned target, suite, and plan records, and run records bound to an execution envelope and content hash.
+- Signed Evidence Passport V2 admission, checked against server-owned evaluator, issuer, key, policy, replay, chronology, and scope records.
+- A separate link from a verified admission to its exact suite execution, and an explicitly unverified import path.
+- Four-eyes evidence review, freshness, and decision eligibility. See [Evidence trust and review](/docs/get-started/evidence-trust-review).
+- Governance decision records, with a separately gated, audited separation exception. See [Permissions and separation](/docs/reference/permissions-and-separation).
+
+What does not exist:
+
+- No FairMind worker, queue, sandbox, or executor runs evaluations. Migration `013m` adds worker tables only; preflight reports `worker_unavailable` for any plan or suite that asks for a FairMind worker.
+- Automatic enforcement is rejected with `automatic_enforcement_disabled`.
+- Lifecycle phase labels in a plan do not mean pre-deployment, realtime, or post-deployment assurance is running.
+- No certification, conformity assessment, legal conclusion, or "verified" designation is produced.
+
+A bounded claim: FairMind provides a default-off evidence-control foundation that can support an organization's evaluation and governance process when its own deployment and control prerequisites are met. Do not shorten that to "FairMind evaluates models", "FairMind is AI Act compliant", or "FairMind approves releases".
+
+## How to write a bounded finding
+
+Prefer:
+
+> The submitted environmental assessment produced a conditional-go recommendation using the recorded inputs and provisional benchmark set. Reviewer sign-off remains blocked until the mitigation requirement is resolved.
+
+Avoid:
+
+> The system is environmentally compliant and approved for release.
+
+## Safe use
+
+1. Confirm the capability state before running an evaluator.
+2. Inspect the underlying artifact, scope, threshold, provenance, and limitations.
+3. Keep a human reviewer in the decision path.
+4. Treat framework mappings as evidence relevance, not automatic conformity.
+5. Preserve rerun and remediation history.
+6. Validate production authentication, tenant isolation, and deployment controls in your own environment.
+

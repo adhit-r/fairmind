@@ -1,269 +1,105 @@
 """
-Report Generation API Routes
+Report Export API Routes
 
-Endpoints for generating audit-ready reports in PDF and DOCX formats
-with compliance documentation and bias evaluation summaries.
+PDF and DOCX export of stored audit-report snapshots (ai-governance /reports).
+Nothing is typeset from caller-posted content: the data is loaded server-side,
+with the same organization scoping as GET /api/v1/ai-governance/reports/{id}.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Body
-from fastapi.responses import StreamingResponse
-from typing import Dict, List, Any, Optional
-from pydantic import BaseModel, Field
-from datetime import datetime
-import io
-import logging
+import hashlib
 
-from config.auth import get_current_active_user
-from ..services.report_generator import (
-    ReportGenerator,
-    BiasReportData,
-    EvaluationSummary,
-    ComplianceStatus,
-)
+from fastapi import APIRouter, Depends
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy.orm import Session
 
-# Stateless: renders the evaluation data sent in the request; sign-in only.
+from config.auth import TokenData, get_current_active_user
+from database.connection import get_db
+from ..services.report_generator import generate_snapshot_docx, generate_snapshot_pdf
+from .ai_governance import _require_report_access, _serialize_audit_report_row
+
 router = APIRouter(
     prefix="/api/v1/reports",
     tags=["reports"],
     dependencies=[Depends(get_current_active_user)],
 )
-logger = logging.getLogger(__name__)
+
+_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+_FORMATS = {"pdf": ("application/pdf", generate_snapshot_pdf), "docx": (_DOCX, generate_snapshot_docx)}
 
 
-# Request/Response Models
-class EvaluationSummaryRequest(BaseModel):
-    """Request model for evaluation summary data"""
-    total_tests: int = Field(..., description="Total number of tests run")
-    tests_passed: int = Field(..., description="Number of tests passed")
-    tests_failed: int = Field(..., description="Number of tests failed")
-    overall_bias_rate: float = Field(..., description="Overall bias rate as percentage")
-    evaluation_time: float = Field(..., description="Time taken to run evaluation in seconds")
+class StoredReportExport(BaseModel):
+    """The only accepted body: a stored snapshot id. Any other field is rejected with 422."""
+
+    model_config = ConfigDict(extra="forbid")
+    report_id: str
 
 
-class ComplianceStatusRequest(BaseModel):
-    """Request model for compliance status"""
-    gdpr_compliant: bool = Field(..., description="GDPR compliance status")
-    ai_act_compliant: bool = Field(..., description="EU AI Act compliance status")
-    fairness_score: float = Field(..., description="Fairness score from 0-100")
+def _export(report_id: str, fmt: str, current_user: TokenData, db: Session) -> Response:
+    row = _require_report_access(db, report_id, current_user)  # 404 across organizations
+    content_hash = hashlib.sha256((row.data_json or "").encode()).hexdigest()
+    media_type, render = _FORMATS[fmt]
+    return Response(
+        render(_serialize_audit_report_row(row), content_hash),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename=audit_report_{row.id}.{fmt}"},
+    )
 
 
-class BiasEvaluationReportRequest(BaseModel):
-    """Request model for bias evaluation report generation"""
-    model_type: str = Field(..., description="Type of model (e.g., 'language_model', 'image_classifier')")
-    model_description: str = Field(..., description="Description of the model")
-    evaluation_summary: EvaluationSummaryRequest = Field(..., description="Summary of evaluation results")
-    overall_risk: str = Field(..., description="Overall risk level: 'low', 'medium', 'high', or 'critical'")
-    risk_factors: List[str] = Field(default_factory=list, description="List of identified risk factors")
-    recommendations: List[str] = Field(default_factory=list, description="List of remediation recommendations")
-    compliance_status: ComplianceStatusRequest = Field(..., description="Compliance status across frameworks")
-    explainability_insights: Optional[Dict[str, Any]] = Field(None, description="Model explainability insights")
+@router.get("/snapshots/{report_id}/pdf")
+def export_snapshot_pdf(
+    report_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return _export(report_id, "pdf", current_user, db)
 
 
-@router.post("/bias-evaluation/pdf", response_description="PDF report file")
-async def generate_pdf_report(request: BiasEvaluationReportRequest = Body(...)):
-    """
-    Generate a PDF report for bias evaluation results.
-
-    Returns a downloadable PDF with:
-    - Executive summary with risk level indicators
-    - Evaluation metrics and test results
-    - Compliance status across regulatory frameworks
-    - Risk factors and remediation recommendations
-    - Report metadata and timestamp
-
-    Args:
-        request: Bias evaluation data including model info, test results, and compliance status
-
-    Returns:
-        Binary PDF file with Content-Type: application/pdf
-
-    Example:
-        ```json
-        {
-            "model_type": "language_model",
-            "model_description": "BERT-based sentiment analysis model",
-            "evaluation_summary": {
-                "total_tests": 50,
-                "tests_passed": 45,
-                "tests_failed": 5,
-                "overall_bias_rate": 10.0,
-                "evaluation_time": 120.5
-            },
-            "overall_risk": "medium",
-            "risk_factors": ["Gender bias in pronouns", "Ethnic bias in entity recognition"],
-            "recommendations": ["Add diverse training data", "Implement fairness constraints"],
-            "compliance_status": {
-                "gdpr_compliant": true,
-                "ai_act_compliant": true,
-                "fairness_score": 75.5
-            }
-        }
-        ```
-    """
-    try:
-        # Convert request to domain model
-        evaluation_summary = EvaluationSummary(
-            total_tests=request.evaluation_summary.total_tests,
-            tests_passed=request.evaluation_summary.tests_passed,
-            tests_failed=request.evaluation_summary.tests_failed,
-            overall_bias_rate=request.evaluation_summary.overall_bias_rate,
-            evaluation_time=request.evaluation_summary.evaluation_time,
-        )
-
-        compliance_status = ComplianceStatus(
-            gdpr_compliant=request.compliance_status.gdpr_compliant,
-            ai_act_compliant=request.compliance_status.ai_act_compliant,
-            fairness_score=request.compliance_status.fairness_score,
-        )
-
-        report_data = BiasReportData(
-            timestamp=datetime.now().isoformat(),
-            model_type=request.model_type,
-            model_description=request.model_description,
-            evaluation_summary=evaluation_summary,
-            overall_risk=request.overall_risk,
-            risk_factors=request.risk_factors,
-            recommendations=request.recommendations,
-            compliance_status=compliance_status,
-            explainability_insights=request.explainability_insights or {},
-        )
-
-        # Generate PDF
-        generator = ReportGenerator()
-        pdf_bytes = generator.generate_pdf(report_data)
-
-        # Create filename with timestamp
-        filename = f"bias_evaluation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-
-        # Return as streaming response
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
-
-    except Exception as e:
-        logger.error(f"Error generating PDF report: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate PDF report: {str(e)}"
-        )
+@router.get("/snapshots/{report_id}/docx")
+def export_snapshot_docx(
+    report_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return _export(report_id, "docx", current_user, db)
 
 
-@router.post("/bias-evaluation/docx", response_description="DOCX report file")
-async def generate_docx_report(request: BiasEvaluationReportRequest = Body(...)):
-    """
-    Generate a DOCX report for bias evaluation results.
+@router.post("/bias-evaluation/pdf")
+def generate_pdf_report(
+    request: StoredReportExport,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return _export(request.report_id, "pdf", current_user, db)
 
-    Returns a downloadable Word document with:
-    - Executive summary with risk level color coding
-    - Evaluation metrics and test results table
-    - Compliance status across regulatory frameworks
-    - Risk factors and remediation recommendations
-    - Professional formatting and report metadata
 
-    Args:
-        request: Bias evaluation data including model info, test results, and compliance status
-
-    Returns:
-        Binary DOCX file with Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
-
-    Example:
-        ```json
-        {
-            "model_type": "language_model",
-            "model_description": "BERT-based sentiment analysis model",
-            "evaluation_summary": {
-                "total_tests": 50,
-                "tests_passed": 45,
-                "tests_failed": 5,
-                "overall_bias_rate": 10.0,
-                "evaluation_time": 120.5
-            },
-            "overall_risk": "medium",
-            "risk_factors": ["Gender bias in pronouns", "Ethnic bias in entity recognition"],
-            "recommendations": ["Add diverse training data", "Implement fairness constraints"],
-            "compliance_status": {
-                "gdpr_compliant": true,
-                "ai_act_compliant": true,
-                "fairness_score": 75.5
-            }
-        }
-        ```
-    """
-    try:
-        # Convert request to domain model
-        evaluation_summary = EvaluationSummary(
-            total_tests=request.evaluation_summary.total_tests,
-            tests_passed=request.evaluation_summary.tests_passed,
-            tests_failed=request.evaluation_summary.tests_failed,
-            overall_bias_rate=request.evaluation_summary.overall_bias_rate,
-            evaluation_time=request.evaluation_summary.evaluation_time,
-        )
-
-        compliance_status = ComplianceStatus(
-            gdpr_compliant=request.compliance_status.gdpr_compliant,
-            ai_act_compliant=request.compliance_status.ai_act_compliant,
-            fairness_score=request.compliance_status.fairness_score,
-        )
-
-        report_data = BiasReportData(
-            timestamp=datetime.now().isoformat(),
-            model_type=request.model_type,
-            model_description=request.model_description,
-            evaluation_summary=evaluation_summary,
-            overall_risk=request.overall_risk,
-            risk_factors=request.risk_factors,
-            recommendations=request.recommendations,
-            compliance_status=compliance_status,
-            explainability_insights=request.explainability_insights or {},
-        )
-
-        # Generate DOCX
-        generator = ReportGenerator()
-        docx_bytes = generator.generate_docx(report_data)
-
-        # Create filename with timestamp
-        filename = f"bias_evaluation_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-
-        # Return as streaming response
-        return StreamingResponse(
-            io.BytesIO(docx_bytes),
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
-
-    except Exception as e:
-        logger.error(f"Error generating DOCX report: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate DOCX report: {str(e)}"
-        )
+@router.post("/bias-evaluation/docx")
+def generate_docx_report(
+    request: StoredReportExport,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return _export(request.report_id, "docx", current_user, db)
 
 
 @router.get("/formats")
-async def get_supported_formats():
-    """
-    Get list of supported report formats.
-
-    Returns:
-        List of available report formats with descriptions
-    """
+def get_supported_formats():
+    """List supported export formats; both take a stored report snapshot id."""
     return {
         "formats": [
             {
                 "id": "pdf",
                 "name": "PDF Report",
-                "description": "Professional PDF format with color-coded risk levels and audit-ready formatting",
-                "endpoint": "/api/v1/reports/bias-evaluation/pdf",
-                "content_type": "application/pdf"
+                "description": "PDF export of a stored report snapshot",
+                "endpoint": "/api/v1/reports/snapshots/{report_id}/pdf",
+                "content_type": "application/pdf",
             },
             {
                 "id": "docx",
                 "name": "Word Document",
-                "description": "Editable Word format compatible with Microsoft Office and Google Docs",
-                "endpoint": "/api/v1/reports/bias-evaluation/docx",
-                "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            }
+                "description": "Editable Word export of a stored report snapshot",
+                "endpoint": "/api/v1/reports/snapshots/{report_id}/docx",
+                "content_type": _DOCX,
+            },
         ]
     }

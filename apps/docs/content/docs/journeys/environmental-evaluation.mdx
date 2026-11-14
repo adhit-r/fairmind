@@ -1,0 +1,42 @@
+---
+title: Assess environmental impact
+description: Record environmental evidence, interpret the gate, and resolve mitigation blockers.
+---
+
+<Callout title="See it in the app">The [Environment](../app/release/environment.mdx) page shows this step in a recording and a click-through, captured in the demo.</Callout>
+
+Environmental governance is the strongest evidence-producing evaluation path in the current FairMind release.
+
+## What the workflow records
+
+- assessment inputs or connector evidence;
+- provenance class and uncertainty;
+- a versioned decision result;
+- ENV-1 through ENV-6 control coverage;
+- mitigation and exception records;
+- reviewer sign-off state;
+- a CSRD-style export payload.
+
+## Run an assessment
+
+1. Select the governed system.
+2. Open the environmental evaluation surface.
+3. Enter measured inputs when they are available. Label estimates and inherited metadata accurately.
+4. Record the time window, model or workload scope, region, and energy or emissions source.
+5. Run the decision engine.
+6. Inspect the recommendation, confidence, uncertainty, control coverage, and blockers together.
+
+<Callout type="warn" title="Benchmarks are provisional">
+The current benchmark set is explicitly provisional. A recommendation is bounded by the supplied evidence and benchmark version.
+</Callout>
+
+## Resolve a blocked gate
+
+When the gate is blocked:
+
+1. Open the missing or failed control.
+2. Record the mitigation owner and planned action.
+3. Attach new evidence or a rerun after the change.
+4. Request reviewer sign-off again.
+
+The backend refuses reviewer sign-off while the environmental gate remains blocked.

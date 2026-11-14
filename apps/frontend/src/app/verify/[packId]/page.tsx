@@ -21,6 +21,17 @@ const REASONS: Record<number, string> = {
   410: 'This link has expired. Ask the sender for a new one.',
 }
 
+/** The pack's frame for loading and error states, so a failed link still looks like FairMind. */
+function Notice({ title, body, alert = false }: { title: string; body: string; alert?: boolean }) {
+  return (
+    <Card className="p-6">
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-ink3)]">FairMind inspection pack</div>
+      <h1 className="mt-1 text-xl font-semibold tracking-tight text-[var(--fm-ink)]">{title}</h1>
+      <p role={alert ? 'alert' : 'status'} className="mt-2 text-sm text-[var(--fm-ink2)]">{body}</p>
+    </Card>
+  )
+}
+
 function AuditorView() {
   const { packId } = useParams<{ packId: string }>()
   const token = useSearchParams().get('t')
@@ -45,8 +56,8 @@ function AuditorView() {
     }
   }, [packId, token])
 
-  if (error) return <p role="alert" className="text-sm text-[#b4232c]">{error}</p>
-  if (!pack) return <p className="text-sm text-[var(--fm-ink2)]">Loading pack</p>
+  if (error) return <Notice title="This pack cannot be shown" body={error} alert />
+  if (!pack) return <Notice title="Loading the inspection pack" body="Checking the link and fetching the manifest." />
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,7 +74,10 @@ function AuditorView() {
         </p>
         <pre className="mt-3 overflow-x-auto rounded-[10px] bg-[var(--fm-bg)] p-3 font-mono text-xs text-[var(--fm-ink)]">{`# from a checkout of the FairMind repository
 pipx install ./apps/cli
-fairmind verify pack.json`}</pre>
+fairmind verify pack.json
+
+# or let the CLI fetch this pack from its link, then check it locally
+fairmind verify "<this page's address>" --api <FairMind API address>`}</pre>
         <p className="mt-3 text-sm text-[var(--fm-ink2)]">
           The command recomputes the SHA-256 of the canonical manifest and each system&apos;s evidence chain head, prints what it found, and exits 0 only when both match.
         </p>
@@ -90,7 +104,7 @@ export default function VerifyPackPage() {
   return (
     <main className="min-h-screen bg-[var(--fm-bg)] px-4 py-10 text-[var(--fm-ink)]">
       <div className="mx-auto max-w-4xl">
-        <Suspense fallback={<p className="text-sm text-[var(--fm-ink2)]">Loading pack</p>}>
+        <Suspense fallback={<Notice title="Loading the inspection pack" body="Checking the link and fetching the manifest." />}>
           <AuditorView />
         </Suspense>
       </div>

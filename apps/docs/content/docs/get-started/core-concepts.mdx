@@ -1,0 +1,48 @@
+---
+title: Core concepts
+description: The seven terms the rest of the docs use, in the order a system meets them.
+---
+
+<Status state="shipped" />
+
+## AI system
+
+The thing being governed: a model, an agent, or an application built on them. It belongs to an organisation, has an owner and a risk tier, and names the frameworks that apply. Everything else hangs off the system. See [System context](/docs/get-started/system-context).
+
+## Framework, requirement and control
+
+A **framework** is a body of rules, such as the EU AI Act or ISO/IEC 42001. It breaks into **requirements** (a clause or article). FairMind maps requirements to **controls**: the things an organisation actually does or tests. One control can serve several frameworks.
+
+## Pack and workflow
+
+A **pack** is what you install for a framework: the **workflows** that produce evidence for its requirements. A workflow is a repeatable sequence of steps: collect, check, ask a person, file evidence. A person starts every run; the agent can draft a step when asked.
+
+## Evaluation
+
+A test with a stated method and threshold. FairMind runs an evaluation in one of three ways:
+
+| Mode | Input | Example |
+| --- | --- | --- |
+| Upload | Files you provide | A predictions CSV for fairness metrics |
+| Live | The system's connected endpoint, judged by your organisation's model | Prompt-injection and jailbreak behaviour tests |
+| Connection | Your agent platform's configuration, read-only | Tool permissions and memory settings of managed agents |
+
+All 109 catalogue evaluations run in FairMind. 21 of them (agent scenarios, drills, attacks on models and detectors) judge results you produce in your own sandbox or tool; FairMind computes the metric but does not run the scenario or attack itself.
+
+## Evidence
+
+The record a decision rests on: what was tested, how, the raw result, its provenance and limits, and who reviewed it. Evidence has a strength: **measured** (FairMind ran it) counts for more than **attested** (a person stated it). See [Evidence model](/docs/get-started/evidence-model).
+
+## Release gate
+
+Five checks: fairness, data governance, human oversight, monitoring and environmental. Each reads the newest evidence on file:
+
+- **Proven**: measured or tool-estimated, with confidence of 0.70 or more.
+- **Attested**: anything else on file, such as a person's statement. It counts for little.
+- **Open**: nothing on file, or a monitoring snapshot older than one and a half cadences.
+
+The verdict comes from the system's risk tier and the overall confidence across the five checks: `go`, `conditional_go` or `no_go`. A measured fairness failure never passes as a plain `go`, and failing blocking policy rules force `no_go`.
+
+## Decision
+
+A person approves or rejects a release request. The gate informs the decision; it never makes it. A rejection makes the verdict `no_go` until a reviewer approves a new request, and approval is refused while critical findings are open.

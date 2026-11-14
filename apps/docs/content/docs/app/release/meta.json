@@ -1,0 +1,5 @@
+{
+  "title": "Release and operate",
+  "defaultOpen": false,
+  "pages": ["decisions", "monitoring", "findings", "environment"]
+}

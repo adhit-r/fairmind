@@ -7,19 +7,21 @@ import secrets
 from typing import List, Optional
 try:
     from pydantic_settings import BaseSettings
-    from pydantic import field_validator
+    from pydantic import field_validator, model_validator
     validator = field_validator  # Alias for compatibility
 except ImportError:
     from pydantic import BaseSettings, validator
 from pydantic import Field, SecretStr
+from dotenv import dotenv_values
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     """Application settings with validation and environment-specific configurations."""
     
-    # Environment
-    environment: str = "development"
+    # Environment. Production unless told otherwise, so a deploy that forgets to
+    # set it never runs development behaviour.
+    environment: str = "production"
     # Local development only: JWTAuthenticationMiddleware signs loopback
     # requests without a token in as this existing user. Ignored outside development.
     fairmind_dev_login_email: Optional[str] = None
@@ -53,11 +55,13 @@ class Settings(BaseSettings):
     # PostgreSQL only, e.g. postgresql://user:pass@host/db
     database_url: str = Field(default="", validate_default=True)
     database_echo: bool = False
-    database_pool_size: int = 20
+    # Per pool, per process; a process has the async pool, the sync engine and the
+    # ORM engine. Small by default so replicas stay under Neon's connection limit.
+    database_pool_size: int = 5
     # Seconds to wait for a pooled connection at startup. Serverless Postgres
     # (Neon) can take 10 to 30 seconds to wake a suspended compute.
     database_connect_timeout: int = 60
-    database_max_overflow: int = 30
+    database_max_overflow: int = 5
     database_timeout: int = 30
     assurance_v2_enabled: bool = False
     # Core assurance surfaces stay separately hidden until their exact
@@ -171,10 +175,17 @@ class Settings(BaseSettings):
     resend_from_email: str = "noreply@fairmind.ai"
     # How often published policy rules are re-checked for newly failing systems; 0 turns alerts off.
     policy_alert_interval_seconds: int = 900
+    # How often the release autopilot runs systems set to run; 0 turns the schedule off (Run now still works).
+    autopilot_interval_seconds: int = 3600
     admin_email: str = "admin@fairmind.ai"
     
     # Error Tracking
     sentry_dsn: Optional[str] = None
+    # Cloudflare Turnstile secret; when set, the public forms require a token (config/turnstile.py).
+    turnstile_secret_key: Optional[str] = None
+    # The public demo: POST /api/v1/auth/demo signs a visitor in as this existing
+    # user, and DemoReadOnlyMiddleware refuses every change made as them. Off when unset.
+    demo_user_email: Optional[str] = None
     
     # AWS S3
     aws_access_key_id: Optional[str] = None
@@ -266,6 +277,12 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.environment == "development"
+
+    @property
+    def database_is_local(self) -> bool:
+        """True when DATABASE_URL points at this machine."""
+        from urllib.parse import urlsplit
+        return urlsplit(self.database_url).hostname in ("localhost", "127.0.0.1", "::1")
     
     @property
     def database_config(self) -> dict:
@@ -312,6 +329,15 @@ class ProductionSettings(Settings):
     database_echo: bool = False
     
     # Production security requirements
+    @model_validator(mode="after")
+    def require_explicit_secrets(self):
+        # The base defaults are random per process, so an unset secret passes every check below
+        # yet signs tokens no other worker or restart can verify. Production must supply both.
+        missing = [n.upper() for n in ("secret_key", "jwt_secret") if n not in self.model_fields_set]
+        if missing:
+            raise ValueError(f"{' and '.join(missing)} must be set when ENVIRONMENT is production")
+        return self
+
     @validator("secret_key")
     def validate_secret_key(cls, v):
         if v == "development-secret-key-change-in-production":
@@ -329,6 +355,10 @@ class ProductionSettings(Settings):
         return v
 
 
+# Same file Settings reads (Config.env_file), relative to the working directory.
+_ENV_FILE: Optional[str] = ".env"
+
+
 def resolve_environment() -> str:
     """The environment name both the settings class and the environment field use.
 
@@ -337,9 +367,15 @@ def resolve_environment() -> str:
     the two disagree: NODE_ENV=production with ENVIRONMENT=development built a
     ProductionSettings whose is_development was True, which skipped the Neon auth
     middleware despite NEON_AUTH_ENABLED=true and switched on the dev auto-login.
-    NODE_ENV stays supported for start.sh, which already sets it.
+    NODE_ENV stays supported for start.sh, which already sets it. The .env file
+    is read too, as Settings reads it. With nothing set the answer is production.
     """
-    return (os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "development").lower()
+    file_values = dotenv_values(_ENV_FILE) if _ENV_FILE and os.path.exists(_ENV_FILE) else {}
+
+    def pick(name):
+        return os.getenv(name) or file_values.get(name)
+
+    return (pick("ENVIRONMENT") or pick("NODE_ENV") or "production").lower()
 
 
 @lru_cache()

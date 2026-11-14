@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _caller_org, _load_json_value
+from api.routes.llm import LLMError, _public_https, decrypt, encrypt
 from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
 
@@ -37,9 +38,12 @@ def _ensure_tables() -> None:
     if _tables_ready:
         return
     import database.governance_models  # noqa: F401
+    from config.settings import settings
     from database.connection import Base, db_manager
 
-    Base.metadata.create_all(bind=db_manager.engine)
+    # Outside development scripts/setup_db.py creates these tables before start.
+    if settings.is_development:
+        Base.metadata.create_all(bind=db_manager.engine)
     _tables_ready = True
 
 
@@ -94,10 +98,19 @@ def suggest_stage_mlflow(versions: List[Dict[str, Any]], aliases: Dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
-async def _sync_mlflow(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+def _public_tracking_uri(config: Dict[str, Any]) -> str:
+    """The MLflow tracking URI, which must be a public https address: it is fetched server-side."""
     base = str(config.get("tracking_uri") or "").rstrip("/")
     if not base:
         raise HTTPException(status_code=400, detail="MLflow integration has no tracking_uri")
+    try:
+        return _public_https(base, "MLflow tracking URI")
+    except LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+async def _sync_mlflow(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+    base = _public_tracking_uri(config)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     found: List[Dict[str, Any]] = []
     page_token: Optional[str] = None
@@ -388,7 +401,7 @@ def _get_integration(db: Session, org_id: str, integration_id: str) -> Any:
 
 
 @router.get("")
-async def list_integrations(http: Request, db: Session = Depends(get_db)):
+def list_integrations(http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     rows = db.execute(
         text(f"SELECT {_INTEGRATION_COLS} FROM governance_integrations WHERE org_id = :org ORDER BY created_at DESC"),
@@ -398,8 +411,10 @@ async def list_integrations(http: Request, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201, dependencies=[Depends(org_mutator)])
-async def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
+def create_integration(body: IntegrationCreate, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
+    if body.kind == "mlflow":
+        _public_tracking_uri(body.config)
     row_id = str(uuid.uuid4())
     db.execute(
         text(
@@ -412,7 +427,7 @@ async def create_integration(body: IntegrationCreate, http: Request, db: Session
             "kind": body.kind,
             "name": body.name,
             "config": json.dumps(body.config),
-            "token": body.token or None,
+            "token": encrypt(body.token) if body.token else None,
             "now": _now(),
         },
     )
@@ -421,7 +436,7 @@ async def create_integration(body: IntegrationCreate, http: Request, db: Session
 
 
 @router.delete("/{integration_id}", status_code=204, dependencies=[Depends(org_mutator)])
-async def delete_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
+def delete_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)
     _get_integration(db, org, integration_id)
@@ -437,8 +452,10 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
     _ensure_tables()
     org = _caller_org(http)
     row = _get_integration(db, org, integration_id)
-    kind, config, token = row[2], _load_json_value(row[4], {}), row[5]
+    # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
+    kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
     now = _now()
+    legacy_plaintext = bool(row[5]) and decrypt(row[5]) is None
     try:
         found = await _CONNECTORS[kind](config, token)
     except HTTPException as exc:
@@ -448,6 +465,9 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
         )
         db.commit()
         raise
+
+    if legacy_plaintext:
+        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": integration_id})
 
     created = updated = 0
     for item in found:
@@ -504,7 +524,7 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
 
 
 @router.get("/discovered")
-async def list_discovered(
+def list_discovered(
     http: Request,
     status: str = Query(default="new", pattern="^(new|promoted|ignored|all)$"),
     db: Session = Depends(get_db),
@@ -550,7 +570,7 @@ def _workspace_for(db: Session, org_id: str, integration_row: Any) -> str:
 
 
 @router.post("/discovered/{asset_id}/promote", dependencies=[Depends(org_mutator)])
-async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Session = Depends(get_db)):
+def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Session = Depends(get_db)):
     """Turn a discovered asset into a governed system. Suggestions apply unless overridden."""
     _ensure_tables()
     org = _caller_org(http)
@@ -598,7 +618,7 @@ async def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: 
 
 
 @router.post("/discovered/{asset_id}/ignore", dependencies=[Depends(org_mutator)])
-async def ignore_asset(asset_id: str, http: Request, db: Session = Depends(get_db)):
+def ignore_asset(asset_id: str, http: Request, db: Session = Depends(get_db)):
     _ensure_tables()
     org = _caller_org(http)
     _get_asset(db, org, asset_id)

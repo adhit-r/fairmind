@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from "react";
 import { apiClient as api } from "@/lib/api/api-client";
-import { IconDownload, IconFilter } from "@tabler/icons-react";
+import { IconDownload } from "@tabler/icons-react";
 
 interface AuditLog {
   id: string;
@@ -53,12 +53,17 @@ export default function AdminAuditLogPage() {
         const response = await api.get<{ logs: AuditLog[] }>(
           `/api/v1/audit-logs?${params}`
         );
+        if (!response.success) {
+          // An audit log that silently shows nothing would read as "nothing happened".
+          setLogs([]);
+          setError(response.error || "The audit log could not be loaded.");
+          return;
+        }
         setLogs(response.data?.logs || []);
         setError(null);
       } catch (err) {
-        // Endpoint unavailable: show an empty list
-        console.warn("Audit logs API not yet implemented:", err);
         setLogs([]);
+        setError(err instanceof Error ? err.message : "The audit log could not be loaded.");
       } finally {
         setIsLoading(false);
       }
@@ -127,16 +132,17 @@ export default function AdminAuditLogPage() {
             <IconDownload size={20} />
             Export as CSV
           </button>
-          <button className="flex items-center gap-2 rounded-lg border border-[var(--fm-line)] bg-white px-4 py-2 font-bold text-black">
-            <IconFilter size={20} />
-            Filters
-          </button>
         </div>
 
         {/* Content */}
         {isLoading ? (
           <div className="flex justify-center">
             <div className="h-12 w-12 animate-spin rounded-full border-2 border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
+          </div>
+        ) : error ? (
+          <div role="alert" className="p-8 fm-card text-center">
+            <h3 className="text-xl font-semibold text-[var(--fm-ink)]">The audit log could not be loaded</h3>
+            <p className="mt-2 text-[var(--fm-ink2)]">{error}</p>
           </div>
         ) : logs.length === 0 ? (
           <div className="p-8 fm-card">
@@ -154,22 +160,22 @@ export default function AdminAuditLogPage() {
             <table className="w-full">
               <thead className="border-b border-[var(--fm-line)] bg-gray-100">
                 <tr>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Timestamp
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     User
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Action
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Resource
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left font-bold text-black">
+                  <th scope="col" className="px-6 py-4 text-left font-bold text-black">
                     IP Address
                   </th>
                 </tr>

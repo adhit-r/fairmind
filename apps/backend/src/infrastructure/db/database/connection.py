@@ -43,6 +43,8 @@ class DatabaseManager:
             database_url,
             pool_pre_ping=True,
             pool_recycle=300,
+            pool_size=settings.database_pool_size,
+            max_overflow=settings.database_max_overflow,
             echo=os.getenv("DEBUG", "false").lower() == "true"
         )
         if settings.assurance_v2_enabled:
@@ -75,6 +77,12 @@ class DatabaseManager:
                 # Table by table: one failing definition must not roll back
                 # the users table.
                 for table in metadata.sorted_tables:
+                    # Already there: skip the per-table round trips. Callers run this
+                    # inside request handlers, where ~80 checks against a remote
+                    # database froze the event loop for minutes.
+                    if table.schema is None and table.name in existing:
+                        created += 1
+                        continue
                     try:
                         table.create(bind=self.engine, checkfirst=True)
                         created += 1

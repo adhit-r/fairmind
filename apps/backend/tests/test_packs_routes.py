@@ -185,6 +185,16 @@ def test_catalogue_counts(tmp_database):
     assert len(packs) == 21 and FOUNDATION in {p["id"] for p in packs}
 
 
+def test_catalogue_engine_status_matches_the_code():
+    """'Engine exists' means runnable; rerun scripts/export_pack_catalogue.py when an engine is added."""
+    from src.application.services.evaluation_results import RULES
+    from src.application.services.eval_engines import REGISTRY
+
+    catalogue = json.loads((Path(__file__).resolve().parents[1] / "src/api/routers/pack_catalogue_data/catalogue.json").read_text())
+    exists = {e["id"] for e in catalogue["evaluations"] if e["engine"] == "Engine exists"}
+    assert exists == set(REGISTRY) | set(RULES)
+
+
 def test_install_and_uninstall_toggle(tmp_database):
     _, client = _org(tmp_database)
     assert client.post(f"{PACKS}/{FOUNDATION}/install").json()["installed"] is True
@@ -255,8 +265,9 @@ def test_evaluations_filter_by_pillar_and_engine(tmp_database):
     _, client = _org(tmp_database)
     everything = client.get(f"{PACKS}/evaluations").json()
     assert len(everything) == 109
-    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Partial"}).json()
-    assert len(secure) == 6 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
+    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Engine exists"}).json()
+    assert secure and all(e["pillar"] == "SECURE" and e["engine"] == "Engine exists" for e in secure)
+    assert client.get(f"{PACKS}/evaluations", params={"engine": "Partial"}).json() == []
     drift = client.get(f"{PACKS}/evaluations", params={"q": "data drift"}).json()
     assert [e["id"] for e in drift] == ["EV-DAT-01"] and drift[0]["tests"] and drift[0]["installed"] is False
     assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["pack"]["id"] == drift[0]["pack"]["id"]
@@ -345,6 +356,10 @@ def test_changes_loop_through_revise_then_escalate_after_three_rounds(tmp_databa
     run = _decide(client, run, "request_changes", "still not right")
     assert run["events"][-4]["payload"]["escalated"]
     assert ("step.completed", "escalate") in _kinds(run)
+    # The ledger says who was told; it never claims a message nobody sent.
+    told = next(e["payload"] for e in run["events"] if (e["kind"], e["stepId"]) == ("step.completed", "escalate"))
+    assert told["notificationSent"] == (told["recipients"] > 0)
+    assert told["notificationSent"] or told["reason"]
     assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
     assert _approval_count(tmp_database, run["id"]) == 5
 
@@ -660,7 +675,7 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
-    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"] is None  # no engine and no stored results to read
+    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"]["status"] == "not_run"  # engine since Nov 2026, not run yet
     assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"]["status"] == "not_run"  # has an engine, not run yet
 
 
@@ -877,3 +892,35 @@ def test_the_agent_only_does_a_step_that_is_waiting_for_output(tmp_database):
     _, client = _installed_org(tmp_database)
     gate = _to_gate(client)
     assert client.post(f"{PACKS}/runs/{gate['id']}/steps/{gate['currentStep']}/agent").status_code == 409
+
+
+def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_database, monkeypatch):
+    from api.routes import llm
+
+    org_id, client = _org(tmp_database)
+    assert client.post(f"{PACKS}/ask", json={"question": "Which systems are blocked?"}).status_code == 409  # no provider yet
+    system = _system(tmp_database, org_id)
+    _store(tmp_database, org_id, system, "fairness_test", _fairness(False), "2026-11-01T10:00:00")
+    _save_provider(client)
+    seen = {}
+
+    async def answer(conn, system_prompt, user, schema):
+        seen["prompt"] = json.loads(user)
+        return {"answer": "Credit model fails fairness.", "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
+            "model": conn.model, "latencyMs": 5, "usage": {}}
+
+    monkeypatch.setattr(llm, "complete", answer)
+    body = client.post(f"{PACKS}/ask", json={"question": "Which systems are blocked?"}).json()
+    assert body["answer"] == "Credit model fails fairness."
+    assert body["systems"] == [{"id": system, "name": "Credit model", "reason": "Fairness fails"}]
+    assert body["systemsRead"] == 1 and seen["prompt"]["question"] == "Which systems are blocked?"
+    gate = seen["prompt"]["facts"]["systems"][0]
+    assert gate["verdict"] and any(c["label"] for c in gate["checks"])
+
+    async def failing(conn, system_prompt, user, schema):
+        raise llm.LLMError("Anthropic is rate limiting this key")
+
+    monkeypatch.setattr(llm, "complete", failing)
+    failed = client.post(f"{PACKS}/ask", json={"question": "Anything?"})
+    assert failed.status_code == 502 and failed.json()["detail"] == "Anthropic is rate limiting this key"
+    assert client.post(f"{PACKS}/ask", json={"question": ""}).status_code == 422

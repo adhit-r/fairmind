@@ -178,8 +178,14 @@ credentials*
 *.json
 # fumadocs section indexes order the docs navigation; they are source, not data.
 !apps/docs/content/**/meta.json
+# The docs "Build with FairMind" section is source, not build output.
+!apps/docs/content/docs/build/
 !package.json
 !package-lock.json
+# The MCP Registry entry, read by the release workflow.
+!apps/mcp/server.json
+# FLOSS/fund funding manifest.
+!/funding.json
 !research/aibom-fairness-evidence/**/*.json
 !apps/backend/src/domain/assurance/evidence-passport-v2.schema.json
 !apps/backend/src/api/routers/pack_catalogue_data/*.json
@@ -297,6 +303,8 @@ checkpoints/
 !.github/**/*.yml
 !.github/**/*.yaml
 data/
+# The app's API data hooks are source, not data.
+!apps/frontend/src/astryx/data/
 datasets/
 *.parquet
 *.feather

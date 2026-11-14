@@ -1,0 +1,47 @@
+{
+  "title": "See the environmental assessment for each system",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Environment scores the energy and carbon use of each AI system into an impact tier."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The counts show how many systems are proven, estimated, out of date, failing or not assessed.",
+      "box": {
+        "x": 334,
+        "y": 262,
+        "w": 918,
+        "h": 79
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Each row shows the latest tier, its confidence, and whether it blocks approval.",
+      "box": {
+        "x": 353,
+        "y": 413,
+        "w": 880,
+        "h": 105
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Start an assessment opens a form for that system. We will not save it here.",
+      "box": {
+        "x": 1082,
+        "y": 451,
+        "w": 151,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "Below the list, a table explains how impact tiers are set. The thresholds are provisional."
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 42
+}

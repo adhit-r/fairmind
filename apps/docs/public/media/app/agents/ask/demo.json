@@ -1,0 +1,27 @@
+{
+  "title": "Ask a question about your AI estate",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Ask FairMind answers questions from your own systems and records."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "It uses the AI provider your organisation configured in Settings.",
+      "box": {
+        "x": 461,
+        "y": 90,
+        "w": 272,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Once a provider is on, you type a question or pick a suggestion, and the answer links to the systems it names."
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 26
+}

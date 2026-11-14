@@ -612,6 +612,13 @@ GATE_CHECKS = (
     ("environmental", "Environmental impact", {"environmental", "environmental_assessment"}),
 )
 
+
+
+def gate_checks(include_environmental: bool = True) -> tuple:
+    """The checks the gate weighs. An organisation may leave environmental impact out of its release gate."""
+    return GATE_CHECKS if include_environmental else tuple(c for c in GATE_CHECKS if c[0] != "environmental")
+
+
 TIER_TO_IMPACT = {"low": "low", "medium": "medium", "high": "high", "critical": "high"}
 PROVEN_CLASSES = {"measured", "tool_estimated"}
 
@@ -657,8 +664,12 @@ def release_gate(
     now: Optional[datetime] = None,
     approval_status: str = "not_requested",
     last_decision: Optional[str] = None,
+    include_environmental: bool = True,
 ) -> Dict[str, Any]:
     """Verdict, confidence and the state of each check from the evidence on file.
+
+    With ``include_environmental=False`` (an organisation that keeps energy use out of release decisions)
+    the gate weighs the other four checks only.
 
     Each check reads its newest record (the higher confidence breaks a tie): proven
     when that record is measured or tool-estimated with confidence at or above
@@ -679,12 +690,12 @@ def release_gate(
     """
     checks: List[Dict[str, Any]] = []
     reasons: List[str] = []
-    for key, label, types in GATE_CHECKS:
+    for key, label, types in gate_checks(include_environmental):
         matching = [r for r in evidence if str(r.get("evidenceType") or r.get("type") or "").lower() in types]
         if key == "environmental" and environmental_assessed and not matching:
             assessment = environmental_assessed if isinstance(environmental_assessed, dict) else {"provenance_class": "tool_estimated", "confidence": 0.85}
             matching = [{"evidenceType": "environmental", "confidence": assessment["confidence"], "metadata": {"provenance_class": assessment["provenance_class"]}}]
-        state, confidence, evidence_id, detail = "open", 0.0, None, None
+        state, confidence, evidence_id, detail, evidence_class = "open", 0.0, None, None, None
         stale_for = None
         if key == "monitoring" and monitoring_cadence_hours:
             times = [t for r in matching if _provenance(r) in PROVEN_CLASSES and float(r.get("confidence") or 0.0) >= 0.70 for t in [_record_time(r)] if t]
@@ -695,7 +706,7 @@ def release_gate(
                     reasons.append(f"Latest monitoring snapshot is {_span(age_hours)} old; the cadence is {_span(monitoring_cadence_hours)}")
         if matching and stale_for is None:
             record = max(matching, key=lambda r: (_record_time(r) or _NO_TIME, float(r.get("confidence") or 0.0)))
-            prov = _provenance(record)
+            prov = evidence_class = _provenance(record)
             raw = float(record.get("confidence") or 0.0)
             confidence = cap_confidence_for_provenance(raw, prov) if prov in PROVEN_CLASSES else min(cap_confidence_for_provenance(raw, "manual"), ATTESTATION_CONFIDENCE)
             state = "proven" if prov in PROVEN_CLASSES and confidence >= 0.70 else "attested"
@@ -705,7 +716,12 @@ def release_gate(
                 detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
                 if content.get("all_checks_pass") is False:
                     reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
-        checks.append({"key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "detail": detail, **({"stale": True} if stale_for is not None else {})})
+        checks.append({
+            "key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "evidenceClass": evidence_class, "detail": detail,
+            **({"stale": True} if stale_for is not None else {}),
+            # detail exists only for measured or tool-estimated fairness and monitoring records
+            **({"fails": True} if detail and detail["all_checks_pass"] is False else {}),
+        })
 
     overall = round(sum(c["confidence"] for c in checks) / len(checks), 2) if checks else 0.0
     verdict = get_recommendation(TIER_TO_IMPACT.get(str(risk_tier).lower(), "high"), overall)
@@ -766,7 +782,7 @@ def tier_reasons(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> Lis
     return [f"Risk tier {risk_tier} is below the suggested {suggested}; {tail}"]
 
 
-def gate_explain(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def gate_explain(risk_tier: str, applicability: Optional[Dict[str, Any]], include_environmental: bool = True) -> Dict[str, Any]:
     """The tier, impact and decision-matrix row behind the verdict. Row bands run from ``from`` up to, not including, ``to``."""
     stored = str(risk_tier or "").strip().lower()
     tier = effective_tier(risk_tier, applicability)
@@ -790,7 +806,7 @@ def gate_explain(risk_tier: str, applicability: Optional[Dict[str, Any]]) -> Dic
         }
     return {
         "tier": risk_tier, "effectiveTier": tier, "impact": impact, "tierNote": " ".join(notes) or None, "tierSource": source,
-        "perCheck": round(1 / len(GATE_CHECKS), 2),
+        "perCheck": round(1 / len(gate_checks(include_environmental)), 2),
         "row": [{"band": band, "from": low, "to": high, "verdict": DECISION_MATRIX[(impact, band)]} for band, low, high in BANDS],
     }
 
@@ -832,6 +848,7 @@ def path_forward(
     lifecycle_stage: Optional[str] = None,
     approval_blockers: Iterable[Dict[str, Any]] = (),
     now: Optional[datetime] = None,
+    include_environmental: bool = True,
 ) -> Dict[str, Any]:
     """The fewest, strongest steps to the next verdict, each priced by re-running the real release_gate.
 
@@ -841,12 +858,16 @@ def path_forward(
     environmental assessment step meets ``environmental_assessment``.
     """
     now = now or datetime.now(timezone.utc)
+    checks = gate_checks(include_environmental)
 
     def run(steps: tuple) -> Dict[str, Any]:
         extra = [r for r in (_synthetic(check, action, now) for check, action in steps) if r]
         # A new assessment is priced as tool-estimated, even over a manual one already on file.
         assessed = True if any(action == "environmental_assessment" for _, action in steps) else environmental_assessed
-        return release_gate(risk_tier, evidence + extra, environmental_assessed=assessed, monitoring_cadence_hours=monitoring_cadence_hours, now=now)
+        return release_gate(
+            risk_tier, evidence + extra, environmental_assessed=assessed, monitoring_cadence_hours=monitoring_cadence_hours, now=now,
+            include_environmental=include_environmental,
+        )
 
     base = run(())
     current = {c["key"]: c for c in base["checks"]}
@@ -860,7 +881,7 @@ def path_forward(
 
     counts: Dict[tuple, float] = {}
     choices = []
-    for key, _, _ in GATE_CHECKS:
+    for key, _, _ in checks:
         check = current[key]
         if check["state"] == "proven":
             continue
@@ -892,7 +913,7 @@ def path_forward(
             "kind": kind,
             "steps": [
                 {"check": key, "action": action, "evidenceClass": ACTION_CLASS[action], "counts": counts[(key, action)],
-                 "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(GATE_CHECKS), 2), "note": ACTION_NOTES.get(action)}
+                 "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(checks), 2), "note": ACTION_NOTES.get(action)}
                 for key, action in ordered
             ],
             "confidenceAfter": gate["confidence"], "verdictAfter": gate["verdict"], "approvalReady": ready(steps, gate),
@@ -929,7 +950,7 @@ def path_forward(
             # Each manual-only check with the most it can count: an upload or an attestation, both capped at ATTESTATION_CONFIDENCE.
             manual = [
                 f"{label.lower()} ({max((v for (k, _), v in counts.items() if k == key), default=current[key]['confidence']):.2f} at most)"
-                for key, label, _ in GATE_CHECKS
+                for key, label, _ in checks
                 if current[key]["state"] != "proven" and not any(k == key and ACTION_CLASS[a] != "manual" for k, a in counts)
             ]
             named = " and ".join([", ".join(manual[:-1]), manual[-1]] if len(manual) > 1 else manual).capitalize()

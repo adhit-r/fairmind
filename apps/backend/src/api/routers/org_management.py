@@ -18,7 +18,7 @@ import json
 import csv
 from io import StringIO
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr
@@ -259,6 +259,13 @@ def _permission_list(value) -> List[str]:
     return list(normalize_org_role_permissions(value))
 
 
+def _expired(expires_at: datetime) -> bool:
+    """Compare in UTC whether the column is timestamp (ORM) or timestamptz (production schema)."""
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at <= datetime.now(timezone.utc)
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=OrganizationsListResponse)
@@ -346,7 +353,7 @@ async def list_org_members(
                     om.id,
                     om.user_id,
                     u.email,
-                    u.full_name as name,
+                    COALESCE(u.name, u.username) as name,
                     om.role,
                     om.status,
                     om.joined_at
@@ -433,7 +440,7 @@ async def invite_member(
                 """
                 SELECT om.id FROM org_members om
                 JOIN users u ON om.user_id = u.id
-                WHERE om.org_id = :org_id AND u.email = :email
+                WHERE om.org_id = :org_id AND lower(u.email) = lower(:email)
                 """,
                 {"org_id": org_id, "email": payload.email}
             )
@@ -447,7 +454,7 @@ async def invite_member(
             existing_invite = await db.fetch_one(
                 """
                 SELECT id FROM org_invitations
-                WHERE org_id = :org_id AND email = :email AND status = 'pending' AND expires_at > :now
+                WHERE org_id = :org_id AND lower(email) = lower(:email) AND status = 'pending' AND expires_at > :now
                 """,
                 {"org_id": org_id, "email": payload.email, "now": datetime.utcnow()}
             )
@@ -544,8 +551,8 @@ async def get_invitation_details(token: str):
 
     Returns: 200 OK with invitation details
     Raises:
-    - 400 Bad Request: Invalid or expired token
-    - 404 Not Found: Invitation not found
+    - 400 Bad Request: expired
+    - 404 Not Found: unknown, revoked or already used
     """
     try:
         async with get_db_connection() as db:
@@ -555,14 +562,13 @@ async def get_invitation_details(token: str):
                 {"token": token}
             )
 
-            if not invitation:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or expired invitation token"
-                )
+            # Only a pending invitation is shown: a revoked or used one discloses
+            # nothing, and an unknown token is not called "expired".
+            if not invitation or invitation["status"] != "pending":
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
             # Check if expired
-            if invitation["expires_at"] <= datetime.utcnow():
+            if _expired(invitation["expires_at"]):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invitation has expired"
@@ -624,13 +630,10 @@ async def accept_invitation(
             )
 
             if not invitation:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or expired invitation token"
-                )
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
 
             # 2. Validate invitation is not expired and pending
-            if invitation["expires_at"] <= datetime.utcnow():
+            if _expired(invitation["expires_at"]):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invitation has expired"
@@ -643,7 +646,7 @@ async def accept_invitation(
                 )
 
             # 3. Validate email matches
-            if invitation["email"] != current_user.email:
+            if invitation["email"].lower() != current_user.email.lower():
                 await _log_org_audit(
                     org_id=str(invitation["org_id"]),
                     user_id=current_user.user_id,
@@ -841,6 +844,13 @@ async def update_member(
                     f"UPDATE org_members SET {', '.join(updates)} WHERE id = :id AND org_id = :org_id",
                     params
                 )
+                if payload.role and payload.role != member["role"]:
+                    # Tokens carry the rights of the old role; end them. A suspended
+                    # member needs no bump: tokens require an active membership.
+                    await db.execute(
+                        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = :uid",
+                        {"uid": member["user_id"]},
+                    )
 
                 # Log audit event
                 await _log_org_audit(
@@ -907,6 +917,14 @@ async def remove_member(
             await db.execute(
                 "DELETE FROM org_members WHERE id = :id AND org_id = :org_id",
                 {"id": member_id, "org_id": org_id}
+            )
+            # End the removed user's sessions, and stop their stored org pointing here.
+            await db.execute(
+                "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, "
+                "org_id = CASE WHEN CAST(org_id AS TEXT) = :org_id THEN NULL ELSE org_id END, "
+                "primary_org_id = CASE WHEN CAST(primary_org_id AS TEXT) = :org_id THEN NULL ELSE primary_org_id END "
+                "WHERE id = :user_id",
+                {"org_id": str(org_id), "user_id": member["user_id"]},
             )
 
             # Log audit event

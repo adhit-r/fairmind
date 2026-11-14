@@ -1,0 +1,105 @@
+---
+title: MCP server
+description: Let a coding agent ask whether an AI system may ship, run evaluations and record evidence, without opening the app.
+---
+
+<Status state="shipped" />
+
+`fairmind-mcp` serves nine tools over stdio. It is a thin layer over the [Python SDK](/docs/build/python-sdk) and reads the same environment variables.
+
+## Tools
+
+| Tool | What it does |
+| --- | --- |
+| `list_systems` | AI systems your key can see, with id, risk tier and lifecycle stage |
+| `release_gate` | Verdict, confidence, the five checks and the reasons |
+| `clause_map` | The gate per regulatory clause; optional `frameworks` such as `EUAIA` |
+| `list_evaluations` | Searches the catalogue and says which evaluations FairMind can run |
+| `describe_evaluation` | The files and parameters an evaluation takes, and whether it runs as a live behaviour test |
+| `run_evaluation` | Runs on local files, against the live system (`live`) or on the connected agent platform (`use_connection`) |
+| `run_fairness_test` | Uploads a local CSV, stores the measured result, returns metrics and the new gate |
+| `record_monitoring_snapshot` | Compares recent decisions in a local CSV with the latest fairness run |
+| `attest_check` | Records a person's statement that a check is satisfied |
+
+Each tool returns a short text summary plus the full API response as structured content. File paths are paths on the machine running the server, normally yours.
+
+<Steps>
+<Step>
+### Install
+
+```bash
+pip install fairmind-mcp        # or run it without installing: uvx fairmind-mcp
+```
+
+It is listed in the official MCP Registry as `io.github.adhit-r/fairmind`. To work on it from a checkout, run `uv sync` in `apps/mcp`.
+
+The server targets the `mcp` 1.x `FastMCP` API (`mcp>=1.10,<2`).
+</Step>
+
+<Step>
+### Set the environment
+
+```bash
+export FAIRMIND_API_URL=https://app.fairmind.xyz
+export FAIRMIND_API_KEY=...
+```
+
+The client configurations below pass these through; none of them contains the key.
+</Step>
+
+<Step>
+### Add it to your agent
+
+<Tabs groupId="mcp-client" items={['Claude Code', '.mcp.json (per repository)', 'Claude Desktop']} persist>
+<Tab value="Claude Code">
+```bash
+claude mcp add fairmind -- uvx fairmind-mcp
+```
+</Tab>
+<Tab value=".mcp.json (per repository)">
+```json title=".mcp.json"
+{
+  "mcpServers": {
+    "fairmind": {
+      "command": "uvx",
+      "args": ["fairmind-mcp"],
+      "env": {
+        "FAIRMIND_API_URL": "${FAIRMIND_API_URL}",
+        "FAIRMIND_API_KEY": "${FAIRMIND_API_KEY}"
+      }
+    }
+  }
+}
+```
+</Tab>
+<Tab value="Claude Desktop">
+Desktop does not expand variables, so start the server through a shell:
+
+```json title="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "fairmind": {
+      "command": "/bin/sh",
+      "args": ["-c", "exec uvx fairmind-mcp"]
+    }
+  }
+}
+```
+
+Set the two variables in the environment that starts Claude Desktop, for example with `launchctl setenv` on macOS.
+</Tab>
+</Tabs>
+</Step>
+</Steps>
+
+## Try it
+
+- "May the credit-scoring system ship?" The agent calls `list_systems`, then `release_gate`.
+- "Run the prompt injection tests on the support agent." It finds the evaluations, describes them and runs them.
+- "Run a fairness test on `holdout.csv` for gender and region, outcome `repaid`, prediction `approved`." It calls `run_fairness_test` with the path on your machine.
+
+<Callout type="warn" title="Attestations are statements">
+`attest_check` writes evidence under your name. The tool tells the agent to use only statements you gave or confirmed, and the gate shows the check as attested, never proven.
+</Callout>
+
+Behaviour tests run as background jobs and can take minutes; `run_evaluation` waits for them. Set `FAIRMIND_ORG_ID` to act in an organisation other than the key's first.

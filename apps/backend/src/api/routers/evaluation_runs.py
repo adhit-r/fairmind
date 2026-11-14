@@ -105,7 +105,7 @@ _RUN_COLS = (
 
 
 @router.get("/evaluations/{evaluation_id}/engine")
-async def get_engine(evaluation_id: str, _m: OrgMembership = Depends(_member)):
+def get_engine(evaluation_id: str, _m: OrgMembership = Depends(_member)):
     alternate = ALTERNATES.get(evaluation_id)
     return {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None}
 
@@ -146,6 +146,8 @@ async def create_run(
         if len(raw) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=f"{slot.label} is over 25 MB")
         files[slot.name], names[slot.name] = raw, upload.filename
+    if engine.collect:
+        files.update(engine.collect(db, m.org_id, system_id))
     for p in engine.params:
         if p.required and params.get(p.name) in (None, ""):
             raise HTTPException(status_code=422, detail=f"Set {p.label.lower()}")
@@ -323,7 +325,7 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
 
 
 @router.get("/evaluation-jobs/{job_id}")
-async def get_job(job_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_job(job_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = _job_row(db, job_id)
     if not row or row["org_id"] != m.org_id:
@@ -332,7 +334,7 @@ async def get_job(job_id: str, m: OrgMembership = Depends(_member), db: Session 
 
 
 @router.get("/evaluations/{evaluation_id}/runs")
-async def list_runs(
+def list_runs(
     evaluation_id: str,
     system_id: Optional[str] = Query(None),
     m: OrgMembership = Depends(_member),
@@ -352,7 +354,7 @@ async def list_runs(
 
 
 @router.get("/evaluation-runs/{evidence_id}")
-async def get_run(evidence_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_run(evidence_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = db.execute(
         text(_RUN_COLS + "WHERE e.id = :id AND s.org_id = :org AND e.evidence_type = :type"),

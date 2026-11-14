@@ -24,6 +24,7 @@ interface ReportHistoryTableProps {
   loading: boolean
   onDownloadJson: (report: SavedReport) => void
   onDownloadPdf: (report: SavedReport) => void
+  onDownloadDocx: (report: SavedReport) => void
   onPreview: (report: SavedReport) => void
 }
 
@@ -46,6 +47,7 @@ export function ReportHistoryTable({
   loading,
   onDownloadJson,
   onDownloadPdf,
+  onDownloadDocx,
   onPreview,
 }: ReportHistoryTableProps) {
   if (loading) {
@@ -87,6 +89,9 @@ export function ReportHistoryTable({
             </button>
             <button type="button" className={SMALL} onClick={() => onDownloadPdf(report)} title="Download PDF">
               PDF
+            </button>
+            <button type="button" className={SMALL} onClick={() => onDownloadDocx(report)} title="Download DOCX">
+              DOCX
             </button>
           </div>
         </li>

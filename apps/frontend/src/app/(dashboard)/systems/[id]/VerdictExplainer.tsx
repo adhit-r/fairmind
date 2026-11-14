@@ -26,10 +26,12 @@ export function bandRange({ from, to }: GateExplain['row'][number]) {
   return `${two(from)} to ${two(to - 0.01)}`
 }
 
+const CHECK_WORDS: Record<number, string> = { 4: 'four', 5: 'five' }
+
 export function arithmetic(gate: ReleaseGate) {
   const counts = `${gate.proven} proven, ${gate.attested} attested, ${gate.open} open.`
   if (!gate.explain) return `Confidence ${two(gate.confidence)}: ${counts}`
-  return `${cap(gate.explain.effectiveTier)} tier. Confidence ${two(gate.confidence)} is the average of five checks, each worth up to ${two(gate.explain.perCheck)}: ${counts}`
+  return `${cap(gate.explain.effectiveTier)} tier. Confidence ${two(gate.confidence)} is the average of ${CHECK_WORDS[gate.checks.length] ?? gate.checks.length} checks, each worth up to ${two(gate.explain.perCheck)}: ${counts}`
 }
 
 const checkName = (key: GateCheck['key'], gate: ReleaseGate) => (gate.checks.find((c) => c.key === key)?.label ?? key.replace(/_/g, ' ')).toLowerCase()
@@ -125,11 +127,11 @@ export function tierOverride(explain: GateExplain | undefined) {
     : { pending: true, text: `Tier set below the suggested ${suggested}. The gate uses ${suggested} until another person accepts the lower tier.` }
 }
 
-const STEP_LINK: Record<Exclude<GatePathStep['action'], 'attest'>, { label: string; href: string }> = {
+export const STEP_LINK: Record<Exclude<GatePathStep['action'], 'attest'>, { label: string; href: string }> = {
   fairness_run: { label: 'Open the test', href: '#first-verdict' },
   monitoring_snapshot: { label: 'Open monitoring', href: '#operate' },
   environmental_assessment: { label: 'Open assessment', href: '/ai-governance' },
-  evidence_upload: { label: 'Record evidence', href: '/evidence' },
+  evidence_upload: { label: 'Record evidence', href: '/evidence?view=artifacts' },
 }
 
 function StepAction({ step, primary, onAttest, onOpen }: { step: GatePathStep; primary: boolean; onAttest?: (check: GateCheck['key']) => void; onOpen?: (href: string) => void }) {

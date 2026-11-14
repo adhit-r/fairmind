@@ -344,13 +344,13 @@ function useResource<T>(path: string | null): Resource<T> {
 const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`
 
 /** A GET scoped to the organisation picked in the org switcher; waits while organisations load. */
-function useOrgResource<T>(path: string | null): Resource<T> {
+export function useOrgResource<T>(path: string | null): Resource<T> {
   const { selectedOrg, isLoading } = useOrg()
   const res = useResource<T>(path && selectedOrg ? withOrg(path, selectedOrg.id) : null)
   if (path && !selectedOrg) {
     return isLoading
       ? { ...res, loading: true }
-      : { ...res, loading: false, error: 'Select an organisation to see its packs.' }
+      : { ...res, loading: false, error: 'You are not in an organisation yet.' }
   }
   return res
 }
@@ -402,6 +402,15 @@ export interface AIProviderOption {
 }
 
 /** The organisation's saved provider. The key itself never comes back, only its last four characters. */
+export interface AskAnswer {
+  answer: string
+  systems: Array<{ id: string; name: string; reason: string }>
+  provider: string
+  model: string
+  systemsRead: number
+  runsRead: number
+}
+
 export interface AIProviderConfig {
   provider: string
   providerName: string
@@ -466,7 +475,7 @@ export interface EngineSpec {
   id: string
   method: string
   slots: Array<{ name: string; label: string; help: string; kind: 'csv' | 'text' | 'json' | 'binary'; required: boolean }>
-  params: Array<{ name: string; label: string; help: string; kind: 'text' | 'number' | 'json'; default: unknown; required: boolean }>
+  params: Array<{ name: string; label: string; help: string; kind: 'text' | 'number' | 'json'; default: unknown; required: boolean; options?: string[] }>
   platform: boolean
   platformMethod: string
   judge: boolean
@@ -599,6 +608,8 @@ export function usePackActions() {
       testTarget: (systemId: string) =>
         send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p)),
       runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
+      // The model can take a while; the server gives it 75s (llm.TIMEOUT_S), the client's 10s default would cut it off.
+      ask: (question: string) => send<AskAnswer>(API_ENDPOINTS.packs.ask, (p) => apiClient.post(p, { question }, { timeout: 90_000 })),
       saveAIProvider: (body: AIProviderBody) =>
         send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
       deleteAIProvider: () => send<{ config: null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.delete(p)),

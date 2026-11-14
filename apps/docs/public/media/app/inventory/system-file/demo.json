@@ -1,0 +1,63 @@
+{
+  "title": "Read a system file and its release gate",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Open a registered system from the AI systems list."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "Select a registered system.",
+      "box": {
+        "x": 785,
+        "y": 304,
+        "w": 221,
+        "h": 33
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Open its file.",
+      "box": {
+        "x": 841,
+        "y": 312,
+        "w": 419,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "The release gate scores each check. This explains how the verdict was reached.",
+      "box": {
+        "x": 353,
+        "y": 757,
+        "w": 208,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "Requirements shows the clauses of each confirmed framework for this system.",
+      "box": {
+        "x": 431,
+        "y": 190,
+        "w": 113,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-6.jpg",
+      "text": "Record holds the sealed decisions and approval history.",
+      "box": {
+        "x": 546,
+        "y": 190,
+        "w": 70,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 33
+}

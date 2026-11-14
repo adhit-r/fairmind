@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { describeChart } from '@/components/charts/describe'
 import {
   Card,
   CardContent,
@@ -175,27 +176,29 @@ export const ComplianceTrendChart: React.FC<ComplianceTrendChartProps> = ({
           <CardDescription>Line chart showing compliance score progression</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="score"
-                stroke="#3b82f6"
-                fillOpacity={1}
-                fill="url(#colorScore)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div role="img" aria-label={describeChart(`${framework} compliance score`, chartData.map((d) => [d.date, d.score]))}>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="score"
+                  stroke="#3b82f6"
+                  fillOpacity={1}
+                  fill="url(#colorScore)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
@@ -208,17 +211,19 @@ export const ComplianceTrendChart: React.FC<ComplianceTrendChartProps> = ({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-              <Bar dataKey="requirements_met" fill="#10b981" name="Requirements Met" />
-              <Bar dataKey="total_requirements" fill="#e5e7eb" name="Total Requirements" />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div role="img" aria-label={describeChart('Requirements met', chartData.map((d) => [d.date, `${(d as { requirements_met?: number }).requirements_met ?? '?'} of ${(d as { total_requirements?: number }).total_requirements ?? '?'}`]))}>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                <Bar dataKey="requirements_met" fill="#10b981" name="Requirements Met" />
+                <Bar dataKey="total_requirements" fill="#e5e7eb" name="Total Requirements" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 

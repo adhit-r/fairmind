@@ -4,6 +4,7 @@ Handles admin approval notifications and user status emails.
 """
 
 import logging
+from html import escape
 import httpx
 from typing import Optional
 from config.settings import settings
@@ -48,7 +49,11 @@ class ResendEmailService:
     ) -> bool:
         approve_url = f"{settings.frontend_url}/admin/registrations?action=approve&id={request_id}"
         deny_url = f"{settings.frontend_url}/admin/registrations?action=deny&id={request_id}"
-        msg_block = f"<p><strong>Message:</strong> {message}</p>" if message else ""
+        # Everything below except the URLs is requester input from a public form.
+        requester_name, requester_email, org_name, requested_role = (
+            escape(v) for v in (requester_name, requester_email, org_name, requested_role)
+        )
+        msg_block = f"<p><strong>Message:</strong> {escape(message)}</p>" if message else ""
         html = f"""
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
           <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">
@@ -79,25 +84,31 @@ class ResendEmailService:
         """
         return await self._send(admin_email, f"New access request from {requester_name} ({org_name})", html)
 
-    async def send_approval_email(self, user_email: str, user_name: str, org_name: str) -> bool:
+    async def send_approval_email(
+        self, user_email: str, user_name: str, org_name: str, set_password_url: str, expires_minutes: int
+    ) -> bool:
         html = f"""
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
-          <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">
-            Access Approved — FairMind
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:22px;font-weight:600;padding-bottom:12px">
+            Access approved — FairMind
           </h1>
-          <p>Hi <strong>{user_name}</strong>,</p>
-          <p>Your access request for <strong>{org_name}</strong> has been approved.</p>
-          <p>You can now log in to FairMind:</p>
-          <a href="{settings.frontend_url}/auth/login"
-             style="display:inline-block;background:#000;color:#fff;padding:12px 24px;text-decoration:none;font-weight:900;margin-top:16px">
-            Log in to FairMind
+          <p>Hi <strong>{escape(user_name)}</strong>,</p>
+          <p>Your access request for <strong>{escape(org_name)}</strong> has been approved. Choose a password to sign in.</p>
+          <a href="{set_password_url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:16px">
+            Choose your password
           </a>
+          <p style="margin-top:24px;font-size:12px;color:#666">
+            The link works once and expires in {expires_minutes} minutes. After that, use
+            "Forgot password" on <a href="{settings.frontend_url}/login">{settings.frontend_url}/login</a> to get a new one.
+          </p>
         </div>
         """
         return await self._send(user_email, "Your FairMind access has been approved", html)
 
     async def send_denial_email(self, user_email: str, user_name: str, org_name: str, notes: Optional[str] = None) -> bool:
-        notes_block = f"<p><strong>Reason:</strong> {notes}</p>" if notes else ""
+        notes_block = f"<p><strong>Reason:</strong> {escape(notes)}</p>" if notes else ""
+        user_name, org_name = escape(user_name), escape(org_name)
         html = f"""
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
           <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">

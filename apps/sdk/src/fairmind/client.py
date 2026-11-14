@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import time
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence, Union
 
 import httpx
 
@@ -38,6 +40,35 @@ class FairMindError(Exception):
 
 def _split(value: Union[str, Sequence[str]]) -> str:
     return value if isinstance(value, str) else ",".join(value)
+
+
+def _chain_head(entries: Sequence[Dict[str, Any]]) -> str:
+    head = hashlib.sha256(b"fairmind-evidence-chain-v1").hexdigest()
+    for entry in entries:
+        head = hashlib.sha256(f"{head}:{entry['hash']}".encode()).hexdigest()
+    return head
+
+
+def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
+    """Check an inspection pack offline: `{"manifest": {...}, "manifestHash": "..."}` as downloaded or shared.
+
+    Recomputes the SHA-256 of the canonical manifest and each system's evidence chain head. `intact` is true only
+    when the manifest hash and every chain head match. Pure: no network, no key.
+    """
+    manifest, expected = document.get("manifest"), document.get("manifestHash")
+    if not isinstance(manifest, dict) or not isinstance(expected, str):
+        raise FairMindError('Not an inspection pack: expected {"manifest": {...}, "manifestHash": "..."}')
+    actual = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    systems = []
+    for item in manifest.get("systems", []):
+        try:
+            recomputed = _chain_head(item.get("evidence", []))
+        except (KeyError, TypeError) as exc:
+            raise FairMindError(f"Malformed evidence entry: {exc!r}") from exc
+        system = item.get("system") or {}
+        systems.append({"name": system.get("name") or system.get("id"), "evidence": len(item.get("evidence", [])), "intact": hmac.compare_digest(str(item.get("chainHead")), recomputed)})
+    hash_ok = hmac.compare_digest(expected, actual)
+    return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "intact": hash_ok and all(s["intact"] for s in systems)}
 
 
 class FairMind:
@@ -245,3 +276,170 @@ class FairMind:
         if job["status"] == "failed":
             raise FairMindError(f"Evaluation {evaluation_id} failed: {job.get('error') or 'no reason given'}")
         return self._packs("GET", f"/evaluation-runs/{job['evidenceId']}")
+
+    def evaluation_run(self, evidence_id: str) -> Dict[str, Any]:
+        """A stored evaluation run (status passed, failed or insufficient, metrics, detail) by its evidence id."""
+        return self._packs("GET", f"/evaluation-runs/{evidence_id}")
+
+    # -- systems -------------------------------------------------------------
+
+    def system(self, system_id: str) -> System:
+        return self._call("GET", f"{GOV}/systems/{system_id}")
+
+    def workspaces(self) -> List[Dict[str, Any]]:
+        return self._call("GET", f"{GOV}/workspaces")
+
+    def create_workspace(self, name: str, owner: Optional[str] = None) -> Dict[str, Any]:
+        return self._call("POST", f"{GOV}/workspaces", json={"name": name, **({"owner": owner} if owner else {})})
+
+    def create_system(
+        self,
+        workspace_id: str,
+        name: str,
+        *,
+        risk_tier: str = "medium",
+        lifecycle_stage: str = "assess",
+        owner: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> System:
+        body: Dict[str, Any] = {"workspace_id": workspace_id, "name": name, "risk_tier": risk_tier, "lifecycle_stage": lifecycle_stage, "metadata": metadata or {}}
+        if owner:
+            body["owner"] = owner
+        return self._call("POST", f"{GOV}/systems", json=body)
+
+    # -- evidence packs ------------------------------------------------------
+
+    def pack_frameworks(self) -> List[Dict[str, str]]:
+        return self._call("GET", f"{GOV}/packs/frameworks")
+
+    def create_pack(self, title: str, frameworks: Union[str, Sequence[str]], system_ids: Union[str, Sequence[str]]) -> Dict[str, Any]:
+        """Build a hashed inspection pack for systems and frameworks (catalogue keys such as EUAIA, ISO42001)."""
+        split = lambda v: [x for x in _split(v).split(",") if x]  # noqa: E731
+        return self._call("POST", f"{GOV}/packs", json={"title": title, "frameworks": split(frameworks), "system_ids": split(system_ids)})
+
+    def packs(self) -> List[Dict[str, Any]]:
+        return self._call("GET", f"{GOV}/packs")
+
+    def pack(self, pack_id: str) -> Dict[str, Any]:
+        return self._call("GET", f"{GOV}/packs/{pack_id}")
+
+    def download_pack(self, pack_id: str) -> Dict[str, Any]:
+        """`{"manifest", "manifestHash"}`: the file `verify_pack` and `fairmind verify` take."""
+        return self._call("GET", f"{GOV}/packs/{pack_id}/download")
+
+    def share_pack(self, pack_id: str) -> Dict[str, Any]:
+        """Mint an auditor token. It is returned once; only its hash is stored."""
+        return self._call("POST", f"{GOV}/packs/{pack_id}/share")
+
+    def revoke_pack_share(self, pack_id: str) -> Dict[str, Any]:
+        return self._call("DELETE", f"{GOV}/packs/{pack_id}/share")
+
+    def public_pack(self, pack_id: str, token: str) -> Dict[str, Any]:
+        """The read-only pack an auditor gets from a share link. No sign-in needed; the token is the credential."""
+        return self._call("GET", f"/api/v1/public/packs/{pack_id}", params={"t": token})
+
+    def verify_pack(self, source: Union[Dict[str, Any], PathLike]) -> Dict[str, Any]:
+        """Verify a pack document (dict) or a downloaded pack.json (path) offline. See the module-level `verify_pack`."""
+        if isinstance(source, dict):
+            return verify_pack(source)
+        p = Path(source)
+        if not p.is_file():
+            raise FairMindError(f"No such file: {p}")
+        try:
+            return verify_pack(json.loads(p.read_text(encoding="utf-8")))
+        except ValueError as exc:
+            raise FairMindError(f"{p} is not valid JSON: {exc}") from exc
+
+    def verify_share_link(self, link: str) -> Dict[str, Any]:
+        """Fetch the pack behind a share link (`.../verify/<pack id>?t=<token>`) from this client's API, then verify it locally."""
+        from urllib.parse import parse_qs, urlparse
+
+        parts = urlparse(link)
+        token = (parse_qs(parts.query).get("t") or [""])[0]
+        pack_id = parts.path.rstrip("/").rsplit("/", 1)[-1]
+        if not token or not pack_id:
+            raise FairMindError("Not a share link: expected .../verify/<pack id>?t=<token>")
+        shared = self.public_pack(pack_id, token)
+        return verify_pack({"manifest": shared["manifest"], "manifestHash": shared["manifestHash"]})
+
+    # -- findings, remediation -----------------------------------------------
+
+    def add_finding(self, system_id: str, risk_type: str, severity: str, description: str) -> Dict[str, Any]:
+        """Record a risk finding against a system. `severity` is low, medium, high or critical."""
+        return self._call("POST", f"{GOV}/risks/assess", json={"systemId": system_id, "riskType": risk_type, "severity": severity, "description": description})
+
+    def findings(self, system_id: Optional[str] = None) -> Dict[str, Any]:
+        """Recorded risks with a summary, for one system or the whole organisation (`risks`, `suggested`, `summary`)."""
+        return self._call("GET", f"{GOV}/dashboard/risk", params={"system_id": system_id} if system_id else {})
+
+    def create_remediation(
+        self,
+        system_id: str,
+        title: str,
+        description: str,
+        *,
+        finding_id: Optional[str] = None,
+        source_type: str = "risk",
+        source_id: Optional[str] = None,
+        owner: Optional[str] = None,
+        priority: str = "medium",
+        due_date: Optional[str] = None,
+        retest_required: bool = True,
+        notes: str = "",
+    ) -> Dict[str, Any]:
+        """Open a remediation task; give `finding_id` to tie it to a recorded finding."""
+        body: Dict[str, Any] = {
+            "system_id": system_id, "title": title, "description": description, "source_type": source_type,
+            "source_id": source_id or finding_id or system_id, "linked_risk_ids": [finding_id] if finding_id else [],
+            "priority": priority, "retest_required": retest_required, "notes": notes,
+        }
+        for key, value in (("owner", owner), ("due_date", due_date)):
+            if value:
+                body[key] = value
+        return self._call("POST", f"{GOV}/remediation", json=body)
+
+    def remediation_tasks(self, system_id: str) -> Dict[str, Any]:
+        """`{"tasks": [...], "summary": {...}}` for a system."""
+        return self._call("GET", f"{GOV}/remediation", params={"system_id": system_id})
+
+    def update_remediation(self, task_id: str, status: Optional[str] = None, notes: Optional[str] = None) -> Dict[str, Any]:
+        """status: open, in_progress, blocked, ready_for_retest, resolved or closed."""
+        body = {k: v for k, v in (("status", status), ("notes", notes)) if v is not None}
+        return self._call("PATCH", f"{GOV}/remediation/{task_id}", json=body)
+
+    # -- release decisions ---------------------------------------------------
+
+    def request_approval(self, system_id: str) -> Dict[str, Any]:
+        """Ask for a release decision on a system (returns the pending request; reuses one already pending)."""
+        return self._call("POST", f"{GOV}/approval/system/{system_id}/request", json={})
+
+    def approval_status(self, system_id: str) -> Dict[str, Any]:
+        """`{"systemId", "request", "decisions"}`: the latest release decision request and its decisions."""
+        return self._call("GET", f"{GOV}/approval/system/{system_id}")
+
+    def decide_approval(self, request_id: str, decision: Literal["approved", "rejected"], notes: str = "") -> Dict[str, Any]:
+        return self._call("POST", f"{GOV}/approval-requests/{request_id}/decision", json={"decision": decision, "notes": notes})
+
+    # -- report snapshots ----------------------------------------------------
+
+    def generate_report(
+        self,
+        system_id: str,
+        report_type: Literal["compliance", "bias", "governance"],
+        *,
+        title: Optional[str] = None,
+        frameworks: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        """Generate and store an audit report snapshot of the system's risks, evidence and approvals."""
+        body: Dict[str, Any] = {"system_id": system_id, "report_type": report_type}
+        if title:
+            body["title"] = title
+        if frameworks:
+            body["frameworks"] = list(frameworks)
+        return self._call("POST", f"{GOV}/reports/generate", json=body)
+
+    def reports(self, system_id: str, report_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        return self._call("GET", f"{GOV}/reports", params={"system_id": system_id, **({"report_type": report_type} if report_type else {})})
+
+    def report(self, report_id: str) -> Dict[str, Any]:
+        return self._call("GET", f"{GOV}/reports/{report_id}")

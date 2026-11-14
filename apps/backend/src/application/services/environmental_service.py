@@ -614,6 +614,25 @@ def _valid_exception(exception: Any) -> bool:
     return expiry >= date.today()
 
 
+ENVIRONMENTAL_GATE_SETTING = "environmentalGate"
+
+
+def environmental_gate_enabled(db: Session, org_id: str | None) -> bool:
+    """Whether the organisation weighs environmental impact in release decisions. Off unless an owner turns it on."""
+    if not org_id:
+        return False
+    row = db.execute(
+        text("SELECT metadata::jsonb ->> :key FROM organizations WHERE id::text = :id"),
+        {"key": ENVIRONMENTAL_GATE_SETTING, "id": str(org_id)},
+    ).fetchone()
+    return bool(row) and str(row[0]).lower() == "true"
+
+
+def system_environmental_gate_enabled(db: Session, system_id: str) -> bool:
+    row = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    return environmental_gate_enabled(db, str(row[0]) if row and row[0] else None)
+
+
 def env_gate_status(
     db: Session,
     system_id: str,
@@ -642,6 +661,14 @@ def env_gate_status(
             "assessmentId": None,
         }
     resolved_org_id = str(row[0])
+    if not environmental_gate_enabled(db, resolved_org_id):
+        return {
+            "blocked": False,
+            "code": "not_required",
+            "reason": "This organisation does not weigh environmental impact in release decisions.",
+            "recommendation": None,
+            "assessmentId": None,
+        }
 
     latest = get_latest_env_assessment(db, system_id, org_id=resolved_org_id)
     if latest is None:

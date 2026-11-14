@@ -19,13 +19,17 @@ export default function ResetPasswordPage() {
   const [form, setForm] = useState({ password: '', confirm: '' })
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState<string | null>(null)
+  const [welcome, setWelcome] = useState(false)
 
   useEffect(() => {
     // The emailed link carries the token in the fragment, which never reaches a server.
     // Keep the first read: the fragment is cleared from history below, and a repeated
     // effect run (React strict mode) would otherwise overwrite the token with null.
-    const fromLink = new URLSearchParams(window.location.hash.slice(1)).get('token')
+    const fragment = new URLSearchParams(window.location.hash.slice(1))
+    const fromLink = fragment.get('token')
     setToken(current => current ?? fromLink)
+    // Approval emails send new accounts here to choose their first password.
+    if (fragment.get('welcome') === '1') setWelcome(true)
     window.history.replaceState(null, '', window.location.pathname)
   }, [])
 
@@ -58,7 +62,8 @@ export default function ResetPasswordPage() {
       <Card className="w-full max-w-md p-8 fm-card">
         <div className="flex flex-col items-center mb-8">
           <OrangeLogo size="lg" />
-          <h1 className="text-[24px] font-semibold tracking-tight mt-4">Choose a new password</h1>
+          <h1 className="text-[24px] font-semibold tracking-tight mt-4">{welcome ? 'Welcome to FairMind' : 'Choose a new password'}</h1>
+          {welcome && <p className="text-muted-foreground mt-2 text-center">Your access was approved. Choose a password to finish setting up your account.</p>}
         </div>
 
         {done ? (
@@ -93,7 +98,7 @@ export default function ResetPasswordPage() {
             </div>
 
             <Button type="submit" className="w-full" disabled={loading || !token || mismatch}>
-              {loading ? 'Saving...' : 'Set new password'}
+              {loading ? 'Saving...' : welcome ? 'Set password and continue' : 'Set new password'}
             </Button>
           </form>
         )}

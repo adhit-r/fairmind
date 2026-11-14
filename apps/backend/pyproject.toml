@@ -7,7 +7,7 @@ name = "fairmind-backend"
 version = "0.1.0"
 description = "AI Governance Platform Backend"
 authors = [{name = "Fairmind Team", email = "support@fairmind.xyz"}]
-license = {text = "MIT"}
+license = {text = "AGPL-3.0-only"}
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -34,6 +34,7 @@ keywords = [
     "llm-bias"
 ]
 dependencies = [
+    "bandit>=1.7.0",  # EV-DEV-03 code scan runs it at request time
     "fastapi>=0.137.2",
     "uvicorn[standard]>=0.42.0",
     "pydantic>=2.12.4",
@@ -92,7 +93,6 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.5.0",
     "pre-commit>=3.4.0",
-    "bandit>=1.7.0",
     "pylint>=2.17.0",
     "autopep8>=2.0.0",
     "coverage>=7.3.0",
@@ -111,6 +111,8 @@ test = [
     "pytest-playwright>=0.4.0",
     "playwright>=1.40.0",
     "moto[s3]>=5.1",
+    # tests/test_clients_integration.py drives the MCP server (apps/mcp targets the 1.x FastMCP API).
+    "mcp>=1.10,<2",
 ]
 # FairMind-E measurement harness (research/fairmind-e/measurement); optional at runtime.
 research = [
@@ -204,6 +206,7 @@ markers = [
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "e2e: marks tests as end-to-end tests",
+    "real_session_check: run config.auth._session_is_live against the database instead of the suite-wide stub",
 ]
 
 [tool.coverage.run]
@@ -252,3 +255,12 @@ max-locals = 20
 max-returns = 6
 max-branches = 15
 max-statements = 60
+
+[tool.ruff.lint]
+# CI gate (audit C9): only rules that flag real bugs, so it can be strict from day
+# one: syntax errors, undefined names, redefinitions, == None, mutable defaults.
+select = ["E9", "F63", "F7", "F82", "F811", "E711", "B006"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest fixtures are named like the fixture they receive, which F811 misreads.
+"tests/**" = ["F811"]

@@ -1,0 +1,48 @@
+---
+title: Environment
+description: Assess the energy and carbon use of each AI system, score it into an impact tier, and export it for CSRD reporting.
+---
+
+<Status state="partial">Impact tiers use provisional thresholds that will be recalibrated from real assessments. The result is an estimate with a stated confidence, not a certified figure.</Status>
+
+<Access status="partial" where="Release and operate › Environment" address="/environment" change="Owner or admin of the organisation (starting an assessment)" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/release/environment" /></Tab>
+  <Tab value="Try it"><TryIt page="app/release/environment" /></Tab>
+</Tabs>
+
+## What it is for
+
+Each registered system can have an environmental assessment: its energy and carbon use, scored into an impact tier (Low, Medium or High) with a confidence band. Assessments are versioned. You can export a system's record for CSRD reporting.
+
+By default the assessment is also one of the checks in the release gate. Your organisation can leave it out of the gate. When it does, a banner reads **Not counted in release decisions**, and assessments still feed CSRD reporting. An owner or admin changes this in **Settings**.
+
+## How to use it
+
+1. Open **Environment**. The counts at the top show Proven, Estimated, Out of date, Fails and Not assessed.
+2. Find a system under **Systems**. Click its name to focus on that system and see its version history.
+3. Press **Start an assessment**. A drawer opens with the assessment form for that system.
+4. Fill in the form and save. The result is scored on save and added to the version trail.
+5. Press **Export for CSRD** on a system with a result to download its record. If the export fails, the page shows the reason.
+6. Read **How impact tiers are set** below the list.
+
+Starting an assessment needs owner or admin rights. Other members who belong to the system can read.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/release/environment" />
+
+## What's on the page
+
+Each row shows the check state, then the latest assessment: impact tier, confidence, whether it needs a plan to reduce impact, whether it blocks approval, and the version with its date. "No assessment yet" means none exists.
+
+The focused view adds a history table with version, date, impact tier, confidence, recommendation and review state.
+
+**How impact tiers are set** is a table of measured figures with a "Low below" and a "High above" value for each. It is marked provisional when the backend says so.
+
+For the method and the evidence it produces, read [Environmental evaluation](../../journeys/environmental-evaluation.mdx). On what an assessment can and cannot claim, see [Status and limits](../../get-started/status-and-limits.mdx).
+
+<PageAnatomy route="environment" />

@@ -8,6 +8,8 @@ PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops coun
 POST /systems/{id}/attestations            a person states a check is satisfied; manual evidence
 GET  /systems/{id}/gate                    verdict, confidence, check states, the release decision status, why, and the path to the next verdict
 GET  /systems/{id}/clause-map              the gate per framework clause, scoped to the confirmed frameworks
+GET  /estate/gates                         the gate of every system in the caller's org, without explain and path
+GET  /frameworks/{key}/systems             per requirement, the cell of every system that confirmed the framework
 
 Mounted under /api/v1/ai-governance next to the governance router and sharing
 its org scoping and system access rules.
@@ -26,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import (
     CLOSED_RISK_STATUSES,
+    OrgMembership,
+    org_member,
     _authenticated_actor,
     _caller_org,
     _enforce_org_scope,
@@ -41,11 +45,12 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
-from src.application.services.clause_map_service import clause_map
+from src.application.services.clause_map_service import _catalogue, clause_map, tracked_requirements
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
+    TIERS,
     FairnessRunError,
     confirm_attributes,
     effective_tier,
@@ -63,8 +68,10 @@ router = APIRouter(tags=["fairness"], dependencies=[Depends(_enforce_org_scope)]
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-async def _read_upload(file: UploadFile) -> bytes:
-    data = await file.read()
+def _read_upload(file: UploadFile) -> bytes:
+    # Sync on purpose: the handlers run in the threadpool, and the form parser has
+    # already spooled the upload. Read one byte past the limit, never the whole file.
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if not data:
         raise HTTPException(status_code=422, detail="The uploaded file is empty")
     if len(data) > MAX_UPLOAD_BYTES:
@@ -134,7 +141,9 @@ def _approval_blockers(db: Session, system_id: str, gate: Dict[str, Any]) -> Lis
         env = {"blocked": True, "code": "missing_environmental_evidence"}
     counts = (_release_blockers(db, system_id) or {}).get("blockers", {})
     findings, tasks = counts.get("openHighOrCriticalFindings", 0), counts.get("activeCriticalTasks", 0)
-    out = [{"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": env.get("code") != "missing_environmental_evidence"}]
+    out = []
+    if env.get("code") != "not_required":
+        out.append({"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": env.get("code") != "missing_environmental_evidence"})
     if env.get("blocked") and env.get("code") != "missing_environmental_evidence":
         out.append({"key": env.get("code"), "text": ENV_BLOCKER_TEXT.get(env.get("code"), env.get("reason")), "met": False})
     out.append({"key": "open_findings", "text": "No open high or critical findings" + (f" ({findings} open)" if findings else ""), "met": not findings})
@@ -154,7 +163,10 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
     applicability, stage = _system_applicability(db, system_id)
     tier = effective_tier(risk_tier, applicability)
-    assessed = _environmental_assessed(db, system_id)
+    from src.application.services.environmental_service import system_environmental_gate_enabled
+
+    with_env = system_environmental_gate_enabled(db, system_id)
+    assessed = _environmental_assessed(db, system_id) if with_env else None
     approval = decided = None
     if with_decision:
         approval = _fetch_latest_system_approval(db, system_id)
@@ -165,15 +177,16 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate = release_gate(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence,
         approval_status=approval["status"] if approval else "not_requested", last_decision=decided[0] if decided else None,
+        include_environmental=with_env,
     )
     gate["reasons"] += tier_reasons(risk_tier, applicability)
     _apply_policy_rules(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
-    gate["explain"] = gate_explain(risk_tier, applicability)
+    gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
-        approval_blockers=_approval_blockers(db, system_id, gate),
+        approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
     )
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
@@ -208,7 +221,7 @@ def _apply_policy_rules(db: Session, system_id: str, gate: Dict[str, Any]) -> No
 
 
 @router.post("/systems/{system_id}/fairness-runs/inspect")
-async def inspect_fairness_csv(
+def inspect_fairness_csv(
     system_id: str,
     file: UploadFile = File(...),
     current_user: TokenData = Depends(get_current_active_user),
@@ -217,7 +230,7 @@ async def inspect_fairness_csv(
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     try:
-        return inspect_csv(await _read_upload(file), _last_run_metadata(db, system_id))
+        return inspect_csv(_read_upload(file), _last_run_metadata(db, system_id))
     except FairnessRunError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -238,7 +251,7 @@ def _confirmation_summary(record: Optional[Dict[str, Any]]) -> Optional[Dict[str
 
 
 @router.post("/systems/{system_id}/fairness-runs")
-async def create_fairness_run(
+def create_fairness_run(
     system_id: str,
     http: Request,
     file: UploadFile = File(...),
@@ -251,6 +264,7 @@ async def create_fairness_run(
     confirm_sha256: Optional[str] = Form(None),
     removal_reason: Optional[str] = Form(None),
     uncovered_reason: Optional[str] = Form(None),
+    keep_for_agent: Optional[str] = Form(None, description='"1" keeps this file so the release autopilot can re-run it'),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -258,7 +272,7 @@ async def create_fairness_run(
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_row(db, system_id)
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
-    data = await _read_upload(file)
+    data = _read_upload(file)
     now = datetime.now(timezone.utc).isoformat()
     try:
         # The suggestion is recomputed from these bytes, so a client cannot choose what it was shown.
@@ -314,9 +328,19 @@ async def create_fairness_run(
             "created_at": now,
         },
     )
+    kept = False
+    if keep_for_agent == "1" and confirmation["confirmed"]:
+        from api.routes.autopilot import keep_source  # autopilot imports this module
+
+        keep_source(
+            db, _caller_org(http), system_id, "fairness", kind="upload", file_name=file.filename, content=data,
+            actor=_authenticated_actor(current_user), basis={"evidenceId": evidence_id, "mapping": result["mapping"]},
+        )
+        kept = True
     db.commit()
     return {
         "runId": run_id,
+        "keptForAgent": kept,
         "evidenceId": evidence_id,
         "systemId": system_id,
         "title": title,
@@ -327,7 +351,7 @@ async def create_fairness_run(
 
 
 @router.get("/systems/{system_id}/fairness-runs")
-async def list_fairness_runs(
+def list_fairness_runs(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -370,7 +394,7 @@ async def list_fairness_runs(
 
 
 @router.get("/systems/{system_id}/clause-map")
-async def get_clause_map(
+def get_clause_map(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -394,7 +418,7 @@ async def get_clause_map(
 
 
 @router.get("/systems/{system_id}/seals")
-async def get_decision_seals(
+def get_decision_seals(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -406,7 +430,7 @@ async def get_decision_seals(
 
 
 @router.get("/systems/{system_id}/gate")
-async def get_release_gate(
+def get_release_gate(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -415,6 +439,114 @@ async def get_release_gate(
     _require_system_access(db, system_id, current_user)
     system = _system_row(db, system_id)
     return _gate_payload(db, system_id, system.risk_tier)
+
+
+class ReleaseGateSettings(BaseModel):
+    environmentalGate: bool
+
+
+@router.get("/release-gate/settings", response_model=ReleaseGateSettings)
+def get_release_gate_settings(http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
+    """Which checks this organisation's release gate weighs. Any member may read it."""
+    from src.application.services.environmental_service import environmental_gate_enabled
+
+    return {"environmentalGate": environmental_gate_enabled(db, m.org_id)}
+
+
+@router.put("/release-gate/settings", response_model=ReleaseGateSettings)
+def set_release_gate_settings(
+    body: ReleaseGateSettings, http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)
+):
+    """Owners and admins choose whether environmental impact counts in release decisions; each change is audited."""
+    if str(m.role).lower() not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only an owner or admin of the organisation can change the release gate")
+    db.execute(
+        text(
+            "UPDATE organizations SET metadata = COALESCE(metadata::jsonb, '{}'::jsonb) || jsonb_build_object('environmentalGate', CAST(:on AS boolean)), "
+            "updated_at = NOW() WHERE id::text = :id"
+        ),
+        {"on": body.environmentalGate, "id": m.org_id},
+    )
+    db.execute(
+        text(
+            "INSERT INTO org_audit_logs (id, org_id, user_id, action, resource_type, resource_id, changes, status, ip_address, user_agent, created_at) "
+            "VALUES (:id, :org, :user, :action, 'organization', :org, CAST(:changes AS json), 'success', :ip, :ua, NOW())"
+        ),
+        {
+            "id": str(uuid.uuid4()), "org": m.org_id, "user": m.user_id,
+            "action": "release_gate_environmental_" + ("on" if body.environmentalGate else "off"),
+            "changes": json.dumps({"environmentalGate": body.environmentalGate}),
+            "ip": http.client.host if http.client else None, "ua": http.headers.get("user-agent"),
+        },
+    )
+    db.commit()
+    return {"environmentalGate": body.environmentalGate}
+
+
+def _org_systems(db: Session, http: Request) -> List[Any]:
+    return db.execute(text("SELECT id, name, risk_tier FROM governance_ai_systems WHERE org_id = :org"), {"org": _caller_org(http)}).fetchall()
+
+
+@router.get("/estate/gates")
+def get_estate_gates(
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The release gate of every system in the caller's org: verdict, confidence and checks, without explain and path."""
+    _ensure_tables(db)
+    out = []
+    # ponytail: N gate computations (~10 queries each); precompute on evidence write if estates pass ~100 systems.
+    for row in _org_systems(db, http):
+        gate = _gate_payload(db, row.id, row.risk_tier)
+        out.append({
+            "systemId": row.id, "verdict": gate["verdict"], "confidence": gate["confidence"], "band": gate["band"], "approvalStatus": gate["approvalStatus"],
+            "checks": [{k: v for k, v in c.items() if k != "detail"} for c in gate["checks"]],
+        })
+    return out
+
+
+@router.get("/frameworks/{framework_key}/systems")
+def get_framework_systems(
+    framework_key: str,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Every requirement of one framework the gate speaks to, with one cell per system that confirmed the framework.
+
+    Systems run from the highest tier down; ``cells`` follows that order. Systems with no confirmed applicability
+    count as ``unconfirmed``, confirmed ones without this framework as ``notInScope``.
+    """
+    framework = _catalogue()["frameworks"].get(framework_key)
+    if not framework:
+        raise HTTPException(status_code=404, detail="Framework not found")
+    _ensure_tables(db)
+    systems, unconfirmed, not_in_scope = [], 0, 0
+    for row in _org_systems(db, http):
+        applicability, _ = _system_applicability(db, row.id)
+        if applicability is None:
+            unconfirmed += 1
+        elif any(isinstance(f, dict) and f.get("key") == framework_key for f in applicability.get("frameworks") or []):
+            systems.append(row)
+        else:
+            not_in_scope += 1
+    systems.sort(key=lambda r: (-TIERS.index(effective_tier(r.risk_tier, None)), r.name))
+    # ponytail: one gate computation per system, as /estate/gates.
+    clauses = []
+    for row in systems:
+        payload = clause_map(_gate_payload(db, row.id, row.risk_tier), frameworks=[framework_key])
+        clauses.append({c["key"]: c for fw in payload["frameworks"] for c in fw["clauses"]})
+    return {
+        "framework": {"key": framework_key, "name": framework.get("name") or framework_key},
+        "systems": [{"id": r.id, "name": r.name, "riskTier": r.risk_tier} for r in systems],
+        "unconfirmed": unconfirmed,
+        "notInScope": not_in_scope,
+        "requirements": [
+            {"key": key, "cells": [{"state": by_key[key]["cell"], "checks": by_key[key]["checks"]} if key in by_key else None for by_key in clauses]}
+            for key in tracked_requirements(framework_key)
+        ],
+    }
 
 
 def _insert_evidence(db: Session, http: Request, current_user: TokenData, system_id: str, *, evidence_type: str, title: str, source: str, content: Dict[str, Any], confidence: float, metadata: Dict[str, Any]) -> str:
@@ -450,7 +582,7 @@ def _latest_fairness_run(db: Session, system_id: str) -> Optional[Dict[str, Any]
 
 
 @router.post("/systems/{system_id}/monitoring-runs")
-async def create_monitoring_run(
+def create_monitoring_run(
     system_id: str,
     http: Request,
     file: UploadFile = File(...),
@@ -469,7 +601,7 @@ async def create_monitoring_run(
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
     try:
         result = run_monitoring(
-            await _read_upload(file),
+            _read_upload(file),
             attributes=attribute_list,
             prediction=prediction or None,
             score=score or None,
@@ -549,7 +681,7 @@ class MonitoringPolicyRequest(BaseModel):
 
 
 @router.get("/systems/{system_id}/monitoring-policy")
-async def get_monitoring_policy(
+def get_monitoring_policy(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -560,7 +692,7 @@ async def get_monitoring_policy(
 
 
 @router.put("/systems/{system_id}/monitoring-policy")
-async def put_monitoring_policy(
+def put_monitoring_policy(
     system_id: str,
     body: MonitoringPolicyRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -593,7 +725,7 @@ async def put_monitoring_policy(
 
 
 @router.get("/systems/{system_id}/monitoring-runs")
-async def list_monitoring_runs(
+def list_monitoring_runs(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -623,7 +755,7 @@ class AttestationRequest(BaseModel):
 
 
 @router.post("/systems/{system_id}/attestations")
-async def create_attestation(
+def create_attestation(
     system_id: str,
     body: AttestationRequest,
     http: Request,

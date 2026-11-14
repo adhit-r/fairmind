@@ -79,7 +79,7 @@ class AIComplianceAutomationService:
             self.client = AsyncOpenAI(api_key=api_key or settings.openai_api_key)
             self.model = "gpt-6.1-sol"
         elif provider == LLMProvider.GEMINI:
-            self.client = httpx.AsyncClient()
+            self.client = httpx.AsyncClient(timeout=30)
             self.model = settings.llm_model
             self.api_key = api_key or settings.google_api_key
         else:
@@ -556,7 +556,6 @@ class AIComplianceAutomationService:
         citations = []
         
         # Look for common citation patterns
-        import re
         patterns = [
             r'Section \d+',
             r'DPDP Act',

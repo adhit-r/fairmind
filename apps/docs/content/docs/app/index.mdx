@@ -1,0 +1,55 @@
+---
+title: Getting around
+description: Seven menu groups down the left, a panel of their pages beside them, one file for every AI system, and a search that reaches every page.
+---
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/getting-around" /></Tab>
+  <Tab value="Try it"><TryIt page="app/getting-around" /></Tab>
+</Tabs>
+
+The app lives at [app.fairmind.xyz](https://app.fairmind.xyz). Down its left edge runs a strip of seven icons, one for
+each group of pages. Choosing an icon opens the group's first page, with all its pages listed in a panel beside the strip. Settings sits at the foot of
+the strip.
+
+| Group | Pages | What you do there |
+|---|---|---|
+| Home | [Home](./home/home.mdx), [Needs you](./home/needs-you.mdx) | See the state of every system at a glance, and the things waiting for a person |
+| Inventory | [AI systems](./inventory/systems.mdx), [Discovery](./inventory/discovery.mdx) | Register the AI systems you govern, and review the ones FairMind found in your connected platforms |
+| Rules | [Plan](./rules/plan.mdx), [Frameworks](./rules/frameworks.mdx), [Policies](./rules/policies.mdx) | Decide what each system must meet, and against which frameworks and internal policies |
+| Testing | [Evaluations](./testing/evaluations.mdx), [Runs](./testing/runs.mdx), [Agent audits](./testing/agent-audits.mdx) | Choose evaluations, run them, and audit agents |
+| Release and operate | [Decisions](./release/decisions.mdx), [Monitoring](./release/monitoring.mdx), [Findings](./release/findings.mdx), [Environment](./release/environment.mdx) | Record release decisions, watch systems in production, work findings to closure, assess environmental cost |
+| Records | [Evidence](./records/evidence.mdx), [Auditor packs](./records/auditor-packs.mdx) | Keep the evidence behind every decision, and share a bounded pack with an auditor |
+| Agents | [Autopilot](./agents/autopilot.mdx), [Ask FairMind](./agents/ask.mdx) | Let FairMind prepare the next steps, or ask it about your estate |
+
+Each AI system also has its own page, its [system file](./inventory/system-file.mdx), which gathers that system's
+plan, runs, findings, evidence and decisions in one place. Inventory stays lit while you are in one.
+
+## Signals in the menu
+
+A number beside a page is a live count read from the server: how many things need you, how many systems are
+registered, how many were discovered and not yet registered, how many runs and how many open findings. A count the
+server cannot give is left out, never estimated.
+
+## Search
+
+**Search or ask** at the top of the panel (or Cmd+K, Ctrl+K on Windows and Linux) opens one search over every page and
+every system in the organisation. Pick a result to go straight to it.
+
+## On a phone
+
+Below 768 pixels wide, the strip and panel fold into a menu button in the top bar.
+
+## The demo
+
+**Try the demo** on the [sign-in page](https://app.fairmind.xyz/login) opens a demo organisation with real systems,
+evaluations and evidence, read-only. Every recording in these docs was captured there. The server refuses any change
+made in the demo, so you can open every form and drawer without affecting anything.
+
+## Step by step
+
+<TourSteps page="app/getting-around" />
+
+## What's on the page
+
+<PageAnatomy route="dashboard" />

@@ -13,9 +13,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
-from api.routes import evaluation_results
+from src.application.services import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
+from src.application.services.clause_map_service import _catalogue
 from src.application.services.llm_runtime import grok_cli
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
@@ -372,7 +373,7 @@ def _run_or_404(db: Session, org_id: str, run_id: str):
 
 
 @router.get("/catalogue")
-async def get_catalogue(_m: OrgMembership = Depends(_member)):
+def get_catalogue(_m: OrgMembership = Depends(_member)):
     pillars = [
         {
             "id": p.id,
@@ -396,8 +397,26 @@ async def get_catalogue(_m: OrgMembership = Depends(_member)):
     return {"version": cat.VERSION, "pillars": pillars, "counts": counts}
 
 
+@router.get("/controls")
+def get_controls(_m: OrgMembership = Depends(_member)):
+    """The catalogue's common controls with the workflows that implement each, and the raw control-to-requirement crosswalk."""
+    data = _catalogue()
+    return {
+        "controls": [
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "objective": c.get("objective"),
+                "workflows": [{"id": w.id, "name": w.name, "approver": w.approver, "scope": w.scope} for w in WORKFLOWS.values() if w.commonControl == c["id"]],
+            }
+            for c in data["commonControls"]
+        ],
+        "crosswalk": data["crosswalk"],
+    }
+
+
 @router.get("")
-async def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     installed = set(_installed_ids(db, m.org_id))
     return [_pack_json(pid, pid in installed) for pid in PACKS]
@@ -435,7 +454,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
 
 
 @router.get("/evaluations")
-async def list_evaluations(
+def list_evaluations(
     pillar: Optional[str] = Query(default=None),
     engine: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
@@ -456,7 +475,7 @@ async def list_evaluations(
 
 
 @router.get("/evaluations/{evaluation_id}")
-async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     ev = EVALUATIONS.get(evaluation_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
@@ -465,7 +484,7 @@ async def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member)
 
 
 @router.get("/library/{pack_id}")
-async def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
@@ -523,7 +542,7 @@ def _bundle_json(bundle_id: str, installed: List[str], org: Coverage) -> dict:
 
 
 @router.get("/bundles")
-async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     installed = _installed_ids(db, m.org_id)
     org = _org_coverage(db, m.org_id, installed)
@@ -531,7 +550,7 @@ async def list_bundles(m: OrgMembership = Depends(_member), db: Session = Depend
 
 
 @router.post("/bundles/{bundle_id}/install")
-async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if bundle_id not in BUNDLES:
         raise HTTPException(status_code=404, detail="Bundle not found")
     _ensure_tables(db)
@@ -542,7 +561,7 @@ async def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), d
 
 
 @router.get("/journeys")
-async def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org = _org_coverage(db, m.org_id, _installed_ids(db, m.org_id))
     installed = set(_installed_ids(db, m.org_id))
@@ -577,7 +596,7 @@ def _framework_workflows(framework_key: str, installed: set, latest: Dict[str, A
 
 
 @router.post("/journeys/{framework_key}/install")
-async def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     """Add a framework: install every pack that covers or tests one of its requirements."""
     if framework_key not in FRAMEWORKS:
         raise HTTPException(status_code=404, detail="Journey not found")
@@ -589,7 +608,7 @@ async def install_framework(framework_key: str, m: OrgMembership = Depends(_mana
 
 
 @router.get("/journeys/{framework_key}")
-async def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     fw = FRAMEWORKS.get(framework_key)
     if not fw:
         raise HTTPException(status_code=404, detail="Journey not found")
@@ -690,7 +709,7 @@ def _install(db: Session, m: OrgMembership, pack_id: str) -> None:
 
 
 @router.post("/{pack_id}/install")
-async def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
@@ -699,7 +718,7 @@ async def install_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: S
 
 
 @router.delete("/{pack_id}/install")
-async def uninstall_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def uninstall_pack(pack_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
@@ -719,7 +738,7 @@ def _workflow_or_404(workflow_id: str) -> Workflow:
 
 
 @router.get("/workflows/{workflow_id}")
-async def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
     org_id = m.org_id
@@ -770,7 +789,7 @@ async def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db
 
 
 @router.post("/workflows/{workflow_id}/runs")
-async def start_run(
+def start_run(
     workflow_id: str,
     body: StartRunBody = StartRunBody(),
     m: OrgMembership = Depends(_manager),
@@ -822,7 +841,7 @@ async def start_run(
 
 
 @router.get("/runs")
-async def list_runs(
+def list_runs(
     status: Optional[str] = Query(default=None),
     m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
@@ -845,7 +864,7 @@ async def list_runs(
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_run(run_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _run_or_404(db, m.org_id, run_id)
     return _run_json(db, run_id)
@@ -931,6 +950,29 @@ def _edge(step, *needles: str) -> Optional[str]:
     return None
 
 
+def _escalate(db: Session, run, wf, step, user_id: Optional[str]) -> dict:
+    """Email the organisation's owners and admins; the ledger records how many were told, or that nobody was."""
+    from src.application.services.reviewer_notify import decision_email, reviewer_emails, send_in_background
+
+    recipients = reviewer_emails(db, run["org_id"], user_id)
+    if recipients:
+        send_in_background(
+            recipients,
+            f"Escalated: {wf.name}",
+            decision_email(
+                f"{wf.name} was escalated",
+                [f"The run reached \"{step.title}\" and needs the {wf.approver} to look at it."],
+                "/runs",
+            ),
+        )
+    return {
+        "approver": wf.approver,
+        "notificationSent": bool(recipients),
+        "recipients": len(recipients),
+        **({} if recipients else {"reason": "The organisation has no owner or admin with an email address."}),
+    }
+
+
 def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -> None:
     """Move the run onto step_id and through every step the engine finishes itself. Caller commits."""
     wf = WORKFLOWS[run["workflow_id"]]
@@ -950,8 +992,7 @@ def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -
         if step.kind == "trigger":
             payload = {"systemId": run["ai_system_id"], "startedBy": run["started_by"], "workflowVersion": run["workflow_version"]}
         elif step.kind == "escalate":
-            # ponytail: recorded only; no notifier exists yet, so nobody is messaged.
-            payload = {"approver": wf.approver, "notificationSent": False}
+            payload = _escalate(db, run, wf, step, user_id)
         else:
             head = db.execute(
                 text("SELECT seq, hash FROM workflow_run_events WHERE run_id = :id ORDER BY seq DESC LIMIT 1"),
@@ -994,7 +1035,7 @@ def _claim(db: Session, run_id: str, step_id: str) -> None:
 
 
 @router.post("/runs/{run_id}/steps/{step_id}/output")
-async def submit_step_output(
+def submit_step_output(
     run_id: str,
     step_id: str,
     body: StepOutputBody,
@@ -1194,6 +1235,101 @@ async def agent_step(run_id: str, step_id: str, m: OrgMembership = Depends(_mana
     return _run_json(db, run_id)
 
 
+# --- Ask FairMind: questions about the estate, answered by the organisation's model ---
+
+ASK_SYSTEM = (
+    "You are FairMind's assistant. You answer one person's question about their organisation's AI systems, "
+    "each system's release gate (verdict, confidence and the state of each check) and the workflow runs "
+    "waiting for a person. Use only the facts you are given. When the facts do not answer the question, say "
+    "what is missing instead of guessing. Answer in at most four short sentences of plain prose. In systems, "
+    "list the systems your answer is about, by the id given in the facts, each with a reason of a few words."
+)
+ASK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "systems": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "reason": {"type": "string"}},
+                "required": ["id", "reason"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["answer", "systems"],
+    "additionalProperties": False,
+}
+ASK_MAX_SYSTEMS = 60  # ponytail: the first 60 systems by name; retrieve by question if estates outgrow one prompt
+
+
+class AskBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+
+
+def _ask_facts(db: Session, org_id: str) -> dict:
+    from api.routes.fairness_runs import _gate_payload
+
+    systems = db.execute(
+        text("SELECT id, name, risk_tier, lifecycle_stage FROM governance_ai_systems WHERE org_id = :org ORDER BY name LIMIT :n"),
+        {"org": org_id, "n": ASK_MAX_SYSTEMS},
+    ).fetchall()
+    estate = []
+    for s in systems:
+        gate = _gate_payload(db, s.id, s.risk_tier)
+        estate.append({
+            "id": s.id, "name": s.name, "riskTier": s.risk_tier, "lifecycleStage": s.lifecycle_stage,
+            "verdict": gate["verdict"], "confidence": gate["confidence"], "approvalStatus": gate["approvalStatus"],
+            "checks": [
+                {k: c[k] for k in ("label", "state", "confidence", "evidenceClass", "fails", "stale") if k in c}
+                for c in gate["checks"]
+            ],
+            "reasons": gate["reasons"][:6],
+        })
+    waiting = db.execute(
+        text("SELECT * FROM workflow_runs WHERE org_id = :org AND status = 'waiting' ORDER BY created_at DESC LIMIT 30"),
+        {"org": org_id},
+    ).mappings().all()
+    runs = [{k: v for k, v in _summary(db, r).items() if k in ("workflowName", "currentStep", "waitingFor", "createdAt")} for r in waiting]
+    return {"systems": estate, "waitingRuns": runs}
+
+
+@router.post("/ask")
+async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    """One question about the estate, answered by the organisation's model from the gates and waiting runs alone."""
+    _ensure_tables(db)
+    row = _ai_row(db, m.org_id)
+    if not row or not row["enabled"]:
+        raise HTTPException(status_code=409, detail="Set up an AI provider in organisation settings to ask FairMind")
+    conn = _stored_connection(row)
+    facts = _ask_facts(db, m.org_id)
+    names = {s["id"]: s["name"] for s in facts["systems"]}
+    prompt = json.dumps({"question": body.question.strip(), "facts": facts}, default=str, sort_keys=True)
+    db.rollback()  # hold no transaction open while the model works
+    try:
+        data, meta = await llm.complete(conn, ASK_SYSTEM, prompt, ASK_SCHEMA)
+    except llm.LLMError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    answer = str(data.get("answer") or "").strip()
+    if not answer:
+        raise HTTPException(status_code=502, detail="The model returned an empty answer")
+    cited, seen = [], set()
+    for item in data.get("systems") or []:
+        sid = str(item.get("id") or "") if isinstance(item, dict) else ""
+        if sid in names and sid not in seen:  # only systems that are in this organisation's facts
+            seen.add(sid)
+            cited.append({"id": sid, "name": names[sid], "reason": str(item.get("reason") or "")[:200]})
+    return {
+        "answer": answer[:4000],
+        "systems": cited,
+        "provider": conn.provider.name,
+        "model": meta["model"],
+        "systemsRead": len(facts["systems"]),
+        "runsRead": len(facts["waitingRuns"]),
+    }
+
+
 # --- the organisation's model (bring your own key) -------------------------
 
 
@@ -1271,18 +1407,18 @@ def _body_connection(body: AIProviderBody, stored) -> tuple:
 
 
 @router.get("/ai-providers")
-async def list_ai_providers(_m: OrgMembership = Depends(_member)):
+def list_ai_providers(_m: OrgMembership = Depends(_member)):
     return llm.catalogue()
 
 
 @router.get("/ai-provider")
-async def get_ai_provider(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_ai_provider(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     return {"config": _ai_json(_ai_row(db, m.org_id))}
 
 
 @router.put("/ai-provider")
-async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if grok_cli.enabled():
         raise HTTPException(status_code=409, detail=_CLI_SAVES_NOTHING)
     _ensure_tables(db)
@@ -1322,7 +1458,7 @@ async def save_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_man
 
 
 @router.delete("/ai-provider")
-async def delete_ai_provider(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def delete_ai_provider(m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     if grok_cli.enabled():
         raise HTTPException(status_code=409, detail=_CLI_SAVES_NOTHING)
     _ensure_tables(db)
@@ -1356,7 +1492,7 @@ async def test_ai_provider(body: AIProviderBody, m: OrgMembership = Depends(_man
 
 
 @router.post("/runs/{run_id}/decision")
-async def decide_run(
+def decide_run(
     run_id: str,
     body: DecisionBody,
     m: OrgMembership = Depends(_manager),
@@ -1501,7 +1637,7 @@ def _draft_or_404(db: Session, org_id: str, workflow_id: str):
 
 
 @router.get("/workflows/{workflow_id}/versions")
-async def list_versions(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_versions(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _workflow_or_404(workflow_id)
     _ensure_tables(db)
     rows = (
@@ -1531,14 +1667,14 @@ async def list_versions(workflow_id: str, m: OrgMembership = Depends(_member), d
 
 
 @router.get("/workflows/{workflow_id}/draft")
-async def get_draft(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_draft(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
     return _draft_json(db, _draft_or_404(db, m.org_id, wf.id), wf)
 
 
 @router.post("/workflows/{workflow_id}/draft")
-async def create_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def create_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     """Start a draft from the version runs use now. If one exists it is returned as it is."""
     wf = _editable(db, m, workflow_id)
     row = _draft(db, m.org_id, wf.id)
@@ -1575,7 +1711,7 @@ async def create_draft(workflow_id: str, m: OrgMembership = Depends(_manager), d
 
 
 @router.put("/workflows/{workflow_id}/draft")
-async def save_draft(workflow_id: str, body: DraftBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_draft(workflow_id: str, body: DraftBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     """Save the draft as it is; problems are reported, not refused, so half-finished edits are kept."""
     wf = _editable(db, m, workflow_id)
     row = _draft_or_404(db, m.org_id, wf.id)
@@ -1591,7 +1727,7 @@ async def save_draft(workflow_id: str, body: DraftBody, m: OrgMembership = Depen
 
 
 @router.delete("/workflows/{workflow_id}/draft")
-async def discard_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def discard_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     wf = _editable(db, m, workflow_id)
     row = _draft_or_404(db, m.org_id, wf.id)
     db.execute(text("DELETE FROM workflow_versions WHERE id = :id AND status = 'draft'"), {"id": row["id"]})
@@ -1600,7 +1736,7 @@ async def discard_draft(workflow_id: str, m: OrgMembership = Depends(_manager), 
 
 
 @router.post("/workflows/{workflow_id}/draft/publish")
-async def publish_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def publish_draft(workflow_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     wf = _editable(db, m, workflow_id)
     row = _draft_or_404(db, m.org_id, wf.id)
     problems = _problems(_steps_of(row), wf)
@@ -1618,4 +1754,4 @@ async def publish_draft(workflow_id: str, m: OrgMembership = Depends(_manager), 
         db.rollback()
         raise HTTPException(status_code=409, detail="The draft changed while publishing, retry")
     db.commit()
-    return await get_workflow(workflow_id, m, db)
+    return get_workflow(workflow_id, m, db)

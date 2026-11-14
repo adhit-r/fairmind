@@ -1,49 +1,58 @@
 ---
-title: Introduction
-description: Understand FairMind's evidence-first model for AI assurance and governance.
+title: What is FairMind
+description: An open-source AI assurance workbench for models and agents. It turns governance frameworks into controls, collects evaluation evidence, and gates releases.
 ---
 
-FairMind is an AI assurance evidence workbench. It keeps an AI system, its tests, evidence, risks, remediation, approvals, and reports in one reviewable context.
+<Status state="partial">Alpha, November 2026. The main path works end to end; see [Status and limits](/docs/get-started/status-and-limits).</Status>
 
-The product is built around a simple rule: an evaluator result is evidence for a decision, not the decision itself.
+<HomeHero />
 
-## What FairMind helps you do
+<DemoStrip />
 
-1. Register an AI system and define its governance scope.
-2. Run a supported evaluator or bring an external result.
-3. Record artifacts with provenance, limitations, and review state.
-4. Link evidence to risks and governance controls.
-5. Assign remediation, run a retest, and preserve the history.
-6. Create a point-in-time assurance snapshot for review.
+## Where to start
 
-## The core lifecycle
+<Cards>
+  <Card title="Start here" href="/docs/get-started/quickstart" description="Quickstart, core concepts, the evidence model and what works today." />
+  <Card title="The app" href="/docs/app" description="Every page in the menu, with a recording and a click-through." />
+  <Card title="Journeys" href="/docs/journeys/register-system" description="Register a system, review evidence, fix and retest, release." />
+  <Card title="Build with FairMind" href="/docs/build/python-sdk" description="Python SDK, CLI, MCP server and the release gate in CI." />
+  <Card title="Reference" href="/docs/reference/api" description="The API, permissions and separation, the EU AI Act crosswalk." />
+</Cards>
 
-| Stage | Question | Primary workspace |
+## By role
+
+| You are | Start with |
+| --- | --- |
+| A compliance or risk lead | [Frameworks](/docs/app/rules/frameworks), [Plan](/docs/app/rules/plan), [Decisions](/docs/app/release/decisions), [Auditor packs](/docs/app/records/auditor-packs) |
+| An ML or platform engineer | [Python SDK](/docs/build/python-sdk), [CLI](/docs/build/cli), [Release gate in CI](/docs/build/release-gate-in-ci), [Evaluations](/docs/app/testing/evaluations) |
+| An auditor | [Evidence](/docs/app/records/evidence), [Auditor packs](/docs/app/records/auditor-packs), [Evidence model](/docs/get-started/evidence-model) |
+
+## What FairMind is
+
+FairMind keeps an AI system, its tests, evidence, risks, remediation and approvals in one reviewable record. It answers one question for a release: **may this system ship, and what is the evidence?**
+
+One rule runs through the product: an evaluation result is evidence for a decision, never the decision itself. A person decides.
+
+## The lifecycle
+
+| Stage | Question | Where |
 | --- | --- | --- |
-| Onboard | What system are we governing? | System registration |
-| Assess | What was tested, with which method and threshold? | Test Lab |
-| Govern | What evidence and risks affect the decision? | Evidence & Controls |
-| Remediate | What must change, who owns it, and was it retested? | Remediation |
-| Operate | What changed after release? | Monitoring and reports |
+| **Onboard** | Which system are we governing, and under which frameworks? | [Register a system](/docs/journeys/register-system) |
+| **Assess** | What was tested, how, and against which threshold? | [Govern your first agent](/docs/journeys/govern-your-first-agent) |
+| **Govern** | Which evidence and risks bear on each control? | [Review evidence](/docs/journeys/evidence-review) |
+| **Remediate** | What must change, who owns it, and did the retest pass? | [Fix and retest](/docs/journeys/remediation-retest) |
+| **Operate** | What changed after release? | [Scheduled monitoring](/docs/journeys/scheduled-monitoring) |
 
-## Evidence, not automatic compliance
+## What you can do today
 
-<Callout type="warn" title="Human review is required">
-FairMind records technical results and governance decisions. It does not turn an evaluation, a control mapping, or a readiness score into certification, legal compliance, or approval.
-</Callout>
+- **Evaluate models and agents.** All 109 catalogue evaluations run in FairMind: on uploaded files, as behaviour tests against your live system, as configuration audits of your agent platform, or on results from your own sandbox, drills and detectors.
+- **Map to frameworks.** Read the release gate clause by clause, led by the EU AI Act, ISO/IEC 42001, the NIST AI RMF and the RBI FREE-AI framework. Catalogue evaluations also map to AIUC-1 requirements.
+- **Gate a release.** Five checks give `go`, `conditional_go` or `no_go`. Failing blocking policy rules force `no_go`.
+- **Hand an auditor a verifiable pack.** Export an inspection pack, share a read-only link, and verify it offline with `fairmind verify`.
+- **Work from code or an agent.** The [Python SDK](/docs/build/python-sdk), [CLI](/docs/build/cli), GitHub Action and [MCP server](/docs/build/mcp-server) use the same API with an API key.
 
-The product makes capability state visible because different surfaces prove different things. Environmental evaluation is the strongest evidence-producing vertical in the current release. Other evaluators may be external-provider dependent, metadata-only, interface-only, unavailable, or research-only.
+## What FairMind is not
 
-Continue with [Capability truth](/docs/concepts/capability-truth) before selecting an evaluator.
-
-## Who uses FairMind
-
-- Assurance and compliance leads review gaps, mappings, approvals, and snapshots.
-- ML engineers and evaluators register subjects, run supported tests, and attach artifacts.
-- Risk and system owners manage remediation, exceptions, and release blockers.
-- Auditors and reviewers inspect evidence, decisions, and audit history.
-- Organization administrators manage membership and access.
-
-## Evidence basis
-
-This page follows the active product navigation and system-scoped lifecycle in `apps/frontend/src/lib/constants/navigation.ts`, `apps/frontend/src/app/(dashboard)/dashboard/page.tsx`, and `apps/frontend/src/app/(dashboard)/onboard/page.tsx`. Capability boundaries are summarized in `.docs-forge/kb/engineer-brief.md`.
+- Not a certification. It produces no compliance certificate, automatic approval or "verified" badge.
+- Not a runtime guardrail. It assesses systems; it does not sit in the request path.
+- Not a sandbox. Evaluation engines run inside the backend; uploaded model files are inspected, never executed.

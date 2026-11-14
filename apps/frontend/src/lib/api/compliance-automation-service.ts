@@ -226,36 +226,6 @@ export const reportAPI = {
 
         return unwrap(api.get(`/api/v1/compliance/reports?${query}`))
     },
-
-    /**
-     * Get a specific report by ID
-     */
-    get: async (id: string): Promise<ComplianceReport> => {
-        return unwrap(api.get(`/api/v1/compliance/reports/${id}`))
-    },
-
-    /**
-     * Download a compliance report
-     */
-    download: async (id: string): Promise<Blob> => {
-        const response = await fetch(`/api/v1/compliance/reports/${id}/download`)
-        if (!response.ok) throw new Error('Failed to download report')
-        return response.blob()
-    },
-}
-
-// Remediation APIs
-export const remediationAPI = {
-    /**
-     * Get AI-generated remediation plan for a compliance gap
-     */
-    generatePlan: async (data: {
-        framework: string
-        gap_id: string
-        model_id?: string
-    }): Promise<RemediationPlan> => {
-        return unwrap(api.post('/api/v1/compliance/gap-remediation', data))
-    },
 }
 
 // System Status API

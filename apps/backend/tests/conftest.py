@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 
+# Settings default to production; the suite exercises development behaviour.
+# Set before tests.pg, whose database setup already imports config.settings.
+os.environ.setdefault("ENVIRONMENT", "development")
+
 from tests import pg
 
 if not pg.SERVER_URL:
@@ -74,6 +78,38 @@ def drop_test_databases() -> Generator[None, None, None]:
     """Drop every database pg.fresh_engine() created during the test."""
     yield
     pg.drop_test_databases()
+
+
+@pytest.fixture(autouse=True)
+def accept_synthetic_sessions(request, monkeypatch) -> None:
+    """Most tests sign requests with tokens for users that have no users row
+    (tests/auth_helpers.auth_headers), which the per-request session check would
+    reject, and record refresh token ids in memory. test_session_revocation runs
+    both against the database (real_session_check)."""
+    if request.node.get_closest_marker("real_session_check"):
+        return
+
+    async def _live(user_id, token_version, org_id):
+        return True
+
+    monkeypatch.setattr("config.auth._session_is_live", _live)
+
+    # Rotating refresh token ids live in memory for the same reason.
+    issued: dict[str, bool] = {}
+
+    async def _store(jti, user_id, expires_at):
+        issued[jti] = False
+
+    async def _claim(jti):
+        if jti not in issued:
+            return "unknown"
+        if issued[jti]:
+            return "reused"
+        issued[jti] = True
+        return "ok"
+
+    monkeypatch.setattr("config.auth._store_refresh_jti", _store)
+    monkeypatch.setattr("config.auth._claim_refresh_jti", _claim)
 
 
 @pytest.fixture(autouse=True)
@@ -390,3 +426,12 @@ def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
+
+
+@pytest.fixture
+def environmental_gate_on(monkeypatch):
+    """Organisations leave environmental impact out of the release gate unless an owner turns it on;
+    tests written for the five-check gate turn it on for every organisation."""
+    import src.application.services.environmental_service as environmental_service
+
+    monkeypatch.setattr(environmental_service, "environmental_gate_enabled", lambda db, org_id: bool(org_id))

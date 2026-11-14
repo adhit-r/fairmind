@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-from .confidence import band_from_score, cap_confidence_for_provenance, normalize_provenance
+from .confidence import band_from_score, confidence_from_source, normalize_provenance
 from .controls import _has_dated_mitigation, _has_exception, coverage, coverage_rate
 from .decision_matrix import NO_GO, get_recommendation, requires_mitigation
 from .impact import impact_tier
@@ -61,14 +61,12 @@ def _resolve_provenance(assessment: Mapping[str, Any]) -> str:
 
 
 def _resolve_confidence(assessment: Mapping[str, Any], provenance: str) -> float:
-    """Derive the evidence-confidence score, provenance-capped.
+    """Derive the evidence-confidence score from the provenance class alone.
 
-    An explicitly supplied score is honoured but never allowed to exceed what its
-    provenance class permits (a claimed 0.95 on vendor-reported data is capped);
-    an ``unknown`` provenance forces 0.0 regardless of any claimed score.
+    A supplied score is kept on the assessment for audit but does not enter the
+    gate; ``unknown`` provenance is 0.0.
     """
-    score = assessment.get("confidence_score", assessment.get("evidence_confidence"))
-    return cap_confidence_for_provenance(score, provenance)
+    return confidence_from_source(provenance)
 
 
 def _mitigation_readiness(assessment: Mapping[str, Any], documented_mitigation: bool) -> str:

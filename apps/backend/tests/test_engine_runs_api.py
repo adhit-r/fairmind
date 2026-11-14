@@ -31,7 +31,7 @@ def test_a_run_is_stored_and_drives_the_evaluation_result(tmp_database):
     system = _system(tmp_database, org_id)
     spec = client.get(f"{PACKS}/evaluations/EV-DAT-01/engine").json()
     assert [s["name"] for s in spec["slots"]] == ["reference", "current"]
-    assert client.get(f"{PACKS}/evaluations/EV-SEC-22/engine").status_code == 404
+    assert client.get(f"{PACKS}/evaluations/EV-XXX-99/engine").status_code == 404
 
     passed = _run(client, system, 0.0)
     assert passed.status_code == 200, passed.text
@@ -58,3 +58,18 @@ def test_runs_check_the_system_files_and_role(tmp_database):
     assert missing.status_code == 422
     member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
     assert _run(member, system, 0.0).status_code == 403
+
+
+def test_release_regression_reads_the_systems_stored_results(tmp_database):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+
+    def release():
+        return client.post(f"{PACKS}/evaluations/EV-REL-01/runs", data={"system_id": system, "params": '{"required": "EV-DAT-01"}'}).json()
+
+    assert release()["status"] == "insufficient"  # EV-DAT-01 has not been run
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    assert release()["status"] == "passed"
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    latest = release()
+    assert latest["status"] == "failed" and latest["metrics"]["failed"] == 1

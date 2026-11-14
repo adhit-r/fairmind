@@ -271,7 +271,7 @@ async def run_weat_test(
         raise HTTPException(status_code=500, detail=f"WEAT test failed: {str(e)}")
 
 @router.post("/test/fairness")
-async def run_fairness_metrics(
+def run_fairness_metrics(
     predictions: str = Form(...),  # JSON string of predictions
     true_labels: str = Form(...),  # JSON string of true labels
     sensitive_attributes: str = Form(...)  # JSON string of sensitive attributes
@@ -437,12 +437,12 @@ async def analyze_text_bias(
         raise HTTPException(status_code=500, detail=f"Text bias analysis failed: {str(e)}")
 
 @router.post("/templates")
-async def add_custom_template():
+def add_custom_template():
     """Custom templates are not stored: /detect runs the built-in templates only."""
     raise HTTPException(status_code=501, detail="Custom bias test templates are not stored; /detect runs the built-in templates only")
 
 @router.get("/templates", response_model=TemplateResponse)
-async def get_test_templates():
+def get_test_templates():
     """Get all available bias test templates"""
     try:
         templates = llm_bias_service.test_templates
@@ -471,7 +471,7 @@ async def get_test_templates():
         )
 
 @router.get("/libraries")
-async def get_available_libraries():
+def get_available_libraries():
     """Get list of available bias testing libraries"""
     try:
         available = bias_testing_library.get_available_libraries()
@@ -491,7 +491,7 @@ async def get_available_libraries():
         raise HTTPException(status_code=500, detail=f"Failed to get libraries: {str(e)}")
 
 @router.post("/libraries/{library_name}/install", dependencies=[Depends(require_admin)])
-async def install_library(library_name: str):
+def install_library(library_name: str):
     """Install a specific bias testing library"""
     try:
         # Find the library enum
@@ -521,7 +521,7 @@ def _own(rows, org_id: str) -> list:
 
 
 @router.get("/history")
-async def get_bias_history(limit: int = 100, m: OrgMembership = Depends(org_member)):
+def get_bias_history(limit: int = 100, m: OrgMembership = Depends(org_member)):
     """Get this organisation's bias detection history"""
     try:
         history = [
@@ -547,7 +547,7 @@ def _export(rows: list, format: str) -> str:
 
 
 @router.get("/export")
-async def export_bias_results(format: str = "json", m: OrgMembership = Depends(org_member)):
+def export_bias_results(format: str = "json", m: OrgMembership = Depends(org_member)):
     """Export this organisation's bias detection results"""
     try:
         if format not in ["json", "csv"]:
@@ -575,7 +575,7 @@ async def export_bias_results(format: str = "json", m: OrgMembership = Depends(o
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
 @router.get("/health")
-async def bias_detection_health():
+def bias_detection_health():
     """Health check for bias detection services"""
     try:
         # Check if services are available

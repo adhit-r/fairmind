@@ -39,8 +39,9 @@ fi
 # Create required directories
 mkdir -p uploads datasets models logs
 
-# Run database migrations (if needed)
-# python -m alembic upgrade head
+# Bring the schema up to date and verify it; the app no longer creates tables
+# outside development (same step as the migrate service in deploy/lightsail).
+python scripts/setup_db.py || { echo "Schema setup or verify failed; not starting."; exit 1; }
 
 # Start the application
 echo "Starting FairMind API server..."

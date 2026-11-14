@@ -17,12 +17,13 @@ import uuid
 import logging
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from pydantic import BaseModel, EmailStr
 
 from config.database import get_db_connection, get_db_transaction
 from config.settings import settings
-from config.auth import get_current_active_user, require_admin, TokenData
+from config.turnstile import require_turnstile
+from config.auth import auth_manager, get_current_active_user, require_admin, TokenData
 from src.application.services.api_boundary_dependencies import email_service
 
 logger = logging.getLogger("fairmind.registration")
@@ -46,23 +47,28 @@ class ReviewRequest(BaseModel):
 
 # ── Public: submit a signup request ──────────────────────────────────────────
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def submit_registration(payload: RegistrationRequest):
+@router.post("/register", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_turnstile)])
+async def submit_registration(payload: RegistrationRequest, request: Request):
     """Anyone can request access. Admin is notified via Resend."""
+    from middleware.security import client_ip
+    from src.api.routers.auth import _reset_rate_limited
+
+    # Each request emails the platform admin, so cap them per address and per IP.
+    if _reset_rate_limited(f"register-email:{payload.email.lower()}", f"register-ip:{client_ip(request)}"):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a few minutes.")
     request_id = str(uuid.uuid4())
 
     try:
         async with get_db_connection() as db:
             # Check for existing pending request from same email
             existing = await db.fetch_one(
-                "SELECT id FROM registration_requests WHERE email = :email AND status = 'pending'",
+                "SELECT id FROM registration_requests WHERE lower(email) = lower(:email) AND status = 'pending'",
                 {"email": payload.email},
             )
             if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="A pending request for this email already exists.",
-                )
+                # Same answer as a new request, so the form cannot be used to learn
+                # who has applied; no second row and no second admin email.
+                return {"id": str(existing["id"]), "status": "pending", "message": "Request submitted. You will be notified by email."}
 
             # No organisation is created or looked up until an admin approves.
             await db.execute(
@@ -126,13 +132,13 @@ async def list_registrations(
                         "email": r["email"],
                         "name": r["name"],
                         "org_name": r["org_name"],
-                        "org_domain": r.get("org_domain"),
+                        "org_domain": r["org_domain"],
                         "requested_role": r["requested_role"],
-                        "message": r.get("message"),
+                        "message": r["message"],
                         "status": r["status"],
-                        "review_notes": r.get("review_notes"),
-                        "reviewed_at": r["reviewed_at"].isoformat() if r.get("reviewed_at") else None,
-                        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+                        "review_notes": r["review_notes"],
+                        "reviewed_at": r["reviewed_at"].isoformat() if r["reviewed_at"] else None,
+                        "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                     }
                     for r in rows
                 ]
@@ -177,18 +183,22 @@ async def approve_registration(
                     detail="An organisation with this name already exists. Its owner can invite the requester.",
                 )
 
-            # Same shape as self-serve signup (api/routes/auth.py), except the
-            # global role: requested_role is requester input and 'admin' would
-            # make them a platform operator. Org rights come from org_members.
+            # The global role stays analyst: requested_role is requester input and
+            # 'admin' would make them a platform operator. Org rights come from
+            # org_members. The password is a random one nobody knows; the approval
+            # email carries a single-use link to choose a real one, which also
+            # proves the requester controls the address.
             user_id = str(uuid.uuid4())
+            password_hash = auth_manager.get_password_hash(secrets.token_urlsafe(32))
             org_id = str(uuid.uuid4())
             now = datetime.utcnow()
             slug_base = re.sub(r"[^a-z0-9]+", "-", req["org_name"].lower()).strip("-") or "org"
             await db.execute(
                 "INSERT INTO users (id, email, username, password_hash, name, role, roles, is_active) "
-                "VALUES (:id, :email, :username, '', :name, 'analyst', CAST(:roles AS jsonb), TRUE)",
+                "VALUES (:id, :email, :username, :pw, :name, 'analyst', CAST(:roles AS jsonb), TRUE)",
                 {
                     "id": user_id,
+                    "pw": password_hash,
                     "email": req["email"],
                     "username": f"{req['email'].split('@')[0]}-{secrets.token_hex(3)}",
                     "name": req["name"],
@@ -202,7 +212,7 @@ async def approve_registration(
                     "id": org_id,
                     "name": req["org_name"],
                     "slug": f"{slug_base}-{secrets.token_hex(3)}",
-                    "domain": req.get("org_domain"),
+                    "domain": req["org_domain"],
                     "owner": user_id,
                 },
             )
@@ -221,9 +231,15 @@ async def approve_registration(
                 {"org": org_id, "reviewer": current_user.user_id, "now": now, "notes": body.notes, "id": request_id},
             )
 
+        token = auth_manager.create_password_reset_token(user_id, password_hash)
+        # The token rides in the fragment, which browsers never send to a server.
+        set_password_url = f"{settings.frontend_url}/reset-password#token={token}&welcome=1"
         import asyncio
         asyncio.create_task(
-            email_service.send_approval_email(req["email"], req["name"], req["org_name"])
+            email_service.send_approval_email(
+                req["email"], req["name"], req["org_name"], set_password_url,
+                auth_manager.password_reset_expire_minutes,
+            )
         )
 
         logger.info(f"Registration approved: {req['email']} by {current_user.email}")

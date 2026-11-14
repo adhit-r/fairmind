@@ -67,74 +67,9 @@ class StakeholderDashboardRequest(BaseModel):
 
 # Endpoints
 
-@router.get("/frameworks")
-async def list_frameworks():
-    """
-    List all supported regulatory frameworks
-    
-    Returns:
-        List of supported frameworks with descriptions
-    """
-    frameworks = [
-        {
-            "id": RegulatoryFramework.EU_AI_ACT,
-            "name": "EU AI Act",
-            "description": "European Union Artificial Intelligence Act",
-            "region": "EU",
-            "status": "Proposed",
-        },
-        {
-            "id": RegulatoryFramework.GDPR,
-            "name": "GDPR",
-            "description": "General Data Protection Regulation",
-            "region": "EU",
-            "status": "Active",
-        },
-        {
-            "id": RegulatoryFramework.ISO_IEC_42001,
-            "name": "ISO/IEC 42001",
-            "description": "AI Management System Standard",
-            "region": "International",
-            "status": "Active",
-        },
-        {
-            "id": RegulatoryFramework.NIST_AI_RMF,
-            "name": "NIST AI RMF",
-            "description": "NIST AI Risk Management Framework",
-            "region": "US",
-            "status": "Active",
-        },
-        {
-            "id": RegulatoryFramework.IEEE_7000,
-            "name": "IEEE 7000",
-            "description": "Model Process for Addressing Ethical Concerns",
-            "region": "International",
-            "status": "Active",
-        },
-        {
-            "id": RegulatoryFramework.DPDP_ACT,
-            "name": "DPDP Act",
-            "description": "Digital Personal Data Protection Act (India, 2023)",
-            "region": "India",
-            "status": "Active",
-        },
-        {
-            "id": RegulatoryFramework.INDIA_AI_FRAMEWORK,
-            "name": "India AI Framework",
-            "description": "National AI Framework (NITI Aayog Guidelines)",
-            "region": "India",
-            "status": "Active",
-        },
-    ]
-    
-    return {
-        "frameworks": frameworks,
-        "total": len(frameworks),
-    }
-
 
 @router.get("/frameworks/{framework}/requirements")
-async def get_framework_requirements(framework: RegulatoryFramework):
+def get_framework_requirements(framework: RegulatoryFramework):
     """
     Get requirements for a specific regulatory framework
     
@@ -232,7 +167,7 @@ async def generate_fairness_documentation(request: FairnessDocumentationRequest)
 
 
 @router.post("/stakeholder-dashboard", dependencies=[Depends(org_member)])
-async def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
+def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
     """
     Get stakeholder dashboard data
     
@@ -243,33 +178,23 @@ async def get_stakeholder_dashboard(request: StakeholderDashboardRequest):
         Dashboard data for stakeholders
     """
     try:
-        # First, we need to get compliance results
-        # In a real implementation, this would fetch from database
-        # For now, we'll return a sample structure
-        
-        sample_compliance_results = [
-            {
-                "framework": RegulatoryFramework.EU_AI_ACT,
-                "compliance_score": 85.0,
-                "overall_status": ComplianceStatus.COMPLIANT,
-                "total_requirements": 8,
-                "compliant_requirements": 7,
-                "recommendations": ["Address human oversight measures"],
-            }
-        ]
-        
-        dashboard_data = await compliance_service.generate_stakeholder_dashboard_data(
-            system_id=request.system_id,
-            compliance_results=sample_compliance_results,
-        )
-        
-        return dashboard_data
+        # Compliance checks are not persisted, so there are no stored results to build a dashboard from.
+        return {
+            "system_id": request.system_id,
+            "last_updated": datetime.utcnow().isoformat(),
+            "has_data": False,
+            "message": "No stored compliance results for this system",
+            "compliance_overview": {"overall_score": None, "frameworks": []},
+            "risk_indicators": {"high_priority_issues": 0, "open_recommendations": 0},
+            "trends": {"compliance_trend": None, "last_assessment_date": None},
+            "key_metrics": {"total_requirements": 0, "met_requirements": 0},
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/risk-levels")
-async def get_risk_levels():
+def get_risk_levels():
     """
     Get AI system risk levels per EU AI Act
     
@@ -331,7 +256,7 @@ async def get_risk_levels():
 
 
 @router.post("/assess-risk")
-async def assess_system_risk(
+def assess_system_risk(
     system_data: Dict[str, Any] = Body(..., description="AI system information")
 ):
     """
@@ -417,7 +342,7 @@ def _get_requirements_for_risk_level(risk_level: RiskLevel) -> List[str]:
 
 
 @router.get("/compliance-templates")
-async def get_compliance_templates():
+def get_compliance_templates():
     """
     Get compliance documentation templates
     
@@ -490,7 +415,7 @@ async def get_compliance_templates():
 
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",

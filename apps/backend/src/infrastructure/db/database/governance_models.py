@@ -23,6 +23,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -3929,6 +3930,23 @@ class GovernanceMonitoringPolicy(Base):
         return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
 
 
+class GovernanceBiasAnalysis(Base):
+    """A stored LLM-judge or advanced-bias analysis run against one AI system."""
+
+    __tablename__ = "governance_bias_analyses"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)  # "llm-judge" or an advanced-bias method, e.g. "causal"
+    inputs_json = Column(Text, nullable=False, default="{}")  # summary of what was analysed, not the raw rows
+    result_json = Column(Text, nullable=False, default="{}")
+    verdict = Column(String, nullable=False)  # "pass", "fail" or "insufficient"
+    severity = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 
@@ -4225,3 +4243,120 @@ class GovernanceEvidencePack(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     share_token_hash = Column(String, nullable=True)
     share_expires_at = Column(String, nullable=True)
+
+
+class SystemDataSource(Base):
+    """Data the release autopilot may re-run on: a kept upload or an https URL, one per system and purpose.
+
+    The columns and protected attributes come from a person-confirmed fairness run (``basis_evidence_id``),
+    so an agent run never chooses what to test.
+    """
+
+    __tablename__ = "system_data_sources"
+    __table_args__ = (UniqueConstraint("system_id", "purpose", name="uq_system_data_source_purpose"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    purpose = Column(String, nullable=False)  # fairness | monitoring
+    kind = Column(String, nullable=False)  # upload | url
+    url = Column(Text, nullable=True)
+    file_name = Column(String, nullable=True)
+    content = Column(LargeBinary, nullable=True)  # ponytail: kept uploads in Postgres (25 MB cap); move to the artifact store if they grow
+    sha256 = Column(String, nullable=True)
+    mapping_json = Column(Text, nullable=False, default="{}")
+    basis_evidence_id = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class SystemAutopilot(Base):
+    """Whether the release autopilot runs a system's measurable route steps: off, ask (a person runs each) or run."""
+
+    __tablename__ = "system_autopilot"
+
+    system_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    mode = Column(String, nullable=False, default="off")
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    last_run_at = Column(String, nullable=True)
+
+
+class AutopilotEvent(Base):
+    """One thing the autopilot did or could not do for a system: the trace shown beside its route."""
+
+    __tablename__ = "autopilot_events"
+    __table_args__ = (Index("ix_autopilot_events_system_created", "system_id", "created_at"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    check_key = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # done | failed
+    detail = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    actor = Column(String, nullable=False)  # who started it: "autopilot" on a schedule, else the person
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernancePlan(Base):
+    """An organisation's governance plan: what discovery learned, the frameworks it chose, and the last task snapshot.
+
+    The tasks themselves are recomputed from the catalogue crosswalk and the estate on every read; the snapshot only
+    lets a read say what changed since the last one.
+    """
+
+    __tablename__ = "governance_plans"
+
+    org_id = Column(String, primary_key=True)
+    status = Column(String, nullable=False, default="discovery")  # discovery | active
+    profile_json = Column(Text, nullable=False, default="{}")  # key -> {value, source, basis}
+    transcript_json = Column(Text, nullable=False, default="[]")  # the discovery conversation
+    snapshot_json = Column(Text, nullable=False, default="{}")  # task key -> state at the last read
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class PlanTaskOverride(Base):
+    """A person's choices on one plan task: the owner they assigned and a note."""
+
+    __tablename__ = "plan_task_overrides"
+
+    org_id = Column(String, primary_key=True)
+    task_key = Column(String, primary_key=True)
+    owner = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class PlanAttestation(Base):
+    """A person states an organisation-level control is in place, with a reference; it counts as attested, not measured."""
+
+    __tablename__ = "plan_attestations"
+    __table_args__ = (Index("ix_plan_attestations_org_task", "org_id", "task_key"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False)
+    task_key = Column(String, nullable=False)
+    statement = Column(Text, nullable=False)
+    reference = Column(Text, nullable=True)
+    attested_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class PlanChange(Base):
+    """What changed in an organisation's plan between two reads: tasks added, closed or proven, and why."""
+
+    __tablename__ = "plan_changes"
+    __table_args__ = (Index("ix_plan_changes_org_created", "org_id", "created_at"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False)
+    summary = Column(Text, nullable=False)
+    detail_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())

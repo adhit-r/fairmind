@@ -189,13 +189,13 @@ def stored_key(db: Session, org_id: str, platform: str) -> str:
 
 
 @router.get("/platform-connections")
-async def list_connections(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_connections(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     return [_json(p, _row(db, m.org_id, p)) for p in PLATFORMS]
 
 
 @router.put("/platform-connections/{platform}")
-async def save_connection(platform: str, body: ConnectionBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_connection(platform: str, body: ConnectionBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _platform(platform)
     _ensure_tables(db)
     key = body.apiKey.strip()
@@ -213,7 +213,7 @@ async def save_connection(platform: str, body: ConnectionBody, m: OrgMembership 
 
 
 @router.delete("/platform-connections/{platform}")
-async def delete_connection(platform: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def delete_connection(platform: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _platform(platform)
     _ensure_tables(db)
     db.execute(text("DELETE FROM org_platform_connections WHERE org_id = :org AND platform = :p"), {"org": m.org_id, "p": platform})

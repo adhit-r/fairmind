@@ -25,13 +25,8 @@ from .jwt_exceptions import (
     TokenMissingException,
     handle_jwt_exception
 )
-from .jwt_models import (
-    JWTPayload, 
-    TokenRequest, 
-    TokenResponse, 
-    UserRole, 
-    TokenType
-)
+# UserRole and TokenType are defined below; jwt_models' copies were shadowed by them.
+from .jwt_models import JWTPayload, TokenRequest, TokenResponse
 
 logger = logging.getLogger("fairmind.auth")
 
@@ -95,6 +90,8 @@ class User(BaseModel):
     last_login: Optional[datetime] = None
     permissions: List[str] = []
     org_id: Optional[str] = None
+    # users.token_version: bumped to end every session (logout, password reset, removal).
+    token_version: int = 0
 
 
 class TokenData(BaseModel):
@@ -109,6 +106,7 @@ class TokenData(BaseModel):
     iat: datetime
     permissions: List[str] = []
     org_id: Optional[str] = None
+    token_version: int = 0
 
 
 class AuthManager:
@@ -152,12 +150,13 @@ class AuthManager:
             "permissions": user.permissions,
             "token_type": TokenType.ACCESS.value,
             "principal_kind": PrincipalKind.HUMAN.value,
+            "ver": user.token_version,
         }
         
         return self.jwt_manager.create_token(payload, expires_delta)
     
-    def create_refresh_token(self, user: User) -> str:
-        """Create a refresh token using new JWT infrastructure."""
+    def create_refresh_token(self, user: User, jti: Optional[str] = None) -> str:
+        """Create a refresh token; with a jti it is a rotating token (issue_refresh_token)."""
         expires_delta = timedelta(days=self.refresh_token_expire_days)
         
         payload = {
@@ -168,9 +167,45 @@ class AuthManager:
             "roles": [user.role.value],
             "token_type": TokenType.REFRESH.value,
             "principal_kind": PrincipalKind.HUMAN.value,
+            "ver": user.token_version,
         }
+        if jti:
+            payload["jti"] = jti
         
         return self.jwt_manager.create_token(payload, expires_delta)
+
+    async def issue_refresh_token(self, user: User) -> str:
+        """A rotating refresh token: its jti is recorded so it can be used exactly once."""
+        jti = uuid.uuid4().hex
+        await _store_refresh_jti(
+            jti, str(user.id), datetime.now(timezone.utc) + timedelta(days=self.refresh_token_expire_days)
+        )
+        return self.create_refresh_token(user, jti=jti)
+
+    async def refresh_session(self, refresh_token: str) -> tuple[str, str]:
+        """Rotate: spend this refresh token, return a new access token and refresh token.
+
+        A rotating token presented a second time means it was copied; every session
+        of the user ends (token_version bump) and the request fails. Tokens issued
+        before rotation existed carry no jti; they refresh once into a rotating one.
+        """
+        claims = self.jwt_manager.verify_token(refresh_token) or {}
+        jti = claims.get("jti")
+        if jti:
+            outcome = await _claim_refresh_jti(jti)
+            if outcome == "reused":
+                user_id = claims.get("user_id")
+                demo = (settings.demo_user_email or "").strip().lower()
+                # The shared demo account must not sign every visitor out; refuse this one only.
+                if user_id and not (demo and str(claims.get("email", "")).lower() == demo):
+                    await revoke_user_sessions(str(user_id))
+                logger.warning("Refresh token reuse detected; the user's sessions were ended")
+                raise InvalidTokenException("Session has been signed out")
+            if outcome not in ("ok", "grace"):
+                raise InvalidTokenException("Refresh token is not recognised")
+        access_token = await self.refresh_access_token(refresh_token)
+        user = await self.get_user_by_id(str(claims.get("user_id")))
+        return access_token, await self.issue_refresh_token(user)
     
     def create_api_key(self, user: User, name: str) -> str:
         """Create an API key using new JWT infrastructure."""
@@ -259,9 +294,18 @@ class AuthManager:
                 or organization_id != organization_id.strip()
             ):
                 raise InvalidTokenException("Service principal organization is invalid")
-            if token_type == TokenType.API_KEY.value and not await _api_key_is_live(token, str(user_id)):
-                raise InvalidTokenException("API key is revoked or its user is inactive")
+            if token_type == TokenType.API_KEY.value and not await _api_key_is_live(
+                token, str(user_id), str(org_id) if org_id else None
+            ):
+                raise InvalidTokenException("API key is revoked, or its user is inactive or left the organization")
             
+            if (
+                token_type == TokenType.ACCESS.value
+                and parsed_principal_kind is PrincipalKind.HUMAN
+                and not await _session_is_live(str(user_id), int(payload.get("ver") or 0), str(org_id) if org_id else None)
+            ):
+                raise InvalidTokenException("Session has been signed out")
+
             # Convert timestamps if they're datetime objects
             if isinstance(exp, datetime):
                 exp_dt = exp
@@ -287,6 +331,7 @@ class AuthManager:
                 iat=iat_dt,
                 permissions=permissions,
                 org_id=str(org_id) if org_id else None,
+                token_version=int(payload.get("ver") or 0),
             )
             
         except (TokenExpiredException, InvalidTokenException):
@@ -309,6 +354,9 @@ class AuthManager:
             user = await self.get_user_by_id(token_data.user_id)
             if not user or not user.is_active:
                 raise InvalidTokenException("User not found or inactive")
+            # verify_token checks the same version on every access token (_session_is_live).
+            if token_data.token_version != user.token_version:
+                raise InvalidTokenException("Session has been signed out")
             
             return self.create_access_token(user)
             
@@ -385,14 +433,18 @@ class AuthManager:
         return user.role in required_roles
 
 
+# The org claim comes only from an active membership (preferring the stored org), so a
+# removed member's next token names no org they have left; the role is that org's.
+_ORG_PICK = (
+    "FROM org_members m WHERE m.user_id = u.id AND m.status = 'active' "
+    "ORDER BY COALESCE(m.org_id = u.org_id, FALSE) DESC, "
+    "COALESCE(m.org_id = u.primary_org_id, FALSE) DESC, m.joined_at LIMIT 1"
+)
 _USER_COLUMNS = (
     "u.id, u.email, u.username, u.role, u.is_active, u.created_at, u.last_login, "
-    "u.permissions, u.password_hash, "
-    "COALESCE(u.org_id, u.primary_org_id, "
-    "(SELECT m.org_id FROM org_members m WHERE m.user_id = u.id AND m.status = 'active' "
-    "ORDER BY m.joined_at LIMIT 1)) AS resolved_org_id, "
-    "(SELECT m.role FROM org_members m WHERE m.user_id = u.id AND m.status = 'active' "
-    "ORDER BY m.joined_at LIMIT 1) AS resolved_org_role"
+    "u.permissions, u.password_hash, u.token_version, "
+    f"(SELECT m.org_id {_ORG_PICK}) AS resolved_org_id, "
+    f"(SELECT m.role {_ORG_PICK}) AS resolved_org_role"
 )
 
 
@@ -407,17 +459,91 @@ def api_key_hash(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
-async def _api_key_is_live(api_key: str, user_id: str) -> bool:
-    """A key works only while its api_keys row exists (revoking deletes it)
-    and its user still exists and is active."""
+async def _api_key_is_live(api_key: str, user_id: str, org_id: Optional[str] = None) -> bool:
+    """A key works only while its api_keys row exists (revoking deletes it),
+    its user still exists and is active, and, when it names an org, the user
+    is still an active member of that org."""
+    from .database import get_db_connection
+    sql = (
+        "SELECT k.id FROM api_keys k JOIN users u ON u.id = k.user_id "
+        "WHERE k.user_id = :user AND k.key_hash = :hash AND k.is_active AND u.is_active"
+    )
+    params = {"user": user_id, "hash": api_key_hash(api_key)}
+    if org_id:
+        sql += (
+            " AND EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = u.id "
+            "AND CAST(m.org_id AS TEXT) = :org AND m.status = 'active')"
+        )
+        params["org"] = org_id
+    async with get_db_connection() as db:
+        row = await db.fetch_one(sql, params)
+    return row is not None
+
+
+async def _session_is_live(user_id: str, token_version: int, org_id: Optional[str]) -> bool:
+    """A human session token works only while its user is active, nobody has
+    ended the user's sessions since it was issued (token_version), and, when it
+    names an org, the user is still an active member there. One indexed lookup
+    per request, so removal, suspension, logout and password reset take effect
+    on the next request instead of when the token expires."""
+    if user_id == E2E_ADMIN_ID and _e2e_admin() is not None:
+        return True  # development-only account with no users row
+    from .database import get_db_connection
+    sql = "SELECT 1 FROM users u WHERE u.id = :user AND u.is_active AND COALESCE(u.token_version, 0) = :ver"
+    params: Dict[str, Any] = {"user": user_id, "ver": token_version}
+    if org_id:
+        sql += (
+            " AND EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = u.id "
+            "AND CAST(m.org_id AS TEXT) = :org AND m.status = 'active')"
+        )
+        params["org"] = org_id
+    async with get_db_connection() as db:
+        row = await db.fetch_one(sql, params)
+    return row is not None
+
+
+async def _store_refresh_jti(jti: str, user_id: str, expires_at: datetime) -> None:
     from .database import get_db_connection
     async with get_db_connection() as db:
-        row = await db.fetch_one(
-            "SELECT k.id FROM api_keys k JOIN users u ON u.id = k.user_id "
-            "WHERE k.user_id = :user AND k.key_hash = :hash AND k.is_active AND u.is_active",
-            {"user": user_id, "hash": api_key_hash(api_key)},
+        await db.execute(
+            "INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES (:jti, :user, :exp)",
+            {"jti": jti, "user": user_id, "exp": expires_at},
         )
-    return row is not None
+
+
+# Two tabs that refresh at once send the same cookie; a second use this soon is that race, not theft.
+REFRESH_REUSE_GRACE_SECONDS = 30
+
+
+async def _claim_refresh_jti(jti: str) -> str:
+    """Mark a refresh token used: "ok" the first time, "grace" when used again within
+    REFRESH_REUSE_GRACE_SECONDS, "reused" after that, "unknown" if never issued."""
+    from .database import get_db_connection
+    async with get_db_connection() as db:
+        claimed = await db.fetch_one(
+            "UPDATE refresh_tokens SET used_at = now() "
+            "WHERE jti = :jti AND used_at IS NULL AND expires_at > now() RETURNING jti",
+            {"jti": jti},
+        )
+        if claimed:
+            return "ok"
+        seen = await db.fetch_one(
+            "SELECT used_at, used_at > now() - make_interval(secs => :grace) AS recent "
+            "FROM refresh_tokens WHERE jti = :jti",
+            {"jti": jti, "grace": REFRESH_REUSE_GRACE_SECONDS},
+        )
+    if not seen or seen["used_at"] is None:
+        return "unknown"
+    return "grace" if seen["recent"] else "reused"
+
+
+async def revoke_user_sessions(user_id: str) -> None:
+    """End every session of a user: refresh tokens issued before this stop working."""
+    from .database import get_db_connection
+    async with get_db_connection() as db:
+        await db.execute(
+            "UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = :id", {"id": user_id}
+        )
 
 
 E2E_ADMIN_ID = "e2e-admin"
@@ -442,6 +568,13 @@ def _e2e_admin() -> Optional[User]:
     )
 
 
+def _row_get(row, key: str):
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
+
+
 def _user_from_row(row) -> User:
     try:
         role = UserRole(row["role"])
@@ -453,10 +586,7 @@ def _user_from_row(row) -> User:
         permissions = json.loads(permissions)
     if role == UserRole.ADMIN and "*" not in permissions:
         permissions = [*permissions, "*"]
-    try:
-        org_role = row["resolved_org_role"]
-    except (KeyError, IndexError):
-        org_role = None
+    org_role = _row_get(row, "resolved_org_role")
     if org_role in ("owner", "admin") and "model:write" not in permissions:
         # Org owners and admins may change governance records
         # (GovernanceAssuranceService.may_mutate); every token they mint carries it.
@@ -471,6 +601,7 @@ def _user_from_row(row) -> User:
         last_login=row["last_login"],
         permissions=permissions,
         org_id=str(row["resolved_org_id"]) if row["resolved_org_id"] else None,
+        token_version=_row_get(row, "token_version") or 0,
     )
 
 

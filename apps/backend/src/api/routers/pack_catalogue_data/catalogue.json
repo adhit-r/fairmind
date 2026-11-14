@@ -34955,12 +34955,13 @@
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/api/routers/monitoring.py; src/application/services/advanced_bias_detection_service.py",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "NISTRMF|MEASURE 2.4",
     "ISO42001|A.6.2.6",
     "UKAICOP|P12"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-02",
@@ -34974,14 +34975,15 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "NISTADV|Poisoning",
     "OWASPLLM|LLM04",
     "ATLAS|Persistence",
     "EUAIA|Art 15"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-03",
@@ -34995,14 +34997,15 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "EUAIA|Art 10",
     "ISO42001|A.7.4",
     "NISTRMF|MEASURE 2.11",
     "AIVERIFY|P8"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-04",
@@ -35016,13 +35019,14 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "EUAIA|Art 10",
     "ISO42001|A.7.4",
     "AIVERIFY|P8"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-05",
@@ -35036,12 +35040,13 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "ISO42001|A.7.4",
     "NISTRMF|MEASURE 2.1"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-06",
@@ -35055,14 +35060,15 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/enhanced_bias_detection_service.py (mentions PII)",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "EUAIA|Art 10",
     "NIST600|Data privacy",
     "NISTRMF|MEASURE 2.10",
     "ISO42001|A.7.2"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-07",
@@ -35076,14 +35082,15 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "OWASPLLM|LLM08",
     "OWASPLLM|LLM04",
     "OWASPAG|ASI06",
     "NISTADV|Indirect PI"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-01",
@@ -35097,15 +35104,16 @@
    "commonControl": "FMC-PRV-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/enhanced_bias_detection_service.py (mentions PII)",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM02",
     "NIST600|Data privacy",
     "NISTRMF|MEASURE 2.10",
     "NISTADV|Privacy",
     "OWASPMCP|MCP10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-02",
@@ -35119,12 +35127,13 @@
    "commonControl": "FMC-PRV-01",
    "pattern": "FP-SEC-09",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTADV|Privacy",
     "NISTRMF|MEASURE 2.10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-03",
@@ -35138,11 +35147,12 @@
    "commonControl": "FMC-PRV-01",
    "pattern": "FP-GOV-10",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "CSAAICM|DSP"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-01",
@@ -35157,13 +35167,14 @@
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/benchmark_suite_service.py",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.5",
     "NISTRMF|MEASURE 2.3",
     "EUAIA|Art 15",
     "ISO42001|A.6.2.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-02",
@@ -35177,12 +35188,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/llm_as_judge_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.5",
     "AIVERIFY|P3"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-03",
@@ -35196,13 +35208,14 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Confabulation",
     "OWASPLLM|LLM09",
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-04",
@@ -35217,13 +35230,14 @@
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/benchmark_suite_service.py; src/application/services/advanced_bias_detection_service.py",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "EUAIA|Art 15",
     "AIVERIFY|P6",
     "NISTRMF|MEASURE 2.5",
     "NISTADV|Evasion"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-05",
@@ -35237,12 +35251,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-06",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NISTRMF|MEASURE 2.3",
     "ISO42001|A.6.2.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-06",
@@ -35256,12 +35271,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-06",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI02",
     "NISTRMF|MEASURE 2.3"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-07",
@@ -35275,11 +35291,12 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-01",
@@ -35294,14 +35311,15 @@
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "codeLocation": "src/application/services/evaluation_results.py",
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "NIST600|Harmful bias",
     "AIVERIFY|P7",
     "INDAI|Sutra 4",
     "EUAIA|Art 10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-02",
@@ -35316,11 +35334,12 @@
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "codeLocation": "src/application/services/evaluation_results.py",
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "AIVERIFY|P7"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-03",
@@ -35334,12 +35353,13 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "INDAI|Sutra 4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-04",
@@ -35353,12 +35373,13 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/llm_bias_detection_service.py; modern_llm_bias_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "NIST600|Harmful bias"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-05",
@@ -35373,11 +35394,12 @@
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/llm_bias_detection_service.py; modern_llm_bias_service.py",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NIST600|Harmful bias",
     "NISTRMF|MEASURE 2.11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-06",
@@ -35392,11 +35414,12 @@
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/india_bias_detection_service.py",
+   "codeLocation": "src/application/services/evaluation_results.py",
    "tests": [
     "INDAI|Sutra 4",
     "NISTRMF|MEASURE 2.11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-01",
@@ -35410,14 +35433,15 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-04",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPAG|ASI03",
     "OWASPMCP|MCP02",
     "OWASPLLM|LLM06",
     "CSAAICM|IAM"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-02",
@@ -35431,13 +35455,14 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-04",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI02",
     "OWASPLLM|LLM06",
     "ATLAS|Privilege Escalation"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-03",
@@ -35451,13 +35476,14 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPMCP|MCP09",
     "OWASPMCP|MCP02",
     "OWASPAG|ASI04"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-AGT-04",
@@ -35471,12 +35497,13 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPAG|ASI02",
     "ATLAS|Exfiltration"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-01",
@@ -35490,15 +35517,16 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-01",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": "Only src/api/middleware/input_sanitization.py, which protects FairMind's own API; not an evaluator of customer systems",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM01",
     "NISTADV|Direct PI",
     "OWASPAG|ASI01",
     "ATLAS|Initial Access",
     "ATLAS|Execution"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-02",
@@ -35512,14 +35540,15 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-01",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM01",
     "NISTADV|Indirect PI",
     "OWASPMCP|MCP06",
     "OWASPAG|ASI01"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-03",
@@ -35533,13 +35562,14 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-01",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": "Only src/api/middleware/input_sanitization.py, which protects FairMind's own API; not an evaluator of customer systems",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM01",
     "NISTADV|Misuse",
     "ATLAS|Defense Evasion"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-04",
@@ -35553,12 +35583,13 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-01",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM07",
     "ATLAS|Discovery"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-05",
@@ -35572,13 +35603,14 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM07",
     "OWASPMCP|MCP10",
     "ATLAS|Discovery"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-06",
@@ -35592,12 +35624,13 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-04",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/platform.py",
    "tests": [
     "OWASPLLM|LLM06",
     "OWASPAG|ASI02"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-07",
@@ -35611,13 +35644,14 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/llm_bias_detection_service.py; modern_llm_bias_service.py; src/application/services/enhanced_bias_detection_service.py (toxicity)",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Violent-Hateful",
     "NIST600|Obscene-Abusive",
     "NISTRMF|MEASURE 2.6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DEV-01",
@@ -35631,11 +35665,12 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-SEC-01",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "UKAICOP|P2"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DEV-02",
@@ -35649,12 +35684,13 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-SEC-01",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPMCP|MCP01",
     "CSAAICM|CEK"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DEV-03",
@@ -35668,12 +35704,13 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-SEC-03",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "SSDF218A|PW",
     "OWASPAG|ASI05"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-01",
@@ -35688,13 +35725,14 @@
    "pattern": "FP-EVA-07",
    "pillar": "EVALUATE",
    "engine": "Engine exists",
-   "codeLocation": "src/api/routers/monitoring.py; src/application/services/advanced_bias_detection_service.py",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NISTRMF|MEASURE 2.4",
     "NISTRMF|MEASURE 4.3",
     "EUAIA|Art 72",
     "UKAICOP|P12"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-02",
@@ -35708,13 +35746,14 @@
    "commonControl": "FMC-MON-01",
    "pattern": "FP-EVA-07",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "OWASPAG|ASI10",
     "UKAICOP|P12",
     "CSAAICM|LOG"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-03",
@@ -35728,11 +35767,12 @@
    "commonControl": "FMC-MON-01",
    "pattern": "FP-GOV-12",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPLLM|LLM10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-04",
@@ -35746,15 +35786,16 @@
    "commonControl": "FMC-MON-01",
    "pattern": "FP-EVA-07",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "EUAIA|Art 12",
     "EUAIA|Art 19",
     "OWASPMCP|MCP08",
     "ISO42001|A.6.2.8",
     "CSAAICM|LOG"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-RSK-01",
@@ -35768,11 +35809,12 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/llm_as_judge_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NISTRMF|MEASURE 2.6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-RSK-02",
@@ -35786,12 +35828,13 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-10",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "EUAIA|Art 5(1)(a)",
     "EUAIA|Art 5(1)(b)"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-RSK-03",
@@ -35805,12 +35848,13 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NISTADV|Misuse",
     "NISTRMF|MEASURE 2.6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TRN-01",
@@ -35824,12 +35868,13 @@
    "commonControl": "FMC-TRN-01",
    "pattern": "FP-COM-03",
    "pillar": "COMPLY",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "EUAIA|Art 50",
     "AIVERIFY|P1"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TRN-02",
@@ -35843,12 +35888,13 @@
    "commonControl": "FMC-TRN-01",
    "pattern": "FP-SEC-10",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "EUAIA|Art 50",
     "NIST600|Info integrity"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OVS-01",
@@ -35862,12 +35908,13 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-EVA-06",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "EUAIA|Art 14",
     "OWASPAG|ASI10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OVS-02",
@@ -35881,12 +35928,13 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-EVA-05",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "EUAIA|Art 14",
     "AIVERIFY|P10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OVS-03",
@@ -35900,11 +35948,12 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-EVA-05",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "EUAIA|Art 14"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OVS-04",
@@ -35919,13 +35968,14 @@
    "pattern": "FP-COM-05",
    "pillar": "COMPLY",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/generative_ai_explainability.py",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Art 86",
     "NISTRMF|MEASURE 2.9",
     "AIVERIFY|P2",
     "INDAI|Sutra 6"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-REL-01",
@@ -35939,12 +35989,13 @@
    "commonControl": "FMC-REL-01",
    "pattern": "FP-GOV-06",
    "pillar": "GOVERN",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/benchmark_suite_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "NISTRMF|MEASURE 2.13",
     "ISO42001|A.6.2.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-INC-01",
@@ -35958,12 +36009,13 @@
    "commonControl": "FMC-INC-01",
    "pattern": "FP-SEC-12",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Art 20",
     "UKAICOP|P11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-LEG-01",
@@ -35977,11 +36029,12 @@
    "commonControl": "FMC-LEG-01",
    "pattern": "FP-GOV-11",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NIST600|IP"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-ENV-01",
@@ -35996,12 +36049,13 @@
    "pattern": "FP-GOV-12",
    "pillar": "GOVERN",
    "engine": "Engine exists",
-   "codeLocation": "src/application/services/environmental_service.py",
+   "codeLocation": "src/application/services/evaluation_results.py",
    "tests": [
     "NISTRMF|MEASURE 2.12",
     "NIST600|Environmental",
     "AIVERIFY|P11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SLF-01",
@@ -36015,11 +36069,12 @@
    "commonControl": "FMC-SLF-01",
    "pattern": "FP-SEC-13",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": "Only src/api/middleware/input_sanitization.py, which protects FairMind's own API; not an evaluator of customer systems",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPAG|ASI01"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SLF-02",
@@ -36033,11 +36088,12 @@
    "commonControl": "FMC-SLF-01",
    "pattern": "FP-SEC-13",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI03"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SLF-03",
@@ -36051,12 +36107,13 @@
    "commonControl": "FMC-SLF-01",
    "pattern": "FP-SEC-13",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/evidence_authenticity_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "OWASPMCP|MCP08",
     "EUAIA|Art 12"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-01",
@@ -36070,11 +36127,12 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-02",
@@ -36088,11 +36146,12 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-03",
@@ -36106,9 +36165,10 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
-   "tests": []
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
+   "tests": [],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-04",
@@ -36122,9 +36182,10 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
-   "tests": []
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
+   "tests": [],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-08",
@@ -36138,14 +36199,15 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM05",
     "OWASPMCP|MCP05",
     "OWASPAG|ASI05",
     "CSAAICM|AIS"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-09",
@@ -36159,12 +36221,13 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "OWASPLLM|LLM08",
     "OWASPMCP|MCP10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-10",
@@ -36178,12 +36241,13 @@
    "commonControl": "FMC-MON-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPLLM|LLM10",
     "OWASPAG|ASI08"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-11",
@@ -36197,14 +36261,15 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-09",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NISTADV|Privacy",
     "ATLAS|AI Model Access",
     "ATLAS|Exfiltration",
     "CSAAICM|MDS"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-12",
@@ -36218,12 +36283,13 @@
    "commonControl": "FMC-PRV-01",
    "pattern": "FP-SEC-09",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NISTADV|Privacy",
     "NISTRMF|MEASURE 2.10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-13",
@@ -36237,14 +36303,15 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-09",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/advanced_bias_detection_service.py (robustness)",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NISTADV|Evasion",
     "ATLAS|AI Attack Staging",
     "ATLAS|Defense Evasion",
     "EUAIA|Art 15"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-14",
@@ -36258,8 +36325,8 @@
    "commonControl": "FMC-INV-01",
    "pattern": "FP-SEC-08",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPLLM|LLM03",
     "OWASPAG|ASI04",
@@ -36267,7 +36334,8 @@
     "NISTADV|Supply chain",
     "ATLAS|Initial Access",
     "CSAAICM|STA"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-15",
@@ -36281,13 +36349,14 @@
    "commonControl": "FMC-INV-01",
    "pattern": "FP-SEC-08",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPLLM|LLM04",
     "NISTADV|Poisoning",
     "ATLAS|Persistence"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-16",
@@ -36301,12 +36370,13 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPMCP|MCP01",
     "ATLAS|Credential Access"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-17",
@@ -36320,13 +36390,14 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPMCP|MCP03",
     "OWASPMCP|MCP06",
     "OWASPAG|ASI02"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-18",
@@ -36340,12 +36411,13 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/platform.py",
    "tests": [
     "OWASPMCP|MCP09",
     "OWASPAG|ASI10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-19",
@@ -36359,13 +36431,14 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/platform.py",
    "tests": [
     "OWASPMCP|MCP07",
     "OWASPAG|ASI03",
     "CSAAICM|IAM"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-20",
@@ -36379,14 +36452,15 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-07",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/platform.py",
    "tests": [
     "OWASPAG|ASI05",
     "OWASPMCP|MCP05",
     "ATLAS|Execution",
     "ATLAS|Privilege Escalation"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-21",
@@ -36400,12 +36474,13 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-06",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/platform.py",
    "tests": [
     "OWASPAG|ASI06",
     "OWASPLLM|LLM04"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-22",
@@ -36419,12 +36494,13 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-06",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI07",
     "MAESTRO|L7"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-23",
@@ -36438,12 +36514,13 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-SEC-07",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI08",
     "MAESTRO|L5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-24",
@@ -36457,12 +36534,13 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-SEC-07",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI10",
     "ATLAS|Persistence"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-25",
@@ -36476,11 +36554,12 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-SEC-07",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI09"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-26",
@@ -36494,13 +36573,14 @@
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-09",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "ATLAS|Reconnaissance",
     "ATLAS|Discovery",
     "ATLAS|Resource Development"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-27",
@@ -36514,14 +36594,15 @@
    "commonControl": "FMC-AGT-01",
    "pattern": "FP-SEC-05",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/platform.py",
    "tests": [
     "ATLAS|Exfiltration",
     "ATLAS|Collection",
     "ATLAS|Command and Control",
     "OWASPLLM|LLM02"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-SEC-28",
@@ -36535,13 +36616,14 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM09",
     "NIST600|Confabulation",
     "NIST600|Info integrity"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-01",
@@ -36555,12 +36637,13 @@
    "commonControl": "FMC-OFF-01",
    "pattern": "FP-SEC-10",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NIST600|Info integrity",
     "EUAIA|Art 50"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-02",
@@ -36574,12 +36657,13 @@
    "commonControl": "FMC-OFF-01",
    "pattern": "FP-SEC-10",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NIST600|Info integrity",
     "NISTADV|Misuse"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-03",
@@ -36593,12 +36677,13 @@
    "commonControl": "FMC-OFF-01",
    "pattern": "FP-SEC-10",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "NISTADV|Misuse",
     "UKAICOP|P1"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-04",
@@ -36612,12 +36697,13 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Obscene-Abusive",
     "EUAIA|Art 5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-05",
@@ -36631,12 +36717,13 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|CBRN",
     "EUAIA|Art 55"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-06",
@@ -36650,11 +36737,12 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/llm_bias_detection_service.py; modern_llm_bias_service.py; src/application/services/enhanced_bias_detection_service.py (toxicity)",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Violent-Hateful"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-07",
@@ -36668,12 +36756,13 @@
    "commonControl": "FMC-RSK-03",
    "pattern": "FP-SEC-11",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Info integrity",
     "NISTADV|Misuse"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OFF-08",
@@ -36687,12 +36776,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "NIST600|Human-AI config",
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-08",
@@ -36706,12 +36796,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "AIVERIFY|P6",
     "EUAIA|Art 15"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-09",
@@ -36725,12 +36816,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/benchmark_suite_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "AIVERIFY|P3",
     "NISTRMF|MEASURE 2.1"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-10",
@@ -36744,12 +36836,13 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/india_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "INDAI|Sutra 4",
     "NISTRMF|MEASURE 2.11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-TST-11",
@@ -36763,12 +36856,13 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-01",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/model.py",
    "tests": [
     "NIST600|Confabulation",
     "NISTRMF|MEASURE 2.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-07",
@@ -36782,13 +36876,14 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-03",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/api/routers/monitoring.py; src/application/services/advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/evaluation_results.py",
    "tests": [
     "NISTRMF|MEASURE 2.11",
     "NISTRMF|MEASURE 4.3",
     "AIVERIFY|P7"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-FAI-08",
@@ -36802,12 +36897,13 @@
    "commonControl": "FMC-RSK-02",
    "pattern": "FP-COM-05",
    "pillar": "COMPLY",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "EUAIA|Art 16",
     "AIVERIFY|P11"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OVS-05",
@@ -36821,13 +36917,14 @@
    "commonControl": "FMC-OVS-01",
    "pattern": "FP-EVA-05",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/generative_ai_explainability.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "AIVERIFY|P2",
     "EUAIA|Art 86",
     "NISTRMF|MEASURE 2.9"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-OVS-06",
@@ -36841,11 +36938,12 @@
    "commonControl": "FMC-SLF-01",
    "pattern": "FP-SEC-13",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/agentic.py",
    "tests": [
     "OWASPAG|ASI09"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-08",
@@ -36859,12 +36957,13 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/data.py",
    "tests": [
     "EUAIA|Art 10",
     "ISO42001|A.7.4"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-09",
@@ -36878,12 +36977,13 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-EVA-04",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/model_provenance_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "ISO42001|A.7.5",
     "UKAICOP|P8"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-DAT-10",
@@ -36897,11 +36997,12 @@
    "commonControl": "FMC-LEG-01",
    "pattern": "FP-GOV-11",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "NIST600|IP"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-04",
@@ -36915,12 +37016,13 @@
    "commonControl": "FMC-PRV-01",
    "pattern": "FP-SEC-02",
    "pillar": "SECURE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [
     "OWASPLLM|LLM02",
     "NIST600|Data privacy"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-PRV-05",
@@ -36934,12 +37036,13 @@
    "commonControl": "FMC-DAT-01",
    "pattern": "FP-GOV-09",
    "pillar": "GOVERN",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/assess.py",
    "tests": [
     "UKAICOP|P13",
     "NIST600|Data privacy"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-MON-05",
@@ -36953,12 +37056,13 @@
    "commonControl": "FMC-MON-01",
    "pattern": "FP-EVA-07",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/ops.py",
    "tests": [
     "OWASPAG|ASI08",
     "OWASPLLM|LLM10"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-05",
@@ -36972,11 +37076,12 @@
    "commonControl": "FMC-TST-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/benchmark_suite_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Art 50"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-06",
@@ -36990,12 +37095,13 @@
    "commonControl": "FMC-DEV-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Not found",
-   "codeLocation": null,
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "OWASPAG|ASI05",
     "SSDF218A|PW"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-07",
@@ -37009,11 +37115,12 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.5"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-08",
@@ -37027,11 +37134,12 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.3"
-   ]
+   ],
+   "maturity": "L4"
   },
   {
    "id": "EV-USE-09",
@@ -37045,11 +37153,12 @@
    "commonControl": "FMC-FAI-01",
    "pattern": "FP-EVA-08",
    "pillar": "EVALUATE",
-   "engine": "Partial",
-   "codeLocation": "src/application/services/comprehensive_bias_evaluation_pipeline.py; bias_testing_library.py; advanced_bias_detection_service.py",
+   "engine": "Engine exists",
+   "codeLocation": "src/application/services/eval_engines/suites.py",
    "tests": [
     "EUAIA|Annex III.5"
-   ]
+   ],
+   "maturity": "L4"
   }
  ],
  "patterns": [

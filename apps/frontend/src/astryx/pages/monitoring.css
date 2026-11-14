@@ -1,0 +1,23 @@
+.fm-mon { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.fm-mon-counts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.fm-mon-counts li { display: grid; gap: 2px; min-width: 120px; padding: 12px 16px; border-radius: var(--radius-element); background: var(--color-background-muted); }
+.fm-mon-counts b { font-family: var(--font-family-code, ui-monospace, monospace); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.fm-mon-counts span { font-size: 13px; color: var(--color-text-secondary); }
+.fm-mon-counts .bad b { color: var(--color-text-error); }
+.fm-mon-counts .warn b { color: var(--color-text-warning); }
+.fm-mon-list { margin: 0; padding: 0; list-style: none; }
+.fm-mon-row { display: grid; grid-template-columns: minmax(160px, 1.2fr) minmax(0, 2fr) auto; gap: 8px 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--color-border); }
+.fm-mon-row:last-child { border-bottom: 0; }
+.fm-mon-name a { color: var(--color-text-primary); font-weight: 500; text-decoration: none; }
+.fm-mon-name a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.fm-mon-name div { margin-top: 4px; }
+.fm-mon-facts { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 13px; color: var(--color-text-secondary); }
+.fm-mon-facts b { font-family: var(--font-family-code, ui-monospace, monospace); font-weight: 500; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.fm-mon-rail { display: grid; gap: 12px; position: sticky; top: 16px; }
+.fm-mon-alerts { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.fm-mon-alerts li { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border); font-size: 13px; }
+.fm-mon-alerts li:last-child { padding-bottom: 0; border-bottom: 0; }
+.fm-mon-alerts a { color: var(--color-text-primary); font-weight: 500; text-decoration: none; }
+.fm-mon-alerts small { color: var(--color-text-secondary); font-size: 12px; }
+@media (max-width: 1000px) { .fm-mon { grid-template-columns: minmax(0, 1fr); } .fm-mon-rail { position: static; } }
+@media (max-width: 700px) { .fm-mon-row { grid-template-columns: minmax(0, 1fr); } }

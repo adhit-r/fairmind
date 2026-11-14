@@ -6,7 +6,7 @@ description: The literal Assurance V2 permissions, four-eyes review, and the gat
 The Assurance V2 routes check literal permissions held by the caller's persisted organization membership. A client-supplied role name is never trusted, and a permission is never inferred from another one.
 
 <Callout type="warn" title="Default off">
-Every Assurance V2 route is behind `ASSURANCE_V2_ENABLED` plus its own child gate, and all of them default to `false`. See [Configuration](/docs/reference/configuration#assurance-v2-gates).
+Every Assurance V2 route is behind `ASSURANCE_V2_ENABLED` plus its own child gate, and all of them default to `false`.
 </Callout>
 
 ## Human permissions
@@ -49,7 +49,7 @@ A violation returns `evidence_review_separation_required`. Reviews are frozen on
 
 A normal governance decision has the same independence rule: the decider cannot be the run requester, any evidence submitter, or any evidence linker. A violation returns `governance_decision_separation_required`.
 
-Assurance V2 as a whole requires PostgreSQL: with the master switch on, the backend does not start on any other database. See [Configuration](/docs/reference/configuration#startup-requirements).
+Assurance V2 as a whole requires PostgreSQL: with the master switch on, the backend does not start on any other database.
 
 ## Separation overrides
 
@@ -70,7 +70,3 @@ An override waives only the decision-separation rule. It does not relax four-eye
 ## Operating the exception path
 
 Enabling the override gate and giving the owner role `evaluation:separation:override` is a deployment change, not a routine API step. Record the request, reason, approver, scope, and expiry under your own change controls.
-
-## Evidence basis
-
-Permissions are defined in `apps/backend/src/api/evaluation_permissions.py`. Route checks are in `apps/backend/src/api/routers/evaluation_workbench.py`, `imported_evidence.py`, `evaluator_catalog.py`, and `trust_administration_http.py`. Separation rules are in `apps/backend/src/application/services/verified_evidence_review_service.py` and `governance_decision_service.py`. The owner and grantee checks are in migrations `013j` and `013l`.

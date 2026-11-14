@@ -12,7 +12,11 @@ export const API_ENDPOINTS = {
   // Authentication
   auth: {
     login: '/api/v1/auth/login',
+    // The public read-only demo (off unless the backend sets DEMO_USER_EMAIL).
+    demo: '/api/v1/auth/demo',
     register: '/api/v1/auth/register',
+    // Without an invitation, an account starts as an access request a platform admin approves.
+    requestAccess: '/api/v1/register',
     refresh: '/api/v1/auth/refresh',
     logout: '/api/v1/auth/logout',
     me: '/api/v1/auth/me',
@@ -34,8 +38,6 @@ export const API_ENDPOINTS = {
     recentActivity: '/api/v1/core/activity/recent',
     governanceMetrics: '/api/v1/core/governance/metrics',
     metricsSummary: '/api/v1/core/metrics/summary',
-    model: (id: string) => `/api/v1/core/models/${id}`,
-    modelTest: (id: string) => `/api/v1/core/models/${id}/test`,
   },
 
   // Database
@@ -47,13 +49,11 @@ export const API_ENDPOINTS = {
     dashboardStats: '/api/v1/database/dashboard-stats',
     models: '/api/v1/database/models',
     reports: '/api/v1/database/reports',
-    monitoringMetrics: '/api/v1/database/monitoring-metrics',
     health: '/api/v1/database/health',
   },
 
   // Bias Detection
   biasDetection: {
-    detect: '/api/v1/bias/analyze/dataset',
     testWeat: '/api/v1/bias-detection/test/weat',
     testFairness: '/api/v1/bias-detection/test/fairness',
     testImage: '/api/v1/bias-detection/test/image',
@@ -64,18 +64,6 @@ export const API_ENDPOINTS = {
     history: '/api/v1/bias-detection/history',
     export: '/api/v1/bias-detection/export',
     health: '/api/v1/bias-detection/health',
-  },
-
-  // Security
-  security: {
-    containerScan: '/api/v1/security/container/scan',
-    llmTest: '/api/v1/security/llm/test',
-    modelAnalyze: '/api/v1/security/model/analyze',
-    generateReport: '/api/v1/security/report/generate',
-    status: '/api/v1/security/status',
-    scansHistory: '/api/v1/security/scans/history',
-    scanDetails: (scanId: string) => `/api/v1/security/scans/${scanId}`,
-    complianceFrameworks: '/api/v1/security/compliance/frameworks',
   },
 
   // Advanced Bias Detection
@@ -101,18 +89,11 @@ export const API_ENDPOINTS = {
   // AI Governance
   aiGovernance: {
     policies: (orgId: string) => `/api/v1/ai-governance/organizations/${orgId}/policies`,
-    complianceAssess: '/api/v1/ai-governance/compliance/assess',
     complianceFrameworks: '/api/v1/ai-governance/compliance/frameworks',
-    lifecycleProcess: '/api/v1/ai-governance/lifecycle/process',
     lifecycleSummary: (systemId: string) => `/api/v1/ai-governance/lifecycle/${systemId}/summary`,
-    lifecycleChecks: '/api/v1/ai-governance/lifecycle/checks',
-    evidenceCollect: '/api/v1/ai-governance/evidence/collect',
     evidenceCollectV2: '/api/v1/ai-governance/evidence/collect-v2',
-    evidenceUpload: '/api/v1/ai-governance/evidence/upload',
-    evidence: (systemId: string) => `/api/v1/ai-governance/evidence/${systemId}`,
     evidenceV2: (systemId: string) => `/api/v1/ai-governance/evidence-v2/${systemId}`,
     evidenceSummary: (systemId: string) => `/api/v1/ai-governance/evidence/${systemId}/summary`,
-    evidenceCollections: '/api/v1/ai-governance/evidence/collections',
     evidenceItem: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}`,
     evidenceItemLinks: (evidenceId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links`,
     evidenceItemLink: (evidenceId: string, linkId: string) => `/api/v1/ai-governance/evidence-item/${evidenceId}/links/${linkId}`,
@@ -133,17 +114,9 @@ export const API_ENDPOINTS = {
     systemApplicabilityAcceptOverride: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/applicability/accept-override`,
     generateReport: '/api/v1/ai-governance/reports/generate',
     listReports: '/api/v1/ai-governance/reports',
-    getReport: (reportId: string) => `/api/v1/ai-governance/reports/${reportId}`,
-    exportReport: (reportId: string) => `/api/v1/ai-governance/reports/${reportId}/export`,
+    exportReport: (id: string, format: 'pdf' | 'docx') => `/api/v1/reports/snapshots/${encodeURIComponent(id)}/${format}`,
     assessRisks: '/api/v1/ai-governance/risks/assess',
-    incidents: '/api/v1/ai-governance/incidents',
-    updateIncidentStatus: (incidentId: string) => `/api/v1/ai-governance/incidents/${incidentId}/status`,
     riskDashboard: '/api/v1/ai-governance/dashboard/risk',
-    registerModel: '/api/v1/ai-governance/ai-models/register',
-    modelExplainability: (modelId: string) => `/api/v1/ai-governance/ai-models/${modelId}/explainability`,
-    modelBiasDetection: (modelId: string) => `/api/v1/ai-governance/ai-models/${modelId}/bias-detection`,
-    modelExplainabilitySummary: (modelId: string) => `/api/v1/ai-governance/ai-models/${modelId}/explainability/summary`,
-    modelBiasSummary: (modelId: string) => `/api/v1/ai-governance/ai-models/${modelId}/bias/summary`,
     status: '/api/v1/ai-governance/status',
     // Model Inventory
     aiSystems: '/api/v1/ai-governance/systems',
@@ -199,27 +172,14 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/evidence/${evidenceId}/control-mappings`,
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
+    estateGates: '/api/v1/ai-governance/estate/gates',
+    frameworkSystems: (frameworkKey: string) => `/api/v1/ai-governance/frameworks/${encodeURIComponent(frameworkKey)}/systems`,
   },
 
   // Datasets
   datasets: {
     list: '/api/v1/core/datasets',
     upload: '/api/v1/core/datasets',
-    get: (datasetId: string) => `/api/v1/core/datasets/${datasetId}`,
-    delete: (datasetId: string) => `/api/v1/core/datasets/${datasetId}`,
-  },
-
-  // Bias Detection V2 (Production API)
-  biasV2: {
-    uploadDataset: '/api/v1/bias-v2/upload-dataset',
-    detect: '/api/v1/bias-v2/detect',
-    detectLLM: '/api/v1/bias-v2/detect-llm',
-    getTest: (testId: string) => `/api/v1/bias-v2/test/${testId}`,
-    datasets: '/api/v1/bias-v2/datasets',
-    getDataset: (datasetId: string) => `/api/v1/bias-v2/datasets/${datasetId}`,
-    deleteDataset: (datasetId: string) => `/api/v1/bias-v2/datasets/${datasetId}`,
-    history: '/api/v1/bias-v2/history',
-    statistics: '/api/v1/bias-v2/statistics',
   },
 
   // Monitoring
@@ -264,56 +224,14 @@ export const API_ENDPOINTS = {
     health: '/api/v1/comprehensive-bias-evaluation/health',
   },
 
-  // Real-time Model Integration
-  // Real-time Model Integration
-  realtimeModelIntegration: {
-    providers: '/api/v1/realtime-model-integration/providers',
-    biasTestTypes: '/api/v1/realtime-model-integration/bias-test-types',
-    configureModel: '/api/v1/realtime-model-integration/configure-model',
-    testConnection: '/api/v1/realtime-model-integration/test-connection',
-    performBiasTest: '/api/v1/realtime-model-integration/perform-bias-test',
-    comprehensiveAnalysis: '/api/v1/realtime-model-integration/comprehensive-analysis',
-    connect: '/api/v1/realtime-model-integration/connect',
-    disconnect: '/api/v1/realtime-model-integration/disconnect',
-    status: '/api/v1/realtime-model-integration/status',
-    health: '/api/v1/realtime-model-integration/health',
-  },
-
   // Model Performance Benchmarking
   modelPerformanceBenchmarking: {
     benchmarkRuns: '/api/v1/model-performance-benchmarking/benchmark-runs',
     runBenchmark: '/api/v1/model-performance-benchmarking/run-benchmark',
   },
-
-  // Benchmark Suite
-  benchmarkSuite: {
-    run: '/api/v1/benchmark-suite/run',
-    results: '/api/v1/benchmark-suite/results',
-    available: '/api/v1/benchmark-suite/available',
-    health: '/api/v1/benchmark-suite/health',
-  },
-
-  // Fairness Governance
-  fairnessGovernance: {
-    computeClassicMLFairness: '/api/v1/fairness-governance/compute-classic-ml-fairness',
-    health: '/api/v1/fairness-governance/health',
-  },
-
-  // Compliance & Reporting
-  compliance: {
-    frameworks: '/api/v1/compliance/frameworks',
-    frameworkRequirements: (framework: string) => `/api/v1/compliance/frameworks/${framework}/requirements`,
-    check: '/api/v1/compliance/check',
-    auditReport: '/api/v1/compliance/audit-report',
-    fairnessDocumentation: '/api/v1/compliance/fairness-documentation',
-    riskLevels: '/api/v1/compliance/risk-levels',
-    assessRisk: '/api/v1/compliance/assess-risk',
-    templates: '/api/v1/compliance/compliance-templates',
-  },
   // MLOps Integration
   mlops: {
     status: '/api/v1/mlops/status',
-    logTest: '/api/v1/mlops/log-test',
     runUrl: (provider: string, runId: string) => `/api/v1/mlops/run-url/${provider}/${runId}`,
   },
   // Agentic packs
@@ -325,6 +243,7 @@ export const API_ENDPOINTS = {
     bundles: '/api/v1/packs/bundles',
     installBundle: (bundleId: string) => `/api/v1/packs/bundles/${encodeURIComponent(bundleId)}/install`,
     journeys: '/api/v1/packs/journeys',
+    controls: '/api/v1/packs/controls',
     journey: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}`,
     installFramework: (frameworkKey: string) => `/api/v1/packs/journeys/${encodeURIComponent(frameworkKey)}/install`,
     evaluations: '/api/v1/packs/evaluations',
@@ -344,6 +263,7 @@ export const API_ENDPOINTS = {
     stepOutput: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/output`,
     decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
     agentStep: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/agent`,
+    ask: '/api/v1/packs/ask',
     aiProviders: '/api/v1/packs/ai-providers',
     aiProvider: '/api/v1/packs/ai-provider',
     aiProviderTest: '/api/v1/packs/ai-provider/test',
@@ -360,13 +280,11 @@ export const API_ENDPOINTS = {
     update: (orgId: string) => `/api/v1/organizations/${orgId}`,
     members: (orgId: string) => `/api/v1/organizations/${orgId}/members`,
     inviteMembers: (orgId: string) => `/api/v1/organizations/${orgId}/members/invite`,
-    auditReport: (orgId: string) => `/api/v1/organizations/${orgId}/compliance/audit-report`,
   },
 
   // Invitations
   invitations: {
-    getDetails: (token: string) => `/api/v1/invitations/${token}`,
-    accept: (token: string) => `/api/v1/invitations/${token}/accept`,
-    decline: (token: string) => `/api/v1/invitations/${token}/decline`,
+    getDetails: (token: string) => `/api/v1/organizations/invitations/${encodeURIComponent(token)}`,
+    accept: (token: string) => `/api/v1/organizations/invitations/${encodeURIComponent(token)}/accept`,
   },
 } as const

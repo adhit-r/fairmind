@@ -1,4 +1,12 @@
-@tailwind base;
+/* Layer order first, before any import is hoisted: Tailwind's preflight sits under Astryx so older pages keep it and Astryx components win. */
+@layer tw-preflight, reset, astryx-base, astryx-theme, product;
+
+@layer tw-preflight {
+  @tailwind base;
+}
+
+@astryx;
+
 @tailwind components;
 @tailwind utilities;
 
@@ -109,6 +117,10 @@ body {
 }
 .fm-strip { scrollbar-width: none; }
 .fm-strip::-webkit-scrollbar { display: none; }
+/* On phones the strips scroll sideways; the right-edge fade says there is more. */
+@media (max-width: 767.98px) {
+  .fm-strip { padding-right: 24px; scrollbar-width: thin; }
+}
 /* .pk-card is the packs pages' name for the same card. */
 .fm-card,
 .pk-card {
@@ -121,4 +133,105 @@ body {
 }
 @media (max-width: 767px) {
   .fm-sec { margin: 12px 0 4px; padding: 0; }
+}
+
+/* Matrix cells (components/ui/matrix.tsx). Ink for proof, brand only for open, literals only for status. */
+.fm-cel {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  vertical-align: middle;
+  flex: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+button.fm-cel { cursor: pointer; }
+button.fm-cel:focus-visible { outline: 2px solid var(--fm-ink); outline-offset: 2px; }
+.fm-cel.proven,
+.fm-cel.r3 { background: var(--fm-ink); }
+.fm-cel.estimated, .fm-cel.attested, .fm-tex { position: relative; }
+/* Textures are drawn as an ink layer masked by a tiny SVG tile, so the colour stays a token and no gradient is used. */
+.fm-cel.estimated::before, .fm-cel.attested::before, .fm-tex::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--fm-ink); -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Cpath d='M-1 1l2-2M0 3l3-3M2 4l2-2' stroke='black' stroke-width='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Cpath d='M-1 1l2-2M0 3l3-3M2 4l2-2' stroke='black' stroke-width='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; }
+.fm-cel.estimated::before { -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; }
+.fm-cel.attested { box-shadow: inset 0 0 0 1px var(--fm-ink); }
+/* Partially satisfies is half filled, not hatched: hatch means attested, and grids can show both legends. */
+.fm-cel.r2 { box-shadow: inset 0 -6px 0 var(--fm-ink), inset 0 0 0 1px var(--fm-ink); }
+.fm-cel.planned,
+.fm-cel.r1 { box-shadow: inset 0 0 0 1px var(--fm-ink); }
+.fm-cel.open { box-shadow: inset 0 0 0 1.5px var(--fm-brand); }
+.fm-cel.fails { background: #fde9ea; box-shadow: inset 0 0 0 1.5px #b4232c; }
+.fm-cel.stale { box-shadow: inset 0 0 0 1.5px #a14d00; }
+.fm-cel.atorg { background: var(--fm-ink3); opacity: 0.55; }
+
+/* Matrix grid */
+.mx-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 0 18px 10px; font-size: 11px; color: var(--fm-ink3); }
+.mx-legend span { display: inline-flex; gap: 5px; align-items: center; }
+.mx-wrap { overflow-x: auto; }
+.mx-grid { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.mx-grid th,
+.mx-grid td { padding: 0; border-bottom: 1px solid var(--fm-line); font-weight: 400; text-align: left; }
+.mx-grid thead th { vertical-align: bottom; }
+.mx-grid .mx-rq {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: min(280px, 46vw);
+  min-width: min(280px, 46vw);
+  max-width: min(280px, 46vw);
+  height: 28px;
+  padding: 0 12px 0 18px;
+  background: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mx-rq a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.mx-code { margin-right: 8px; font-size: 11px; color: var(--fm-ink3); }
+.mx-grid .mx-hd { padding-bottom: 8px; font-size: 11.5px; color: var(--fm-ink3); }
+.mx-grid .mx-gh th { height: 26px; border-bottom: 0; }
+.mx-grid .mx-gl { padding: 8px 6px 4px 8px; border-left: 1px solid var(--fm-line); font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fm-ink3); white-space: nowrap; }
+.mx-gl span { display: block; width: 0; min-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.mx-gl.mx-ov span { min-width: 0; overflow: visible; }
+.mx-grid .mx-gl.mx-up { vertical-align: top; padding-top: 3px; }
+.mx-grid .mx-gh:has(.mx-up) th { height: 38px; }
+.mx-vh {
+  display: block;
+  height: var(--mx-vh, 120px);
+  max-height: 120px;
+  max-width: 26px;
+  margin: 0 auto;
+  padding: 6px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11.5px;
+  line-height: 12px;
+  color: var(--fm-ink);
+}
+a.mx-vh:hover { text-decoration: underline; }
+.mx-grid .mx-c,
+.mx-grid .mx-ch { width: 28px; min-width: 28px; text-align: center; transition: opacity 0.12s; }
+.mx-grid .mx-gs { padding-left: 8px; }
+.mx-grid .mx-off { opacity: 0.35; }
+.mx-ch.mx-off .mx-vh { text-decoration: line-through; }
+.mx-grid tbody tr:not(.mx-grp):hover > *,
+.mx-grid .mx-hc { background: #fbfbfa; }
+.mx-grid .mx-grp td { padding: 12px 0 4px; background: #fff; font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fm-ink3); }
+.mx-grp td span { display: inline-block; position: sticky; left: 0; padding-left: 18px; }
+.mx-grid .mx-tl,
+.mx-grid .mx-cnt { padding: 0 14px; white-space: nowrap; }
+.mx-grid th.mx-tl,
+.mx-grid th.mx-cnt { padding-bottom: 8px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fm-ink3); }
+.mx-grid td.mx-cnt { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--fm-ink2); }
+.mx-grid .mx-fill { width: 100%; }
+.mx-more { padding: 10px 18px; border-top: 1px solid var(--fm-line); font-size: 12px; color: var(--fm-ink2); }
+@media (max-width: 767px) {
+  .mx-legend { padding-left: 16px; padding-right: 16px; }
+  .mx-grid .mx-rq { padding-left: 16px; }
 }

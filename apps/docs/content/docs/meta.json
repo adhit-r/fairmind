@@ -2,10 +2,13 @@
   "title": "FairMind",
   "pages": [
     "index",
-    "quickstart",
-    "concepts",
-    "workflows",
-    "reference",
-    "limitations"
+    "---Start here---",
+    "...get-started",
+    "---The app---",
+    "...app",
+    "---More---",
+    "journeys",
+    "build",
+    "reference"
   ]
 }

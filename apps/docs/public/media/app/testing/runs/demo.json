@@ -1,0 +1,33 @@
+{
+  "title": "See where workflow runs appear",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Every started workflow is a run. The line under the title says how many are waiting on a person."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The demo has none yet. A run starts when a workflow is started from a framework or a system.",
+      "box": {
+        "x": 748,
+        "y": 190,
+        "w": 90,
+        "h": 24
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Open a run to see its steps, where a person decides, and a ledger whose chain of hashes shows nothing was changed.",
+      "box": {
+        "x": 725,
+        "y": 274,
+        "w": 137,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 22
+}

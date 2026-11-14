@@ -53,7 +53,7 @@ router = APIRouter(prefix="/compliance", tags=["compliance-automation"], depende
 # ============================================================================
 
 @router.post("/schedules", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED)
-async def create_compliance_schedule(
+def create_compliance_schedule(
     request: ScheduleCreateRequest,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_mutator),
@@ -134,7 +134,7 @@ async def create_compliance_schedule(
 
 
 @router.get("/schedules", response_model=ScheduleListResponse)
-async def list_compliance_schedules(
+def list_compliance_schedules(
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     framework: Optional[str] = None,
@@ -197,7 +197,7 @@ async def list_compliance_schedules(
 
 
 @router.get("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def get_compliance_schedule(
+def get_compliance_schedule(
     schedule_id: str,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
@@ -244,7 +244,7 @@ async def get_compliance_schedule(
 
 
 @router.put("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def update_compliance_schedule(
+def update_compliance_schedule(
     schedule_id: str,
     request: ScheduleUpdateRequest,
     current_user=Depends(get_current_user),
@@ -314,7 +314,7 @@ async def update_compliance_schedule(
 
 
 @router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_compliance_schedule(
+def delete_compliance_schedule(
     schedule_id: str,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_mutator),
@@ -419,7 +419,7 @@ async def run_compliance_schedule_now(
 # ============================================================================
 
 @router.get("/violations", response_model=ViolationListResponse)
-async def list_violations(
+def list_violations(
     request: ViolationFilterRequest = Depends(),
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
@@ -488,7 +488,7 @@ async def list_violations(
 
 
 @router.get("/violations/{violation_id}", response_model=ViolationResponse)
-async def get_violation(
+def get_violation(
     violation_id: str,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
@@ -537,7 +537,7 @@ async def get_violation(
 
 
 @router.patch("/violations/{violation_id}/acknowledge", response_model=ViolationResponse)
-async def acknowledge_violation(
+def acknowledge_violation(
     violation_id: str,
     request: ViolationAcknowledgeRequest,
     current_user=Depends(get_current_user),
@@ -595,56 +595,6 @@ async def acknowledge_violation(
 # REMEDIATION ENDPOINTS
 # ============================================================================
 
-@router.post("/gap-remediation", response_model=GapRemediationResponse)
-async def get_remediation_plan(
-    request: GapRemediationRequest,
-    current_user=Depends(get_current_user),
-) -> GapRemediationResponse:
-    """
-    Get an AI-generated remediation plan for a compliance gap.
-
-    Uses LLM-powered analysis to generate step-by-step remediation
-    guidance for specific compliance gaps.
-    """
-    try:
-        # TODO: Call AIComplianceAutomationService.generate_remediation_plan()
-        logger.info(f"Generating remediation plan for gap: {request.gap_id}")
-
-        # Placeholder response
-        return GapRemediationResponse(
-            plan_id=str(uuid.uuid4()),
-            framework=request.framework,
-            gap_id=request.gap_id,
-            gap_description="Placeholder gap description",
-            severity=SeverityEnum.HIGH,
-            remediation_steps=[
-                RemediationStepRequest(
-                    step_number=1,
-                    action="Analyze requirement",
-                    description="Understand the compliance requirement",
-                    effort_hours=2,
-                ),
-                RemediationStepRequest(
-                    step_number=2,
-                    action="Implement fix",
-                    description="Implement the required fix",
-                    effort_hours=8,
-                ),
-            ],
-            estimated_effort_hours=10,
-            legal_citations=[request.framework.value],
-            success_criteria=["Requirement met", "Evidence documented"],
-            generated_by="ai",
-            generated_at=datetime.utcnow(),
-        )
-
-    except Exception as e:
-        logger.error(f"Error generating remediation plan: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate remediation plan"
-        )
-
 
 # ============================================================================
 # STATUS ENDPOINTS
@@ -688,7 +638,7 @@ async def get_automation_status(
 # ============================================================================
 
 @router.get("/reports", response_model=ComplianceReportListResponse)
-async def get_compliance_reports(
+def get_compliance_reports(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),

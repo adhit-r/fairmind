@@ -1,0 +1,78 @@
+{
+  "version": "v1.1.0",
+  "entity": {
+    "type": "organisation",
+    "role": "owner",
+    "name": "Axonome",
+    "email": "adhi.r@axonome.xyz",
+    "description": "Axonome builds and maintains FairMind, an open-source agentic AI governance platform. FairMind is developed in public: the platform under AGPL-3.0 and its SDK, CLI and MCP server under Apache-2.0, with signed releases and an archived DOI for each release.",
+    "webpageUrl": {
+      "url": "https://github.com/Axonome"
+    }
+  },
+  "projects": [
+    {
+      "guid": "fairmind",
+      "name": "FairMind",
+      "description": "Open-source agentic AI governance. FairMind runs governance as workflows: agents collect evidence, run fairness, robustness, privacy and security evaluations and draft findings, and a person approves or rejects at every gate. Every step lands on a hash-chained ledger, and one evaluation run maps to every framework requirement it supports, across 51 frameworks including the EU AI Act, NIST AI RMF, ISO/IEC 42001 and India's DPDP Act. A CLI, Python SDK, GitHub Action and MCP server bring the release gate into CI and coding agents.",
+      "webpageUrl": {
+        "url": "https://fairmind.xyz",
+        "wellKnown": "https://fairmind.xyz/.well-known/funding-manifest-urls"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/adhit-r/fairmind"
+      },
+      "licenses": [
+        "spdx:AGPL-3.0-only",
+        "spdx:Apache-2.0"
+      ],
+      "tags": [
+        "ai",
+        "machine-learning",
+        "governance",
+        "compliance",
+        "security",
+        "fairness",
+        "auditing",
+        "llm",
+        "agents",
+        "python"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "axonome-bank",
+        "type": "bank",
+        "description": "Bank transfer to Axonome. Account details are shared on request once funding is approved."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "maintainer-time",
+        "status": "active",
+        "name": "Maintainer time",
+        "description": "Paid maintainer time for FairMind: reviewing contributions, fixing bugs, keeping evaluation engines and framework mappings current, and answering users.",
+        "amount": 25000,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": [
+          "axonome-bank"
+        ]
+      },
+      {
+        "guid": "infrastructure-security",
+        "status": "active",
+        "name": "Infrastructure and security",
+        "description": "Hosting for the demo and documentation, CI capacity, deploying the sandboxed evaluation runner, and independent security reviews of the evaluation sandbox and evidence ledger.",
+        "amount": 25000,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": [
+          "axonome-bank"
+        ]
+      }
+    ]
+  }
+}

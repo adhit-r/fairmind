@@ -1,0 +1,46 @@
+---
+title: Autopilot
+description: Decide how much each AI system lets agents do, and see what the agents have run.
+---
+
+<Status state="partial">Agent steps that read or write need your organisation's AI provider. Without one the page shows a warning, **No AI provider is set up**, with a **Set it up in Settings** button. The modes can still be changed.</Status>
+
+<Access status="partial" where="Agents › Autopilot" address="/autopilot" change="Organisation mutation access to the system" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/agents/autopilot" /></Tab>
+  <Tab value="Try it"><TryIt page="app/agents/autopilot" /></Tab>
+</Tabs>
+
+## What it is for
+
+Autopilot sets, per system, how much room agents get to carry out the steps that move a system toward release. It also lists recent agent runs across the estate.
+
+## How to use it
+
+1. Read **Estate summary**: systems under autopilot view, steps done this week, and steps that need a person.
+2. In **By system**, find the system. Its name links to its file. Under it is the time of the last run, or "Never".
+3. Set the mode in the selector labelled "Autopilot mode for" that system:
+   - **Off** does nothing.
+   - **Ask first** lines up the steps and waits for you.
+   - **Run** lets the agent do the steps it can. Switching to **Run** starts a pass at once.
+4. The right-hand column shows the agent's next steps, the first one by label, or "Nothing left for the agent to do."
+5. In **Agent runs**, select a row to open it in Runs. **Open all runs** goes to the full list.
+
+If a mode change fails, the error appears under the selector.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/agents/autopilot" />
+
+## What's on the page
+
+**Agent runs** shows active runs first (Running, Queued, Waiting, Blocked), then up to six recent Done or Failed runs, each with its workflow name, current step, status and update time. With none, it reads "No runs yet".
+
+By system, each row loads its own autopilot data, so one slow system does not block the rest. With no registered systems, the page offers **Go to Discovery**.
+
+From the code, the agent runs two actions only: fairness runs and monitoring snapshots. Everything else stays with a person. The [Runs](../testing/runs.mdx) page holds the full history.
+
+<PageAnatomy route="autopilot" />

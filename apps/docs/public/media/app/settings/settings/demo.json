@@ -1,0 +1,53 @@
+{
+  "title": "Find the organisation, people and API key settings",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Settings has a section list on the left. Organisation comes first, with the release gate options."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "AI provider holds the model key used by Ask FairMind and agent steps.",
+      "box": {
+        "x": 346,
+        "y": 192,
+        "w": 196,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Team and roles lists members. Owners and admins can invite people and change roles.",
+      "box": {
+        "x": 346,
+        "y": 284,
+        "w": 196,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Developers is where you create API keys for CI and the CLI.",
+      "box": {
+        "x": 346,
+        "y": 330,
+        "w": 196,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "The audit log lists what happened in the organisation, page by page.",
+      "box": {
+        "x": 346,
+        "y": 376,
+        "w": 196,
+        "h": 20
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 30
+}

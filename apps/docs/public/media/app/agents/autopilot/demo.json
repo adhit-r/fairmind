@@ -1,0 +1,37 @@
+{
+  "title": "Set how much room agents get on each system",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Autopilot sets how much agents may do for each AI system."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The summary counts steps done this week and steps that need a person.",
+      "box": {
+        "x": 334,
+        "y": 242,
+        "w": 918,
+        "h": 113
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Recent and active agent runs are listed here. Select one to open it in Runs.",
+      "box": {
+        "x": 334,
+        "y": 374,
+        "w": 918,
+        "h": 198
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "By system, each row has a mode: Off, Ask first or Run."
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 33
+}

@@ -20,7 +20,7 @@ FairMind does not make this classification.
 
 ## Where FairMind records can help
 
-Most of the rows below rely on [Assurance V2](/docs/concepts/evidence-trust-review) records, which are default off. The [Evidence Workbench](/docs/workflows/evidence-review) holds mutable records that are weaker evidence.
+Most of the rows below rely on [Assurance V2](/docs/get-started/evidence-trust-review) records, which are default off. The [Evidence Workbench](/docs/journeys/evidence-review) holds mutable records that are weaker evidence.
 
 | AI Act area | Supporting FairMind records | Limit |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Most of the rows below rely on [Assurance V2](/docs/concepts/evidence-trust-revi
 | Record-keeping, Article 12 | Admissions, links, reviews, decisions, and audit events are kept in PostgreSQL tables whose update and delete paths are guarded by triggers. | Retention periods, export, and legal record requirements are yours to establish. |
 | Transparency to deployers, Article 13 | Status, limitations, provenance, freshness, and reviewer data can inform internal documentation. | FairMind does not produce instructions for use or transparency content. |
 | Human oversight, Article 14 | Four-eyes evidence review and a separately gated, audited decision exception support separation and accountability. | FairMind does not provide runtime stop, override, or operational oversight of the AI system. |
-| Accuracy, robustness, cybersecurity, Article 15 | Scope, signature, replay, and trust checks protect the integrity of evidence records. | They do not validate model performance, robustness, or security. Only results from a validated evaluator, as listed in [Capability truth](/docs/concepts/capability-truth), describe the system itself. |
+| Accuracy, robustness, cybersecurity, Article 15 | Scope, signature, replay, and trust checks protect the integrity of evidence records. | They do not validate model performance, robustness, or security. Only results from a validated evaluator, as listed in [Capability truth](/docs/get-started/status-and-limits), describe the system itself. |
 | Quality management system, Article 17 | Controlled records can be inputs to a QMS. | FairMind is not a QMS. |
 | Deployer duties and fundamental-rights impact assessment, Articles 26 and 27 | Records can organize supporting evidence and decisions. | FairMind does not decide deployer duties or complete a fundamental-rights impact assessment. |
 | General-purpose AI model providers, Articles 53 and 55 | Versioned evidence records can support a provider's own files. | FairMind does not produce GPAI technical documentation, the training-content summary, systemic-risk evaluations, or incident reports. |
@@ -37,7 +37,3 @@ Most of the rows below rely on [Assurance V2](/docs/concepts/evidence-trust-revi
 ## Evidence quality checks
 
 For each claim in a compliance file, record the exact run, suite, target, evaluator identity, source artifacts, signer, review status, freshness state, limitations, and decision owner. If any of these is missing, say so. Do not turn an incomplete record into a compliance conclusion.
-
-## Evidence basis
-
-Record types and protections are defined in migrations `013` to `013m` under `apps/backend/migrations/`. Review and decision separation are described in [Permissions and separation](/docs/reference/permissions-and-separation).

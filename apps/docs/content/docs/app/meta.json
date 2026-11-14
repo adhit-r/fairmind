@@ -1,0 +1,14 @@
+{
+  "title": "The app",
+  "pages": [
+    "index",
+    "home",
+    "inventory",
+    "rules",
+    "testing",
+    "release",
+    "records",
+    "agents",
+    "...settings"
+  ]
+}

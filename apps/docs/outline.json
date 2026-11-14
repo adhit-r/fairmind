@@ -1,0 +1,740 @@
+{
+  "app": "https://app.fairmind.xyz",
+  "routes": {
+    "dashboard": {
+      "path": "/dashboard",
+      "title": "AI estate",
+      "headings": [
+        "h1: AI estate",
+        "h2: Where the systems are"
+      ],
+      "regions": [
+        "Every system against every release check",
+        "Where the systems are"
+      ],
+      "controls": [
+        "button: Check now"
+      ],
+      "tables": [
+        {
+          "name": "",
+          "headers": [
+            "System",
+            "Data",
+            "Test",
+            "Release",
+            "Operate",
+            "Confidence",
+            "Data governance",
+            "Fairness",
+            "Human oversight",
+            "Decision",
+            "Monitoring",
+            "Needs attention N",
+            "Being checked N"
+          ]
+        }
+      ],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/estate/gates",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "needs-you": {
+      "path": "/needs-you",
+      "title": "Needs you",
+      "headings": [
+        "h1: Needs you"
+      ],
+      "regions": [
+        "Inbox"
+      ],
+      "controls": [
+        "radio: All N",
+        "radio: Release approval N",
+        "radio: Workflow run N",
+        "radio: Plan task N",
+        "radio: Tier sign-off N",
+        "radio: Read a policy N",
+        "radio: Policy approval N",
+        "radio: Policy alert N"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "systems": {
+      "path": "/systems",
+      "title": "AI systems",
+      "headings": [
+        "h1: AI systems"
+      ],
+      "regions": [],
+      "controls": [
+        "searchbox: Search systems",
+        "button: Show N more"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/estate/gates",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "discovery": {
+      "path": "/discovery",
+      "title": "Discovery",
+      "headings": [
+        "h1: Discovery",
+        "h2: Connectors",
+        "h2: Found, not registered (N)",
+        "h2: Registered (N)"
+      ],
+      "regions": [
+        "Connectors",
+        "Found, not registered (N)",
+        "Registered (N)"
+      ],
+      "controls": [
+        "button: Connect a source",
+        "button: Sync now",
+        "button: Remove",
+        "button: Register it",
+        "button: Ignore"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "plan": {
+      "path": "/plan",
+      "title": "Governance plan",
+      "headings": [
+        "h1: Governance plan",
+        "h1: Set up your governance plan"
+      ],
+      "regions": [
+        "Discovery"
+      ],
+      "controls": [
+        "textbox: Tell me about your organisation and how it uses AI.",
+        "button: Send"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "frameworks": {
+      "path": "/frameworks",
+      "title": "Frameworks",
+      "headings": [
+        "h1: Frameworks",
+        "h3: No system has confirmed this framework"
+      ],
+      "regions": [
+        "Frameworks"
+      ],
+      "controls": [
+        "button: Install all packs",
+        "button: Show coverage"
+      ],
+      "tables": [
+        {
+          "name": "",
+          "headers": [
+            "Framework",
+            "Pillar",
+            "Type",
+            "Covered by installed packs",
+            "Covered by all packs",
+            "Packs",
+            "Waiting",
+            "Actions"
+          ]
+        }
+      ],
+      "emptyStates": [
+        "No system has confirmed this framework"
+      ],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/frameworks/AIVERIFY/systems",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/journeys",
+        "GET /api/v1/packs/journeys/AIVERIFY",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "policies": {
+      "path": "/policies",
+      "title": "Policies",
+      "headings": [
+        "h1: Policies",
+        "h3: No policies yet",
+        "h2: Open alerts"
+      ],
+      "regions": [
+        "Policies"
+      ],
+      "controls": [
+        "button: Enforce rules now",
+        "button: Draft a policy with the agent",
+        "button: All N",
+        "button: With open alerts N"
+      ],
+      "tables": [],
+      "emptyStates": [
+        "No policies yet",
+        "Ask the agent to draft one from a short brief."
+      ],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/evaluations",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "evaluations": {
+      "path": "/evaluations",
+      "title": "Evaluations",
+      "headings": [
+        "h1: Evaluations"
+      ],
+      "regions": [],
+      "controls": [],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/evaluations",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "runs": {
+      "path": "/runs",
+      "title": "Runs",
+      "headings": [
+        "h1: Runs",
+        "h3: No runs yet"
+      ],
+      "regions": [],
+      "controls": [],
+      "tables": [],
+      "emptyStates": [
+        "No runs yet",
+        "A run starts when a workflow is started from a framework or a system. Open Frameworks to start one."
+      ],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "agent-audits": {
+      "path": "/agent-audits",
+      "title": "Agent audits",
+      "headings": [
+        "h1: Agent audits",
+        "h2: Audit checks"
+      ],
+      "regions": [],
+      "controls": [
+        "textbox: API key",
+        "button: Save key"
+      ],
+      "tables": [
+        {
+          "name": "",
+          "headers": [
+            "Check",
+            "Reads",
+            "Latest result",
+            "Systems",
+            "Action"
+          ]
+        }
+      ],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/evaluations",
+        "GET /api/v1/packs/platform-connections",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "decisions": {
+      "path": "/decisions",
+      "title": "Decisions",
+      "headings": [
+        "h1: Decisions"
+      ],
+      "regions": [
+        "Approval requests"
+      ],
+      "controls": [
+        "radio: Pending N",
+        "radio: Approved N",
+        "radio: Rejected N"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "monitoring": {
+      "path": "/monitoring",
+      "title": "Monitoring",
+      "headings": [
+        "h1: Monitoring",
+        "h2: Systems",
+        "h2: Alerts"
+      ],
+      "regions": [
+        "Systems"
+      ],
+      "controls": [],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/estate/gates",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/ai-governance/systems/{id}/monitoring-policy",
+        "GET /api/v1/ai-governance/systems/{id}/monitoring-runs",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "findings": {
+      "path": "/findings",
+      "title": "Findings",
+      "headings": [
+        "h1: Findings",
+        "h3: No findings"
+      ],
+      "regions": [],
+      "controls": [],
+      "tables": [],
+      "emptyStates": [
+        "No findings"
+      ],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "environment": {
+      "path": "/environment",
+      "title": "Environment",
+      "headings": [
+        "h1: Environment",
+        "h2: Systems",
+        "h2: How impact tiers are set"
+      ],
+      "regions": [
+        "Systems",
+        "How impact tiers are set"
+      ],
+      "controls": [
+        "button: Start an assessment"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/estate/gates",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/organizations/{id}/systems/{id}/environmental-impact",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/environment/benchmarks",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "evidence": {
+      "path": "/evidence",
+      "title": "Evidence",
+      "headings": [
+        "h1: Evidence"
+      ],
+      "regions": [
+        "Evidence chain"
+      ],
+      "controls": [
+        "button: Add evidence"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/evidence-v2/{id}",
+        "GET /api/v1/ai-governance/evidence/{id}/summary",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/organizations/{id}/systems/{id}/framework-assignments",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/ai-governance/systems/{id}/seals",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "auditor-packs": {
+      "path": "/auditor-packs",
+      "title": "Auditor packs",
+      "headings": [
+        "h1: Auditor packs",
+        "h3: No packs built yet"
+      ],
+      "regions": [],
+      "controls": [
+        "button: How to verify a pack",
+        "button: Build a pack"
+      ],
+      "tables": [],
+      "emptyStates": [
+        "No packs built yet"
+      ],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/packs",
+        "GET /api/v1/ai-governance/packs/frameworks",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "autopilot": {
+      "path": "/autopilot",
+      "title": "Autopilot",
+      "headings": [
+        "h1: Autopilot",
+        "h2: Agent runs",
+        "h2: By system"
+      ],
+      "regions": [
+        "Estate summary",
+        "Agent runs",
+        "Autopilot by system"
+      ],
+      "controls": [],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/estate/autopilot",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/ai-governance/systems/{id}/autopilot",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "ask": {
+      "path": "/ask",
+      "title": "Ask about your AI estate",
+      "headings": [
+        "h1: Ask about your AI estate",
+        "h3: Connect an AI provider to ask questions"
+      ],
+      "regions": [],
+      "controls": [],
+      "tables": [],
+      "emptyStates": [
+        "Connect an AI provider to ask questions"
+      ],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "settings": {
+      "path": "/settings",
+      "title": "Settings",
+      "headings": [
+        "h1: Settings",
+        "h2: Organisation",
+        "h3: Release gate"
+      ],
+      "regions": [
+        "Organisation"
+      ],
+      "controls": [
+        "button: Organisation",
+        "button: AI provider",
+        "button: Connections",
+        "button: Team and roles",
+        "button: Developers",
+        "button: Audit log",
+        "switch: Count environmental impact in release decisions"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/release-gate/settings",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    },
+    "systems.file": {
+      "path": "/systems/{id}",
+      "title": "System file",
+      "headings": [
+        "h2: What it is",
+        "h3: Release gate",
+        "h2: What it needs",
+        "h2: Agent and people trace",
+        "h3: Details",
+        "h3: Decisions and seals",
+        "h3: Findings",
+        "h3: Evidence"
+      ],
+      "regions": [
+        "What it is",
+        "What it needs",
+        "Autopilot",
+        "Release autopilot",
+        "Agent and people trace"
+      ],
+      "controls": [
+        "button: Decide",
+        "button: System file",
+        "button: Requirements",
+        "button: Record",
+        "button: Confirm tier and rules",
+        "button: How the verdict was reached",
+        "button: Run a fairness test",
+        "button: Record a monitoring snapshot",
+        "button: Monitoring cadence",
+        "button: Stored analyses",
+        "button: Run an evaluation",
+        "button: Monitoring",
+        "radio: Off",
+        "radio: Ask first",
+        "radio: Run",
+        "button: Open",
+        "textbox: fairness data URL",
+        "button: Connect",
+        "textbox: monitoring data URL",
+        "button: Open the full record",
+        "button: Remediation (N)",
+        "button: Audit reports"
+      ],
+      "tables": [],
+      "emptyStates": [],
+      "requests": [
+        "GET /api/v1/ai-governance/approval-requests",
+        "GET /api/v1/ai-governance/approval/system/{id}",
+        "GET /api/v1/ai-governance/dashboard/risk",
+        "GET /api/v1/ai-governance/evidence/{id}/summary",
+        "GET /api/v1/ai-governance/organizations/{id}/policies",
+        "GET /api/v1/ai-governance/organizations/{id}/policies/alerts",
+        "GET /api/v1/ai-governance/organizations/{id}/systems/{id}/environmental-impact",
+        "GET /api/v1/ai-governance/remediation",
+        "GET /api/v1/ai-governance/reports",
+        "GET /api/v1/ai-governance/systems",
+        "GET /api/v1/ai-governance/systems/{id}",
+        "GET /api/v1/ai-governance/systems/{id}/autopilot",
+        "GET /api/v1/ai-governance/systems/{id}/clause-map",
+        "GET /api/v1/ai-governance/systems/{id}/fairness-runs",
+        "GET /api/v1/ai-governance/systems/{id}/gate",
+        "GET /api/v1/ai-governance/systems/{id}/monitoring-policy",
+        "GET /api/v1/ai-governance/systems/{id}/monitoring-runs",
+        "GET /api/v1/ai-governance/systems/{id}/seals",
+        "GET /api/v1/auth/me",
+        "GET /api/v1/integrations",
+        "GET /api/v1/integrations/discovered",
+        "GET /api/v1/organizations",
+        "GET /api/v1/packs/ai-provider",
+        "GET /api/v1/packs/runs",
+        "GET /api/v1/plan"
+      ]
+    }
+  }
+}

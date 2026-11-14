@@ -10,9 +10,11 @@
 
 **Open-source agentic AI governance. Agents do the governance work; a person decides at every gate.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0 / Apache-2.0](https://img.shields.io/badge/license-AGPL--3.0%20%2F%20Apache--2.0-blue.svg)](LICENSING.md)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23982915.svg)](https://doi.org/10.5281/zenodo.23982915)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16369/badge)](https://www.bestpractices.dev/projects/16369)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/adhit-r/fairmind/badge)](https://scorecard.dev/viewer/?uri=github.com/adhit-r/fairmind)
+[![PyPI](https://img.shields.io/pypi/v/fairmind-mcp?label=PyPI)](https://pypi.org/project/fairmind-mcp/)
 [![Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/adhit-r/fairmind/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/adhit-r/fairmind)
 [![OECD.AI Catalogue](https://img.shields.io/badge/OECD.AI-Catalogue%20of%20Tools%20%26%20Metrics-1f4e79)](https://oecd.ai/en/catalogue/tools/adhit-rfairmind)
 [![Mentioned in Awesome AI Regulation, Principles & Guidelines](https://awesome.re/mentioned-badge.svg)](https://github.com/EthicalML/awesome-artificial-intelligence-regulation#interactive-and-practical-tools)
@@ -51,7 +53,7 @@ FairMind helps a team get ready for review and shows an auditor the evidence. It
 |---|---|
 | **AI systems** | Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. Each system has one page that walks it through Onboard, Assess, Govern, Remediate and Operate. |
 | **Packs and workflows** | Install packs, start workflow runs, record step outputs, decide at gates. Draft and publish your own version of any workflow. |
-| **Evaluations** | Run 61 of the 109 evaluations: on uploaded files, against your live AI system, or on your agent platform's configuration. Results are stored as measured evidence. |
+| **Evaluations** | Run all 109 evaluations: on uploaded files, against your live AI system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
 | **Release gate** | Five checks (fairness, data governance, human oversight, monitoring, environmental) give `go`, `conditional_go` or `no_go`. Failing blocking policy rules force `no_go`. Approval is refused while critical findings are open. |
 | **Policies** | Write rules mapped to framework controls. Results are evaluated live and count as evidence for those controls. |
 | **Evidence for auditors** | Read the gate per framework clause, export inspection packs, share a read-only auditor link, and verify a pack offline with `fairmind verify`. |
@@ -62,7 +64,7 @@ FairMind helps a team get ready for review and shows an auditor the evidence. It
 | Area | Where it stands |
 |---|---|
 | **Agent steps** | The agent drafts a work step when someone presses *Let the agent do this step* or *Run to the next decision*. It uses your own model (19 providers, key encrypted at rest) or, without one, built-in rules that list what is on file and what is missing. It writes text to the ledger; it does not change anything outside FairMind. |
-| **The other 48 evaluations** | Catalogue entries without an engine. Attach evidence from your own tools; their pages say *Not runnable in FairMind yet*. |
+| **Agent, attack and detector evaluations** | 21 evaluations judge a results file from your own sandbox, drill, attack run or detector. FairMind computes the metric from the raw rows but does not run the scenario or attack itself until sandboxed workers exist. |
 | **Monitoring** | You push snapshots on your schedule (for example `fairmind monitor` in a cron job). FairMind tracks cadence, flags stale snapshots and opens a finding on sustained drift. It does not pull data itself. |
 | **Older pages** | Bias detection, LLM judge, multimodal bias and similar pages from earlier versions remain outside the main navigation. They are not validated. |
 
@@ -133,7 +135,7 @@ A framework mapping organises evidence. It is not legal advice or a conformity d
 Mint an API key at `POST /api/v1/auth/api-keys`.
 
 ```bash
-pipx install ./apps/cli
+pipx install fairmind-cli
 export FAIRMIND_API_URL=https://your-fairmind-host
 export FAIRMIND_API_KEY=...
 
@@ -151,7 +153,7 @@ fairmind verify pack.json        # offline, no network
     api-key: ${{ secrets.FAIRMIND_API_KEY }}
 ```
 
-The [Python SDK](apps/sdk/README.md) wraps the same calls, and the [MCP server](apps/mcp/README.md) gives Claude Code and other MCP clients nine tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
+The [Python SDK](apps/sdk/README.md) (`pip install fairmind`) wraps the same calls, and the [MCP server](apps/mcp/README.md) (`pip install fairmind-mcp`, listed in the official MCP Registry as `io.github.adhit-r/fairmind`) gives Claude Code and other MCP clients nine tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
 
 ---
 
@@ -220,7 +222,7 @@ It is also listed in [Awesome AI Regulation, Principles & Guidelines](https://gi
 
 ## Contributing
 
-Contributions are welcome, from typo fixes to new evaluation engines. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a [good first issue](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). The 48 evaluations without an engine are a good place to start. Questions go to [Discussions](https://github.com/adhit-r/fairmind/discussions). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Contributions are welcome, from typo fixes to new evaluation engines. Start with [CONTRIBUTING.md](CONTRIBUTING.md), then pick a [good first issue](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). Running the agent-scenario and attack evaluations in a sandboxed worker is a good place to start. Questions go to [Discussions](https://github.com/adhit-r/fairmind/discussions). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Security
 
@@ -232,4 +234,4 @@ Metadata is in [CITATION.cff](CITATION.cff). Concept DOI: [10.5281/zenodo.239829
 
 ## License
 
-Created and maintained by [Axonome](https://www.fairmind.xyz/about). MIT licence; see [LICENSE](LICENSE).
+Created and maintained by [Axonome](https://www.fairmind.xyz/about). The platform is under the [AGPL-3.0](LICENSE); the Python SDK, CLI and MCP server are under [Apache-2.0](apps/sdk/LICENSE). A commercial license is available. See [LICENSING.md](LICENSING.md). Releases up to `v0.3.1-alpha` were MIT.

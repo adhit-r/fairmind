@@ -254,6 +254,12 @@ class AdvancedBiasDetectionService:
     ) -> CausalAnalysisResult:
         """Perform causal inference analysis using difference-in-means with t-tests"""
 
+        # Text protected attributes (e.g. gender) are coded as categories so they can be correlated.
+        df = df.copy()
+        for attr in protected_attrs:
+            if attr in df.columns and not pd.api.types.is_numeric_dtype(df[attr]):
+                df[attr] = df[attr].astype("category").cat.codes
+
         if treatment not in df.columns or outcome not in df.columns:
             return CausalAnalysisResult(
                 treatment_effect=0.0,

@@ -1,0 +1,53 @@
+{
+  "title": "Find a runnable check and read its results",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "The catalogue lists every evaluation, grouped by pillar. The counts under the title say how many can run today."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The list starts on runnable evaluations only. Those are the ones with an engine behind them.",
+      "box": {
+        "x": 960,
+        "y": 191,
+        "w": 51,
+        "h": 17
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Switch the engine filter to see the entries that are listed but have no engine yet.",
+      "box": {
+        "x": 1028,
+        "y": 191,
+        "w": 68,
+        "h": 17
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Click an evaluation name to open its panel with the metric, threshold and results by system.",
+      "box": {
+        "x": 347,
+        "y": 320,
+        "w": 152,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "Each system shows its latest result and the evidence it came from.",
+      "box": {
+        "x": 889,
+        "y": 646,
+        "w": 346,
+        "h": 24
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 51
+}

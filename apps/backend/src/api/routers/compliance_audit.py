@@ -98,5 +98,5 @@ async def run_compliance_audit(body: ComplianceAuditRequest) -> ComplianceAuditR
     summary="List supported frameworks",
     description="Return metadata about all regulatory frameworks supported by the audit engine.",
 )
-async def list_supported_frameworks() -> List[FrameworkInfoResponse]:
+def list_supported_frameworks() -> List[FrameworkInfoResponse]:
     return [FrameworkInfoResponse(**fw) for fw in _engine.list_frameworks()]

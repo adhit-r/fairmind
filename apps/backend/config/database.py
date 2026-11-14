@@ -67,14 +67,12 @@ class DatabaseManager:
         self.database: Optional[Database] = None
         self.engine = None
         self.SessionLocal = None
-        self._pool = None
 
     async def _close_resources(self) -> list[Exception]:
         """Best-effort close of every initialized resource in reverse order."""
         errors: list[Exception] = []
         engine_to_close, self.engine = self.engine, None
         database_to_close, self.database = self.database, None
-        pool_to_close, self._pool = self._pool, None
         self.SessionLocal = None
 
         if engine_to_close is not None:
@@ -85,11 +83,6 @@ class DatabaseManager:
         if database_to_close is not None:
             try:
                 await database_to_close.disconnect()
-            except Exception as error:
-                errors.append(error)
-        if pool_to_close is not None:
-            try:
-                await pool_to_close.close()
             except Exception as error:
                 errors.append(error)
         return errors
@@ -104,7 +97,7 @@ class DatabaseManager:
                 runtime_search_path = postgresql_runtime_search_path(trusted_schema)
 
             pool_options = {
-                "min_size": 5,
+                "min_size": 1,
                 "max_size": settings.database_pool_size,
                 "max_queries": 50000,
                 "max_inactive_connection_lifetime": 300,
@@ -115,8 +108,6 @@ class DatabaseManager:
             if runtime_search_path is not None:
                 pool_options["server_settings"] = {"search_path": runtime_search_path}
             self.database = Database(settings.database_url, **pool_options)
-            # asyncpg pool for direct access when needed
-            self._pool = await asyncpg.create_pool(settings.database_url, **pool_options)
             await self.database.connect()
 
             # Sync engine for migrations and admin tasks
@@ -126,7 +117,8 @@ class DatabaseManager:
                 pool_size=settings.database_pool_size,
                 max_overflow=settings.database_max_overflow,
                 pool_pre_ping=True,
-                pool_recycle=3600,  # Recycle connections every hour
+                # Under Neon's idle suspend, so a pooled connection is never one the server dropped.
+                pool_recycle=300,
                 # libpq moves on to the next address when a connect stalls
                 connect_args={"connect_timeout": 5},
                 echo=settings.database_echo and not settings.is_production,
@@ -161,16 +153,19 @@ class DatabaseManager:
                 bind=self.engine
             )
 
-            # Create all tables defined in models
-            try:
-                from src.infrastructure.db.database.models import Base
-                Base.metadata.create_all(bind=self.engine)
-                logger.info("Database tables created successfully")
-            except Exception as error:
-                logger.warning(
-                    "Database table creation failed (%s)",
-                    type(error).__name__,
-                )
+            # Development convenience only. Elsewhere the schema comes from
+            # scripts/setup_db.py, run before the app starts (deploy/lightsail
+            # runs it as the migrate service), so the app never guesses at DDL.
+            if settings.is_development:
+                try:
+                    from src.infrastructure.db.database.models import Base
+                    Base.metadata.create_all(bind=self.engine)
+                    logger.info("Database tables created successfully")
+                except Exception as error:
+                    logger.warning(
+                        "Database table creation failed (%s)",
+                        type(error).__name__,
+                    )
 
             logger.info("Database connections initialized successfully")
 
@@ -260,17 +255,11 @@ class DatabaseManager:
             return False
     
     async def get_pool_status(self) -> dict:
-        """Get connection pool status."""
-        if not self._pool:
+        """Connection pool status of the sync engine (the async pool has no public counters)."""
+        if self.engine is None:
             return {"status": "no_pool"}
-        
-        return {
-            "size": self._pool.get_size(),
-            "max_size": self._pool.get_max_size(),
-            "min_size": self._pool.get_min_size(),
-            "idle_connections": self._pool.get_idle_size(),
-            "used_connections": self._pool.get_size() - self._pool.get_idle_size(),
-        }
+        pool = self.engine.pool
+        return {"size": pool.size(), "checked_out": pool.checkedout(), "overflow": pool.overflow()}
 
 
 # Global database manager instance

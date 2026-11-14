@@ -9,6 +9,7 @@ auto-login, so it is the case worth pinning down.
 
 import pytest
 
+import config.settings as settings_module
 from config.settings import (
     DevelopmentSettings,
     ProductionSettings,
@@ -28,6 +29,9 @@ def _clear_settings_cache():
 
 @pytest.fixture
 def env(monkeypatch):
+    # Only the variables a test sets count, not the developer's own .env.
+    monkeypatch.setattr(settings_module, "_ENV_FILE", None)
+
     def _set(node_env=None, environment=None):
         for name, value in (("NODE_ENV", node_env), ("ENVIRONMENT", environment)):
             if value is None:
@@ -43,7 +47,8 @@ def env(monkeypatch):
 @pytest.mark.parametrize(
     "node_env, environment, expected",
     [
-        (None, None, "development"),
+        # Nothing set means production, so a deploy cannot forget its way into dev mode.
+        (None, None, "production"),
         ("production", None, "production"),
         (None, "production", "production"),
         ("production", "production", "production"),
@@ -99,3 +104,49 @@ def test_production_is_never_also_development(env):
     assert isinstance(settings, ProductionSettings)
     assert settings.is_production is True
     assert settings.is_development is False
+
+
+@pytest.mark.parametrize("missing", ["SECRET_KEY", "JWT_SECRET"])
+def test_production_refuses_to_start_without_explicit_secrets(env, monkeypatch, missing):
+    env(environment="production")
+    monkeypatch.delenv(missing)
+    with pytest.raises(ValueError, match=missing):
+        ProductionSettings(_env_file=None)
+
+
+def test_development_still_starts_without_secrets(env, monkeypatch):
+    env(environment="development")
+    monkeypatch.delenv("SECRET_KEY")
+    monkeypatch.delenv("JWT_SECRET")
+    assert DevelopmentSettings(_env_file=None).secret_key
+
+
+def test_env_file_is_read_when_the_process_sets_nothing(env, monkeypatch, tmp_path):
+    env()
+    env_file = tmp_path / ".env"
+    env_file.write_text("NODE_ENV=development\n")
+    monkeypatch.setattr(settings_module, "_ENV_FILE", str(env_file))
+    assert resolve_environment() == "development"
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    assert resolve_environment() == "production"
+
+
+@pytest.mark.parametrize(
+    "url, local",
+    [
+        ("postgresql://u@127.0.0.1:55440/db", True),
+        ("postgresql://u@localhost/db", True),
+        ("postgresql://u@[::1]:5432/db", True),
+        ("postgresql://u:p@ep-x.eu-central-1.aws.neon.tech/db?sslmode=require", False),
+        ("postgresql://u@10.0.0.5/db", False),
+    ],
+)
+def test_dev_login_needs_a_local_database(env, url, local):
+    from middleware.security import dev_login_email
+
+    env(environment="development")
+    dev = DevelopmentSettings(_env_file=None, database_url=url, fairmind_dev_login_email="dev@fairmind.test")
+    assert dev.database_is_local is local
+    assert (dev_login_email(dev) is not None) is local
+    prod = ProductionSettings(_env_file=None, environment="production", database_url=url, fairmind_dev_login_email="dev@fairmind.test")
+    assert dev_login_email(prod) is None

@@ -10,6 +10,9 @@ from sqlalchemy import text as sql
 from api.main import app
 from src.application.services.fairness_run_service import effective_tier, gate_explain, path_forward, release_gate, tier_reasons
 from tests.auth_helpers import auth_headers
+import pytest
+
+pytestmark = pytest.mark.usefixtures("environmental_gate_on")  # written for the five-check gate
 
 NOW = datetime(2026, 11, 7, tzinfo=timezone.utc)
 PASSING_RUN = {"id": "run", "evidenceType": "fairness_test", "confidence": 0.95, "metadata": {"provenance_class": "measured"}, "timestamp": "2026-11-06T00:00:00+00:00", "content": {"all_checks_pass": True, "attributes": []}}
@@ -100,6 +103,13 @@ def test_go_is_not_promised_past_a_failing_measured_check():
     path = path_forward("low", [failing], environmental_assessed=True, now=NOW)
     assert path["target"] == "go" and path["options"] == []
     assert "Go is not reachable while a measured check fails; it needs a passing re-run." in path["notes"]
+
+
+def test_each_check_names_the_class_of_the_record_it_read():
+    manual = {"id": "ho", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T00:00:00+00:00"}
+    checks = {c["key"]: c for c in release_gate("medium", [PASSING_RUN, manual], environmental_assessed=True, now=NOW)["checks"]}
+    assert (checks["fairness"]["evidenceClass"], checks["human_oversight"]["evidenceClass"], checks["monitoring"]["evidenceClass"]) == ("measured", "manual", None)
+    assert checks["environmental"]["evidenceClass"] == "tool_estimated" and checks["environmental"]["evidenceId"] is None  # classed from its assessment
 
 
 def test_effective_tier_explain_and_reasons():

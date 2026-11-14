@@ -1,0 +1,43 @@
+---
+title: Scheduled monitoring
+description: Push a monitoring snapshot on a schedule, let the gate notice when snapshots stop, and have sustained drift open a finding.
+---
+
+A model that was fair at release can drift. Monitoring only helps if snapshots keep arriving, so FairMind expects them on a cadence and acts when they stop or when they keep failing.
+
+Your side pushes the snapshots. A scheduled job in your own infrastructure runs `fairmind monitor` against recent production decisions. FairMind stores no credentials for your data and pulls nothing.
+
+## Set it up
+
+1. Create an API key as in [Release gate in CI](/docs/build/release-gate-in-ci) and store it as the repository secret `FAIRMIND_API_KEY`. Store the API address as the variable `FAIRMIND_API_URL`.
+2. Open the system file, go to the Operate stage and choose the expected cadence: daily, weekly or monthly. The default is weekly.
+3. Copy the workflow from **Schedule it**. It already contains the system id and a cron expression that matches the cadence.
+4. Set the variable `FAIRMIND_PREDICTION_COLUMN` (and `FAIRMIND_ATTRIBUTES` if the system has no snapshot yet) and provide a step that exports recent decisions to `artifacts/decisions.csv`.
+
+The job installs the CLI (`pipx install fairmind-cli`, or `pipx install ./apps/cli` inside the FairMind repository) and runs:
+
+```bash
+fairmind monitor --system <id> --file artifacts/decisions.csv --attributes gender,region --prediction approved
+```
+
+The command exits 1 when the snapshot is outside thresholds, so the failed run also shows up in your Actions history.
+
+## Stale monitoring is not proven
+
+The monitoring check on the release gate is proven only while the newest measured snapshot is no older than 1.5 times the cadence. With a weekly cadence that is 10.5 days. After that the check goes back to open and the gate says why, for example "Latest monitoring snapshot is 12 days old; the cadence is 7 days". The next snapshot restores it. A manual attestation carries no timestamp to judge, so it is unaffected.
+
+Without a stored policy the weekly default applies.
+
+## Sustained drift opens a finding
+
+After each snapshot FairMind counts the consecutive snapshots that fell outside thresholds. When that count reaches the drift window, 3 by default, it opens one finding on the system with severity high. The title names the attributes and the description lists the worst impact ratio, selection-rate drift and score PSI. While that finding is still open, no second one is created.
+
+A later snapshot that passes is reported but never closes the finding. Closing it is a person's decision, after the cause is understood and a fresh fairness run has been recorded.
+
+## API
+
+| Call | Purpose |
+| --- | --- |
+| `GET /api/v1/ai-governance/systems/{id}/monitoring-policy` | Cadence and drift window; defaults when none is stored |
+| `PUT /api/v1/ai-governance/systems/{id}/monitoring-policy` | Set `cadenceHours` (1 to 2160) and `driftWindow` (2 to 10) |
+| `POST /api/v1/ai-governance/systems/{id}/monitoring-runs` | Record a snapshot; the response carries a `watch` object with the policy, `consecutiveDrifting`, `findingId` and `findingOpened` |

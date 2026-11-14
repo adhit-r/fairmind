@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/profiles")
-async def get_profiles(limit: int = 10, m: OrgMembership = Depends(org_member)):
+def get_profiles(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get user profiles from database (Using direct SQL on auth.users)"""
     try:
         # Supabase auth.users table is not directly accessible via public schema usually
@@ -67,7 +67,7 @@ async def get_profiles(limit: int = 10, m: OrgMembership = Depends(org_member)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/bias-analyses")
-async def get_bias_analyses(limit: int = 10, m: OrgMembership = Depends(org_member)):
+def get_bias_analyses(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get geographic bias analyses from database"""
     try:
         analyses_data = []
@@ -104,7 +104,7 @@ async def get_bias_analyses(limit: int = 10, m: OrgMembership = Depends(org_memb
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/audit-logs")
-async def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)):
+def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get audit logs from database"""
     try:
         logs_data = []
@@ -151,7 +151,7 @@ async def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/country-metrics")
-async def get_country_metrics(limit: int = 10, m: OrgMembership = Depends(org_member)):
+def get_country_metrics(limit: int = 10, m: OrgMembership = Depends(org_member)):
     """Get country performance metrics from database"""
     try:
         # Stub for now as table might be complex
@@ -165,7 +165,7 @@ async def get_country_metrics(limit: int = 10, m: OrgMembership = Depends(org_me
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard-stats")
-async def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
+def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
     """Get dashboard statistics using Direct SQL - matches frontend DashboardStats interface"""
     try:
         stats = {
@@ -248,7 +248,7 @@ async def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/models")
-async def get_models(m: OrgMembership = Depends(org_member)):
+def get_models(m: OrgMembership = Depends(org_member)):
     """Get this organisation's models for frontend display from database"""
     try:
         models_data = []
@@ -308,31 +308,9 @@ async def get_models(m: OrgMembership = Depends(org_member)):
         logger.error(f"Error getting models: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/reports")
-async def get_reports(m: OrgMembership = Depends(org_member)):
-    """Get reports for frontend display"""
-    # Placeholder for now
-    return {
-        "success": True,
-        "data": [],
-        "count": 0
-    }
-
-@router.get("/monitoring-metrics")
-async def get_monitoring_metrics(m: OrgMembership = Depends(org_member)):
-    """Get monitoring metrics for frontend display"""
-    # Placeholder
-    return {
-        "success": True,
-        "data": {
-            "system_health": "healthy",
-            "active_models": 0,
-            "total_predictions": 0
-        }
-    }
 
 @router.get("/health")
-async def database_health():
+def database_health():
     """Check database connectivity"""
     try:
         with db_manager.get_session() as session:
@@ -352,13 +330,5 @@ async def database_health():
 
 # Main API endpoints (accessible at /api/v1/*)
 @main_router.get("/models")
-async def get_models_main(m: OrgMembership = Depends(org_member)):
-    return await get_models(m)
-
-@main_router.get("/reports") 
-async def get_reports_main(m: OrgMembership = Depends(org_member)):
-    return await get_reports(m)
-
-@main_router.get("/monitoring/metrics")
-async def get_monitoring_metrics_main(m: OrgMembership = Depends(org_member)):
-    return await get_monitoring_metrics(m)
+def get_models_main(m: OrgMembership = Depends(org_member)):
+    return get_models(m)
