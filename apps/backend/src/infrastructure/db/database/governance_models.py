@@ -4034,7 +4034,7 @@ class GovernanceIntegration(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
-    kind = Column(String, nullable=False)  # mlflow | github
+    kind = Column(String, nullable=False)  # a key of api.routes.integrations._CONNECTORS
     name = Column(String, nullable=False)
     config_json = Column(Text, nullable=False, default="{}")
     # ponytail: token stored at rest as-is in the local store; encrypt with an app key before production
@@ -4052,10 +4052,10 @@ class GovernanceDiscoveredAsset(Base):
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
     integration_id = Column(String, ForeignKey("governance_integrations.id"), nullable=False, index=True)
-    source = Column(String, nullable=False)  # mlflow | github
+    source = Column(String, nullable=False)  # the integration kind
     external_id = Column(String, nullable=False)
     name = Column(String, nullable=False)
-    kind = Column(String, nullable=False)  # ml_model | llm_app | ai_assisted_dev
+    kind = Column(String, nullable=False)  # ml_model | llm_app | ai_assisted_dev | agent | ai_service | mcp_server
     metadata_json = Column(Text, nullable=False, default="{}")
     suggested_tier = Column(String, nullable=False, default="medium")
     suggested_stage = Column(String, nullable=False, default="onboard")

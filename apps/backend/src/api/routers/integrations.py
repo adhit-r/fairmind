@@ -1,7 +1,10 @@
 """
 Integrations: the gateway for onboarding AI systems.
 
-A connector (MLflow registry, GitHub org, Hugging Face Hub) is synced into discovered assets.
+A connector is synced into discovered assets: model registries (MLflow, Hugging Face), code
+(GitHub, including MCP server configs), AI vendor admin APIs (Anthropic, Claude Enterprise,
+OpenAI), cloud AI inventories (AWS, Azure, Google Cloud), sign-in providers (Okta, Entra ID),
+Microsoft 365 Copilot, gateways (LiteLLM) and uploaded proxy logs, and MCP registries.
 Rules suggest a risk tier and lifecycle stage; a person promotes an asset into
 a governed system. Decisions stay human; discovery is automatic.
 """
@@ -9,6 +12,7 @@ a governed system. Decisions stay human; discovery is automatic.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -22,6 +26,20 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _caller_org, _load_json_value
 from api.routes.llm import LLMError, _public_https, decrypt, encrypt
+from api.routes.discovery_sources import (
+    anthropic_admin,
+    aws,
+    azure,
+    claude_enterprise,
+    entra,
+    gcp,
+    litellm,
+    m365_copilot,
+    mcp_registry,
+    okta,
+    openai_admin,
+    proxy_logs,
+)
 from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
 
@@ -31,6 +49,7 @@ from database.connection import get_db
 router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[Depends(org_member)])
 
 _tables_ready = False
+logger = logging.getLogger(__name__)
 
 
 def _ensure_tables() -> None:
@@ -70,6 +89,7 @@ _ML_DEPS = re.compile(
     r"\b(transformers|torch|pytorch|tensorflow|keras|scikit-learn|sklearn|xgboost|lightgbm|catboost|mlflow|onnxruntime)\b",
     re.I,
 )
+_MCP_CONFIGS = (".mcp.json", "mcp.json", ".cursor/mcp.json", ".vscode/mcp.json")
 _AGENT_FILES = {"CLAUDE.md", "AGENTS.md", ".cursorrules", ".cursor", ".codex", "GEMINI.md", ".windsurfrules"}
 _MODEL_FILES = re.compile(r"\.(pkl|joblib|onnx|pt|pth|h5|safetensors|gguf)$|^MLproject$|^model_card\.md$", re.I)
 
@@ -197,13 +217,15 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
                     r = await client.get(entry["download_url"])
                     if r.status_code < 400:
                         deps_text += "\n" + r.text[:20000]
+            mcp = await _github_mcp_servers(client, full, names)
+            found.extend(_mcp_assets(full, repo, owner, mcp))
             llm = sorted({m.group(0).lower() for m in _LLM_DEPS.finditer(deps_text)})
             ml = sorted({m.group(0).lower() for m in _ML_DEPS.finditer(deps_text)})
             if llm:
                 kind = "llm_app"
             elif ml or model_files:
                 kind = "ml_model"
-            elif agent_files:
+            elif agent_files or mcp:
                 kind = "ai_assisted_dev"
             else:
                 continue  # no AI signal; not an asset
@@ -219,7 +241,7 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
                         "default_branch": repo.get("default_branch"),
                         "language": repo.get("language"),
                         "pushed_at": repo.get("pushed_at"),
-                        "signals": {"llm_sdks": llm, "ml_libraries": ml, "model_files": model_files, "agent_configs": agent_files},
+                        "signals": {"llm_sdks": llm, "ml_libraries": ml, "model_files": model_files, "agent_configs": agent_files, "mcp_servers": sorted(mcp)},
                         "business_line": "",
                         "owner": owner,
                     },
@@ -228,6 +250,56 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
                 }
             )
     return found
+
+
+def mcp_servers_in(config_text: str) -> Dict[str, Dict[str, Any]]:
+    """MCP servers declared in a client config (.mcp.json, Cursor, VS Code): name -> how it runs."""
+    try:
+        data = json.loads(config_text)
+    except ValueError:
+        return {}
+    servers = (data.get("mcpServers") or data.get("servers") or {}) if isinstance(data, dict) else {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for name, spec in servers.items() if isinstance(servers, dict) else []:
+        if not isinstance(spec, dict):
+            continue
+        out[str(name)] = {
+            "transport": spec.get("type") or ("http" if spec.get("url") else "stdio"),
+            "url": spec.get("url") or "",
+            "command": " ".join([str(spec.get("command") or "")] + [str(a) for a in spec.get("args") or []]).strip(),
+            # Names of env vars only; values are secrets.
+            "env_keys": sorted((spec.get("env") or {}).keys()) if isinstance(spec.get("env"), dict) else [],
+        }
+    return out
+
+
+async def _github_mcp_servers(client: httpx.AsyncClient, full: str, root_names: set) -> Dict[str, Dict[str, Any]]:
+    found: Dict[str, Dict[str, Any]] = {}
+    for path in _MCP_CONFIGS:
+        if path.split("/")[0] not in root_names:
+            continue
+        entry = await _github_json(client, f"/repos/{full}/contents/{path}")
+        if isinstance(entry, dict) and entry.get("download_url"):
+            r = await client.get(entry["download_url"])
+            if r.status_code < 400:
+                for name, spec in mcp_servers_in(r.text[:100000]).items():
+                    found[name] = {**spec, "config_file": path}
+    return found
+
+
+def _mcp_assets(full: str, repo: Dict[str, Any], owner: str, servers: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "external_id": f"{full}#mcp:{name}",
+            "name": name,
+            "kind": "mcp_server",
+            "metadata": {**spec, "repo": full, "url": repo.get("html_url"), "business_line": "", "owner": owner, "signal": "MCP client config"},
+            # A remote server sends data out of the organisation; a local one runs code on the developer's machine.
+            "suggested_tier": "medium",
+            "suggested_stage": "onboard",
+        }
+        for name, spec in servers.items()
+    ]
 
 
 _HF_API = "https://huggingface.co/api"
@@ -325,7 +397,28 @@ async def _sync_huggingface(config: Dict[str, Any], token: Optional[str]) -> Lis
     return found
 
 
-_CONNECTORS = {"mlflow": _sync_mlflow, "github": _sync_github, "huggingface": _sync_huggingface}
+async def _sync_upload_only(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+    raise HTTPException(status_code=400, detail="Proxy logs are read from an upload; use Upload logs")
+
+
+_CONNECTORS = {
+    "mlflow": _sync_mlflow,
+    "github": _sync_github,
+    "huggingface": _sync_huggingface,
+    "anthropic": anthropic_admin.sync,
+    "openai": openai_admin.sync,
+    "claude_enterprise": claude_enterprise.sync,
+    "aws": aws.sync,
+    "azure": azure.sync,
+    "gcp": gcp.sync,
+    "okta": okta.sync,
+    "entra": entra.sync,
+    "m365_copilot": m365_copilot.sync,
+    "litellm": litellm.sync,
+    "proxy_logs": _sync_upload_only,
+    "mcp_registry": mcp_registry.sync,
+}
+MAX_LOG_BYTES = 20 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -334,10 +427,14 @@ _CONNECTORS = {"mlflow": _sync_mlflow, "github": _sync_github, "huggingface": _s
 
 
 class IntegrationCreate(BaseModel):
-    kind: str = Field(pattern="^(mlflow|github|huggingface)$")
+    kind: str = Field(pattern="^(" + "|".join(_CONNECTORS) + ")$")
     name: str = Field(min_length=1)
     config: Dict[str, Any] = Field(default_factory=dict)
     token: Optional[str] = None
+
+
+class LogUpload(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_LOG_BYTES)
 
 
 class PromoteRequest(BaseModel):
@@ -446,29 +543,8 @@ def delete_integration(integration_id: str, http: Request, db: Session = Depends
     return None
 
 
-@router.post("/{integration_id}/sync", dependencies=[Depends(org_mutator)])
-async def sync_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
-    """Pull the source and upsert discovered assets. Promoted or ignored assets keep their status."""
-    _ensure_tables()
-    org = _caller_org(http)
-    row = _get_integration(db, org, integration_id)
-    # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
-    kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
-    now = _now()
-    legacy_plaintext = bool(row[5]) and decrypt(row[5]) is None
-    try:
-        found = await _CONNECTORS[kind](config, token)
-    except HTTPException as exc:
-        db.execute(
-            text("UPDATE governance_integrations SET last_sync_summary = :summary WHERE id = :id"),
-            {"summary": json.dumps({"error": str(exc.detail), "at": now}), "id": integration_id},
-        )
-        db.commit()
-        raise
-
-    if legacy_plaintext:
-        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": integration_id})
-
+def _upsert(db: Session, org: str, integration_id: str, kind: str, found: List[Dict[str, Any]], now: str) -> Tuple[int, int]:
+    """Insert new discovered assets and refresh known ones. Promoted or ignored assets keep their status."""
     created = updated = 0
     for item in found:
         existing = db.execute(
@@ -514,6 +590,59 @@ async def sync_integration(integration_id: str, http: Request, db: Session = Dep
                 },
             )
             created += 1
+    return created, updated
+
+
+@router.post("/{integration_id}/sync", dependencies=[Depends(org_mutator)])
+async def sync_integration(integration_id: str, http: Request, db: Session = Depends(get_db)):
+    """Pull the source and upsert discovered assets. Promoted or ignored assets keep their status."""
+    _ensure_tables()
+    org = _caller_org(http)
+    row = _get_integration(db, org, integration_id)
+    # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
+    kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
+    now = _now()
+    legacy_plaintext = bool(row[5]) and decrypt(row[5]) is None
+    try:
+        try:
+            found = await _CONNECTORS[kind](config, token)
+        except HTTPException:
+            raise
+        except Exception as exc:  # a vendor response shaped differently than documented; never echoes the token
+            logger.exception("Discovery sync failed for %s integration %s", kind, integration_id)
+            raise HTTPException(status_code=502, detail=f"The source answered in a way FairMind could not read ({type(exc).__name__})") from None
+    except HTTPException as exc:
+        db.execute(
+            text("UPDATE governance_integrations SET last_sync_summary = :summary WHERE id = :id"),
+            {"summary": json.dumps({"error": str(exc.detail), "at": now}), "id": integration_id},
+        )
+        db.commit()
+        raise
+
+    if legacy_plaintext:
+        db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": integration_id})
+
+    created, updated = _upsert(db, org, integration_id, kind, found, now)
+    summary = {"found": len(found), "created": created, "updated": updated, "at": now}
+    db.execute(
+        text("UPDATE governance_integrations SET last_synced_at = :now, last_sync_summary = :summary WHERE id = :id"),
+        {"now": now, "summary": json.dumps(summary), "id": integration_id},
+    )
+    db.commit()
+    return summary
+
+
+@router.post("/{integration_id}/upload", dependencies=[Depends(org_mutator)])
+def upload_logs(integration_id: str, body: LogUpload, http: Request, db: Session = Depends(get_db)):
+    """Read a proxy, firewall or gateway log export for traffic to known AI services. The log itself is not stored."""
+    _ensure_tables()
+    org = _caller_org(http)
+    row = _get_integration(db, org, integration_id)
+    if row[2] != "proxy_logs":
+        raise HTTPException(status_code=400, detail="Only a proxy logs connector takes an upload")
+    now = _now()
+    found = proxy_logs.parse(body.text)
+    created, updated = _upsert(db, org, integration_id, row[2], found, now)
     summary = {"found": len(found), "created": created, "updated": updated, "at": now}
     db.execute(
         text("UPDATE governance_integrations SET last_synced_at = :now, last_sync_summary = :summary WHERE id = :id"),

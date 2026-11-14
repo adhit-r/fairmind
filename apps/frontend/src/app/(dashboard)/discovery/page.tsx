@@ -2,7 +2,7 @@
 
 import '@/astryx/pages/systems.css'
 import { useRouter } from 'next/navigation'
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Drawer } from '@astryxdesign/core/Drawer'
@@ -10,26 +10,52 @@ import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Selector } from '@astryxdesign/core/Selector'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { KIND_LABEL, SOURCE_LABEL, useDiscovery, when, type DiscoveredAsset, type Integration, type IntegrationKind } from '@/astryx/data/discovery'
+import { KIND_LABEL, MAX_LOG_BYTES, SOURCE_LABEL, SOURCES, useDiscovery, when, type DiscoveredAsset, type Integration, type IntegrationKind } from '@/astryx/data/discovery'
 
-const KINDS: IntegrationKind[] = ['mlflow', 'github', 'huggingface']
+const KINDS = Object.keys(SOURCES) as IntegrationKind[]
 
 type Sync = NonNullable<Integration['lastSync']>
-function syncLine(s: Sync | null | undefined): string {
-  if (!s) return 'Not synced yet'
+function syncLine(s: Sync | null | undefined, kind: IntegrationKind): string {
+  if (!s) return kind === 'proxy_logs' ? 'No logs uploaded yet' : 'Not synced yet'
   if (s.error) return `Last sync failed: ${s.error}`
-  return `Synced ${when(s.at)} · ${s.found ?? 0} found, ${s.created ?? 0} new, ${s.updated ?? 0} updated`
+  return `${kind === 'proxy_logs' ? 'Read' : 'Synced'} ${when(s.at)} · ${s.found ?? 0} found, ${s.created ?? 0} new, ${s.updated ?? 0} updated`
 }
 
 /** What a connector reads, from its stored config. */
 function where(i: Integration): string {
-  const c = i.config
-  if (i.kind === 'mlflow') return String(c.tracking_uri ?? '')
-  return `${i.kind === 'github' ? 'github.com' : 'huggingface.co'}/${String(c.owner ?? '')}`
+  const c = i.config as Record<string, string | undefined>
+  switch (i.kind) {
+    case 'mlflow':
+      return c.tracking_uri ?? ''
+    case 'github':
+      return `github.com/${c.owner ?? ''}`
+    case 'huggingface':
+      return `huggingface.co/${c.owner ?? ''}`
+    case 'aws':
+      return `AWS ${c.regions || 'us-east-1'}`
+    case 'azure':
+      return `Azure subscriptions ${c.subscription_ids ?? ''}`
+    case 'gcp':
+      return `Google Cloud ${c.project_id ?? ''} · ${c.locations || 'us-central1'}`
+    case 'okta':
+      return c.domain ?? ''
+    case 'litellm':
+      return c.base_url ?? ''
+    case 'mcp_registry':
+      return c.registry_url ?? ''
+    case 'proxy_logs':
+      return 'Uploaded log exports; the files are not kept'
+    default:
+      return `${SOURCES[i.kind]?.label ?? i.kind} organisation`
+  }
 }
+
+const num = (v: unknown) => (typeof v === 'number' ? v.toLocaleString('en-GB') : null)
+const list = (v: unknown) => (Array.isArray(v) && v.length ? v.slice(0, 4).join(', ') : null)
 
 /** What the scan saw in an item, from its stored metadata. */
 function detail(a: DiscoveredAsset): string {
@@ -41,17 +67,42 @@ function detail(a: DiscoveredAsset): string {
     const n = (m.versions?.length ?? 0) as number
     return `${n} version${n === 1 ? '' : 's'}${m.description ? ` · ${m.description}` : ''}`
   }
-  const sig = m.signals as { llm_sdks?: string[]; ml_libraries?: string[]; agent_configs?: string[]; model_files?: string[] } | undefined
-  return [...(sig?.llm_sdks ?? []), ...(sig?.ml_libraries ?? []), ...(sig?.agent_configs ?? []), ...(sig?.model_files ?? [])].slice(0, 6).join(' · ')
+  if (a.source === 'github' && a.kind !== 'mcp_server') {
+    const sig = m.signals as { llm_sdks?: string[]; ml_libraries?: string[]; agent_configs?: string[]; model_files?: string[]; mcp_servers?: string[] } | undefined
+    return [...(sig?.llm_sdks ?? []), ...(sig?.ml_libraries ?? []), ...(sig?.agent_configs ?? []), ...(sig?.model_files ?? []), ...(sig?.mcp_servers ?? []).map((n) => `MCP ${n}`)].slice(0, 6).join(' · ')
+  }
+  // Newer sources: show the facts that are present, most telling first.
+  const parts = [
+    m.service && m.service !== a.name ? m.service : m.vendor,
+    m.model && `model ${m.model}`,
+    list(m.models_last_30_days) && `models ${list(m.models_last_30_days)}`,
+    num(m.requests_last_30_days) && `${num(m.requests_last_30_days)} requests in 30 days`,
+    num(m.tokens_last_30_days) && `${num(m.tokens_last_30_days)} tokens in 30 days`,
+    num(m.requests) && `${num(m.requests)} requests in the log`,
+    num(m.distinct_users) && `${num(m.distinct_users)} people`,
+    num(m.distinct_users_30_days) && `${num(m.distinct_users_30_days)} people signed in`,
+    m.self_consent_only && `${m.users_who_consented} people consented without an admin`,
+    num(m.active_users_90_days) && `${num(m.active_users_90_days)} active people in 90 days`,
+    num(m.users) && `${num(m.users)} people`,
+    m.transport && `${m.transport}${m.url ? ` ${m.url}` : m.command ? ` ${m.command}` : ''}`,
+    m.repo && a.kind === 'mcp_server' && `in ${m.repo}`,
+    m.project && `project ${m.project}`,
+    m.workspace && `workspace ${m.workspace}`,
+    m.region,
+    m.status,
+  ]
+  return parts.filter(Boolean).slice(0, 5).join(' · ')
 }
 
 function AddConnector({ onCreate, onDone }: { onCreate: ReturnType<typeof useDiscovery>['create']; onDone: () => void }) {
-  const [kind, setKind] = useState<IntegrationKind>('mlflow')
+  const [kind, setKind] = useState<IntegrationKind>('github')
   const [v, setV] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const set = (k: string) => (value: string) => setV((p) => ({ ...p, [k]: value }))
   const f = (k: string) => (v[k] ?? '').trim()
+  const spec = SOURCES[kind]
+  const ready = Boolean(f('name')) && spec.fields.every((x) => x.optional || f(x.key)) && (!spec.token || spec.tokenOptional || Boolean(f('token')))
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -61,12 +112,7 @@ function AddConnector({ onCreate, onDone }: { onCreate: ReturnType<typeof useDis
       await onCreate({
         kind,
         name: f('name'),
-        config:
-          kind === 'mlflow'
-            ? { tracking_uri: f('tracking_uri') }
-            : kind === 'github'
-              ? { owner: f('owner'), repos: f('repos') }
-              : { owner: f('owner'), name_contains: f('name_contains'), pipeline_tag: f('pipeline_tag'), library: f('library') },
+        config: Object.fromEntries(spec.fields.map((x) => [x.key, f(x.key)])),
         token: f('token') || undefined,
       })
       setV({})
@@ -80,26 +126,32 @@ function AddConnector({ onCreate, onDone }: { onCreate: ReturnType<typeof useDis
 
   return (
     <form onSubmit={submit} className="dsc-form">
-      <div className="dsc-kinds" role="group" aria-label="Source">
-        {KINDS.map((k) => (
-          <Button key={k} size="sm" variant={kind === k ? 'primary' : 'secondary'} label={SOURCE_LABEL[k]} onClick={() => setKind(k)} />
-        ))}
-      </div>
+      <Selector
+        label="Source"
+        value={kind}
+        onChange={(k: string) => setKind(k as IntegrationKind)}
+        options={KINDS.map((k) => ({ value: k, label: `${SOURCES[k].group} · ${SOURCES[k].label}` }))}
+      />
+      <Text color="secondary">{spec.reads}</Text>
       <TextInput label="Name" value={v.name ?? ''} onChange={set('name')} isRequired />
-      {kind === 'mlflow' && <TextInput label="Tracking server address" value={v.tracking_uri ?? ''} onChange={set('tracking_uri')} isRequired />}
-      {kind !== 'mlflow' && <TextInput label={kind === 'github' ? 'Organisation or user' : 'Organisation or user on Hugging Face'} value={v.owner ?? ''} onChange={set('owner')} isRequired />}
-      {kind === 'github' && <TextInput label="Repositories" description="Names separated by commas; blank reads them all." value={v.repos ?? ''} onChange={set('repos')} isOptional />}
-      {kind === 'huggingface' && (
-        <>
-          <TextInput label="Name contains" value={v.name_contains ?? ''} onChange={set('name_contains')} isOptional />
-          <TextInput label="Pipeline tag" value={v.pipeline_tag ?? ''} onChange={set('pipeline_tag')} isOptional />
-          <TextInput label="Library" value={v.library ?? ''} onChange={set('library')} isOptional />
-        </>
+      {spec.fields.map((x) => (
+        <TextInput key={`${kind}-${x.key}`} label={x.label} description={x.description} value={v[x.key] ?? ''} onChange={set(x.key)} isRequired={!x.optional} isOptional={x.optional} />
+      ))}
+      {spec.token && (
+        <TextInput
+          label={spec.token}
+          description={spec.tokenDescription}
+          type="password"
+          value={v.token ?? ''}
+          onChange={set('token')}
+          isRequired={!spec.tokenOptional}
+          isOptional={spec.tokenOptional}
+          autoComplete="off"
+        />
       )}
-      <TextInput label="Access token" description="Not needed for public sources. Stored on the server and never shown again." type="password" value={v.token ?? ''} onChange={set('token')} isOptional autoComplete="off" />
       {err && <Banner status="error" title="That did not work" description={err} />}
       <HStack>
-        <Button variant="primary" label={busy ? 'Adding' : 'Add connector'} isDisabled={busy || !f('name')} onClick={() => void submit({ preventDefault() {} } as FormEvent)} />
+        <Button variant="primary" label={busy ? 'Adding' : 'Add connector'} isDisabled={busy || !ready} onClick={() => void submit({ preventDefault() {} } as FormEvent)} />
       </HStack>
     </form>
   )
@@ -119,6 +171,22 @@ export default function DiscoveryPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [synced, setSynced] = useState<Record<string, Sync | null>>({})
+  const fileInput = useRef<HTMLInputElement>(null)
+  const uploadFor = useRef<string | null>(null)
+
+  function readLogs(file: File | undefined) {
+    const id = uploadFor.current
+    if (fileInput.current) fileInput.current.value = ''
+    if (!file || !id) return
+    if (file.size > MAX_LOG_BYTES) {
+      setError('That log file is over 20 MB. Export a shorter period or only the destination host column.')
+      return
+    }
+    void run(id, async () => {
+      const r = await d.upload(id, await file.text())
+      setSynced((p) => ({ ...p, [id]: r }))
+    })
+  }
 
   async function run(id: string, fn: () => Promise<void>) {
     setBusyId(id)
@@ -168,7 +236,7 @@ export default function DiscoveryPage() {
                   Connectors
                 </Heading>
                 {d.integrations.length === 0 ? (
-                  <EmptyState title="No sources connected" description="Connect MLflow, GitHub or Hugging Face and FairMind reads the AI systems in them." actions={<Button variant="primary" label="Connect a source" onClick={() => setAdding(true)} />} />
+                  <EmptyState title="No sources connected" description="Connect code, model registries, AI vendor accounts, clouds, sign-in providers or gateways, and FairMind reads the AI systems in them." actions={<Button variant="primary" label="Connect a source" onClick={() => setAdding(true)} />} />
                 ) : (
                   d.integrations.map((i) => (
                     <div key={i.id} className="dsc-row">
@@ -178,20 +246,33 @@ export default function DiscoveryPage() {
                         </div>
                         <div className="sub">{where(i)}</div>
                       </div>
-                      <div className="sub">{syncLine(i.id in synced ? synced[i.id] : i.lastSync)}</div>
+                      <div className="sub">{syncLine(i.id in synced ? synced[i.id] : i.lastSync, i.kind)}</div>
                       <HStack gap={2}>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          label={busyId === i.id ? 'Syncing' : 'Sync now'}
-                          isDisabled={busyId !== null}
-                          onClick={() =>
-                            run(i.id, async () => {
-                              const r = await d.sync(i.id)
-                              setSynced((p) => ({ ...p, [i.id]: r }))
-                            })
-                          }
-                        />
+                        {i.kind === 'proxy_logs' ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            label={busyId === i.id ? 'Reading' : 'Upload logs'}
+                            isDisabled={busyId !== null}
+                            onClick={() => {
+                              uploadFor.current = i.id
+                              fileInput.current?.click()
+                            }}
+                          />
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            label={busyId === i.id ? 'Syncing' : 'Sync now'}
+                            isDisabled={busyId !== null}
+                            onClick={() =>
+                              run(i.id, async () => {
+                                const r = await d.sync(i.id)
+                                setSynced((p) => ({ ...p, [i.id]: r }))
+                              })
+                            }
+                          />
+                        )}
                         <Button size="sm" variant="ghost" label="Remove" isDisabled={busyId !== null} onClick={() => run(i.id, () => d.remove(i.id))} />
                       </HStack>
                     </div>
@@ -255,6 +336,14 @@ export default function DiscoveryPage() {
         )}
       </VStack>
 
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".csv,.log,.txt,.json,.jsonl,text/plain,text/csv,application/json"
+        hidden
+        aria-label="Log file to read"
+        onChange={(e) => readLogs(e.target.files?.[0])}
+      />
       <Drawer isOpen={adding} onOpenChange={setAdding} label="Connect a source" width={480} padding={5}>
         <VStack gap={4}>
           <Heading level={2}>Connect a source</Heading>
