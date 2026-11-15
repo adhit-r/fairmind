@@ -260,7 +260,8 @@ async def get_model_compliance(
         # AUTOMATED: Collect evidence from FairMind's existing features
         system_data = await automated_collector.collect_evidence_for_model(
             model_id=model_id,
-            framework=framework
+            framework=framework,
+            db=db,
         )
         
         # Run compliance check with automatically collected evidence
