@@ -201,7 +201,7 @@ export default function ComplianceAutomationPage() {
           <p className="text-gray-600">
             Compliance Automation automatically checks your AI systems against regulatory frameworks
             (DPDP Act, NITI Aayog, EU AI Act, GDPR, and more) on a scheduled basis. Violations are
-            tracked with severity levels, and AI-powered remediation plans guide you toward compliance.
+            tracked with severity levels. Remediation plans are coming soon.
           </p>
         </div>
       </div>
@@ -434,9 +434,9 @@ function RemediationSection() {
     <div>
       <h2 className="mb-6 text-2xl font-bold text-black">Remediation Plans</h2>
       <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-        <p className="text-gray-600">Remediation plans will appear here when violations are detected.</p>
+        <p className="font-semibold text-gray-700">Coming soon</p>
         <p className="mt-2 text-sm text-gray-500">
-          AI-generated step-by-step guidance for addressing compliance gaps.
+          Remediation plans are not generated here yet. Track fixes for findings under Findings.
         </p>
       </div>
     </div>

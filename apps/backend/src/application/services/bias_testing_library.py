@@ -185,21 +185,14 @@ class BiasTestingLibrary:
             # Calculate effect size (Cohen's d)
             effect_size = weat_score / np.std(scores) if np.std(scores) > 0 else 0
             
-            a_words = [w for w in attribute_words_a if w in embeddings]
-            b_words = [w for w in attribute_words_b if w in embeddings]
-            p_value = None
-            if a_words and b_words:
-                p_value = self._permutation_p_value(
-                    np.array([embeddings[t] for t in target_words if t in embeddings], dtype=float),
-                    np.array([embeddings[w] for w in a_words + b_words], dtype=float),
-                    len(a_words),
-                )
+            # Permutation p-value over the attribute words
+            p_value = self._bootstrap_p_value(embeddings, target_words, attribute_words_a, attribute_words_b)
             
             return BiasTestResult(
                 library=TestingLibrary.WEAT,
                 test_name="Word Embedding Association Test",
                 bias_score=abs(weat_score),
-                confidence=None,  # WEAT gives a p-value, not a confidence
+                confidence=None,  # not measured; see p_value
                 p_value=p_value,
                 effect_size=abs(effect_size),
                 raw_output={
@@ -210,7 +203,7 @@ class BiasTestingLibrary:
                     "attribute_words_b": attribute_words_b
                 },
                 timestamp=datetime.now(),
-                metadata={"method": "WEAT", "sample_size": len(scores), "p_value_method": "permutation, 1000 iterations"}
+                metadata={"method": "WEAT", "sample_size": len(scores)}
             )
             
         except Exception as e:
@@ -340,28 +333,131 @@ class BiasTestingLibrary:
             logger.error(f"Error running FairLearn metrics: {e}")
             return None
     
-    @staticmethod
-    def _permutation_p_value(target_vecs: np.ndarray, attr_vecs: np.ndarray, n_a: int,
-                             iterations: int = 1000, seed: int = 0) -> float:
-        """Two-sided permutation p-value for the mean A-minus-B association of the targets.
-
-        Rows of ``attr_vecs`` are the A words then the B words; each permutation reassigns them to
-        groups of the original sizes. The +1 correction keeps p above zero for a finite sample.
+    async def analyze_image_bias(self, 
+                                image_paths: List[str],
+                                test_prompts: List[str],
+                                expected_features: List[str]) -> List[BiasTestResult]:
         """
-        def unit(m):
-            return m / np.linalg.norm(m, axis=1, keepdims=True)
+        Analyze images for bias using computer vision libraries
+        
+        Args:
+            image_paths: List of image file paths
+            test_prompts: Prompts used to generate images
+            expected_features: Features expected in the images
+            
+        Returns:
+            List of bias analysis results
+        """
+        results = []
+        
+        try:
+            for i, image_path in enumerate(image_paths):
+                image_result = await self._analyze_single_image(
+                    image_path, 
+                    test_prompts[i] if i < len(test_prompts) else "",
+                    expected_features
+                )
+                if image_result:
+                    results.append(image_result)
+                    
+        except Exception as e:
+            logger.error(f"Error analyzing image bias: {e}")
+        
+        return results
+    
+    async def _analyze_single_image(self, 
+                                   image_path: str,
+                                   test_prompt: str,
+                                   expected_features: List[str]) -> Optional[BiasTestResult]:
+        """Analyze a single image for bias"""
+        raise NotImplementedError("No image bias analyser is wired in; refusing to return placeholder scores.")
 
-        sims = unit(target_vecs) @ unit(attr_vecs).T  # targets x attributes
+    async def analyze_text_bias(self, 
+                               texts: List[str],
+                               test_prompts: List[str],
+                               sensitive_attributes: List[str]) -> List[BiasTestResult]:
+        """
+        Analyze text for bias using NLP libraries
+        
+        Args:
+            texts: List of generated texts
+            test_prompts: Prompts used to generate texts
+            sensitive_attributes: Sensitive attributes to check for bias
+            
+        Returns:
+            List of bias analysis results
+        """
+        results = []
+        
+        try:
+            for i, text in enumerate(texts):
+                text_result = await self._analyze_single_text(
+                    text,
+                    test_prompts[i] if i < len(test_prompts) else "",
+                    sensitive_attributes
+                )
+                if text_result:
+                    results.append(text_result)
+                    
+        except Exception as e:
+            logger.error(f"Error analyzing text bias: {e}")
+        
+        return results
+    
+    async def _analyze_single_text(self, 
+                                  text: str,
+                                  test_prompt: str,
+                                  sensitive_attributes: List[str]) -> Optional[BiasTestResult]:
+        """Analyze a single text for bias"""
+        raise NotImplementedError("No text bias analyser is wired in; refusing to return placeholder scores.")
 
-        def stat(mask):
-            return float(np.mean(sims[:, mask].mean(axis=1) - sims[:, ~mask].mean(axis=1)))
+    def _bootstrap_p_value(self,
+                          embeddings: Dict[str, np.ndarray],
+                          target_words: List[str],
+                          attribute_words_a: List[str],
+                          attribute_words_b: List[str],
+                          iterations: int = 1000) -> Optional[float]:
+        """Two-sided permutation p-value for the WEAT score.
 
-        mask = np.zeros(attr_vecs.shape[0], dtype=bool)
-        mask[:n_a] = True
-        observed = abs(stat(mask))
-        rng = np.random.default_rng(seed)
-        hits = sum(abs(stat(rng.permutation(mask))) >= observed - 1e-12 for _ in range(iterations))
-        return (hits + 1) / (iterations + 1)
+        The attribute words of A and B are pooled and re-split into groups of
+        the original sizes; the p-value is the share of re-splits whose mean
+        target association difference is at least as large as the observed one.
+        Returns None when the test cannot be computed.
+        """
+        try:
+            targets = [w for w in target_words if w in embeddings]
+            a_words = [w for w in attribute_words_a if w in embeddings]
+            b_words = [w for w in attribute_words_b if w in embeddings]
+            if not targets or not a_words or not b_words:
+                return None
+
+            def unit(v):
+                v = np.asarray(v, dtype=float)
+                n = np.linalg.norm(v)
+                return v / n if n > 0 else v
+
+            t = np.stack([unit(embeddings[w]) for w in targets])
+            attrs = np.stack([unit(embeddings[w]) for w in a_words + b_words])
+            sims = t @ attrs.T  # targets x attributes cosine similarities
+            n_a = len(a_words)
+
+            def score(idx_a, idx_b):
+                return float(np.mean(sims[:, idx_a].mean(axis=1) - sims[:, idx_b].mean(axis=1)))
+
+            all_idx = np.arange(attrs.shape[0])
+            observed = score(all_idx[:n_a], all_idx[n_a:])
+            rng = np.random.default_rng(0)  # fixed seed: same inputs, same p-value
+            extreme = 0
+            for _ in range(iterations):
+                perm = rng.permutation(all_idx)
+                if abs(score(perm[:n_a], perm[n_a:])) >= abs(observed) - 1e-12:
+                    extreme += 1
+            # +1 correction so the p-value is never exactly zero
+            return (extreme + 1) / (iterations + 1)
+
+        except Exception as e:
+            logger.error(f"Error calculating permutation p-value: {e}")
+            return None
 
     def get_available_libraries(self) -> Dict[TestingLibrary, bool]:
         """Get list of available testing libraries"""

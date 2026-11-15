@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, validator
 from datetime import datetime, timedelta
 import json
 import logging
+import uuid
 
 from ..schemas.india_compliance import (
     IndiaFramework,
@@ -58,6 +59,7 @@ from ..middleware.india_compliance_auth import (
 from api.routes.ai_governance import _require_system_access
 from config.auth import TokenData, get_current_active_user, get_current_user
 from database.connection import get_db
+from database.record_store import RecordStore
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,41 @@ compliance_service = IndiaComplianceService()
 bias_detection_service = IndiaBiasDetectionService()
 evidence_collection_service = IndiaEvidenceCollectionService()
 ai_automation_service = AIComplianceAutomationService()
+# Evidence the India controls collected, kept so it can be fetched by id later.
+_india_evidence = RecordStore("india_evidence")
+
+
+def _is_pending(result) -> bool:
+    """A framework with no assessable requirements yet (Digital India Act) has no score to average."""
+    return getattr(result.status, "value", result.status) == ComplianceStatus.PENDING.value
+
+
+async def _run_checks(db: Session, system_id: str, frameworks, user_id: str):
+    """Run the India controls over the system's stored configuration and score each framework."""
+    row = db.execute(
+        text("SELECT id, name, org_id, risk_tier, lifecycle_stage, metadata_json FROM governance_ai_systems WHERE id = :id"),
+        {"id": system_id},
+    ).fetchone()
+    config = row[5] if isinstance(row[5], dict) else (json.loads(row[5]) if row[5] else {})
+    system_data = {
+        "system_id": row[0], "user_id": user_id, "name": row[1], "org_id": row[2], "risk_tier": row[3],
+        "lifecycle_stage": row[4], "config": config, "timestamp": datetime.utcnow().isoformat(),
+    }
+    collected = await evidence_collection_service.execute_all_controls(system_id, config)
+    for item in collected:
+        if item.get("id"):
+            _india_evidence.put(str(item["id"]), item, scope=str(system_id))
+    # A control that had nothing to assess is not evidence of anything.
+    evidence = {e["control_id"]: e for e in collected if e.get("control_id") and getattr(e.get("status"), "value", e.get("status")) != "not_assessed"}
+
+    checks = {
+        IndiaFramework.DPDP_ACT_2023: compliance_service.check_dpdp_compliance,
+        IndiaFramework.NITI_AAYOG_PRINCIPLES: compliance_service.check_niti_aayog_compliance,
+        IndiaFramework.MEITY_GUIDELINES: compliance_service.check_meity_compliance,
+        IndiaFramework.DIGITAL_INDIA_ACT: compliance_service.check_digital_india_compliance,
+    }
+    results = [await checks[f](system_data, evidence) for f in frameworks if f in checks]
+    return system_data, results
 
 
 # ============================================================================
@@ -267,58 +304,31 @@ async def check_compliance(
         
         logger.info(f"Starting compliance check for system {request.system_id} by user {user_context.user_id}")
         
-        # The system as registered (org access was checked above), then evidence from the India controls run
-        # over its stored configuration. A control the configuration cannot satisfy reports itself failed.
-        row = db.execute(
-            text("SELECT id, name, org_id, risk_tier, lifecycle_stage, metadata_json FROM governance_ai_systems WHERE id = :id"),
-            {"id": request.system_id},
-        ).fetchone()
-        config = row[5] if isinstance(row[5], dict) else (json.loads(row[5]) if row[5] else {})
-        system_data = {
-            "system_id": row[0], "user_id": current_user.user_id, "name": row[1], "org_id": row[2], "risk_tier": row[3],
-            "lifecycle_stage": row[4], "config": config, "timestamp": datetime.utcnow().isoformat(),
-        }
-        collected = await evidence_collection_service.execute_all_controls(request.system_id, config)
-        # A control that had nothing to assess is not evidence of anything.
-        evidence = {e["control_id"]: e for e in collected if e.get("control_id") and getattr(e.get("status"), "value", e.get("status")) != "not_assessed"}
+        system_data, results = await _run_checks(db, request.system_id, request.frameworks, current_user.user_id)
 
-        # Check compliance for each framework
-        results = []
-        overall_score = 0.0
-        overall_status = ComplianceStatus.COMPLIANT
-        
-        for framework in request.frameworks:
-            if framework == IndiaFramework.DPDP_ACT_2023:
-                result = await compliance_service.check_dpdp_compliance(system_data, evidence)
-            elif framework == IndiaFramework.NITI_AAYOG_PRINCIPLES:
-                result = await compliance_service.check_niti_aayog_compliance(system_data, evidence)
-            elif framework == IndiaFramework.MEITY_GUIDELINES:
-                result = await compliance_service.check_meity_compliance(system_data, evidence)
-            elif framework == IndiaFramework.DIGITAL_INDIA_ACT:
-                result = await compliance_service.check_digital_india_compliance(system_data, evidence)
-            else:
-                continue
-            
-            results.append(result)
-            overall_score += result.overall_score
-            
-            if result.status != ComplianceStatus.COMPLIANT:
-                overall_status = ComplianceStatus.PARTIAL
-        
-        # Calculate average score
-        if results:
-            overall_score = overall_score / len(results)
-        
+        # Frameworks still pending carry no score, so they neither lower the average nor appear in the trend.
+        scored = [r for r in results if not _is_pending(r)]
+        framework_scores: Dict[str, float] = {r.framework.value: r.overall_score for r in scored}
+        overall_score = sum(r.overall_score for r in scored) / len(scored) if scored else 0.0
+        if not scored:
+            overall_status = ComplianceStatus.PENDING
+        elif all(r.status == ComplianceStatus.COMPLIANT for r in scored):
+            overall_status = ComplianceStatus.COMPLIANT
+        else:
+            overall_status = ComplianceStatus.PARTIAL
+
         logger.info(f"Compliance check completed for system {request.system_id}: score={overall_score}")
         
         # Log audit entry
         await AuditLogger.log_compliance_check(
             user_id=user_context.user_id,
+            org_id=user_context.organization_id,
             system_id=request.system_id,
             frameworks=[f.value for f in request.frameworks],
             result={
                 "overall_score": overall_score,
                 "status": overall_status.value,
+                "framework_scores": framework_scores,
             }
         )
         
@@ -369,8 +379,7 @@ async def get_evidence(
         
         logger.info(f"Retrieving evidence {evidence_id} for user {user_context.user_id}")
         
-        # In production, fetch from database
-        evidence = await evidence_collection_service.get_evidence(evidence_id)
+        evidence = _india_evidence.get(evidence_id)
         
         if not evidence:
             raise HTTPException(status_code=404, detail="Evidence not found")
@@ -379,6 +388,7 @@ async def get_evidence(
         # Log audit entry
         await AuditLogger.log_evidence_access(
             user_id=user_context.user_id,
+            org_id=user_context.organization_id,
             evidence_id=evidence_id,
             action="view"
         )
@@ -435,6 +445,12 @@ async def detect_bias(
             )
         _require_system_access(db, request.system_id, current_user)
         
+        if BiasType.GENDER_BIAS in request.bias_types:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Gender bias detection for Indian demographics is not available yet",
+            )
+
         # Validate request
         is_valid, error_msg = BiasDetectionValidator.validate(request.dict())
         if not is_valid:
@@ -467,11 +483,6 @@ async def detect_bias(
                 )
             elif bias_type == BiasType.REGIONAL_BIAS:
                 result = await bias_detection_service.detect_regional_bias(
-                    request.model_id,
-                    request.test_data
-                )
-            elif bias_type == BiasType.GENDER_BIAS:
-                result = await bias_detection_service.detect_gender_bias(
                     request.model_id,
                     request.test_data
                 )
@@ -553,17 +564,33 @@ async def generate_report(
         
         logger.info(f"Generating compliance report for system {system_id} by user {user_context.user_id}")
         
-        report = await compliance_service.generate_india_compliance_report(
+        system_data, results = await _run_checks(db, system_id, frameworks, current_user.user_id)
+        report_data = await compliance_service.generate_india_compliance_report(
+            system_id=system_id,
+            user_id=user_context.user_id,
+            compliance_results=results,
+            system_data=system_data,
+        )
+        now = datetime.utcnow()
+        report = ComplianceReport(
+            id=uuid.uuid4(),
+            report_id=report_data["report_id"],
+            user_id=user_context.user_id,
             system_id=system_id,
             frameworks=frameworks,
-            user_id=user_context.user_id,
+            overall_score=report_data["overall_compliance"]["score"],
+            report_data=report_data,
+            generated_at=now,
+            created_at=now,
+            updated_at=now,
         )
-        
+
         logger.info(f"Report generated for system {system_id}")
         
         # Log audit entry
         await AuditLogger.log_report_export(
             user_id=user_context.user_id,
+            org_id=user_context.organization_id,
             system_id=system_id,
             frameworks=[f.value for f in frameworks],
             format="json"
@@ -621,10 +648,26 @@ async def get_compliance_trends(
         
         logger.info(f"Retrieving compliance trends for system {system_id}, framework {framework}")
         
+        # History: this organisation's earlier compliance checks of the system, from the audit log.
+        rows = db.execute(
+            text(
+                "SELECT details FROM audit_logs WHERE org_id = :org AND action = 'india.compliance_check' "
+                "AND resource_id = :sid ORDER BY created_at"
+            ),
+            {"org": user_context.organization_id, "sid": system_id},
+        ).fetchall()
+        historical_results = []
+        for (details,) in rows:
+            entry = details if isinstance(details, dict) else json.loads(details or "{}")
+            score = (entry.get("framework_scores") or {}).get(framework.value)
+            if score is not None and entry.get("timestamp"):
+                historical_results.append({"timestamp": entry["timestamp"], "overall_score": score})
+
         trends = await compliance_service.get_compliance_trends(
             system_id=system_id,
             framework=framework,
             timeframe=timeframe,
+            historical_results=historical_results,
         )
         
         return trends

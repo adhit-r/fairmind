@@ -134,10 +134,10 @@ def test_system_records_addressed_by_id_stay_in_the_organisation(client):
         json={"workspace_id": "ws-b", "name": "x", "risk_tier": "low", "lifecycle_stage": "onboard"},
     ).status_code == 404
 
-    evidence = client.post(f"{GOV}/evidence/upload", headers=B, json={"system_id": "system-b", "type": "audit_log"})
+    evidence = client.post(f"{GOV}/evidence/upload", headers=B, json={"system_id": "system-b", "type": "audit_log", "confidence": 0.8})
     assert evidence.status_code == 200, evidence.text
     evidence_id = evidence.json()["id"]
-    assert client.post(f"{GOV}/evidence/upload", headers=A, json={"system_id": "system-b", "type": "x"}).status_code == 404
+    assert client.post(f"{GOV}/evidence/upload", headers=A, json={"system_id": "system-b", "type": "x", "confidence": 0.8}).status_code == 404
     assert client.get(f"{GOV}/evidence-item/{evidence_id}", headers=A).status_code == 404
     assert client.patch(f"{GOV}/evidence-item/{evidence_id}", headers=A, json={"title": "x"}).status_code == 404
     assert client.post(

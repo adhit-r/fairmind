@@ -41,7 +41,8 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
   const [content, setContent] = useState('')
   const [fileUrl, setFileUrl] = useState('')
   const [fileName, setFileName] = useState('')
-  const [confidence, setConfidence] = useState(0.8)
+  // No default: the person collecting the evidence states how much it can be trusted.
+  const [confidence, setConfidence] = useState<number | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [folder, setFolder] = useState('')
@@ -79,6 +80,10 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (confidence === null) {
+      setFormError('Set the confidence for this evidence before collecting it.')
+      return
+    }
     setSubmitting(true)
     setFormError(null)
     try {
@@ -294,7 +299,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
       <div>
         <div className="flex items-center justify-between">
           <label className={LABEL_CLS} htmlFor={`${uid}-confidence`}>Confidence</label>
-          <span className="text-[13px] font-semibold tabular-nums">{Math.round(confidence * 100)}%</span>
+          <span className="text-[13px] font-semibold tabular-nums">{confidence === null ? 'Not set' : `${Math.round(confidence * 100)}%`}</span>
         </div>
         <input
           id={`${uid}-confidence`}
@@ -302,7 +307,8 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
           min={0}
           max={1}
           step={0.05}
-          value={confidence}
+          value={confidence ?? 0.5}
+          aria-valuetext={confidence === null ? 'Not set' : `${Math.round(confidence * 100)}%`}
           onChange={(e) => setConfidence(parseFloat(e.target.value))}
           className="mt-1 w-full cursor-pointer accent-[var(--fm-ink)]"
         />

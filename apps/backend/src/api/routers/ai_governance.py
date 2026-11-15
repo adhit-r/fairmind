@@ -529,7 +529,8 @@ class EvidenceCollectRequest(BaseModel):
     system_id: str = Field(min_length=1)
     type: str = Field(min_length=1)
     content: Dict[str, Any] = Field(default_factory=dict)
-    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    # No default: a confidence nobody chose would be stored and shown as if someone had.
+    confidence: float = Field(ge=0.0, le=1.0)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -2326,7 +2327,8 @@ class EvidenceCollectV2Request(BaseModel):
     type: str = Field(min_length=1)
     title: Optional[str] = None
     content: Dict[str, Any] = Field(default_factory=dict)
-    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    # No default: a confidence nobody chose would be stored and shown as if someone had.
+    confidence: float = Field(ge=0.0, le=1.0)
     tags: List[str] = Field(default_factory=list)
     folder: str = ""
     artifact_kind: str = "narrative"

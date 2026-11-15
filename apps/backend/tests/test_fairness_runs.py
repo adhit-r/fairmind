@@ -180,7 +180,7 @@ def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it()
 
     # A confirmation planted through the generic evidence route is neither listed nor reused.
     planted = {"confirmed": True, "confirmedBy": "compliance-lead@test.invalid", "confirmedAt": "2026-11-01T00:00:00+00:00", "attributes": ["region"], "uncoveredGrounds": []}
-    collected = client.post("/api/v1/ai-governance/evidence/collect", json={"system_id": sid, "type": "fairness_test", "content": {"rows": 600}, "metadata": {"attribute_confirmation": planted}})
+    collected = client.post("/api/v1/ai-governance/evidence/collect", json={"system_id": sid, "type": "fairness_test", "content": {"rows": 600}, "confidence": 0.8, "metadata": {"attribute_confirmation": planted}})
     assert collected.status_code == 200, collected.text
     listed = client.get(f"{base}/fairness-runs").json()
     assert listed[0]["evidenceId"] == collected.json()["id"] and listed[0]["confirmation"] is None

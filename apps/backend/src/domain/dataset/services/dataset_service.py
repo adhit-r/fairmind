@@ -468,31 +468,6 @@ class DatasetService(AsyncBaseService):
         """
         metadata = await self.get_dataset(dataset_id)
         
-        # In a real app, file_path would be absolute or relative to a known root
-        # For mock data, we might need to adjust or use sample data
-        if "sample" in dataset_id:
-            # Generate synthetic dataframe for samples
-            np.random.seed(42)
-            if dataset_id == "sample-1":
-                n = 1000
-                return pd.DataFrame({
-                    "age": np.random.randint(18, 80, n),
-                    "income": np.random.normal(50000, 15000, n),
-                    "gender": np.random.choice(['Male', 'Female'], n),
-                    "ethnicity": np.random.choice(['Group A', 'Group B', 'Group C'], n),
-                    "credit_score": np.random.randint(300, 850, n),
-                    "approved": np.random.randint(0, 2, n)
-                })
-            elif dataset_id == "sample-2":
-                n = 500
-                return pd.DataFrame({
-                    "experience_years": np.random.randint(0, 20, n),
-                    "education_level": np.random.choice(['BS', 'MS', 'PhD'], n),
-                    "gender": np.random.choice(['Male', 'Female'], n),
-                    "hired": np.random.randint(0, 2, n)
-                })
-            return pd.DataFrame(metadata.schema.sample_data)
-            
         file_path = Path(metadata.file_path)
         if not file_path.exists():
             # Try relative to upload dir if absolute path fails

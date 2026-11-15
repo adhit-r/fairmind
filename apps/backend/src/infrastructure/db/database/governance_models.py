@@ -4480,3 +4480,21 @@ class PlanChange(Base):
     summary = Column(Text, nullable=False)
     detail_json = Column(Text, nullable=False, default="{}")
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class ServiceRecord(Base):
+    """A JSON record kept for a service that has no table of its own (settings, monitoring, evidence, history)."""
+
+    __tablename__ = "service_records"
+    __table_args__ = (
+        UniqueConstraint("namespace", "record_key", name="uq_service_records_namespace_key"),
+        Index("ix_service_records_namespace_scope_created", "namespace", "scope", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=_new_id)
+    namespace = Column(String(64), nullable=False)
+    record_key = Column(String(255), nullable=False)
+    scope = Column(String(255), nullable=True)  # the owning user or organisation, when there is one
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())

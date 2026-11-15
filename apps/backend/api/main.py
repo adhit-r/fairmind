@@ -788,8 +788,8 @@ def root():
 def api_info():
     """API information endpoint"""
     return {
-        "name": "Fairmind ML Service API",
-        "version": "1.0.0",
+        "name": settings.api_title,
+        "version": settings.api_version,
         "description": "Comprehensive AI governance and bias detection API with database support",
         "endpoints": {
             "health": "/health",

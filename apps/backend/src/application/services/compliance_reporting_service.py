@@ -762,9 +762,9 @@ class ComplianceReportingService:
         return strategies
 
     def _generate_monitoring_plan(self) -> Dict[str, Any]:
-        """Generate fairness monitoring plan"""
+        """A recommended fairness monitoring plan; not a statement that one is in place."""
         return {
-            "status": "recommended",  # a template to adopt, not evidence that monitoring runs
+            "status": "recommended",
             "frequency": "monthly",
             "metrics_to_track": [
                 "Statistical Parity",
@@ -783,20 +783,25 @@ class ComplianceReportingService:
         self,
         bias_test_results: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Generate stakeholder communication plan; key messages state only what the supplied results show."""
+        """Generate stakeholder communication plan; messages state only what the results show."""
         metrics = bias_test_results.get("metrics") or []
-        detected = bias_test_results.get("bias_detected")
-        if not metrics:
-            messages = ["No fairness test results were supplied"]
+        tested = bool(metrics or bias_test_results.get("scores"))
+        if not tested:
+            key_messages = ["No fairness test results were supplied; the system's fairness is not yet assessed"]
+        elif bias_test_results.get("bias_detected"):
+            key_messages = [
+                f"The system was tested for fairness ({', '.join(map(str, metrics)) or 'supplied scores'})",
+                "Bias was detected; the mitigation strategies listed are recommended, not yet applied",
+            ]
         else:
-            messages = [f"Tested for fairness on: {', '.join(map(str, metrics))}"]
-            if detected is True:
-                messages.append("Bias was detected; mitigation is recommended")
-            elif detected is False:
-                messages.append("No bias was detected on the metrics evaluated")
+            key_messages = [
+                f"The system was tested for fairness ({', '.join(map(str, metrics)) or 'supplied scores'})",
+                "No bias was detected in the supplied results",
+            ]
+        key_messages.append("Ongoing fairness monitoring is recommended")
         return {
             "target_audiences": ["Users", "Regulators", "Internal Teams"],
-            "key_messages": messages,
+            "key_messages": key_messages,
             "transparency_measures": [
                 "Publish fairness metrics",
                 "Provide model cards",

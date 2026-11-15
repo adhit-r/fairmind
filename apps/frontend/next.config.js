@@ -46,6 +46,8 @@ const nextConfig = {
       { source: '/compliance/evaluations', destination: '/evaluations', permanent: false },
       { source: '/evidence/packs', destination: '/auditor-packs', permanent: false },
       { source: '/org-admin/settings', destination: '/settings', permanent: false },
+      // The real roles live in org admin; the old page listed hardcoded ones.
+      { source: '/admin/roles', destination: '/org-admin/roles', permanent: false },
       { source: '/remediation-wizard', destination: '/findings', permanent: false },
       // Retired tool pages: the evaluations they stood for live in the catalogue now.
       ...['/bias', '/advanced-bias', '/llm-judge', '/llm-testing', '/benchmarks', '/fairness-documentation', '/explainability-studio', '/multimodal-bias'].map(

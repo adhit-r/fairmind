@@ -179,7 +179,8 @@ class Settings(BaseSettings):
     autopilot_interval_seconds: int = 3600
     # How often discovery connectors are checked for a due schedule; 0 turns scheduled discovery off.
     discovery_check_interval_seconds: int = 300
-    admin_email: str = "admin@fairmind.ai"
+    # Where access requests are sent (ADMIN_EMAIL); unset means no notice is sent and a warning is logged.
+    admin_email: Optional[str] = None
     
     # Error Tracking
     sentry_dsn: Optional[str] = None

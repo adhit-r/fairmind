@@ -15,9 +15,10 @@ All queries automatically filtered by org_id for multi-tenant isolation.
 import logging
 import uuid
 import json
+from collections import Counter
 import csv
 from io import StringIO
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
 from fastapi.responses import StreamingResponse
@@ -34,12 +35,6 @@ from src.application.services.governance_assurance_service import (
 
 logger = logging.getLogger("fairmind.org_management")
 
-def _count(values) -> dict:
-    out: dict = {}
-    for v in values:
-        if v:
-            out[v] = out.get(v, 0) + 1
-    return out
 
 
 def _audit_report_pdf(report: dict) -> bytes:
@@ -1341,10 +1336,12 @@ async def get_audit_report(
                 "metrics": {
                     "events_per_day": events_per_day_list,
                     "action_distribution": action_distribution,
-                    "top_users": sorted(
-                        ({"user": u, "count": c} for u, c in _count(e.get("user_email") for e in audit_log).items()),
-                        key=lambda x: x["count"], reverse=True,
-                    )[:5],
+                    "top_users": [
+                        {"user": user, "count": count}
+                        for user, count in Counter(
+                            entry.get("user_email") or "unknown" for entry in audit_log
+                        ).most_common(5)
+                    ],
                 },
                 "audit_log": audit_log
             }
@@ -1385,3 +1382,53 @@ async def get_audit_report(
     except Exception as e:
         logger.error(f"Error generating audit report: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate audit report")
+
+
+def _audit_report_pdf(report: Dict[str, Any]) -> bytes:
+    """The audit report as a real PDF document."""
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), title="Audit report")
+    period = report.get("report_period", {})
+    summary = report.get("summary", {})
+
+    def table(rows):
+        t = Table(rows, repeatRows=1)
+        t.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        return t
+
+    story = [
+        Paragraph("Audit report", styles["Title"]),
+        Paragraph(f"Period: {period.get('start')} to {period.get('end')}", styles["Normal"]),
+        Paragraph(
+            f"Events: {summary.get('total_events', 0)} &middot; Users: {summary.get('unique_users', 0)}",
+            styles["Normal"],
+        ),
+        Spacer(1, 12),
+    ]
+    top = summary.get("top_actions") or []
+    if top:
+        story += [Paragraph("Top actions", styles["Heading3"]),
+                  table([["Action", "Count"]] + [[a["action"], a["count"]] for a in top]), Spacer(1, 12)]
+    columns = ["timestamp", "user_email", "action", "resource_type", "resource_id", "ip_address"]
+    log = report.get("audit_log") or []
+    story.append(Paragraph("Audit log", styles["Heading3"]))
+    if log:
+        story.append(table([["Time", "User", "Action", "Resource type", "Resource", "IP"]]
+                           + [[str(entry.get(c) or "") for c in columns] for entry in log]))
+    else:
+        story.append(Paragraph("No events in this period.", styles["Normal"]))
+    doc.build(story)
+    return buffer.getvalue()

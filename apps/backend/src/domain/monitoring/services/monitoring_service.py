@@ -24,7 +24,7 @@ class SystemHealth:
     """System health status."""
     status: str
     uptime: float
-    memory_usage: Optional[float]  # None when psutil is not installed
+    memory_usage: Optional[float]
     cpu_usage: Optional[float]
     disk_usage: Optional[float]
     active_connections: int
@@ -42,13 +42,16 @@ class MonitoringService(AsyncBaseService):
     
     def __init__(self, logger: Optional[ILogger] = None):
         super().__init__(logger)
-        self.metrics_store: Dict[str, List[Dict]] = defaultdict(list)
-        self.configs: Dict[str, Dict] = {}
+        from database.record_store import PersistentMap, RecordStore
+
+        # Kept in the database so metrics and configs survive restarts and are shared by workers.
+        self._metrics = RecordStore("monitoring_metrics")  # one record per reading, scoped to its model key
+        self.configs = PersistentMap("monitoring_configs", load=dict, dump=dict)
         self.health_status = self._initialize_health_status()
 
     def _initialize_health_status(self) -> SystemHealth:
         return SystemHealth(
-            status="healthy",
+            status="unknown",
             uptime=0.0,
             memory_usage=0.0,
             cpu_usage=0.0,
@@ -79,11 +82,7 @@ class MonitoringService(AsyncBaseService):
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
-        self.metrics_store[model_id].append(metric_record)
-        
-        # Keep only last 1000 metrics
-        if len(self.metrics_store[model_id]) > 1000:
-            self.metrics_store[model_id] = self.metrics_store[model_id][-1000:]
+        self._metrics.put(metric_record["id"], metric_record, scope=model_id)
             
         self._log_operation("record_metrics", model_id=model_id)
         return metric_record
@@ -95,8 +94,8 @@ class MonitoringService(AsyncBaseService):
         end_time: Optional[datetime] = None,
         limit: int = 100
     ) -> List[Dict[str, Any]]:
-        """Get metrics for a model."""
-        metrics = self.metrics_store.get(model_id, [])
+        """Get metrics for a model, oldest first."""
+        metrics = self._metrics.list(scope=model_id)
         
         if start_time or end_time:
             filtered = []
@@ -111,7 +110,7 @@ class MonitoringService(AsyncBaseService):
 
     async def get_latest_metrics(self, model_id: str) -> Optional[Dict[str, Any]]:
         """Get latest metrics."""
-        metrics = self.metrics_store.get(model_id, [])
+        metrics = self._metrics.list(scope=model_id, limit=1)
         return metrics[-1] if metrics else None
 
     async def get_system_health(self) -> Dict[str, Any]:
@@ -120,31 +119,34 @@ class MonitoringService(AsyncBaseService):
         return asdict(self.health_status)
 
     async def _update_health_status(self):
-        """Update health status from the host and a real database round trip; nothing is assumed."""
+        """Measure host usage and probe the database; report unknowns as unknown."""
         try:
             import psutil
             self.health_status.cpu_usage = psutil.cpu_percent(interval=None)
             self.health_status.memory_usage = psutil.virtual_memory().percent
             self.health_status.disk_usage = psutil.disk_usage('/').percent
         except ImportError:
+            # psutil is not installed: these figures cannot be measured.
             self.health_status.cpu_usage = None
             self.health_status.memory_usage = None
             self.health_status.disk_usage = None
 
+        database = await asyncio.to_thread(self._probe_database)
+        self.health_status.last_check = datetime.now(timezone.utc)
+        # Reaching this code means the API process is serving requests.
+        self.health_status.services = {"api": "healthy", "database": database}
+        self.health_status.status = "healthy" if database == "healthy" else "degraded"
+
+    @staticmethod
+    def _probe_database() -> str:
         try:
             from sqlalchemy import text
             from database.connection import db_manager
-
             with db_manager.get_session() as session:
                 session.execute(text("SELECT 1"))
-            database = "healthy"
-        except Exception as e:
-            logging.getLogger(__name__).warning(f"Database health check failed: {e}")
-            database = "down"
-
-        self.health_status.last_check = datetime.now(timezone.utc)
-        self.health_status.services = {"api": "healthy", "database": database}  # api: this request is being answered
-        self.health_status.status = "healthy" if database == "healthy" else "degraded"
+            return "healthy"
+        except Exception:
+            return "unreachable"
 
     # Configuration Methods
     async def create_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -163,8 +165,9 @@ class MonitoringService(AsyncBaseService):
     async def update_config(self, model_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
         if model_id not in self.configs:
             raise ValueError(f"Config not found for {model_id}")
-        self.configs[model_id].update(config)
-        return self.configs[model_id]
+        updated = {**self.configs[model_id], **config}
+        self.configs[model_id] = updated
+        return updated
 
     async def delete_config(self, model_id: str) -> bool:
         if model_id in self.configs:

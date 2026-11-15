@@ -66,6 +66,7 @@ def env(monkeypatch):
     monkeypatch.setattr(registration, "get_db_transaction", connection)
     email = AsyncMock()
     monkeypatch.setattr(registration, "email_service", email)
+    monkeypatch.setattr(registration.settings, "admin_email", "operator@test.invalid")
     # Submissions share the per-process rate limit with password resets; start each test clean.
     monkeypatch.setattr("src.api.routers.auth._reset_requests", {})
 

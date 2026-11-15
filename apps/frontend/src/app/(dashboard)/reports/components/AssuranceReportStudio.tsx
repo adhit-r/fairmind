@@ -14,7 +14,7 @@ type ReportSystem = {
   owner: string
   riskTier: string
   lifecycleStage: string
-  readiness: number
+  readiness: number | null
 }
 
 function downloadJson(report: SavedReport) {

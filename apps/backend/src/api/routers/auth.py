@@ -857,7 +857,7 @@ def create_user():
 async def list_users(
     current_user: TokenData = Depends(require_admin)
 ):
-    """List the users of the caller's organisation (admin only). Returns users from DB or cache."""
+    """List the users of the caller's organisation (admin only). Returns users from the database; a database failure is an error."""
     try:
         if not current_user.org_id:
             return {"users": []}
@@ -891,10 +891,11 @@ async def list_users(
                 ]
                 return {"users": users}
         except Exception as db_err:
-            logger.warning(f"Could not query users from DB: {db_err}")
-            # Return empty list if DB not available
-            return {"users": []}
+            logger.error(f"Could not query users from DB: {db_err}")
+            raise HTTPException(status_code=503, detail="Could not read users; see the server log")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"List users error: {e}")
         raise HTTPException(
@@ -911,15 +912,15 @@ async def auth_health_check():
         cache_status = await cache_manager.health_check()
 
         return {
-            "status": "healthy",
+            "status": "healthy" if cache_status else "degraded",
             "cache_available": cache_status,
             "timestamp": datetime.utcnow().isoformat()
         }
 
     except Exception as e:
         logger.error(f"Auth health check error: {e}")
-        return {
+        return JSONResponse(status_code=503, content={
             "status": "unhealthy",
             "error": "Health check failed; see the server log",
             "timestamp": datetime.utcnow().isoformat()
-        }
+        })

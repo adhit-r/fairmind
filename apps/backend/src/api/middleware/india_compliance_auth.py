@@ -10,7 +10,7 @@ Requirements: 7.8
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import json
 
@@ -325,7 +325,41 @@ async def require_system_access(
 # ============================================================================
 
 class AuditLogger:
-    """Audit logger for compliance operations"""
+    """Audit logger for compliance operations.
+
+    Each entry is logged and written to the audit_logs table, scoped to the
+    caller's organisation when one is given. A failed write is logged and
+    never fails the request (the request itself is also recorded by the
+    audit middleware).
+    """
+
+    @staticmethod
+    async def _record(audit_entry: Dict[str, Any], org_id: Optional[str]) -> None:
+        logger.info(f"AUDIT: {json.dumps(audit_entry)}")
+        try:
+            from config.database import get_db_connection
+
+            resource_id = (
+                audit_entry.get("system_id")
+                or audit_entry.get("evidence_id")
+                or audit_entry.get("integration_id")
+            )
+            async with get_db_connection() as conn:
+                await conn.execute(
+                    "INSERT INTO audit_logs (user_id, org_id, action, resource_type, resource_id, details, created_at) "
+                    "VALUES (:user_id, :org_id, :action, :resource_type, :resource_id, :details, :created_at)",
+                    {
+                        "user_id": audit_entry.get("user_id"),
+                        "org_id": org_id,
+                        "action": f"india.{audit_entry['operation']}"[:255],
+                        "resource_type": "india_compliance",
+                        "resource_id": str(resource_id)[:255] if resource_id else None,
+                        "details": json.dumps(audit_entry),
+                        "created_at": datetime.now(timezone.utc),
+                    },
+                )
+        except Exception as e:
+            logger.warning(f"Could not persist India compliance audit entry: {e}")
     
     @staticmethod
     async def log_compliance_check(
@@ -333,6 +367,7 @@ class AuditLogger:
         system_id: str,
         frameworks: List[str],
         result: Dict[str, Any],
+        org_id: Optional[str] = None,
     ):
         """Log compliance check operation"""
         audit_entry = {
@@ -343,14 +378,16 @@ class AuditLogger:
             "frameworks": frameworks,
             "result_score": result.get("overall_score"),
             "result_status": result.get("status"),
+            "framework_scores": result.get("framework_scores") or {},
         }
-        logger.info(f"AUDIT: {json.dumps(audit_entry)}")
+        await AuditLogger._record(audit_entry, org_id)
     
     @staticmethod
     async def log_evidence_access(
         user_id: str,
         evidence_id: str,
         action: str,  # view, download, delete
+        org_id: Optional[str] = None,
     ):
         """Log evidence access"""
         audit_entry = {
@@ -360,7 +397,7 @@ class AuditLogger:
             "evidence_id": evidence_id,
             "action": action,
         }
-        logger.info(f"AUDIT: {json.dumps(audit_entry)}")
+        await AuditLogger._record(audit_entry, org_id)
     
     @staticmethod
     async def log_integration_operation(
@@ -368,6 +405,7 @@ class AuditLogger:
         integration_id: str,
         operation: str,  # create, update, delete, sync
         status: str,  # success, failure
+        org_id: Optional[str] = None,
     ):
         """Log integration operation"""
         audit_entry = {
@@ -378,7 +416,7 @@ class AuditLogger:
             "operation_type": operation,
             "status": status,
         }
-        logger.info(f"AUDIT: {json.dumps(audit_entry)}")
+        await AuditLogger._record(audit_entry, org_id)
     
     @staticmethod
     async def log_ai_automation_usage(
@@ -386,6 +424,7 @@ class AuditLogger:
         system_id: str,
         feature: str,  # gap_analysis, remediation_plan, policy_generation, etc.
         status: str,  # success, failure
+        org_id: Optional[str] = None,
     ):
         """Log AI automation feature usage"""
         audit_entry = {
@@ -396,7 +435,7 @@ class AuditLogger:
             "feature": feature,
             "status": status,
         }
-        logger.info(f"AUDIT: {json.dumps(audit_entry)}")
+        await AuditLogger._record(audit_entry, org_id)
     
     @staticmethod
     async def log_report_export(
@@ -404,6 +443,7 @@ class AuditLogger:
         system_id: str,
         frameworks: List[str],
         format: str,  # pdf, json, csv
+        org_id: Optional[str] = None,
     ):
         """Log report export"""
         audit_entry = {
@@ -414,7 +454,7 @@ class AuditLogger:
             "frameworks": frameworks,
             "format": format,
         }
-        logger.info(f"AUDIT: {json.dumps(audit_entry)}")
+        await AuditLogger._record(audit_entry, org_id)
 
 
 # ============================================================================
