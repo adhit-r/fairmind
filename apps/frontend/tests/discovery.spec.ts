@@ -40,6 +40,10 @@ const discovered = [
   asset('okta:a1', 'okta', 'ChatGPT Enterprise', 'ai_service', 'new', { service: 'ChatGPT', vendor: 'OpenAI', distinct_users_30_days: 42 }),
   asset('aws:x', 'aws', 'claims-agent', 'agent', 'promoted', { service: 'Bedrock Agents' }),
 ]
+// Since Shadow AI the waiting list is merged candidates, one row per system however many sources saw it.
+const candidates = [
+  { id: 'c-chatgpt', name: 'ChatGPT Enterprise', kind: 'ai_service', strength: 'strong', sources: ['okta'], sightings: 1, firstSeen: minsAgo(60), lastSeen: minsAgo(12), suggestedTier: 'medium', ownerCheck: null, owners: [] },
+]
 
 test.describe('Discovery', () => {
   let created: Record<string, unknown> | null
@@ -82,6 +86,7 @@ test.describe('Discovery', () => {
         return json(route, { found: 2, created: 2, updated: 0, at: minsAgo(0) })
       }
       if (path === `${BASE}/discovered`) return json(route, discovered)
+      if (path === '/api/v1/discovery/candidates') return json(route, candidates)
       return route.fallback()
     })
   })
@@ -92,9 +97,11 @@ test.describe('Discovery', () => {
     await expect(areas.getByRole('button', { name: /Sign-in and workplace.*1 found/ })).toBeVisible()
     await expect(areas.getByRole('button', { name: /MCP servers.*Not watched/ })).toBeVisible()
     await expect(page.getByText('1 registered')).toBeVisible()
-    await expect(page.getByText('42 people signed in')).toBeVisible()
+    const waiting = page.getByRole('region', { name: 'Waiting for you' })
+    await expect(waiting.getByText('ChatGPT Enterprise')).toBeVisible()
+    await expect(waiting.getByText('No owner found')).toBeVisible()
     await areas.getByRole('button', { name: /Cloud/ }).click()
-    await expect(page.getByText('Nothing waiting from this area.')).toBeVisible()
+    await expect(waiting.getByText('Nothing waiting. Connectors on a schedule keep looking.')).toBeVisible()
   })
 
   test('sources view shows live state, failures and changes the schedule', async ({ page }) => {

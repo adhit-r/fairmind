@@ -40,6 +40,9 @@ function curve(x1: number, y1: number, x2: number, y2: number) {
 /** The last read that worked: a failing source still shows what it last found. */
 const lastGood = (i: Integration) => i.recentRuns?.find((r) => r.status === 'ok')
 
+// A source read before per-step history was kept has a last read but no step results.
+const unread = (i: Integration) => (i.lastSyncedAt ? 'Sync to see what this step fetches' : 'Not read yet')
+
 export function DiscoveryFlow({ d, onReview }: { d: D; onReview: () => void }) {
   const [sel, setSel] = useState<Sel>(() => ({ type: 'source', id: d.integrations[0]?.id ?? '' }))
   // Steps turned off on screen but not saved yet, per source.
@@ -172,7 +175,7 @@ export function DiscoveryFlow({ d, onReview }: { d: D; onReview: () => void }) {
       insp = {
         kind: `Step · ${n.i.name}`,
         title: n.def.title,
-        sub: !n.on ? 'Turned off: not read on the next run' : n.run ? `${n.run.found} found, ${n.run.created} new on the last good read` : 'Not read yet',
+        sub: !n.on ? 'Turned off: not read on the next run' : n.run ? `${n.run.found} found, ${n.run.created} new on the last good read` : unread(n.i),
         what: (n.run?.samples ?? []).map((s) => `${s.name}${s.new ? ' (new)' : ''}${sample(n.i, s.id) ? ` · ${sample(n.i, s.id)}` : ''}`),
         scope: n.def.call,
         err: n.failing ? 'The source is failing; these are from the last good read.' : null,
@@ -310,7 +313,7 @@ export function DiscoveryFlow({ d, onReview }: { d: D; onReview: () => void }) {
                         <span className="dt">{s.new ? 'new' : sample(n.i, s.id)}</span>
                       </div>
                     ))}
-                    {!n.run && <div className="fl-sample"><span className="dt">Not read yet</span></div>}
+                    {!n.run && <div className="fl-sample"><span className="dt">{unread(n.i)}</span></div>}
                     {n.run && n.run.found > n.run.samples.length && <div className="fl-sample"><span className="dt">and {n.run.found - n.run.samples.length} more</span></div>}
                   </div>
                   <div className="fl-foot">{!n.on ? 'Off: not read on the next run' : n.failing ? 'Not reached · last good read' : n.def.call}</div>

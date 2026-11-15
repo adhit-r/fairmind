@@ -75,6 +75,8 @@ export async function installGridFixtures(page: Page, fwSystems: unknown = frame
     if (path === `/api/v1/packs/journeys/${FW}`) return json(route, journey)
     if (path === '/api/v1/packs/journeys') return json(route, [{ key: FW, name: journey.name, pillar: 'governance', active: 3, coveredAll: 0, coveredInstalled: 0, contributingPacks: [], type: null, binding: null, workflows: [], waiting: 0 }])
     if (path === '/api/v1/packs/controls') return json(route, controls)
+    // The shell reads the Shadow AI count on every page; an empty answer, not the [] fallback.
+    if (path === '/api/v1/shadow-ai') return json(route, { findings: [], resolved: [], map: { tools: [], teams: [], cells: {} }, coverage: { proxyLogs: false, okta: false, entra: false, gateway: false, mcpRegistry: false, people: 0, approvedTools: 0, ssoTools: 0 } })
     return json(route, [])
   })
 }
