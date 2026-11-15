@@ -334,7 +334,7 @@ def run_fairness_metrics(
         raise HTTPException(status_code=500, detail=f"Fairness metrics failed: {str(e)}")
 
 @router.post("/test/image")
-async def analyze_image_bias(
+def analyze_image_bias(
     images: List[UploadFile] = File(...),
     test_prompts: str = Form(...),  # JSON string of test prompts
     expected_features: str = Form(...)  # JSON string of expected features
@@ -346,7 +346,7 @@ async def analyze_image_bias(
     )
 
 @router.post("/test/text")
-async def analyze_text_bias(
+def analyze_text_bias(
     texts: List[str] = Form(...),
     test_prompts: List[str] = Form(...),
     sensitive_attributes: List[str] = Form(...)
