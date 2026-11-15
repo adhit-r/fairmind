@@ -68,7 +68,15 @@ class EvidenceCollectionService:
     """Service for collecting and managing compliance evidence"""
     
     def __init__(self):
-        self.evidence_store: Dict[str, Evidence] = {}
+        from database.record_store import PersistentMap
+
+        # Kept in the database so evidence ids stay resolvable after a restart.
+        self.evidence_store = PersistentMap(
+            "compliance_evidence",
+            load=Evidence.model_validate,
+            dump=lambda e: e.model_dump(mode="json"),
+            scope_of=lambda e: e.metadata.get("org_id"),
+        )
         self.technical_controls = self._initialize_technical_controls()
     
     def _initialize_technical_controls(self) -> Dict[str, TechnicalControl]:
@@ -279,7 +287,7 @@ class EvidenceCollectionService:
         
         checks = {
             "completeness": dataset_quality.get("completeness", 0) >= 0.95,
-            "accuracy": dataset_quality.get("accuracy", 0) >= 0.90,
+            "accuracy": (dataset_quality.get("accuracy") or 0) >= 0.90,
             "consistency": dataset_quality.get("consistency", 0) >= 0.95,
             "missing_values": dataset_quality.get("missing_rate", 1.0) <= 0.05,
         }

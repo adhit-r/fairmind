@@ -117,7 +117,7 @@ class AutomatedEvidenceCollector:
             
             return {
                 "completeness": completeness,
-                "accuracy": 0.95,  # Would need ground truth for real accuracy
+                "accuracy": None,  # Needs ground truth; not measured
                 "consistency": consistency,
                 "missing_rate": missing_values / total_rows if total_rows > 0 else 0.0,
                 "total_rows": total_rows,
@@ -151,18 +151,18 @@ class AutomatedEvidenceCollector:
             
             return {
                 "pii_detected": pii_detected,
-                "pii_anonymized": not pii_detected,  # If no PII detected, consider it anonymized
+                "pii_anonymized": bool(dataset) and not pii_detected,  # Only when a dataset was actually scanned
                 "consent_tracked": model_info.get("consent_tracked", False),
-                "data_minimization_applied": model_info.get("data_minimization", True),
-                "retention_policy_defined": model_info.get("retention_policy", True),
-                "source": "fairmind_privacy_check"
+                "data_minimization_applied": model_info.get("data_minimization", False),
+                "retention_policy_defined": model_info.get("retention_policy", False),
+                "source": "fairmind_privacy_check" if dataset else "not_available"
             }
             
         except Exception as e:
             print(f"Error collecting privacy evidence: {e}")
             return {
                 "pii_detected": False,
-                "pii_anonymized": True,
+                "pii_anonymized": False,
                 "consent_tracked": False,
                 "data_minimization_applied": False,
                 "retention_policy_defined": False,
@@ -218,7 +218,7 @@ class AutomatedEvidenceCollector:
                 "training_role_required": model_info.get("training_restricted", False),
                 "deployment_role_required": model_info.get("deployment_restricted", False),
                 "access_logged": model_info.get("access_logging", False),
-                "source": "fairmind_model_registry"
+                "source": "fairmind_model_registry" if model_info else "not_available"
             }
             
         except Exception as e:
@@ -265,7 +265,7 @@ class AutomatedEvidenceCollector:
                 "registry_url": model_info.get("registry_url", ""),
                 "lineage_tracked": model_info.get("lineage_tracked", False),
                 "version": model_info.get("version", ""),
-                "source": "fairmind_model_registry"
+                "source": "fairmind_model_registry" if model_info else "not_available"
             }
             
         except Exception as e:
@@ -363,7 +363,7 @@ class AutomatedEvidenceCollector:
                 "inputs_logged": logging_config.get("log_inputs", False),
                 "decisions_logged": logging_config.get("log_decisions", False),
                 "retention_days": logging_config.get("retention_days", 0),
-                "source": "fairmind_model_registry"
+                "source": "fairmind_model_registry" if model_info else "not_available"
             }
             
         except Exception as e:
@@ -389,7 +389,7 @@ class AutomatedEvidenceCollector:
                 "risk_assessment": {"exists": "risk_assessment" in docs},
                 "testing_procedures": {"exists": "testing" in docs},
                 "deployment_guide": {"exists": "deployment" in docs},
-                "source": "fairmind_model_registry"
+                "source": "fairmind_model_registry" if model_info else "not_available"
             }
             
         except Exception as e:
@@ -428,7 +428,7 @@ class AutomatedEvidenceCollector:
                 "human_override_enabled": oversight.get("override_enabled", False),
                 "escalation_defined": oversight.get("escalation_path", False),
                 "operator_training": oversight.get("training_provided", False),
-                "source": "fairmind_model_registry"
+                "source": "fairmind_model_registry" if model_info else "not_available"
             }
             
         except Exception as e:
@@ -444,97 +444,30 @@ class AutomatedEvidenceCollector:
     # Helper methods to integrate with FairMind's existing services
     
     async def _get_model_info(self, model_id: str) -> Dict[str, Any]:
-        """Get model information from FairMind's model registry"""
-        # This would integrate with your actual model service
-        # For now, return a placeholder
-        return {
-            "id": model_id,
-            "name": f"Model {model_id}",
-            "dataset_id": f"dataset_{model_id}",
-            "version": "1.0.0",
-            "git_repo": "https://github.com/org/repo",
-            "registry_url": "http://localhost:8000/models",
-            "rbac_enabled": True,
-            "training_restricted": True,
-            "deployment_restricted": True,
-            "access_logging": True,
-            "lineage_tracked": True,
-            "logging_config": {
-                "log_predictions": True,
-                "log_inputs": True,
-                "log_decisions": True,
-                "retention_days": 365
-            },
-            "documentation": {
-                "architecture": "System architecture document",
-                "data_flow": "Data flow diagram",
-                "risk_assessment": "Risk assessment report",
-                "testing": "Testing procedures",
-                "deployment": "Deployment guide"
-            },
-            "model_card": {
-                "model_details": {"name": "Model", "version": "1.0"},
-                "intended_use": {"primary_use": "Classification"},
-                "factors": {"relevant_factors": ["age", "gender"]},
-                "metrics": {"accuracy": 0.95},
-                "training_data": {"source": "Internal dataset"},
-                "evaluation_data": {"source": "Test set"},
-                "ethical_considerations": {"bias_mitigation": "Applied"}
-            },
-            "human_oversight": {
-                "review_process_defined": True,
-                "override_enabled": True,
-                "escalation_path": True,
-                "training_provided": True
-            }
-        }
-    
-    async def _get_dataset(self, dataset_id: str) -> List[Dict[str, Any]]:
-        """Get dataset from FairMind's dataset service"""
-        # This would integrate with your actual dataset service
-        # For now, return a sample dataset
-        return [
-            {"feature1": 1, "feature2": "A", "label": 0},
-            {"feature1": 2, "feature2": "B", "label": 1},
-            {"feature1": 3, "feature2": "C", "label": 0},
-        ]
-    
+        """Model registry record for this model.
+
+        No model registry is wired into this collector, so nothing is known
+        about the model and every check that depends on it reports missing
+        evidence instead of an assumed pass.
+        """
+        return {}
+
+    async def _get_dataset(self, dataset_id: Optional[str]) -> List[Dict[str, Any]]:
+        """Dataset rows for this model. No dataset source is wired in."""
+        return []
+
     async def _get_bias_test_results(self, model_id: str) -> Optional[Dict[str, Any]]:
-        """Get bias test results from FairMind's bias detection service"""
-        # This would query your actual bias test results database
-        return {
-            "test_id": f"bias_test_{model_id}",
-            "demographic_parity": 0.95,
-            "equal_opportunity": 0.92,
-            "group_sizes": {"group_a": 100, "group_b": 95},
-            "timestamp": datetime.now().isoformat()
-        }
-    
+        """Stored bias test results for this model. No source is wired in."""
+        return None
+
     async def _get_security_test_results(self, model_id: str) -> Optional[Dict[str, Any]]:
-        """Get security test results"""
-        # This would query your actual security test results
-        return {
-            "test_id": f"security_test_{model_id}",
-            "fgsm_accuracy": 0.75,
-            "pgd_accuracy": 0.68,
-            "input_validation": True
-        }
-    
+        """Stored security test results for this model. No source is wired in."""
+        return None
+
     async def _get_monitoring_data(self, model_id: str) -> Optional[Dict[str, Any]]:
-        """Get monitoring data from FairMind's monitoring service"""
-        # This would query your actual monitoring service
-        return {
-            "baseline_accuracy": 0.95,
-            "current_accuracy": 0.93,
-            "alerts_enabled": True,
-            "fairness_monitoring": {
-                "enabled": True,
-                "metrics": ["demographic_parity", "equal_opportunity", "equalized_odds"],
-                "thresholds": {"demographic_parity": 0.8},
-                "alerts_enabled": True
-            }
-        }
-    
+        """Monitoring data for this model. No source is wired in."""
+        return None
+
     def _default_dataset_quality(self) -> Dict[str, Any]:
         """Default dataset quality metrics"""
         return {

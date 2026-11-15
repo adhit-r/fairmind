@@ -208,8 +208,6 @@ class LLMBiasDetectionService:
                 results["overall_bias_score"] = total_bias_score / scored_tests
                 results["recommendations"] = self._generate_recommendations(results)
             
-            # Store results in history
-            self.bias_history.append(results)
             
             return results
             

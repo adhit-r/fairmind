@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient as api } from "../api-client";
+import { generateCodeVerifier, generateState } from "@/lib/utils/oauth2";
 
 interface AuthTokenResponse {
   access_token: string;
@@ -31,20 +32,6 @@ interface UseAuthentikOptions {
 }
 
 /**
- * Generate a random string for PKCE code_verifier
- * RFC 7636: code_verifier = 43*128unreserved characters
- */
-function generateCodeVerifier(): string {
-  const characters =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-  let result = "";
-  for (let i = 0; i < 128; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return result;
-}
-
-/**
  * Generate code_challenge from code_verifier using SHA-256
  * RFC 7636: code_challenge = BASE64URL(SHA256(code_verifier))
  */
@@ -58,13 +45,6 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=/g, "");
-}
-
-/**
- * Generate a random state parameter for CSRF protection
- */
-function generateRandomState(): string {
-  return btoa(Math.random().toString()).substring(0, 43);
 }
 
 /**
@@ -124,7 +104,7 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
       // Generate PKCE parameters
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
-      const state = generateRandomState();
+      const state = generateState();
 
       // Store PKCE parameters in session storage (secure against XSS with HttpOnly flag in cookie alternative)
       // Note: sessionStorage is used here as it's cleared when tab closes

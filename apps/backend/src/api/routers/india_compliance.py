@@ -284,6 +284,7 @@ async def check_compliance(
 
         # Check compliance for each framework
         results = []
+        framework_scores: Dict[str, float] = {}
         overall_score = 0.0
         overall_status = ComplianceStatus.COMPLIANT
         
@@ -300,6 +301,7 @@ async def check_compliance(
                 continue
             
             results.append(result)
+            framework_scores[framework.value] = result.overall_score
             overall_score += result.overall_score
             
             if result.status != ComplianceStatus.COMPLIANT:
@@ -314,11 +316,13 @@ async def check_compliance(
         # Log audit entry
         await AuditLogger.log_compliance_check(
             user_id=user_context.user_id,
+            org_id=user_context.organization_id,
             system_id=request.system_id,
             frameworks=[f.value for f in request.frameworks],
             result={
                 "overall_score": overall_score,
                 "status": overall_status.value,
+                "framework_scores": framework_scores,
             }
         )
         
@@ -379,6 +383,7 @@ async def get_evidence(
         # Log audit entry
         await AuditLogger.log_evidence_access(
             user_id=user_context.user_id,
+            org_id=user_context.organization_id,
             evidence_id=evidence_id,
             action="view"
         )
@@ -564,6 +569,7 @@ async def generate_report(
         # Log audit entry
         await AuditLogger.log_report_export(
             user_id=user_context.user_id,
+            org_id=user_context.organization_id,
             system_id=system_id,
             frameworks=[f.value for f in frameworks],
             format="json"
@@ -621,10 +627,26 @@ async def get_compliance_trends(
         
         logger.info(f"Retrieving compliance trends for system {system_id}, framework {framework}")
         
+        # History: this organisation's earlier compliance checks of the system, from the audit log.
+        rows = db.execute(
+            text(
+                "SELECT details FROM audit_logs WHERE org_id = :org AND action = 'india.compliance_check' "
+                "AND resource_id = :sid ORDER BY created_at"
+            ),
+            {"org": user_context.organization_id, "sid": system_id},
+        ).fetchall()
+        historical_results = []
+        for (details,) in rows:
+            entry = details if isinstance(details, dict) else json.loads(details or "{}")
+            score = (entry.get("framework_scores") or {}).get(framework.value)
+            if score is not None and entry.get("timestamp"):
+                historical_results.append({"timestamp": entry["timestamp"], "overall_score": score})
+
         trends = await compliance_service.get_compliance_trends(
             system_id=system_id,
             framework=framework,
             timeframe=timeframe,
+            historical_results=historical_results,
         )
         
         return trends

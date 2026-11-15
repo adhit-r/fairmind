@@ -660,7 +660,7 @@ class IndiaComplianceService(ComplianceReportingService):
                 "data_points": [],
                 "trend": "insufficient_data",
                 "improvement": None,
-                "average_score": 0.0,
+                "average_score": None,
             }
         
         # Calculate trend metrics

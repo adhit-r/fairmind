@@ -710,7 +710,7 @@ class ComplianceReportingService:
             "generated_date": datetime.utcnow().isoformat(),
             "model_info": {
                 "name": model_data.get("name", "Unknown"),
-                "version": model_data.get("version", "1.0"),
+                "version": model_data.get("version"),
                 "type": model_data.get("type", "Unknown"),
                 "purpose": model_data.get("purpose", ""),
             },
@@ -762,8 +762,9 @@ class ComplianceReportingService:
         return strategies
 
     def _generate_monitoring_plan(self) -> Dict[str, Any]:
-        """Generate fairness monitoring plan"""
+        """A recommended fairness monitoring plan; not a statement that one is in place."""
         return {
+            "status": "recommended",
             "frequency": "monthly",
             "metrics_to_track": [
                 "Statistical Parity",
@@ -782,14 +783,25 @@ class ComplianceReportingService:
         self,
         bias_test_results: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Generate stakeholder communication plan"""
+        """Generate stakeholder communication plan; messages state only what the results show."""
+        metrics = bias_test_results.get("metrics") or []
+        tested = bool(metrics or bias_test_results.get("scores"))
+        if not tested:
+            key_messages = ["No fairness test results were supplied; the system's fairness is not yet assessed"]
+        elif bias_test_results.get("bias_detected"):
+            key_messages = [
+                f"The system was tested for fairness ({', '.join(map(str, metrics)) or 'supplied scores'})",
+                "Bias was detected; the mitigation strategies listed are recommended, not yet applied",
+            ]
+        else:
+            key_messages = [
+                f"The system was tested for fairness ({', '.join(map(str, metrics)) or 'supplied scores'})",
+                "No bias was detected in the supplied results",
+            ]
+        key_messages.append("Ongoing fairness monitoring is recommended")
         return {
             "target_audiences": ["Users", "Regulators", "Internal Teams"],
-            "key_messages": [
-                "System has been tested for fairness",
-                "Ongoing monitoring is in place",
-                "Mitigation strategies are implemented",
-            ],
+            "key_messages": key_messages,
             "transparency_measures": [
                 "Publish fairness metrics",
                 "Provide model cards",

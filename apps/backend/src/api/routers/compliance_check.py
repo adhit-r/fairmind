@@ -160,6 +160,7 @@ async def check_compliance(
     )
     for evidence in evidence_list:
         evidence.metadata["org_id"] = m.org_id
+        evidence_service.evidence_store[evidence.id] = evidence  # save with its organisation
     
     # Calculate compliance score
     compliance_score = evidence_service.get_compliance_score(evidence_list)
@@ -270,6 +271,7 @@ async def get_model_compliance(
         )
         for evidence in evidence_list:
             evidence.metadata["org_id"] = m.org_id
+            evidence_service.evidence_store[evidence.id] = evidence  # save with its organisation
         
         # Calculate compliance score
         compliance_score = evidence_service.get_compliance_score(evidence_list)
@@ -324,7 +326,7 @@ async def get_model_compliance(
             "results": results,
             "gaps": gaps,
             "timestamp": datetime.now().isoformat(),
-            "note": "Evidence automatically collected from FairMind's bias detection, model registry, monitoring, and security testing features"
+            "note": "Checks with evidence_source 'default' or 'not_available' had no stored evidence for this model and are reported as failed, not assumed."
         }
         
     except Exception as e:

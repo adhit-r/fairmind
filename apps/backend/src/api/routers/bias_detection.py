@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 import json
 import asyncio
+import uuid
 from pydantic import BaseModel
 
 # Import bias detection services
@@ -18,10 +19,13 @@ from ..services.bias_testing_library import bias_testing_library, TestingLibrary
 from api.routes.org_scope import org_member
 from config.auth import get_current_active_user, require_admin
 from src.application.services.governance_assurance_service import OrgMembership
+from database.record_store import RecordStore
 
 logger = logging.getLogger(__name__)
+
+_runs = RecordStore("bias_detection_runs")  # /detect results, one record per run, scoped to the organisation
 # Every route needs a signed-in caller. Most of them are stateless compute over
-# the request body; /detect, /history and /export touch the process-wide result
+# the request body; /detect, /history and /export touch the stored result
 # history and additionally require an organisation (see org_member below).
 router = APIRouter(
     prefix="/bias-detection",
@@ -180,11 +184,9 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
         category = category_mapping[request.model_type]
         
         # Convert custom templates if provided
-        custom_templates = None
         if request.custom_templates:
-            # This would convert the custom templates to BiasTestTemplate objects
-            # For now, we'll use the default templates
-            pass
+            raise HTTPException(status_code=501, detail="Custom templates are not supported yet; omit custom_templates to use the built-in ones.")
+        custom_templates = None
         
         # Run bias detection
         results = await llm_bias_service.detect_bias(
@@ -196,12 +198,12 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
         if "error" in results:
             raise HTTPException(status_code=500, detail=results["error"])
 
-        # The service appended this dict to its process-wide history; tag it so
-        # /history and /export only ever return the owning organisation's runs.
-        results["org_id"] = m.org_id
-        
         # The service returns BiasTestResult dataclasses; the response wants plain dicts.
         test_results = [asdict(r) if is_dataclass(r) else r for r in results["test_results"]]
+
+        # Saved in the database under the caller's organisation for /history and /export.
+        run = json.loads(json.dumps({**results, "test_results": test_results}, default=str))
+        _runs.put(f"{m.org_id}:{run['timestamp']}:{uuid.uuid4()}", run, scope=m.org_id)
 
         return BiasTestResponse(
             timestamp=results["timestamp"],
@@ -341,59 +343,8 @@ async def analyze_image_bias(
     test_prompts: str = Form(...),  # JSON string of test prompts
     expected_features: str = Form(...)  # JSON string of expected features
 ):
-    """
-    Analyze images for bias using computer vision libraries
-    
-    This endpoint can detect various types of visual bias including:
-    - Hand preference bias (left vs right handed)
-    - Cultural representation bias
-    - Demographic bias in visual features
-    - Accessibility bias
-    """
-    try:
-        # Parse JSON inputs
-        prompts = json.loads(test_prompts)
-        features = json.loads(expected_features)
-        
-        # Save uploaded images temporarily
-        image_paths = []
-        for i, image in enumerate(images):
-            # In production, you'd save to a proper storage system
-            temp_path = f"/tmp/bias_test_image_{i}_{datetime.now().timestamp()}.jpg"
-            with open(temp_path, "wb") as f:
-                f.write(image.file.read())
-            image_paths.append(temp_path)
-        
-        # Analyze images for bias
-        results = await bias_testing_library.analyze_image_bias(
-            image_paths=image_paths,
-            test_prompts=prompts,
-            expected_features=features
-        )
-        
-        # Clean up temporary files
-        import os
-        for path in image_paths:
-            if os.path.exists(path):
-                os.remove(path)
-        
-        return {
-            "success": True,
-            "results": [
-                {
-                    "image_index": i,
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "metadata": result.metadata
-                } for i, result in enumerate(results)
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing image bias: {e}")
-        raise HTTPException(status_code=500, detail=f"Image bias analysis failed: {str(e)}")
+    """Image bias analysis. No computer vision analyser is wired in yet."""
+    raise HTTPException(status_code=501, detail="Image bias analysis is not available yet.")
 
 @router.post("/test/text")
 async def analyze_text_bias(
@@ -401,40 +352,8 @@ async def analyze_text_bias(
     test_prompts: List[str] = Form(...),
     sensitive_attributes: List[str] = Form(...)
 ):
-    """
-    Analyze text for bias using NLP libraries
-    
-    This endpoint can detect various types of text bias including:
-    - Gender bias in role assignments
-    - Age bias in descriptions
-    - Cultural bias in language use
-    - Linguistic bias in dialect representation
-    """
-    try:
-        # Run text bias analysis
-        results = await bias_testing_library.analyze_text_bias(
-            texts=texts,
-            test_prompts=test_prompts,
-            sensitive_attributes=sensitive_attributes
-        )
-        
-        return {
-            "success": True,
-            "results": [
-                {
-                    "text_index": i,
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "metadata": result.metadata
-                } for i, result in enumerate(results)
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing text bias: {e}")
-        raise HTTPException(status_code=500, detail=f"Text bias analysis failed: {str(e)}")
+    """Text bias analysis. No NLP analyser is wired in yet; use /detect or the LLM judge."""
+    raise HTTPException(status_code=501, detail="Text bias analysis is not available yet.")
 
 @router.post("/templates")
 def add_custom_template():
@@ -492,49 +411,24 @@ def get_available_libraries():
 
 @router.post("/libraries/{library_name}/install", dependencies=[Depends(require_admin)])
 def install_library(library_name: str):
-    """Install a specific bias testing library"""
-    try:
-        # Find the library enum
-        library = None
-        for lib in TestingLibrary:
-            if lib.value == library_name:
-                library = lib
-                break
-        
-        if not library:
-            raise HTTPException(status_code=400, detail=f"Unknown library: {library_name}")
-        
-        # Attempt to install
-        success = bias_testing_library.install_library(library)
-        
-        if success:
-            return {"success": True, "message": f"Library {library_name} installation requested"}
-        else:
-            return {"success": False, "message": f"Failed to install library {library_name}"}
-            
-    except Exception as e:
-        logger.error(f"Error installing library {library_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"Installation failed: {str(e)}")
-
-def _own(rows, org_id: str) -> list:
-    return [r for r in rows if r.get("org_id") == org_id]
-
+    """Libraries are installed with the backend's dependencies, not at runtime."""
+    if library_name not in {lib.value for lib in TestingLibrary}:
+        raise HTTPException(status_code=400, detail=f"Unknown library: {library_name}")
+    raise HTTPException(
+        status_code=501,
+        detail="Libraries cannot be installed at runtime; add them to the backend's dependencies.",
+    )
 
 @router.get("/history")
 def get_bias_history(limit: int = 100, m: OrgMembership = Depends(org_member)):
     """Get this organisation's bias detection history"""
     try:
-        history = [
-            {k: v for k, v in run.items() if k != "org_id"}
-            for run in _own(llm_bias_service.bias_history, m.org_id)[-limit:]
-        ]
-
+        history = _runs.list(scope=m.org_id, limit=limit)
         return {
             "success": True,
             "history": history,
             "total_entries": len(history)
         }
-        
     except Exception as e:
         logger.error(f"Error getting bias history: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
@@ -553,21 +447,11 @@ def export_bias_results(format: str = "json", m: OrgMembership = Depends(org_mem
         if format not in ["json", "csv"]:
             raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
-        # Both services keep process-wide lists; only rows tagged with the caller's organisation leave.
-        llm_results = _export(
-            [{k: v for k, v in run.items() if k != "org_id"} for run in _own(llm_bias_service.bias_history, m.org_id)],
-            format,
-        )
-        library_results = _export(
-            [r.__dict__ for r in bias_testing_library.test_results if getattr(r, "org_id", None) == m.org_id],
-            format,
-        )
-
+        # /detect runs are the only results kept; the library tests are not recorded.
         return {
             "success": True,
             "format": format,
-            "llm_bias_results": llm_results,
-            "testing_library_results": library_results
+            "llm_bias_results": _export(_runs.list(scope=m.org_id), format),
         }
         
     except Exception as e:

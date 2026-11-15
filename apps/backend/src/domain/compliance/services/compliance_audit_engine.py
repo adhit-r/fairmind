@@ -63,9 +63,23 @@ class FrameworkReport:
 # Helpers
 # ---------------------------------------------------------------------------
 
+_NEGATIVE_ANSWERS = {"false", "no", "none", "n/a", "na", "not applicable", "unknown", "tbd", "todo", "0"}
+
+
+def _present(value) -> bool:
+    """A key counts only when it carries an affirmative, non-empty value."""
+    if value is None or value is False:
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() not in _NEGATIVE_ANSWERS and bool(value.strip())
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value) > 0
+    return True
+
+
 def _ctx_has(ctx: dict, *keys: str) -> bool:
     mc = ctx.get("model_context") or {}
-    return all(k in mc for k in keys)
+    return all(_present(mc.get(k)) for k in keys)
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +87,7 @@ def _ctx_has(ctx: dict, *keys: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _eu_risk_classification(ctx: dict) -> Tuple[bool, str, str]:
-    if ctx.get("risk_level"):
+    if _present(ctx.get("risk_level")):
         return True, "Risk level declared.", ""
     return False, "No risk level classification provided.", "Classify the AI system risk level per EU AI Act Article 6."
 

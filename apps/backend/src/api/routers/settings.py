@@ -22,16 +22,7 @@ class SettingsUpdateRequest(BaseModel):
 @router.get("/")
 async def get_settings(current_user: TokenData = Depends(get_current_active_user)):
     if settings_service is None:
-        return {
-            "success": True,
-            "data": {
-                "email": current_user.email,
-                "notifications": True,
-                "autoRefresh": True,
-                "theme": "light",
-                "language": "en",
-            },
-        }
+        raise HTTPException(status_code=503, detail="Settings are not available; see the server log")
 
     settings = await settings_service.get_settings(current_user.user_id, current_user.email)
     return {"success": True, "data": settings.__dict__}
@@ -43,11 +34,7 @@ async def update_settings(
     current_user: TokenData = Depends(get_current_active_user),
 ):
     if settings_service is None:
-        return {
-            "success": True,
-            "data": payload.model_dump(exclude_none=True),
-            "message": "Settings updated (fallback mode)",
-        }
+        raise HTTPException(status_code=503, detail="Settings are not available; nothing was saved")
 
     try:
         updated = await settings_service.update_settings(

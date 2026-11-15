@@ -361,11 +361,20 @@ def _detect(client, headers):
 
 @pytest.fixture
 def clean_bias_history():
-    from api.services.llm_bias_detection_service import llm_bias_service
+    from sqlalchemy import text
 
-    llm_bias_service.bias_history.clear()
+    from database.connection import db_manager
+    from database.record_store import RecordStore
+
+    RecordStore("bias_detection_runs").list()  # creates the table if needed
+
+    def clear():
+        with db_manager.get_session() as session:
+            session.execute(text("DELETE FROM service_records WHERE namespace = 'bias_detection_runs'"))
+
+    clear()
     yield
-    llm_bias_service.bias_history.clear()
+    clear()
 
 
 def test_bias_history_and_export_are_per_organisation(client, clean_bias_history):
@@ -382,7 +391,8 @@ def test_bias_history_and_export_are_per_organisation(client, clean_bias_history
 
 def test_bias_library_install_is_platform_admin_only(client):
     assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A).status_code == 403
-    assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A_ADMIN).status_code == 200
+    # Admins pass the gate; nothing is installed at runtime, and the route says so.
+    assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A_ADMIN).status_code == 501
 
 
 # --------------------------------------------------------------------------- stateless compute still works when signed in
@@ -751,24 +761,21 @@ def test_user_listing_is_limited_to_the_admins_organisation(client, monkeypatch)
 
 @pytest.fixture
 def monitoring(db):
-    from api.routes import monitoring as monitoring_routes
+    from sqlalchemy import text
 
-    for store in (
-        monitoring_routes.monitoring_service.metrics_store,
-        monitoring_routes.monitoring_service.configs,
-        monitoring_routes.alert_service.rules,
-        monitoring_routes.alert_service.alerts,
-    ):
-        store.clear()
+    from database.connection import db_manager
+    from database.record_store import RecordStore
+
+    RecordStore("monitoring_metrics").list()  # creates the table if needed
+
+    def clear():
+        with db_manager.get_session() as session:
+            session.execute(text("DELETE FROM service_records WHERE namespace LIKE 'monitoring_%'"))
+
+    clear()
     with _mini_app(db, "api.routes.monitoring") as mini:
         yield mini
-    for store in (
-        monitoring_routes.monitoring_service.metrics_store,
-        monitoring_routes.monitoring_service.configs,
-        monitoring_routes.alert_service.rules,
-        monitoring_routes.alert_service.alerts,
-    ):
-        store.clear()
+    clear()
 
 
 def test_monitoring_requires_an_organisation_member(monitoring):
