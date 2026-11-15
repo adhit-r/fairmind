@@ -1,8 +1,6 @@
 {
   "title": "Reference",
   "pages": [
-    "api",
-    "permissions-and-separation",
     "eu-ai-act-crosswalk"
   ],
   "defaultOpen": false

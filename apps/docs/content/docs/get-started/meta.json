@@ -1,4 +1,10 @@
 {
   "title": "Start here",
-  "pages": ["quickstart", "core-concepts", "evidence-model", "system-context", "evidence-trust-review", "status-and-limits"]
+  "pages": [
+    "quickstart",
+    "core-concepts",
+    "evidence-model",
+    "system-context",
+    "status-and-limits"
+  ]
 }

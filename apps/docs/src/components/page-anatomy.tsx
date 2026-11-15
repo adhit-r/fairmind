@@ -18,7 +18,6 @@ const common = (pick: (r: Route) => string[]): Set<string> => {
   return new Set([...counts].filter(([, n]) => n > routes.length * 0.4).map(([c]) => c))
 }
 const COMMON_CONTROLS = common(r => r.controls)
-const COMMON_REQUESTS = common(r => r.requests)
 const COMMON_REGIONS = common(r => r.regions)
 
 export function PageAnatomy({ route }: { route: string }) {
@@ -26,7 +25,6 @@ export function PageAnatomy({ route }: { route: string }) {
   if (!r) throw new Error(`no route "${route}" in outline.json: run npm run outline`)
   const regions = r.regions.filter(x => !COMMON_REGIONS.has(x))
   const controls = r.controls.filter(c => !COMMON_CONTROLS.has(c)).slice(0, 30)
-  const requests = r.requests.filter(q => !COMMON_REQUESTS.has(q))
   const heading = r.headings.find(h => h.startsWith('h1: '))?.slice(4) ?? r.title
 
   const row = (label: string, value: ReactNode) => (
@@ -41,7 +39,6 @@ export function PageAnatomy({ route }: { route: string }) {
         {r.tables.map(t => row(t.name ? `Table: ${t.name}` : 'Table columns', t.headers.join(' · ')))}
         {controls.length > 0 && row('Controls', controls.map(c => c.replace(/^[a-z]+: /, '')).join(' · '))}
         {r.emptyStates.length > 0 && row('When there is nothing yet', r.emptyStates.join(' '))}
-        {requests.length > 0 && row('API it calls', <span className="mono api">{requests.map(q => <span key={q}>{q}</span>)}</span>)}
       </tbody>
     </table>
   )
