@@ -28,13 +28,20 @@ const nextConfig = {
       ['/docs/security-compliance', '/docs'],
       ['/docs/concepts/capability-truth', limits],
       ['/docs/concepts/:slug', '/docs/get-started/:slug'],
-      ['/docs/workflows/release-gate-in-ci', '/docs/build/release-gate-in-ci'],
-      ['/docs/workflows/sdk-and-mcp', '/docs/build/python-sdk'],
+      ['/docs/workflows/release-gate-in-ci', '/docs'],
+      ['/docs/workflows/sdk-and-mcp', '/docs'],
+      ['/docs/workflows/scheduled-monitoring', '/docs/app/release/monitoring'],
       ['/docs/workflows/operator-runbook', '/docs'],
       ['/docs/workflows/:slug', '/docs/journeys/:slug'],
       ['/docs/reference/:slug(deployment|configuration|authentication-rbac)', '/docs'],
       // The Self-host section was removed: the docs cover the product, not running it.
       ['/docs/self-host/:slug*', '/docs'],
+      // Developer pages were removed: the docs cover using the app.
+      ['/docs/build/:slug*', '/docs'],
+      ['/docs/reference/api', '/docs'],
+      ['/docs/reference/permissions-and-separation', '/docs/app/settings/settings'],
+      ['/docs/journeys/scheduled-monitoring', '/docs/app/release/monitoring'],
+      ['/docs/get-started/evidence-trust-review', '/docs/get-started/evidence-model'],
     ].map(([source, destination]) => ({ source, destination, permanent: true }));
   },
 };

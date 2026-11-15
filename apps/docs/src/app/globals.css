@@ -196,7 +196,6 @@ table.fm-anatomy { display: table; table-layout: fixed; width: 100% !important; 
 .fm-anatomy th { width: 28%; padding: 0.8rem 1rem; text-align: left; vertical-align: top; font-weight: 600; background: var(--fm-sunken); }
 .fm-anatomy td { padding: 0.8rem 1rem; line-height: 1.55; color: var(--fm-ink2); }
 .fm-anatomy tr + tr th, .fm-anatomy tr + tr td { border-top: 1px solid var(--fm-line); }
-.fm-anatomy .api { display: flex; flex-direction: column; font-size: 0.8rem; color: var(--fm-ink); }
 
 /* Right rail and footer */
 .fm-rail { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1.25rem; }

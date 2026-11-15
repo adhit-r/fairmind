@@ -41,8 +41,8 @@ Five checks: fairness, data governance, human oversight, monitoring and environm
 - **Attested**: anything else on file, such as a person's statement. It counts for little.
 - **Open**: nothing on file, or a monitoring snapshot older than one and a half cadences.
 
-The verdict comes from the system's risk tier and the overall confidence across the five checks: `go`, `conditional_go` or `no_go`. A measured fairness failure never passes as a plain `go`, and failing blocking policy rules force `no_go`.
+The verdict comes from the system's risk tier and the overall confidence across the five checks: **go**, **conditional go** or **no go**. A measured fairness failure never passes as a plain **go**, and failing blocking policy rules force **no go**.
 
 ## Decision
 
-A person approves or rejects a release request. The gate informs the decision; it never makes it. A rejection makes the verdict `no_go` until a reviewer approves a new request, and approval is refused while critical findings are open.
+A person approves or rejects a release request. The gate informs the decision; it never makes it. A rejection makes the verdict **no go** until a reviewer approves a new request, and approval is refused while critical findings are open.

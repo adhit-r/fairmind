@@ -1,115 +1,53 @@
 ---
 title: Quickstart
-description: From an API key to your first release verdict.
+description: Sign in, register one AI system, test it and read its release verdict, all in the app.
 ---
 
 <Status state="shipped" />
 
-This guide gets you a FairMind server, an API key, and a first verdict on one AI system. It takes about ten minutes on a running server.
+This guide takes one AI system from registration to a release verdict. It takes about ten minutes and happens entirely in the app.
 
 <Steps>
 <Step>
-### Get a FairMind server
+### Sign in
 
-<Tabs groupId="server" items={['Hosted', 'Run locally']} persist>
-<Tab value="Hosted">
+Go to [app.fairmind.xyz](https://app.fairmind.xyz) and sign in. New accounts wait for an administrator to approve them.
 
-Sign in at [app.fairmind.xyz](https://app.fairmind.xyz). New accounts wait for an administrator to approve them.
-
-</Tab>
-<Tab value="Run locally">
-
-You need Python 3.11 or later, [`uv`](https://docs.astral.sh/uv/), Node.js and a PostgreSQL database.
-
-```bash title="Terminal 1: API"
-cd apps/backend
-uv sync
-uv run python scripts/setup_db.py      # creates the schema
-uv run python -m uvicorn api.main:app --reload --port 8000
-```
-
-```bash title="Terminal 2: dashboard"
-cd apps/frontend
-npm install
-NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev   # http://localhost:1111
-```
-
-`curl http://localhost:8000/health/ready` should answer before you go on.
-
-</Tab>
-</Tabs>
+To look around first, press **Try the demo** on the sign-in page. The demo is a full organisation with real evidence, and it is read-only, so you can open every page but not change anything.
 </Step>
 
 <Step>
 ### Register a system
 
-In the dashboard, open **Onboard** and record the system's name, owner, risk tier and the frameworks that apply. [Register a system](/docs/journeys/register-system) explains each field.
+Open **Inventory › AI systems** and press **Register systems**. Enter the system's name, owner, risk tier and the frameworks that apply, or upload a CSV to register several at once. FairMind opens the new system file. [Register a system](/docs/journeys/register-system) explains each field.
+
+Already have models in MLflow, GitHub or Hugging Face? [Discovery](/docs/app/inventory/discovery) finds them for you, and **Register it** turns a found item into a system.
 </Step>
 
 <Step>
-### Create an API key
+### Confirm the tier
 
-While signed in, create a key with `POST /api/v1/auth/api-keys` and a name. Keys are valid for 365 days and act as the user who created them, in that user's organisations.
-
-```bash
-export FAIRMIND_API_URL=https://app.fairmind.xyz   # or http://localhost:8000
-export FAIRMIND_API_KEY=...                        # never commit it
-```
-
-<Callout type="info">There is no API key page in Settings yet; create keys through the API.</Callout>
-</Step>
-
-<Step>
-### Install the SDK
-
-<Tabs groupId="pkg" items={['pip', 'uv']} persist>
-<Tab value="pip">
-```bash
-pip install fairmind
-```
-</Tab>
-<Tab value="uv">
-```bash
-uv add fairmind
-```
-</Tab>
-</Tabs>
+In the system file, read **What it is** and press **Confirm tier and rules**. The risk tier sets how much evidence a release needs.
 </Step>
 
 <Step>
 ### Read the release gate
 
-```python title="first_verdict.py"
-from fairmind import FairMind
-
-fm = FairMind()  # reads FAIRMIND_API_URL and FAIRMIND_API_KEY
-
-system = fm.systems()[0]["id"]
-gate = fm.gate(system)
-
-print(gate["verdict"], gate["confidence"])   # go, conditional_go or no_go
-for check in gate["checks"]:
-    print(check["label"], check["state"])    # proven, attested or open
-```
-
-A new system reads `no_go` with every check open. That is expected: nothing has been measured yet.
+**Release gate** shows the verdict (go, conditional go or no go), the confidence and one bar per check. A new system reads no go with every check open. That is expected: nothing has been measured yet. **Why this verdict** lists the reasons.
 </Step>
 
 <Step>
 ### Measure something
 
-Find an evaluation FairMind can run, then run it. Results are stored as measured evidence on the system and the gate updates.
+**What it needs** lists the next steps, each marked **Agent** or **Person** with how much confidence it adds. Press **Run the test** on one, or open [Testing › Evaluations](/docs/app/testing/evaluations) to pick a check from the catalogue and press **Open to run**.
 
-```python
-for e in fm.evaluations(query="prompt injection"):
-    if e["runnable"]:          # the others accept evidence from your own tools
-        print(e["id"], e["name"])
+Behaviour tests call your system and have your organisation's model judge the answers, so they need two things first: a model key under **Settings › AI provider**, and **how FairMind calls this AI system** set in the system file. Each result is stored as measured evidence and the gate updates.
+</Step>
 
-run = fm.run_evaluation(system, "EV-SEC-01")   # Direct prompt injection, a behaviour test
-print(run["status"], run["summary"])           # passed, failed or insufficient
-```
+<Step>
+### Ask for a decision
 
-A behaviour test calls your system and has your organisation's model judge the answers, so it needs two settings first: an **AI provider** in organisation settings, and **how FairMind calls this system** on the system's page. It runs as a background job; the SDK waits for it. Each evaluation takes different inputs, and `fm.evaluation_engine(id)` lists them. [Govern your first agent](/docs/journeys/govern-your-first-agent) walks through a full run.
+Press **Request release decision**. A reviewer opens the system file, presses **Decide** and approves or rejects. **Approve release** stays disabled while the verdict is no go. The decision is sealed with the evidence it rests on, and shows in [Release › Decisions](/docs/app/release/decisions).
 </Step>
 </Steps>
 
@@ -117,5 +55,6 @@ A behaviour test calls your system and has your organisation's model judge the a
 
 <Cards>
   <Card title="Core concepts" href="/docs/get-started/core-concepts" description="What a check, evidence and a verdict mean." />
-  <Card title="Block a risky release" href="/docs/build/release-gate-in-ci" description="Fail a CI job on no_go." />
+  <Card title="The app" href="/docs/app" description="Every page in the menu, with a recording and a click-through." />
+  <Card title="Govern your first agent" href="/docs/journeys/govern-your-first-agent" description="Test an agent's behaviour and its platform setup." />
 </Cards>
