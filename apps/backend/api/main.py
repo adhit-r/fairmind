@@ -775,21 +775,6 @@ def root():
         "environment": settings.environment,
         "status": "running",
         "description": settings.api_description,
-        "features": [
-            "Advanced Bias Detection & Fairness Analysis",
-            "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
-            "Multimodal Bias Detection (Image, Audio, Video)",
-            "Real-time Monitoring & Alerting",
-            "Model Explainability & Interpretability",
-            "OWASP AI Security Testing",
-            "Model Provenance & Lineage Tracking",
-            "Comprehensive Evaluation Pipeline",
-            "Production-Ready API with Security",
-            "Rate Limiting & Request Monitoring",
-            "Health Checks & System Monitoring",
-            "Error Tracking & Logging",
-            "Automated Testing & Quality Assurance"
-        ],
         "endpoints": {
             "health": "/health",
             "readiness": "/health/ready",

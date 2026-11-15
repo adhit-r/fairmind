@@ -152,17 +152,8 @@ def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)):
 
 @router.get("/country-metrics")
 def get_country_metrics(limit: int = 10, m: OrgMembership = Depends(org_member)):
-    """Get country performance metrics from database"""
-    try:
-        # Stub for now as table might be complex
-        return {
-            "success": True,
-            "data": [],
-            "count": 0
-        }
-    except Exception as e:
-        logger.error(f"Error getting country metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Not available yet: no query reads country metrics, so it answers 501 instead of an empty success."""
+    raise HTTPException(status_code=501, detail="Country metrics are not available yet.")
 
 @router.get("/dashboard-stats")
 def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
@@ -174,11 +165,11 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
             "activeScans": 0,
             "recentActivity": [],
             "systemHealth": {
-                "status": "healthy",
+                "status": None,  # set below from whether every query answered
                 "timestamp": datetime.now().isoformat(),
-                "version": "1.0.0"
             }
         }
+        failed = []
         
         with db_manager.get_session() as session:
             # Count models
@@ -190,7 +181,8 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 stats["totalModels"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting models: {e}")
-                stats["totalModels"] = 0
+                stats["totalModels"] = None  # unknown, not zero
+                failed.append("totalModels")
                 
             # Count datasets
             try:
@@ -200,7 +192,8 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 stats["totalDatasets"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting datasets (table may not exist): {e}")
-                stats["totalDatasets"] = 0
+                stats["totalDatasets"] = None  # unknown, not zero
+                failed.append("totalDatasets")
                 
             # Count active scans (from geographic_bias_analyses where compliance_status != 'completed')
             try:
@@ -212,7 +205,8 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 stats["activeScans"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting active scans: {e}")
-                stats["activeScans"] = 0
+                stats["activeScans"] = None  # unknown, not zero
+                failed.append("activeScans")
                 
             # Get recent activity - format as ActivityItem[]
             try:
@@ -237,6 +231,11 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
             except Exception as e:
                 logger.warning(f"Error fetching recent activity: {e}")
                 stats["recentActivity"] = []
+                failed.append("recentActivity")
+
+        stats["systemHealth"]["status"] = "degraded" if failed else "healthy"
+        if failed:
+            stats["systemHealth"]["unavailable"] = failed
 
         return {
             "success": True,
@@ -272,14 +271,16 @@ def get_models(m: OrgMembership = Depends(org_member)):
                     except:
                         metadata = {}
                 
-                # Extract accuracy from metadata if available
-                accuracy = metadata.get("accuracy") or metadata.get("r2_score") or 0.85
-                
-                # Handle dates
+                # Scores come from the model's own metadata; None when nothing measured them.
+                def metric(*keys):
+                    for k in keys:
+                        v = metadata.get(k)
+                        if isinstance(v, (int, float)) and not isinstance(v, bool):
+                            return float(v)
+                    return None
+
                 def format_date(date_value):
-                    if date_value is None:
-                        return datetime.now().isoformat()
-                    return str(date_value)
+                    return str(date_value) if date_value is not None else None
                 
                 model_dict = {
                     "id": str(row.id),
@@ -288,9 +289,9 @@ def get_models(m: OrgMembership = Depends(org_member)):
                     "type": row.model_type,
                     "version": row.version,
                     "status": "active" if row.status else "inactive",
-                    "accuracy": float(accuracy) if isinstance(accuracy, (int, float)) else 0.85,
-                    "bias_score": 0.15,
-                    "fairness_score": 0.88,
+                    "accuracy": metric("accuracy", "r2_score"),
+                    "bias_score": metric("bias_score"),
+                    "fairness_score": metric("fairness_score"),
                     "created_at": format_date(row.upload_date),
                     "updated_at": format_date(row.updated_at),
                     "tags": tags,

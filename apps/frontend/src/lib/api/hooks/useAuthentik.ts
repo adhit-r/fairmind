@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient as api } from "../api-client";
+import { generateCodeVerifier, generateState } from "@/lib/utils/oauth2";
 
 interface AuthTokenResponse {
   access_token: string;
@@ -34,15 +35,7 @@ interface UseAuthentikOptions {
  * Generate a random string for PKCE code_verifier
  * RFC 7636: code_verifier = 43*128unreserved characters
  */
-function generateCodeVerifier(): string {
-  const characters =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-  let result = "";
-  for (let i = 0; i < 128; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return result;
-}
+// (generateCodeVerifier comes from @/lib/utils/oauth2: crypto-random, not Math.random)
 
 /**
  * Generate code_challenge from code_verifier using SHA-256
@@ -63,9 +56,7 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
 /**
  * Generate a random state parameter for CSRF protection
  */
-function generateRandomState(): string {
-  return btoa(Math.random().toString()).substring(0, 43);
-}
+const generateRandomState = generateState;
 
 /**
  * Hook for Authentik OAuth2 authentication

@@ -64,8 +64,9 @@ class FrameworkReport:
 # ---------------------------------------------------------------------------
 
 def _ctx_has(ctx: dict, *keys: str) -> bool:
+    """True when the caller supplied a non-empty value for every key. A declaration, never a verification."""
     mc = ctx.get("model_context") or {}
-    return all(k in mc for k in keys)
+    return all(mc.get(k) not in (None, "", [], {}, False) for k in keys)
 
 
 # ---------------------------------------------------------------------------
@@ -74,37 +75,37 @@ def _ctx_has(ctx: dict, *keys: str) -> bool:
 
 def _eu_risk_classification(ctx: dict) -> Tuple[bool, str, str]:
     if ctx.get("risk_level"):
-        return True, "Risk level declared.", ""
+        return True, "Declared (not verified): risk level.", ""
     return False, "No risk level classification provided.", "Classify the AI system risk level per EU AI Act Article 6."
 
 
 def _eu_transparency(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "transparency_measures"):
-        return True, "Transparency measures documented.", ""
+        return True, "Declared (not verified): transparency measures documented.", ""
     return False, "No transparency measures documented.", "Document how users are informed they are interacting with AI (Article 52)."
 
 
 def _eu_human_oversight(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "human_oversight"):
-        return True, "Human oversight mechanisms described.", ""
+        return True, "Declared (not verified): human oversight mechanisms described.", ""
     return False, "Human oversight not documented.", "Describe human oversight mechanisms per Article 14."
 
 
 def _eu_data_governance(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "training_data_governance"):
-        return True, "Training data governance documented.", ""
+        return True, "Declared (not verified): training data governance documented.", ""
     return False, "Training data governance not documented.", "Document data governance practices per Article 10."
 
 
 def _eu_technical_documentation(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "technical_documentation"):
-        return True, "Technical documentation available.", ""
+        return True, "Declared (not verified): technical documentation available.", ""
     return False, "Technical documentation missing.", "Provide technical documentation per Annex IV."
 
 
 def _eu_record_keeping(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "logging_capabilities"):
-        return True, "Automatic logging capabilities described.", ""
+        return True, "Declared (not verified): automatic logging capabilities described.", ""
     return False, "No logging capabilities documented.", "Implement automatic event logging per Article 12."
 
 
@@ -128,31 +129,31 @@ EU_AI_ACT = FrameworkSpec(
 
 def _gdpr_lawful_basis(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "lawful_basis"):
-        return True, "Lawful basis for processing documented.", ""
+        return True, "Declared (not verified): lawful basis for processing documented.", ""
     return False, "Lawful basis not specified.", "Identify lawful basis under Article 6 GDPR."
 
 
 def _gdpr_dpia(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "dpia_conducted"):
-        return True, "DPIA completed.", ""
+        return True, "Declared (not verified): DPIA completed.", ""
     return False, "No DPIA conducted.", "Conduct a Data Protection Impact Assessment per Article 35."
 
 
 def _gdpr_data_minimisation(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "data_minimisation"):
-        return True, "Data minimisation measures documented.", ""
+        return True, "Declared (not verified): data minimisation measures documented.", ""
     return False, "Data minimisation not documented.", "Document data minimisation practices per Article 5(1)(c)."
 
 
 def _gdpr_rights(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "data_subject_rights"):
-        return True, "Data subject rights processes documented.", ""
+        return True, "Declared (not verified): data subject rights processes documented.", ""
     return False, "Data subject rights processes not documented.", "Implement processes for data subject rights (Articles 15-22)."
 
 
 def _gdpr_automated_decisions(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "automated_decision_safeguards"):
-        return True, "Automated decision-making safeguards in place.", ""
+        return True, "Declared (not verified): automated decision-making safeguards in place.", ""
     return False, "No safeguards for automated decision-making.", "Implement safeguards per Article 22 for automated decisions."
 
 
@@ -175,25 +176,25 @@ GDPR = FrameworkSpec(
 
 def _dpdp_consent(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "consent_mechanism"):
-        return True, "Consent mechanism documented.", ""
+        return True, "Declared (not verified): consent mechanism documented.", ""
     return False, "No consent mechanism documented.", "Implement consent mechanisms per Section 6 DPDP Act."
 
 
 def _dpdp_purpose_limitation(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "purpose_limitation"):
-        return True, "Purpose limitation documented.", ""
+        return True, "Declared (not verified): purpose limitation documented.", ""
     return False, "Purpose limitation not documented.", "Document purpose limitation per Section 4 DPDP Act."
 
 
 def _dpdp_data_principal_rights(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "data_principal_rights"):
-        return True, "Data principal rights processes documented.", ""
+        return True, "Declared (not verified): data principal rights processes documented.", ""
     return False, "Data principal rights not addressed.", "Implement data principal rights per Chapter III DPDP Act."
 
 
 def _dpdp_breach_notification(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "breach_notification"):
-        return True, "Breach notification process documented.", ""
+        return True, "Declared (not verified): breach notification process documented.", ""
     return False, "No breach notification process.", "Establish breach notification process per Section 8 DPDP Act."
 
 
@@ -215,31 +216,31 @@ DPDP_ACT = FrameworkSpec(
 
 def _iso_ai_policy(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "ai_policy"):
-        return True, "AI management policy documented.", ""
+        return True, "Declared (not verified): AI management policy documented.", ""
     return False, "No AI management policy.", "Establish an AI management system policy per ISO 42001 Clause 5."
 
 
 def _iso_risk_assessment(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "risk_assessment"):
-        return True, "AI risk assessment completed.", ""
+        return True, "Declared (not verified): AI risk assessment completed.", ""
     return False, "No AI risk assessment documented.", "Conduct AI risk assessment per ISO 42001 Clause 6.1."
 
 
 def _iso_objectives(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "ai_objectives"):
-        return True, "AI objectives defined.", ""
+        return True, "Declared (not verified): AI objectives defined.", ""
     return False, "AI objectives not defined.", "Define measurable AI objectives per ISO 42001 Clause 6.2."
 
 
 def _iso_performance_eval(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "performance_evaluation"):
-        return True, "Performance evaluation process documented.", ""
+        return True, "Declared (not verified): performance evaluation process documented.", ""
     return False, "No performance evaluation process.", "Implement performance evaluation per ISO 42001 Clause 9."
 
 
 def _iso_continual_improvement(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "continual_improvement"):
-        return True, "Continual improvement process documented.", ""
+        return True, "Declared (not verified): continual improvement process documented.", ""
     return False, "No continual improvement process.", "Establish continual improvement per ISO 42001 Clause 10."
 
 
@@ -262,25 +263,25 @@ ISO_42001 = FrameworkSpec(
 
 def _nist_govern(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "governance_structure"):
-        return True, "AI governance structure documented.", ""
+        return True, "Declared (not verified): AI governance structure documented.", ""
     return False, "No governance structure documented.", "Establish governance per NIST AI RMF GOVERN function."
 
 
 def _nist_map(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "risk_mapping"):
-        return True, "AI risk mapping completed.", ""
+        return True, "Declared (not verified): AI risk mapping completed.", ""
     return False, "Risk mapping not completed.", "Map AI risks per NIST AI RMF MAP function."
 
 
 def _nist_measure(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "risk_metrics"):
-        return True, "Risk metrics defined.", ""
+        return True, "Declared (not verified): risk metrics defined.", ""
     return False, "No risk metrics defined.", "Define risk metrics per NIST AI RMF MEASURE function."
 
 
 def _nist_manage(ctx: dict) -> Tuple[bool, str, str]:
     if _ctx_has(ctx, "risk_management_plan"):
-        return True, "Risk management plan in place.", ""
+        return True, "Declared (not verified): risk management plan in place.", ""
     return False, "No risk management plan.", "Create risk management plan per NIST AI RMF MANAGE function."
 
 

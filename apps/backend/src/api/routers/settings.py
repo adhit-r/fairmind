@@ -46,13 +46,20 @@ async def update_settings(
         return {
             "success": True,
             "data": payload.model_dump(exclude_none=True),
-            "message": "Settings updated (fallback mode)",
+            "persisted": False,
+            "message": "Settings were not saved: the settings service is unavailable.",
         }
 
     try:
         updated = await settings_service.update_settings(
             current_user.user_id, payload.model_dump(exclude_none=True), current_user.email
         )
-        return {"success": True, "data": updated.__dict__, "message": "Settings updated"}
+        # ponytail: in-memory store; add a user_settings table when settings must survive a restart
+        return {
+            "success": True,
+            "data": updated.__dict__,
+            "persisted": False,
+            "message": "Settings updated for this server session; they reset when the server restarts.",
+        }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

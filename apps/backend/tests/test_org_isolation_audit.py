@@ -382,7 +382,7 @@ def test_bias_history_and_export_are_per_organisation(client, clean_bias_history
 
 def test_bias_library_install_is_platform_admin_only(client):
     assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A).status_code == 403
-    assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A_ADMIN).status_code == 200
+    assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A_ADMIN).status_code == 501  # admin passes the gate; installing is not supported
 
 
 # --------------------------------------------------------------------------- stateless compute still works when signed in
@@ -954,7 +954,7 @@ def test_compliance_violations_are_per_organisation(automation):
     assert automation.get("/api/v1/compliance/violations/violation-orphan", headers=A).status_code == 404
     assert automation.patch(
         f"/api/v1/compliance/violations/violation-{ORG_B}/acknowledge", headers=A, json={"notes": "n"}
-    ).status_code == 404
+    ).status_code == 501  # not stored yet, refused for every violation alike
 
 
 def test_compliance_schedules_of_another_organisation_are_not_found(automation):

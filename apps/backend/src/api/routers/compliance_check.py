@@ -55,6 +55,8 @@ class ComplianceCheckResponse(BaseModel):
     results: List[Dict[str, Any]]
     gaps: List[Dict[str, Any]]
     timestamp: datetime
+    # "self_reported": scored from the system_data the caller sent, not from anything FairMind measured
+    evidence_source: str = "self_reported"
 
 
 class EvidenceResponse(BaseModel):
@@ -260,7 +262,8 @@ async def get_model_compliance(
         # AUTOMATED: Collect evidence from FairMind's existing features
         system_data = await automated_collector.collect_evidence_for_model(
             model_id=model_id,
-            framework=framework
+            framework=framework,
+            db=db,
         )
         
         # Run compliance check with automatically collected evidence

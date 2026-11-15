@@ -179,12 +179,10 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
         
         category = category_mapping[request.model_type]
         
-        # Convert custom templates if provided
-        custom_templates = None
+        # Refuse rather than silently run the defaults in their place
         if request.custom_templates:
-            # This would convert the custom templates to BiasTestTemplate objects
-            # For now, we'll use the default templates
-            pass
+            raise HTTPException(status_code=422, detail="custom_templates are not supported yet; send the request without them to run the default templates.")
+        custom_templates = None
         
         # Run bias detection
         results = await llm_bias_service.detect_bias(
@@ -336,105 +334,28 @@ def run_fairness_metrics(
         raise HTTPException(status_code=500, detail=f"Fairness metrics failed: {str(e)}")
 
 @router.post("/test/image")
-async def analyze_image_bias(
+def analyze_image_bias(
     images: List[UploadFile] = File(...),
     test_prompts: str = Form(...),  # JSON string of test prompts
     expected_features: str = Form(...)  # JSON string of expected features
 ):
-    """
-    Analyze images for bias using computer vision libraries
-    
-    This endpoint can detect various types of visual bias including:
-    - Hand preference bias (left vs right handed)
-    - Cultural representation bias
-    - Demographic bias in visual features
-    - Accessibility bias
-    """
-    try:
-        # Parse JSON inputs
-        prompts = json.loads(test_prompts)
-        features = json.loads(expected_features)
-        
-        # Save uploaded images temporarily
-        image_paths = []
-        for i, image in enumerate(images):
-            # In production, you'd save to a proper storage system
-            temp_path = f"/tmp/bias_test_image_{i}_{datetime.now().timestamp()}.jpg"
-            with open(temp_path, "wb") as f:
-                f.write(image.file.read())
-            image_paths.append(temp_path)
-        
-        # Analyze images for bias
-        results = await bias_testing_library.analyze_image_bias(
-            image_paths=image_paths,
-            test_prompts=prompts,
-            expected_features=features
-        )
-        
-        # Clean up temporary files
-        import os
-        for path in image_paths:
-            if os.path.exists(path):
-                os.remove(path)
-        
-        return {
-            "success": True,
-            "results": [
-                {
-                    "image_index": i,
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "metadata": result.metadata
-                } for i, result in enumerate(results)
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing image bias: {e}")
-        raise HTTPException(status_code=500, detail=f"Image bias analysis failed: {str(e)}")
+    """Not available yet: answers 501 until an image analyser is connected."""
+    raise HTTPException(
+        status_code=501,
+        detail="Image bias analysis is not available yet: no analyser is connected, so no score can be given.",
+    )
 
 @router.post("/test/text")
-async def analyze_text_bias(
+def analyze_text_bias(
     texts: List[str] = Form(...),
     test_prompts: List[str] = Form(...),
     sensitive_attributes: List[str] = Form(...)
 ):
-    """
-    Analyze text for bias using NLP libraries
-    
-    This endpoint can detect various types of text bias including:
-    - Gender bias in role assignments
-    - Age bias in descriptions
-    - Cultural bias in language use
-    - Linguistic bias in dialect representation
-    """
-    try:
-        # Run text bias analysis
-        results = await bias_testing_library.analyze_text_bias(
-            texts=texts,
-            test_prompts=test_prompts,
-            sensitive_attributes=sensitive_attributes
-        )
-        
-        return {
-            "success": True,
-            "results": [
-                {
-                    "text_index": i,
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "metadata": result.metadata
-                } for i, result in enumerate(results)
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing text bias: {e}")
-        raise HTTPException(status_code=500, detail=f"Text bias analysis failed: {str(e)}")
+    """Not available yet: answers 501 until a text analyser is connected."""
+    raise HTTPException(
+        status_code=501,
+        detail="Text bias analysis is not available yet: no analyser is connected, so no score can be given.",
+    )
 
 @router.post("/templates")
 def add_custom_template():
@@ -493,28 +414,10 @@ def get_available_libraries():
 @router.post("/libraries/{library_name}/install", dependencies=[Depends(require_admin)])
 def install_library(library_name: str):
     """Install a specific bias testing library"""
-    try:
-        # Find the library enum
-        library = None
-        for lib in TestingLibrary:
-            if lib.value == library_name:
-                library = lib
-                break
-        
-        if not library:
-            raise HTTPException(status_code=400, detail=f"Unknown library: {library_name}")
-        
-        # Attempt to install
-        success = bias_testing_library.install_library(library)
-        
-        if success:
-            return {"success": True, "message": f"Library {library_name} installation requested"}
-        else:
-            return {"success": False, "message": f"Failed to install library {library_name}"}
-            
-    except Exception as e:
-        logger.error(f"Error installing library {library_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"Installation failed: {str(e)}")
+    raise HTTPException(
+        status_code=501,
+        detail=f"Installing {library_name} from the app is not supported; add it to the backend's dependencies instead.",
+    )
 
 def _own(rows, org_id: str) -> list:
     return [r for r in rows if r.get("org_id") == org_id]

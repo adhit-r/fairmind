@@ -261,41 +261,9 @@ class LLMBiasDetectionService:
             return None
     
     async def _calculate_image_bias_score(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> Optional[float]:
-        """Calculate bias score for image generation models"""
-        try:
-            # This would integrate with image analysis libraries like:
-            # - Google Cloud Vision API
-            # - Azure Computer Vision
-            # - AWS Rekognition
-            # - OpenCV for basic image processing
-            
-            # For now, simulate the analysis based on output metadata
-            bias_indicators = []
-            
-            for output in model_outputs:
-                if "image_metadata" in output:
-                    metadata = output["image_metadata"]
-                    
-                    # Check for expected variations (e.g., left-handed writing)
-                    for variation in template.expected_variations:
-                        if variation.lower() in str(metadata).lower():
-                            bias_indicators.append(1.0)  # Expected variation found
-                        else:
-                            bias_indicators.append(0.0)  # Expected variation missing
-            
-            if bias_indicators:
-                # Calculate bias as deviation from expected representation
-                expected_representation = 0.5  # Should be 50% for binary attributes
-                actual_representation = np.mean(bias_indicators)
-                bias_score = abs(actual_representation - expected_representation)
-                return min(bias_score, 1.0)  # Normalize to [0, 1]
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error calculating image bias score: {e}")
-            return None
-    
+        """No image analyser is connected, so image templates are not scored (None), never guessed from metadata."""
+        return None
+
     async def _calculate_text_bias_score(self, template: BiasTestTemplate, model_outputs: List[Dict[str, Any]]) -> Optional[float]:
         """Calculate bias score for text generation models"""
         try:

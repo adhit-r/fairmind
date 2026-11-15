@@ -33,6 +33,46 @@ from src.application.services.governance_assurance_service import (
 )
 
 logger = logging.getLogger("fairmind.org_management")
+
+def _count(values) -> dict:
+    out: dict = {}
+    for v in values:
+        if v:
+            out[v] = out.get(v, 0) + 1
+    return out
+
+
+def _audit_report_pdf(report: dict) -> bytes:
+    """The audit report as a real PDF: period, summary and every audit-log row."""
+    from io import BytesIO
+
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    period, summary = report["report_period"], report["summary"]
+    story = [
+        Paragraph("Audit report", styles["Title"]),
+        Paragraph(f"Period: {period['start']} to {period['end']}", styles["Normal"]),
+        Paragraph(f"Events: {summary['total_events']} &nbsp; Users: {summary['unique_users']}", styles["Normal"]),
+        Spacer(1, 12),
+    ]
+    cols = ["timestamp", "user_email", "action", "resource_type", "resource_id", "ip_address"]
+    rows = [cols] + [[str(e.get(c) or "") for c in cols] for e in report["audit_log"]]
+    table = Table(rows, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f4f4f2")]),
+    ]))
+    story.append(table if report["audit_log"] else Paragraph("No audit events in this period.", styles["Normal"]))
+    buf = BytesIO()
+    SimpleDocTemplate(buf, pagesize=landscape(A4), title="Audit report").build(story)
+    return buf.getvalue()
+
 router = APIRouter(prefix="/api/v1/organizations", tags=["organization-management"])
 
 
@@ -1301,7 +1341,10 @@ async def get_audit_report(
                 "metrics": {
                     "events_per_day": events_per_day_list,
                     "action_distribution": action_distribution,
-                    "top_users": []  # Can be populated if needed
+                    "top_users": sorted(
+                        ({"user": u, "count": c} for u, c in _count(e.get("user_email") for e in audit_log).items()),
+                        key=lambda x: x["count"], reverse=True,
+                    )[:5],
                 },
                 "audit_log": audit_log
             }
@@ -1326,10 +1369,8 @@ async def get_audit_report(
                 )
 
             elif format == "pdf":
-                # For PDF, return JSON for now (PDF generation would require additional library)
-                # In production, use pypdf or reportlab
                 return StreamingResponse(
-                    iter([json.dumps(report_data)]),
+                    iter([_audit_report_pdf(report_data)]),
                     media_type="application/pdf",
                     headers={
                         "Content-Disposition": f"attachment; filename=audit-report-{end_date}.pdf"

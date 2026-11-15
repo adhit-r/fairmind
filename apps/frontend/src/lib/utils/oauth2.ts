@@ -13,10 +13,17 @@
  * @returns A random 128-character code verifier
  */
 export function generateCodeVerifier(): string {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'
+  return randomString(128, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~')
+}
+
+/** Cryptographically random string over `characters`; rejection sampling keeps every character equally likely. */
+export function randomString(length: number, characters: string): string {
+  const limit = 256 - (256 % characters.length)
   let result = ''
-  for (let i = 0; i < 128; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length))
+  while (result.length < length) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(length))) {
+      if (byte < limit && result.length < length) result += characters[byte % characters.length]
+    }
   }
   return result
 }
@@ -42,12 +49,7 @@ export async function generateCodeChallenge(codeVerifier: string): Promise<strin
  * @returns A random state string
  */
 export function generateState(): string {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < 32; i++) {
-    result += characters.charAt(Math.floor(Math.random() * characters.length))
-  }
-  return result
+  return randomString(32, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789')
 }
 
 /**

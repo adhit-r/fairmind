@@ -39,7 +39,8 @@ class AutomatedEvidenceCollector:
     async def collect_evidence_for_model(
         self,
         model_id: str,
-        framework: str = "eu_ai_act"
+        framework: str = "eu_ai_act",
+        db: Any = None,
     ) -> Dict[str, Any]:
         """
         Automatically collect all evidence for a specific model
@@ -82,7 +83,7 @@ class AutomatedEvidenceCollector:
         evidence["model_card"] = await self._collect_model_card_evidence(model_id)
         
         # 12. Human Oversight Evidence (from Model Service)
-        evidence["human_oversight"] = await self._collect_human_oversight_evidence(model_id)
+        evidence["human_oversight"] = await self._collect_human_oversight_evidence(model_id, db)
         
         return evidence
     
@@ -117,7 +118,7 @@ class AutomatedEvidenceCollector:
             
             return {
                 "completeness": completeness,
-                "accuracy": 0.95,  # Would need ground truth for real accuracy
+                "accuracy": 0.0,  # not measurable without ground truth; never claimed
                 "consistency": consistency,
                 "missing_rate": missing_values / total_rows if total_rows > 0 else 0.0,
                 "total_rows": total_rows,
@@ -153,8 +154,8 @@ class AutomatedEvidenceCollector:
                 "pii_detected": pii_detected,
                 "pii_anonymized": not pii_detected,  # If no PII detected, consider it anonymized
                 "consent_tracked": model_info.get("consent_tracked", False),
-                "data_minimization_applied": model_info.get("data_minimization", True),
-                "retention_policy_defined": model_info.get("retention_policy", True),
+                "data_minimization_applied": model_info.get("data_minimization", False),
+                "retention_policy_defined": model_info.get("retention_policy", False),
                 "source": "fairmind_privacy_check"
             }
             
@@ -288,7 +289,6 @@ class AutomatedEvidenceCollector:
             if not monitoring_data:
                 return {
                     "monitoring_enabled": False,
-                    "accuracy_change": 0.0,
                     "alerts_configured": False,
                     "source": "default"
                 }
@@ -311,7 +311,6 @@ class AutomatedEvidenceCollector:
             print(f"Error collecting drift evidence: {e}")
             return {
                 "monitoring_enabled": False,
-                "accuracy_change": 0.0,
                 "alerts_configured": False,
                 "source": "default"
             }
@@ -416,125 +415,77 @@ class AutomatedEvidenceCollector:
             print(f"Error collecting model card evidence: {e}")
             return {}
     
-    async def _collect_human_oversight_evidence(self, model_id: str) -> Dict[str, Any]:
-        """Collect human oversight evidence"""
-        
+    async def _collect_human_oversight_evidence(self, model_id: str, db: Any = None) -> Dict[str, Any]:
+        """Human oversight from the system's own human_oversight attestation, the record the release gate reads.
+
+        The attestation states who reviews or can override the system's decisions, so it evidences those two
+        checks only. Escalation and operator training stay False until something records them.
+        """
+        not_collected = {
+            "review_process": False,
+            "human_override_enabled": False,
+            "escalation_defined": False,
+            "operator_training": False,
+            "source": "not_collected",
+        }
+        if db is None:
+            return not_collected
         try:
-            model_info = await self._get_model_info(model_id)
-            oversight = model_info.get("human_oversight", {})
-            
-            return {
-                "review_process": oversight.get("review_process_defined", False),
-                "human_override_enabled": oversight.get("override_enabled", False),
-                "escalation_defined": oversight.get("escalation_path", False),
-                "operator_training": oversight.get("training_provided", False),
-                "source": "fairmind_model_registry"
-            }
-            
+            from sqlalchemy import text
+
+            row = db.execute(
+                text(
+                    "SELECT id, content_json, created_at FROM governance_evidence "
+                    "WHERE system_id = :id AND lower(evidence_type) = 'human_oversight' "
+                    "ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"id": model_id},
+            ).fetchone()
         except Exception as e:
             print(f"Error collecting human oversight evidence: {e}")
-            return {
-                "review_process": False,
-                "human_override_enabled": False,
-                "escalation_defined": False,
-                "operator_training": False,
-                "source": "default"
-            }
-    
+            return not_collected
+        if not row:
+            return not_collected
+        content = json.loads(row[1] or "{}") if isinstance(row[1], str) else (row[1] or {})
+        return {
+            "review_process": True,
+            "human_override_enabled": True,
+            "escalation_defined": False,
+            "operator_training": False,
+            "source": "attestation",
+            "evidence_id": row[0],
+            "attested_by": content.get("attested_by"),
+            "statement": content.get("statement"),
+            "attested_at": str(row[2]),
+        }
+
     # Helper methods to integrate with FairMind's existing services
     
     async def _get_model_info(self, model_id: str) -> Dict[str, Any]:
         """Get model information from FairMind's model registry"""
-        # This would integrate with your actual model service
-        # For now, return a placeholder
-        return {
-            "id": model_id,
-            "name": f"Model {model_id}",
-            "dataset_id": f"dataset_{model_id}",
-            "version": "1.0.0",
-            "git_repo": "https://github.com/org/repo",
-            "registry_url": "http://localhost:8000/models",
-            "rbac_enabled": True,
-            "training_restricted": True,
-            "deployment_restricted": True,
-            "access_logging": True,
-            "lineage_tracked": True,
-            "logging_config": {
-                "log_predictions": True,
-                "log_inputs": True,
-                "log_decisions": True,
-                "retention_days": 365
-            },
-            "documentation": {
-                "architecture": "System architecture document",
-                "data_flow": "Data flow diagram",
-                "risk_assessment": "Risk assessment report",
-                "testing": "Testing procedures",
-                "deployment": "Deployment guide"
-            },
-            "model_card": {
-                "model_details": {"name": "Model", "version": "1.0"},
-                "intended_use": {"primary_use": "Classification"},
-                "factors": {"relevant_factors": ["age", "gender"]},
-                "metrics": {"accuracy": 0.95},
-                "training_data": {"source": "Internal dataset"},
-                "evaluation_data": {"source": "Test set"},
-                "ethical_considerations": {"bias_mitigation": "Applied"}
-            },
-            "human_oversight": {
-                "review_process_defined": True,
-                "override_enabled": True,
-                "escalation_path": True,
-                "training_provided": True
-            }
-        }
-    
+        # No source for this yet: report nothing rather than invent values.
+        return {}
+
     async def _get_dataset(self, dataset_id: str) -> List[Dict[str, Any]]:
         """Get dataset from FairMind's dataset service"""
-        # This would integrate with your actual dataset service
-        # For now, return a sample dataset
-        return [
-            {"feature1": 1, "feature2": "A", "label": 0},
-            {"feature1": 2, "feature2": "B", "label": 1},
-            {"feature1": 3, "feature2": "C", "label": 0},
-        ]
-    
+        # No source for this yet: report nothing rather than invent values.
+        return []
+
     async def _get_bias_test_results(self, model_id: str) -> Optional[Dict[str, Any]]:
         """Get bias test results from FairMind's bias detection service"""
-        # This would query your actual bias test results database
-        return {
-            "test_id": f"bias_test_{model_id}",
-            "demographic_parity": 0.95,
-            "equal_opportunity": 0.92,
-            "group_sizes": {"group_a": 100, "group_b": 95},
-            "timestamp": datetime.now().isoformat()
-        }
-    
+        # No source for this yet: report nothing rather than invent values.
+        return None
+
     async def _get_security_test_results(self, model_id: str) -> Optional[Dict[str, Any]]:
         """Get security test results"""
-        # This would query your actual security test results
-        return {
-            "test_id": f"security_test_{model_id}",
-            "fgsm_accuracy": 0.75,
-            "pgd_accuracy": 0.68,
-            "input_validation": True
-        }
-    
+        # No source for this yet: report nothing rather than invent values.
+        return None
+
     async def _get_monitoring_data(self, model_id: str) -> Optional[Dict[str, Any]]:
         """Get monitoring data from FairMind's monitoring service"""
-        # This would query your actual monitoring service
-        return {
-            "baseline_accuracy": 0.95,
-            "current_accuracy": 0.93,
-            "alerts_enabled": True,
-            "fairness_monitoring": {
-                "enabled": True,
-                "metrics": ["demographic_parity", "equal_opportunity", "equalized_odds"],
-                "thresholds": {"demographic_parity": 0.8},
-                "alerts_enabled": True
-            }
-        }
-    
+        # No source for this yet: report nothing rather than invent values.
+        return None
+
     def _default_dataset_quality(self) -> Dict[str, Any]:
         """Default dataset quality metrics"""
         return {
