@@ -38,12 +38,6 @@ compliance_service = ComplianceReportingService()
 
 
 # Request/Response Models
-class ComplianceCheckRequest(BaseModel):
-    """Request model for compliance check"""
-    framework: RegulatoryFramework = Field(..., description="Regulatory framework to check")
-    system_data: Dict[str, Any] = Field(..., description="AI system data and evidence")
-
-
 class AuditReportRequest(BaseModel):
     """Request model for audit report generation"""
     system_id: str = Field(..., description="AI system identifier")
@@ -99,26 +93,7 @@ def get_framework_requirements(framework: RegulatoryFramework):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/check")
-async def check_compliance(request: ComplianceCheckRequest):
-    """
-    Check compliance against a regulatory framework
-    
-    Args:
-        request: Compliance check request with framework and system data
-        
-    Returns:
-        Compliance assessment results
-    """
-    try:
-        result = await compliance_service.check_compliance(
-            framework=request.framework,
-            system_data=request.system_data,
-        )
-        
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# POST /check lives in compliance_check (mounted first); a second one here could never be reached.
 
 
 @router.post("/audit-report", dependencies=[Depends(org_member)])

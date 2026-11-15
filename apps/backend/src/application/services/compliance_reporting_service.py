@@ -838,7 +838,7 @@ class ComplianceReportingService:
                 "open_recommendations": sum(len(r.get("recommendations", [])) for r in compliance_results),
             },
             "trends": {
-                "compliance_trend": "improving",  # Would calculate from historical data
+                "compliance_trend": None,  # needs historical assessments; none are kept
                 "last_assessment_date": datetime.utcnow().isoformat(),
             },
             "key_metrics": {

@@ -152,17 +152,8 @@ def get_audit_logs(limit: int = 10, m: OrgMembership = Depends(org_member)):
 
 @router.get("/country-metrics")
 def get_country_metrics(limit: int = 10, m: OrgMembership = Depends(org_member)):
-    """Get country performance metrics from database"""
-    try:
-        # Stub for now as table might be complex
-        return {
-            "success": True,
-            "data": [],
-            "count": 0
-        }
-    except Exception as e:
-        logger.error(f"Error getting country metrics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    """Not available yet: no query reads country metrics, so it answers 501 instead of an empty success."""
+    raise HTTPException(status_code=501, detail="Country metrics are not available yet.")
 
 @router.get("/dashboard-stats")
 def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
