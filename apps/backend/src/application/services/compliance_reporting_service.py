@@ -626,7 +626,7 @@ class ComplianceReportingService:
             "report_date": datetime.utcnow().isoformat(),
             "system_name": system_data.get("name", "Unknown"),
             "system_description": system_data.get("description", ""),
-            "risk_level": system_data.get("risk_level", RiskLevel.MINIMAL),
+            "risk_level": system_data.get("risk_level"),  # None: not classified
             "overall_compliance_score": avg_score,
             "frameworks_assessed": [f.value for f in frameworks],
             "compliance_results": compliance_results,
@@ -718,7 +718,7 @@ class ComplianceReportingService:
                 "metrics_evaluated": bias_test_results.get("metrics", []),
                 "protected_attributes": bias_test_results.get("protected_attributes", []),
                 "fairness_scores": bias_test_results.get("scores", {}),
-                "bias_detected": bias_test_results.get("bias_detected", False),
+                "bias_detected": bias_test_results.get("bias_detected"),  # None: not reported
             },
             "mitigation_strategies": self._generate_mitigation_strategies(bias_test_results),
             "monitoring_plan": self._generate_monitoring_plan(),
@@ -843,7 +843,7 @@ class ComplianceReportingService:
                 "open_recommendations": sum(len(r.get("recommendations", [])) for r in compliance_results),
             },
             "trends": {
-                "compliance_trend": "improving",  # Would calculate from historical data
+                "compliance_trend": None,  # needs historical assessments; none are kept
                 "last_assessment_date": datetime.utcnow().isoformat(),
             },
             "key_metrics": {

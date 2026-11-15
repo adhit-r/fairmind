@@ -1,0 +1,50 @@
+---
+title: Plan
+description: Answer a few questions, get a governance plan, and track each control from to do to proven.
+---
+
+<Status state="partial">Without an AI provider set up for your organisation, the page reads your free-text answer with keyword rules and says so ("Keyword reading"). With one, it says "Reading with your AI provider". Either way you can correct what it filled in.</Status>
+
+<Access status="partial" where="Rules › Plan" address="/plan" change="Organisation mutation access (owner or admin role, or the model:write permission)" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/rules/plan" /></Tab>
+  <Tab value="Try it"><TryIt page="app/rules/plan" /></Tab>
+</Tabs>
+
+## What it is for
+
+The plan turns the frameworks you answer to into tasks. Each task is a control, with an owner, the systems it covers, and what proves it. The page has two states: setting the plan up, and working it.
+
+## How to use it
+
+**Set it up.** Until a plan exists the page shows **Set up your governance plan**.
+
+1. Answer each question. The kind of question decides the control: type a sentence and press **Send**, press one option, tick several and press **Continue**, or set a level for each control.
+2. When asked about frameworks, tick the suggested ones, add others with **Add another framework** and **Add**, then press **Confirm frameworks**. FairMind pre-ticks from your inventory where it can.
+3. The side panel, **What I have mapped**, fills in as you answer and says whether each fact is from your answer, your description or your inventory.
+4. When no question is left, the page says **I have what I need** and counts the controls. Press **Build my plan**. It will not build before frameworks are confirmed.
+
+**Work it.** The heading then reads "N of M controls proven", with a progress bar.
+
+1. Read the five lanes: **To do**, **Needs you**, **Agent working**, **In review** and **Proven**. Press **Refresh** to re-read the plan.
+2. Click a card to open the task. It shows the control id, priority and objective.
+3. Under **Owner**, type a name or email in **Assign to** and press **Assign**. If a suggested owner exists the button reads **Accept suggestion**.
+4. Write context under **Note** and press **Save note**.
+5. For an organisation-level task, **Already in place?** lets you record what exists. Write **What is in place, and since when** (at least 12 characters), optionally **Where the evidence is**, then press **Attest**. It counts as attested, not measured.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/rules/plan" />
+
+## What's on the page
+
+A task drawer also lists the systems it covers with their progress, what the task **Comes after**, **How to do it** (workflows, and whether their pack is installed), and **Requirements it closes** grouped by framework.
+
+A **What changed** banner shows the latest change to the plan. If the plan cannot load, the page reads **The plan could not load** with **Try again**.
+
+Related: [Frameworks](./frameworks.mdx), [Needs you](../home/needs-you.mdx), [Govern your first agent](../../journeys/govern-your-first-agent.mdx).
+
+<PageAnatomy route="plan" />

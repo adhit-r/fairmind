@@ -2,7 +2,6 @@
  * API hooks barrel export for better tree-shaking
  */
 
-export { useDashboard } from './useDashboard'
 export { useAuth } from './useAuth'
 export { useModels } from './useModels'
 export { useProvenance } from './useProvenance'

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -86,17 +87,26 @@ async def _enforce_org_scope(request: Request, db: Session = Depends(get_db)) ->
     Checked once here for path, query and JSON body ids, so individual routes
     cannot forget it. A foreign id answers 404, never 403, to avoid confirming
     that it exists.
+
+    Only reading the body is async. The queries run in the threadpool: on the
+    event loop, a wait for a free pooled connection froze every request,
+    including the ones holding connections, until the 30 s pool timeout.
     """
-    _resolve_caller_org(request, db)
-    org_id = _caller_org(request)
-    sources = [request.path_params, request.query_params]
+    body = None
     if request.method in ("POST", "PUT", "PATCH") and "json" in request.headers.get("content-type", ""):
         try:
             body = await request.json()
         except ValueError:
             body = None
-        if isinstance(body, dict):
-            sources.append(body)
+    await run_in_threadpool(_check_org_scope, request, db, body)
+
+
+def _check_org_scope(request, db: Session, body) -> None:
+    _resolve_caller_org(request, db)
+    org_id = _caller_org(request)
+    sources = [request.path_params, request.query_params]
+    if isinstance(body, dict):
+        sources.append(body)
     for source in sources:
         for key, table in _SCOPED_IDS.items():
             value = source.get(key)
@@ -139,7 +149,7 @@ async def org_member(
     if not getattr(request.state, "org_id", None) and current_user.org_id:
         request.state.org_id = str(current_user.org_id)
     await _enforce_org_scope(request, db)
-    return _membership(request, current_user, db)
+    return await run_in_threadpool(_membership, request, current_user, db)
 
 
 async def org_mutator(membership: OrgMembership = Depends(org_member)) -> OrgMembership:

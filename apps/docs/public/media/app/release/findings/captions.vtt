@@ -1,0 +1,13 @@
+WEBVTT
+
+1
+00:00:00.400 --> 00:00:04.560
+Findings lists everything raised against your systems, most serious first.
+
+2
+00:00:05.498 --> 00:00:13.839
+The demo has none yet: its one fairness test passed. A failed check, a policy alert or a monitoring watch raises a finding here.
+
+3
+00:00:14.715 --> 00:00:22.310
+Each finding opens with what was found, the suggested fix and its remediation tasks. It closes when the next check passes.

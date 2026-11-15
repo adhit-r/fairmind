@@ -1,0 +1,45 @@
+---
+title: Monitoring
+description: Check whether each registered system still behaves as it did when released, using snapshots you upload.
+---
+
+<Status state="partial">FairMind does not pull data from your systems. You upload snapshots of predictions on your own schedule, for example from a cron job. FairMind compares them with a baseline, flags stale ones, and opens a finding on sustained drift.</Status>
+
+<Access status="partial" where="Release and operate › Monitoring" address="/monitoring" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/release/monitoring" /></Tab>
+  <Tab value="Try it"><TryIt page="app/release/monitoring" /></Tab>
+</Tabs>
+
+## What it is for
+
+Monitoring answers one question: is each registered system still behaving the way it was released? It reads the monitoring check from each system's release gate and shows the newest snapshot facts beside it.
+
+## How to use it
+
+1. Open **Monitoring**. The five counts at the top summarise the estate: Proven, Estimated, Out of date, Drifting and Never watched.
+2. Scan **Systems**. Each row has a state token, and the latest snapshot facts.
+3. Click a system name to open its file.
+4. Press **Upload a snapshot** on a row. This opens the system file, where the upload is made. Nothing is uploaded from this page.
+5. Read **Alerts** on the right. Press **See all alerts** for the full list.
+
+If you have no registered systems, the page offers **Go to Discovery**.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/release/monitoring" />
+
+## What's on the page
+
+For each system, the row shows the latest snapshot time, the overall PSI, the worst attribute drift and whether checks pass. A value that was not computed reads "not scored". PSI is the population stability index: a measure of how far the new data has moved from the baseline. The row also shows the expected cadence, marked "(default)" when you have not set one. A system with no snapshot says "No snapshot uploaded yet" and its risk tier.
+
+State words: Proven and Attested mean evidence supports the check. Estimated means the value is an estimate. Out of date means the last snapshot is older than the expected cadence. Drifting means the check fails. Never watched means no snapshot exists.
+
+**Alerts** combines two sources: open policy rule alerts, each with policy name, severity and opening time, and open findings raised by the monitoring watch. The count says how many are open. A watch finding links to [Findings](./findings.mdx) filtered to that system.
+
+To set up regular uploads, follow [Scheduled monitoring](../../journeys/scheduled-monitoring.mdx).
+
+<PageAnatomy route="monitoring" />

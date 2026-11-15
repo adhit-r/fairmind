@@ -4,13 +4,11 @@
     "index",
     "---Start here---",
     "...get-started",
-    "---Journeys---",
-    "...journeys",
-    "---Build with FairMind---",
-    "...build",
-    "---Self-host---",
-    "...self-host",
-    "---Reference---",
-    "...reference"
+    "---The app---",
+    "...app",
+    "---More---",
+    "journeys",
+    "build",
+    "reference"
   ]
 }

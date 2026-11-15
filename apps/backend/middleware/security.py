@@ -388,6 +388,7 @@ _PUBLIC_EXACT = {
 }
 _PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
 _INVITATION_PREVIEW = re.compile(r"/api/v1/organizations/invitations/[^/]+")
+_OWNER_CHECK = re.compile(r"/api/v1/public/owner-check/[^/]+")
 
 
 def _is_public_path(path: str) -> bool:
@@ -468,6 +469,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Auditor pack links carry their own token; the route checks it.
         if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
+            return await call_next(request)
+
+        # An owner-check link carries its own token for a person without an account; the route checks it.
+        if request.method in ("GET", "POST") and _OWNER_CHECK.fullmatch(request.url.path):
             return await call_next(request)
 
         # An invitee previews an invitation before they have an account; accepting needs one.

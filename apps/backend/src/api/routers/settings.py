@@ -40,6 +40,6 @@ async def update_settings(
         updated = await settings_service.update_settings(
             current_user.user_id, payload.model_dump(exclude_none=True), current_user.email
         )
-        return {"success": True, "data": updated.__dict__, "message": "Settings updated"}
+        return {"success": True, "data": updated.__dict__, "persisted": True, "message": "Settings updated"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

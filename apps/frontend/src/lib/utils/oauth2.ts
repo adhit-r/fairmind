@@ -16,16 +16,13 @@ export function generateCodeVerifier(): string {
   return randomString(128, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~')
 }
 
-/**
- * A random string drawn from `alphabet` with the Web Crypto CSPRNG.
- * Rejection sampling keeps every character equally likely.
- */
-export function randomString(length: number, alphabet: string): string {
-  const limit = 256 - (256 % alphabet.length)
+/** Cryptographically random string over `characters`; rejection sampling keeps every character equally likely. */
+export function randomString(length: number, characters: string): string {
+  const limit = 256 - (256 % characters.length)
   let result = ''
   while (result.length < length) {
     for (const byte of crypto.getRandomValues(new Uint8Array(length))) {
-      if (byte < limit && result.length < length) result += alphabet[byte % alphabet.length]
+      if (byte < limit && result.length < length) result += characters[byte % characters.length]
     }
   }
   return result

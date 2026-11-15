@@ -1,0 +1,229 @@
+'use client'
+
+import { useCallback, useEffect, useState } from 'react'
+import { apiClient, type ApiResponse } from '@/lib/api/api-client'
+import type { DiscoveredAsset, IntegrationKind } from '@/lib/api/hooks/useIntegrations'
+
+function unwrap<T>(res: ApiResponse<T>): T {
+  if (res.success && res.data !== undefined) return res.data
+  throw new Error(res.error || 'Request failed')
+}
+
+/* ------------------------------------------------------------------ Discovery review */
+
+export type Strength = 'strong' | 'fair' | 'single'
+export type Tier = 'low' | 'medium' | 'high' | 'critical'
+
+export interface OwnerCheck {
+  email: string
+  sentAt: string
+  expiresAt: string
+  answeredAt: string | null
+}
+
+export interface OwnerAnswers {
+  own: 'yes' | 'someone_else' | 'unknown'
+  other_owner?: string | null
+  purpose: string
+  users: string
+  data_in: string
+  personal_data: boolean | null
+  acts_without_person: boolean | null
+  moves_money: boolean | null
+  decides_about_people: boolean | null
+  tools_allowed: string[] | null
+  never_do: string
+}
+
+export interface ReachFact {
+  key: string
+  label: string
+  value: 'yes' | 'no' | 'unknown'
+  detail: string
+  by: 'owner' | 'source' | null
+}
+
+export interface Candidate {
+  id: string
+  name: string
+  kind: string
+  strength: Strength
+  sources: IntegrationKind[]
+  sightings: number
+  firstSeen: string
+  lastSeen: string
+  suggestedTier: Tier
+  ownerCheck: OwnerCheck | null
+  owners: { email: string; reasons: string[] }[]
+}
+
+export interface CandidateDetail extends Candidate {
+  members: DiscoveredAsset[]
+  checks: { type: 'name' | 'service' | 'repo' | 'person'; label: string; sources: IntegrationKind[] }[]
+  reach: ReachFact[]
+  tierReasons: string[]
+  frameworks: string[]
+  answers: OwnerAnswers | null
+  mismatches: string[]
+  tools: string[]
+}
+
+const D = '/api/v1/discovery'
+
+export function useCandidates() {
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const refresh = useCallback(async () => {
+    try {
+      setCandidates(unwrap(await apiClient.get<Candidate[]>(`${D}/candidates`)))
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load what is waiting')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+  return { candidates, loading, error, refresh }
+}
+
+export function useCandidate(id: string | null) {
+  const [detail, setDetail] = useState<CandidateDetail | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const refresh = useCallback(async () => {
+    if (!id) {
+      setDetail(null)
+      return
+    }
+    setLoading(true)
+    try {
+      setDetail(unwrap(await apiClient.get<CandidateDetail>(`${D}/candidates/${encodeURIComponent(id)}`)))
+      setError(null)
+    } catch (e) {
+      setDetail(null)
+      setError(e instanceof Error ? e.message : 'Could not load it')
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+  return { detail, loading, error, refresh }
+}
+
+export async function askOwner(id: string, email: string) {
+  return unwrap(await apiClient.post<{ link: string; expiresAt: string; emailSent: boolean }>(`${D}/candidates/${encodeURIComponent(id)}/ask`, { email }))
+}
+
+export interface Decision {
+  decision: 'approve' | 'conditions' | 'retire'
+  conditions: string[]
+  review_days: 30 | 90 | 180
+  risk_tier?: Tier
+  owner?: string
+}
+
+export async function decide(id: string, body: Decision) {
+  return unwrap(await apiClient.post<{ decision: string; systemId: string | null }>(`${D}/candidates/${encodeURIComponent(id)}/decide`, body))
+}
+
+export async function ignoreCandidate(id: string) {
+  return unwrap(await apiClient.post<{ status: string }>(`${D}/candidates/${encodeURIComponent(id)}/ignore`, {}))
+}
+
+export async function splitSighting(assetId: string) {
+  return unwrap(await apiClient.post<{ split: string }>(`${D}/assets/${encodeURIComponent(assetId)}/split`, {}))
+}
+
+/* ------------------------------------------------------------------ Shadow AI */
+
+export type FindingType = 'personal_account' | 'leaver_key' | 'gateway_bypass' | 'not_allowed' | 'self_consent' | 'unregistered_mcp'
+export type Confidence = 'possible' | 'likely' | 'confirmed'
+
+export interface Finding {
+  key: string
+  type: FindingType
+  title: string
+  severity: 'critical' | 'high' | 'medium'
+  confidence: Confidence
+  subject: string
+  evidence: { source: IntegrationKind; title: string; detail: string }[]
+  verdict: string
+  confirm?: string
+  service?: string | null
+  person?: string | null
+  team?: string
+  status: 'open' | 'expected'
+  reason: string | null
+  firstSeen: string
+  lastSeen: string
+  nudgedAt: string | null
+}
+
+export type Stance = 'approved' | 'limited' | 'not_allowed' | 'not_reviewed'
+
+export interface ShadowAI {
+  findings: Finding[]
+  resolved: { key: string; firstSeen: string; lastSeen: string }[]
+  map: {
+    tools: { key: string; label: string; status: Stance; teams: string[] }[]
+    teams: string[]
+    cells: Record<string, Record<string, { company: number; personal: number; unapproved: number }>>
+  }
+  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number }
+}
+
+export interface ToolStance {
+  key: string
+  label: string
+  vendor: string
+  category: string
+  stance: { status: Exclude<Stance, 'not_reviewed'>; teams: string[]; sso_required: boolean; note: string | null; updatedAt: string } | null
+}
+
+const S = '/api/v1/shadow-ai'
+
+export function useShadowAI() {
+  const [data, setData] = useState<ShadowAI | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const refresh = useCallback(async () => {
+    try {
+      setData(unwrap(await apiClient.get<ShadowAI>(S)))
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load Shadow AI')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+  return { data, loading, error, refresh }
+}
+
+export async function listTools() {
+  return unwrap(await apiClient.get<ToolStance[]>(`${S}/tools`))
+}
+
+export async function setToolStance(key: string, body: { status: Exclude<Stance, 'not_reviewed'> | null; teams: string[]; sso_required: boolean }) {
+  return unwrap(await apiClient.put<{ key: string }>(`${S}/tools/${encodeURIComponent(key)}`, body))
+}
+
+export async function markExpected(key: string, reason: string) {
+  return unwrap(await apiClient.post<{ status: string }>(`${S}/findings/expected`, { key, reason }))
+}
+
+export async function reopenFinding(key: string) {
+  return unwrap(await apiClient.post<{ status: string }>(`${S}/findings/reopen`, { key }))
+}
+
+export async function nudgePerson(key: string, message: string) {
+  return unwrap(await apiClient.post<{ sentTo: string }>(`${S}/findings/nudge`, { key, message }))
+}

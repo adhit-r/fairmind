@@ -1,0 +1,63 @@
+---
+title: Settings
+description: Manage your organisation, AI provider, connections, people, API keys and audit log.
+---
+
+<Access where="Settings (bottom of the menu)" address="/settings" change="Owner or admin role for people, roles and the release gate" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/settings/settings" /></Tab>
+  <Tab value="Try it"><TryIt page="app/settings/settings" /></Tab>
+</Tabs>
+
+## What it is for
+
+Settings holds everything that applies to the organisation or to you as a user. A list on the left switches sections. A link with `?section=ai-provider` opens that section directly.
+
+## How to use it
+
+Choose a section from the list. Each is described below.
+
+## Organisation
+
+Shows the name, your role, the domain if set and the creation date. These are read-only: the page says there is no way to rename an organisation from the app yet.
+
+**Release gate** has one switch, **Count environmental impact in release decisions**. When on, every system needs an environmental assessment before approval and energy use becomes one of the release checks. It is off by default. Only an owner or admin can change it.
+
+## AI provider
+
+FairMind uses your organisation's own model key for [Ask FairMind](../agents/ask.mdx), the plan and agent steps. The form is the shared provider settings panel.
+
+## Connections
+
+Lists the sources FairMind looks at for AI systems, with kind and last sync. **Manage in Discovery** goes to Discovery. Below it, the Claude Managed Agents connection feeds agent audits.
+
+## Team and roles
+
+**People** lists members with role and status. Owners and admins can change a role in the selector, **Remove** a member (then **Confirm remove**) and use **Invite a person**: enter an **Email**, choose a **Role**, then **Send invitation**. Others see the list and are told to ask an owner or admin. **Roles** lists role names, whether built in, and how many permissions each has.
+
+## Developers
+
+API keys belong to you, not the organisation. Use one in CI or the FairMind CLI.
+
+1. Choose **Create a key**, enter a **Name** and an optional **Description**, then **Create key**.
+2. Copy the key with **Copy key**. It is shown once and cannot be read again.
+3. To remove a key, choose **Delete**, then **Confirm delete**.
+
+**Gate releases in CI** shows a GitHub Actions step, filled in for a system you choose, that fails the job unless the release gate says go. It lists the three variables to set.
+
+## Audit log
+
+A paged table of the organisation's actions: when, action, resource, who and result. **Newer** and **Older** move between pages.
+
+## Access requests
+
+Shown only to platform admins. It counts waiting requests and links to **Review access requests**. Approving one creates an organisation and emails the requester a link to choose a password.
+
+## Step by step
+
+<TourSteps page="app/settings/settings" />
+
+## What's on the page
+
+<PageAnatomy route="settings" />

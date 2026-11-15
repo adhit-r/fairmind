@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import Depends, HTTPException, Query, Request, WebSocket, WebSocketException
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -73,11 +74,16 @@ async def ws_member(
     websocket.state.user = user
     if user.org_id:
         websocket.state.org_id = str(user.org_id)
-    _resolve_caller_org(websocket, db)
     try:
-        return _membership(websocket, user, db)
+        # Queries off the event loop (see _enforce_org_scope).
+        return await run_in_threadpool(_ws_membership, websocket, user, db)
     except HTTPException:
         raise WebSocketException(code=1008)
+
+
+def _ws_membership(websocket: WebSocket, user: TokenData, db: Session) -> OrgMembership:
+    _resolve_caller_org(websocket, db)
+    return _membership(websocket, user, db)
 
 
 def plain_id(column: str) -> str:

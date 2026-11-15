@@ -18,15 +18,3 @@ Keep the selected system visible while working. A technically correct artifact a
 ## Models and datasets
 
 Models and datasets are inventory objects associated with a system and its evaluations. Recording inventory metadata does not prove the integrity or behavior of the referenced asset.
-
-## Local persistence
-
-The dashboard stores the selected organization and system in browser storage for continuity. A fallback system may appear when the API returns no systems or fails.
-
-<Callout type="warn" title="Demo and fallback data">
-Treat fallback or fixture content as demonstration data. Do not present it as an observed customer system or a measured production result.
-</Callout>
-
-## Evidence basis
-
-Context providers and persistence behavior are implemented in `apps/frontend/src/context/OrgContext.tsx`, `apps/frontend/src/components/workflow/SystemContext.tsx`, and `apps/frontend/src/app/(dashboard)/layout.tsx`.

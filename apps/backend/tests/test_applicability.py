@@ -294,7 +294,7 @@ def test_generic_evidence_upload_cannot_forge_an_applicability_record():
     for evidence_type in ("applicability_decision", "applicability_override_accepted"):
         writes = [
             (f"{GOV}/systems/{sid}/evidence", {"evidence_type": evidence_type, "title": "x", "content": {}}),
-            *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": evidence_type, "content": {"tier": "low"}}) for route in ("collect", "collect-v2", "upload")),
+            *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": evidence_type, "content": {"tier": "low"}, "confidence": 0.8}) for route in ("collect", "collect-v2", "upload")),
         ]
         for url, payload in writes:
             forged = client.post(url, json=payload)

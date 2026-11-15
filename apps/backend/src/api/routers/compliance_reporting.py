@@ -38,12 +38,6 @@ compliance_service = ComplianceReportingService()
 
 
 # Request/Response Models
-class ComplianceCheckRequest(BaseModel):
-    """Request model for compliance check"""
-    framework: RegulatoryFramework = Field(..., description="Regulatory framework to check")
-    system_data: Dict[str, Any] = Field(..., description="AI system data and evidence")
-
-
 class AuditReportRequest(BaseModel):
     """Request model for audit report generation"""
     system_id: str = Field(..., description="AI system identifier")
@@ -99,26 +93,7 @@ def get_framework_requirements(framework: RegulatoryFramework):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/check")
-async def check_compliance(request: ComplianceCheckRequest):
-    """
-    Check compliance against a regulatory framework
-    
-    Args:
-        request: Compliance check request with framework and system data
-        
-    Returns:
-        Compliance assessment results
-    """
-    try:
-        result = await compliance_service.check_compliance(
-            framework=request.framework,
-            system_data=request.system_data,
-        )
-        
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# POST /check lives in compliance_check (mounted first); a second one here could never be reached.
 
 
 @router.post("/audit-report", dependencies=[Depends(org_member)])
@@ -294,17 +269,17 @@ def assess_system_risk(
             risk_level = RiskLevel.LIMITED
             reasoning = "System requires transparency measures"
         
-        # Minimal risk
+        # No keyword matched: that is not evidence of minimal risk
         else:
-            risk_level = RiskLevel.MINIMAL
-            reasoning = "System poses minimal risk"
+            risk_level = None
+            reasoning = "Not classified: nothing in the purpose or domain matched a known risk indicator. Classify the tier manually."
         
         return {
-            "system_id": system_data.get("id", "unknown"),
+            "system_id": system_data.get("id"),
             "risk_level": risk_level,
             "reasoning": reasoning,
             "assessed_at": datetime.utcnow().isoformat(),
-            "requirements": _get_requirements_for_risk_level(risk_level),
+            "requirements": _get_requirements_for_risk_level(risk_level) if risk_level else [],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

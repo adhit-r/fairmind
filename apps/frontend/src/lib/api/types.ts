@@ -65,9 +65,10 @@ export interface Model {
   createdAt: string
   updatedAt: string
   description?: string
-  fairness_score: number
-  bias_score: number
-  accuracy?: number
+  /** null when nothing has measured it */
+  fairness_score: number | null
+  bias_score: number | null
+  accuracy?: number | null
   tags?: string[]
   metadata?: Record<string, any>
 }

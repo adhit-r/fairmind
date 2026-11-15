@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FairMind event poster</title>
+<link rel="stylesheet" href="assets/social.css">
+<style>
+  /* A3 portrait: 297 x 420 mm = 1123 x 1587 CSS px. */
+  @page { size: A3 portrait; margin: 0; }
+  html, body { width: 297mm; height: 419mm; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .frame { width: 297mm; height: 419mm; overflow: hidden; }
+  .eyebrow { position: absolute; left: 80px; top: 84px; font-size: 18px; }
+  .alpha { position: absolute; right: 80px; top: 74px; font-size: 18px; font-weight: 600; padding: 8px 18px; border-radius: 999px;
+    background: #fff; outline: 1px solid rgba(21,23,26,.14); letter-spacing: .02em; }
+  h1 { position: absolute; left: 80px; right: 80px; top: 150px; font-size: 104px; line-height: 1.04; letter-spacing: -0.04em; }
+  h1 span { display: block; color: var(--ink2); margin-top: 18px; }
+  .sub { position: absolute; left: 80px; width: 820px; top: 640px; margin: 0; font-size: 30px; line-height: 1.32; font-weight: 500; color: var(--ink2); letter-spacing: -0.012em; }
+  .sub b { color: var(--ink); font-weight: 600; }
+  .shot { left: 56px; top: 776px; width: 1011px; height: 512px; --x: 316; --y: 70; --s: 1.064; }
+  /* print: soft shadows rasterise badly in some PDF viewers and RIPs; a hairline carries the card instead */
+  @media print { .shot { box-shadow: none; outline: 1px solid rgba(21,23,26,.14); } }
+  footer { position: absolute; left: 80px; right: 80px; bottom: 80px; padding-top: 36px; border-top: 1px solid rgba(21,23,26,.14);
+    display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+  footer .brand { font-size: 32px; }
+  .k { font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); }
+  .v { margin-top: 10px; white-space: nowrap; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+</style></head>
+<body><div class="frame">
+  <div class="eyebrow">AI assurance for models and agents</div>
+  <div class="alpha">Alpha</div>
+  <h1>May this AI system ship?<span>And what is the evidence?</span></h1>
+  <p class="sub">FairMind keeps an AI system, its tests, evidence, risks, remediation and approvals in <b>one reviewable record</b>.</p>
+  <div class="shot"><img src="assets/board.jpg" alt="The FairMind board: three AI systems against their release checks"></div>
+  <footer>
+    <div><div class="brand"><img src="assets/logo-mark.svg" alt="">FairMind</div><div class="v" style="margin-top:14px;font-weight:500;color:var(--ink2)">fairmind.xyz</div></div>
+    <div><div class="k">Try the live demo</div><div class="v">app.fairmind.xyz</div></div>
+    <div><div class="k">Code</div><div class="v">github.com/adhit-r/fairmind</div></div>
+    <div><div class="k">Licence</div><div class="v">Open source, AGPL-3.0</div></div>
+  </footer>
+</div></body></html>

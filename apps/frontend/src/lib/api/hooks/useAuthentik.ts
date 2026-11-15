@@ -32,6 +32,12 @@ interface UseAuthentikOptions {
 }
 
 /**
+ * Generate a random string for PKCE code_verifier
+ * RFC 7636: code_verifier = 43*128unreserved characters
+ */
+// (generateCodeVerifier comes from @/lib/utils/oauth2: crypto-random, not Math.random)
+
+/**
  * Generate code_challenge from code_verifier using SHA-256
  * RFC 7636: code_challenge = BASE64URL(SHA256(code_verifier))
  */
@@ -46,6 +52,11 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
     .replace(/\//g, "_")
     .replace(/=/g, "");
 }
+
+/**
+ * Generate a random state parameter for CSRF protection
+ */
+const generateRandomState = generateState;
 
 /**
  * Hook for Authentik OAuth2 authentication
@@ -104,7 +115,7 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
       // Generate PKCE parameters
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
-      const state = generateState();
+      const state = generateRandomState();
 
       // Store PKCE parameters in session storage (secure against XSS with HttpOnly flag in cookie alternative)
       // Note: sessionStorage is used here as it's cleared when tab closes

@@ -1,0 +1,33 @@
+{
+  "title": "See where findings collect",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Findings lists everything raised against your systems, most serious first."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "The demo has none yet: its one fairness test passed. A failed check, a policy alert or a monitoring watch raises a finding here.",
+      "box": {
+        "x": 748,
+        "y": 190,
+        "w": 89,
+        "h": 24
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Each finding opens with what was found, the suggested fix and its remediation tasks. It closes when the next check passes.",
+      "box": {
+        "x": 7,
+        "y": 341,
+        "w": 64,
+        "h": 64
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 24
+}

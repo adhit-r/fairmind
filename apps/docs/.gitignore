@@ -1,3 +1,7 @@
 .next
 node_modules
 .source
+.capture
+# The root .gitignore drops *.json; the page outline and each recording's click-through data are sources here.
+!outline.json
+!public/media/**/demo.json

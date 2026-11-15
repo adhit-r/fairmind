@@ -37,7 +37,9 @@ class MLOpsIntegrationService:
         self.wandb_api_key = os.getenv("WANDB_API_KEY")
         
         # MLflow configuration
-        self.mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+        self.mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")  # no default: unset means MLflow is off
+        if not self.mlflow_tracking_uri:
+            self.mlflow_enabled = False
         self.mlflow_experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME", "fairmind_bias_detection")
         
         # Initialize clients
@@ -300,7 +302,11 @@ class MLOpsIntegrationService:
         if provider == "wandb" and self.wandb_enabled:
             return f"https://wandb.ai/{self.wandb_entity}/{self.wandb_project}/runs/{run_id}"
         elif provider == "mlflow" and self.mlflow_enabled:
-            return f"{self.mlflow_tracking_uri}/#/experiments/0/runs/{run_id}"
+            try:
+                experiment_id = self.mlflow_client.get_run(run_id).info.experiment_id
+            except Exception:
+                return None  # unknown run: no link rather than a guessed one
+            return f"{self.mlflow_tracking_uri}/#/experiments/{experiment_id}/runs/{run_id}"
         return None
     
     def is_enabled(self) -> bool:

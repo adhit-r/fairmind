@@ -1,0 +1,17 @@
+WEBVTT
+
+1
+00:00:00.400 --> 00:00:04.795
+Frameworks lists the rules you answer to and how much the installed packs cover.
+
+2
+00:00:05.682 --> 00:00:09.394
+Show coverage lays out every requirement against every system.
+
+3
+00:00:11.284 --> 00:00:19.049
+Systems are columns. A mark in a cell says whether that requirement is proven, attested, estimated, out of date or failing.
+
+4
+00:00:19.915 --> 00:00:23.136
+When the grid is ready, export an auditor pack for the framework.

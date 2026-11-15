@@ -544,61 +544,12 @@ def acknowledge_violation(
     m: OrgMembership = Depends(org_member),
 ) -> ViolationResponse:
     """Acknowledge a compliance violation."""
-    try:
-        session = db_manager.get_sync_session()
-        try:
-            violation = session.query(ComplianceViolation).filter(
-                ComplianceViolation.id == violation_id,
-                ComplianceViolation.org_id == m.org_id,
-            ).first()
+    # ponytail: compliance_violations has no acknowledgement columns; add them (migration) before storing this.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Acknowledging a violation is not stored yet, so it is refused rather than reported as done.",
+    )
 
-            if not violation:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Violation {violation_id} not found"
-                )
-
-            # Mark as acknowledged (update would be better with full model)
-            # For now, we just log the acknowledgment
-            logger.info(f"Violation acknowledged: {violation_id} by {current_user.get('email', 'unknown')}")
-            logger.info(f"Acknowledgment notes: {request.notes}")
-
-            return ViolationResponse(
-                id=violation.id,
-                model_id=violation.model_id,
-                framework=FrameworkEnum(violation.framework),
-                violation_type=violation.violation_type,
-                severity=SeverityEnum(violation.severity),
-                status=ViolationStatusEnum.ACKNOWLEDGED,
-                description=violation.description,
-                detected_at=violation.detected_at,
-                resolved=violation.resolved,
-                resolved_at=violation.resolved_at,
-                acknowledged_at=None,
-                remediation_plan_id=None,
-            )
-
-        finally:
-            session.close()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error acknowledging violation: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to acknowledge violation"
-        )
-
-
-# ============================================================================
-# REMEDIATION ENDPOINTS
-# ============================================================================
-
-
-# ============================================================================
-# STATUS ENDPOINTS
-# ============================================================================
 
 @router.get("/status", response_model=AutomationStatusResponse)
 async def get_automation_status(
@@ -658,30 +609,9 @@ def get_compliance_reports(
     The query should include:
     SELECT * FROM compliance_reports WHERE org_id = :org_id ORDER BY created_at DESC
     """
-    org_id, user_id = m.org_id, m.user_id
-    try:
-        logger.info(f"Fetching compliance reports for org: {org_id}, user: {user_id}")
-
-        session = db_manager.get_sync_session()
-        try:
-            # For now, return empty list as reports are generated asynchronously
-            # In production, this will query a ComplianceReport table with org_id filtering:
-            # SELECT * FROM compliance_reports
-            # WHERE org_id = :org_id AND (framework = :framework OR :framework IS NULL)
-            # ORDER BY created_at DESC LIMIT :limit OFFSET :skip
-
-            return ComplianceReportListResponse(
-                reports=[],
-                total=0,
-                offset=skip,
-                limit=limit
-            )
-        finally:
-            session.close()
-
-    except Exception as e:
-        logger.error(f"Error getting compliance reports for org {org_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get reports"
-        )
+    # ponytail: scheduled runs write certificate files but record nothing in a table, so there is no
+    # history to list. Add a compliance_reports table (migration) and insert in generate_automated_report.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Report history is not stored yet, so it cannot be listed.",
+    )
