@@ -47,6 +47,7 @@ from pydantic import BaseModel, Field
 
 from src.application.services.clause_map_service import _catalogue, clause_map, tracked_requirements
 from src.application.services.decision_seal_service import list_seals
+from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
 from src.application.services.fairness_run_service import (
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
@@ -92,13 +93,13 @@ def _environmental_assessed(db: Session, system_id: str) -> Optional[Dict[str, A
     """The newest assessment's provenance and confidence, which the gate counts like any other record; None when there is none."""
     try:
         row = db.execute(
-            text("SELECT provenance_class, confidence_score FROM governance_environmental_assessments WHERE system_id = :id ORDER BY created_at DESC LIMIT 1"),
+            text("SELECT provenance_class, confidence_score, created_at FROM governance_environmental_assessments WHERE system_id = :id ORDER BY created_at DESC LIMIT 1"),
             {"id": system_id},
         ).fetchone()
     except Exception:
         db.rollback()
         return None
-    return {"provenance_class": row[0] or "unknown", "confidence": float(row[1] or 0.0)} if row else None
+    return {"provenance_class": row[0] or "unknown", "confidence": float(row[1] or 0.0), "created_at": row[2]} if row else None
 
 
 DEFAULT_CADENCE_HOURS = 168
@@ -159,7 +160,8 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     The verdict is computed on the effective tier: the suggested tier while a lower confirmed tier awaits a
     second person. ``explain`` and ``path`` say why the verdict is what it is and what would move it.
     """
-    records = _fetch_evidence_records(db, system_id)
+    reopened = reopened_since(db, system_id)
+    records = drop_superseded(_fetch_evidence_records(db, system_id), {k: at for k, (at, _) in reopened.items()})
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
     applicability, stage = _system_applicability(db, system_id)
     tier = effective_tier(risk_tier, applicability)
@@ -167,6 +169,8 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
 
     with_env = system_environmental_gate_enabled(db, system_id)
     assessed = _environmental_assessed(db, system_id) if with_env else None
+    if assessed and "environmental" in reopened and not drop_superseded([{"evidenceType": "environmental", "createdAt": assessed["created_at"]}], {"environmental": reopened["environmental"][0]}):
+        assessed = None  # assessed before the change that reopened it
     approval = decided = None
     if with_decision:
         approval = _fetch_latest_system_approval(db, system_id)
@@ -180,6 +184,10 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
         include_environmental=with_env,
     )
     gate["reasons"] += tier_reasons(risk_tier, applicability)
+    for check in gate["checks"]:
+        if check["key"] in reopened and check["state"] == "open":
+            check["reopenedBy"] = reopened[check["key"]][1]
+            gate["reasons"].append(f"Change {reopened[check['key']][1]} reopened {check['label'].lower()}")
     _apply_policy_rules(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
@@ -484,7 +492,11 @@ def set_release_gate_settings(
 
 
 def _org_systems(db: Session, http: Request) -> List[Any]:
-    return db.execute(text("SELECT id, name, risk_tier FROM governance_ai_systems WHERE org_id = :org"), {"org": _caller_org(http)}).fetchall()
+    # Retired systems leave the live estate; their files stay readable one by one.
+    return db.execute(
+        text("SELECT id, name, risk_tier FROM governance_ai_systems WHERE org_id = :org AND COALESCE(lifecycle_stage, '') <> 'retired'"),
+        {"org": _caller_org(http)},
+    ).fetchall()
 
 
 @router.get("/estate/gates")

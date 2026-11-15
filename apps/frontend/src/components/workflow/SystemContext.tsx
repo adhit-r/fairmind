@@ -22,7 +22,7 @@ export interface AISystemSummary {
   riskTier: "low" | "medium" | "high" | "critical"
   /** Null when the backend has not reported readiness for this system. */
   readiness: number | null
-  stage: "onboard" | "assess" | "govern" | "remediate" | "operate"
+  stage: "onboard" | "assess" | "govern" | "remediate" | "operate" | "retired"
   workspaceId?: string
   metadata?: Record<string, unknown>
   /** When the system was registered; absent on the empty-state placeholder. */

@@ -87,9 +87,16 @@ async def test_generate_automated_report(service, mock_db_session):
 
 
 def _evidence_db(records):
+    """Evidence rows for the evidence query; no recorded changes, so nothing is reopened."""
     db = MagicMock()
-    db.execute.return_value.fetchone.return_value = ("sys-1", "high")
-    db.execute.return_value.fetchall.return_value = records
+
+    def execute(statement, *_args, **_kwargs):
+        result = MagicMock()
+        result.fetchone.return_value = ("sys-1", "high")
+        result.fetchall.return_value = [] if "governance_system_changes" in str(statement) else records
+        return result
+
+    db.execute.side_effect = execute
     return db
 
 

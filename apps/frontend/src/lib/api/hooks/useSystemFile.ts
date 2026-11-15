@@ -8,7 +8,7 @@ import type { CellState } from '@/components/ui/matrix'
 
 const GOV = '/api/v1/ai-governance'
 
-export type StageKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'operate'
+export type StageKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'operate' | 'retired'
 
 export interface LifecycleSummary {
   stage: StageKey
@@ -96,6 +96,8 @@ export interface GateCheck {
   stale?: true
   /** A measured or tool-estimated record that fails its own thresholds. */
   fails?: true
+  /** The number of the recorded change that reopened this check; its older evidence no longer counts. */
+  reopenedBy?: number
 }
 
 export interface ReleaseGate {

@@ -46,6 +46,8 @@ import { RequirementsTab } from './RequirementsTab'
 import { RecordTab } from './RecordTab'
 import { LeavesOpen } from './LeavesOpen'
 import { VerdictExplainer, stepLine, stepTitle, tierOverride } from './VerdictExplainer'
+import { RetiredCard, VersionsCard } from './Lifecycle'
+import { useRetirement, useSystemChanges } from '@/lib/api/hooks/useLifecycle'
 
 // Environmental is left out: an attestation would shadow any later assessment, which the path recommends instead.
 const ATTESTABLE = new Set<string>(['data_governance', 'human_oversight', 'monitoring'])
@@ -87,8 +89,10 @@ export default function SystemFilePage() {
 function SystemFileBody({ id }: { id: string }) {
   const router = useRouter()
   const { selectedOrg } = useOrg()
-  const { setSelectedSystemId } = useSystemContext()
+  const { setSelectedSystemId, systems } = useSystemContext()
   const file = useSystemFile(id)
+  const changes = useSystemChanges(id)
+  const retirement = useRetirement(id)
   const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
   const ap = useAutopilot(id, `${gate?.confidence ?? ''}-${evidence?.totalEvidence ?? 0}-${approval?.decisions.length ?? 0}`)
   const { confirm: confirmApplicability, acceptOverride } = useApplicability()
@@ -187,7 +191,15 @@ function SystemFileBody({ id }: { id: string }) {
     }
   }
 
-  const primary = canRequest
+  const retired = retirement.data?.retired ?? null
+  const lifecycleActions = retired ? null : (
+    <>
+      <Button label="Record a change" variant="secondary" href={`/systems/${encodeURIComponent(id)}/change`} />
+      <Button label="Retire" variant="ghost" href={`/systems/${encodeURIComponent(id)}/retire`} />
+    </>
+  )
+  const versions = gate ? <VersionsCard changes={changes.data?.changes ?? []} checks={gate.checks} approved={status === 'approved'} createdAt={s.createdAt} /> : null
+  const primary = retired ? null : canRequest
     ? <Button label={status === 'rejected' ? 'Request a new decision' : 'Request release decision'} variant="primary" isDisabled={busy !== null} isLoading={busy === 'request'} onClick={() => void act('request', file.requestDecision)} />
     : status === 'pending' && req
       ? <Button label="Decide" variant="primary" onClick={() => setPanel({ kind: 'decide' })} />
@@ -402,6 +414,8 @@ function SystemFileBody({ id }: { id: string }) {
         </VStack>
       </section>
 
+      {versions}
+
       <section className="fm-card" aria-labelledby="sf-needs">
         <VStack gap={4}>
           <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
@@ -524,6 +538,7 @@ function SystemFileBody({ id }: { id: string }) {
             <Heading level={1} maxLines={2}>{s.name}</Heading>
             <HStack gap={2} vAlign="center">
               {primary}
+              {lifecycleActions}
               <span className="fm-sf-rail-toggle"><Button label="Details" variant="secondary" onClick={() => setRailOpen(true)} /></span>
             </HStack>
           </HStack>
@@ -546,7 +561,12 @@ function SystemFileBody({ id }: { id: string }) {
 
         <div className="fm-sf">
           <div className="fm-sf-main">
-            {mainFile}
+            {retired ? (
+              <div className="fm-sf-main" hidden={tab !== 'file'}>
+                <RetiredCard record={retired} createdAt={s.createdAt} replacementName={systems.find((o) => o.id === retired.replacedBy)?.name} chain={retirement.data?.chain} />
+                {versions}
+              </div>
+            ) : mainFile}
             {tab === 'requirements' && (
               <div className="fm-sf-embed"><RequirementsTab confirmed={applicability?.frameworks ?? clauseMap?.confirmed ?? []} clauseMap={clauseMap} /></div>
             )}
