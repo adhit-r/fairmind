@@ -289,7 +289,6 @@ class AutomatedEvidenceCollector:
             if not monitoring_data:
                 return {
                     "monitoring_enabled": False,
-                    "accuracy_change": 0.0,
                     "alerts_configured": False,
                     "source": "default"
                 }
@@ -312,7 +311,6 @@ class AutomatedEvidenceCollector:
             print(f"Error collecting drift evidence: {e}")
             return {
                 "monitoring_enabled": False,
-                "accuracy_change": 0.0,
                 "alerts_configured": False,
                 "source": "default"
             }

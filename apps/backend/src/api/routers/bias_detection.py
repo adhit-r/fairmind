@@ -179,12 +179,10 @@ async def detect_bias(request: BiasTestRequest, m: OrgMembership = Depends(org_m
         
         category = category_mapping[request.model_type]
         
-        # Convert custom templates if provided
-        custom_templates = None
+        # Refuse rather than silently run the defaults in their place
         if request.custom_templates:
-            # This would convert the custom templates to BiasTestTemplate objects
-            # For now, we'll use the default templates
-            pass
+            raise HTTPException(status_code=422, detail="custom_templates are not supported yet; send the request without them to run the default templates.")
+        custom_templates = None
         
         # Run bias detection
         results = await llm_bias_service.detect_bias(
@@ -416,28 +414,10 @@ def get_available_libraries():
 @router.post("/libraries/{library_name}/install", dependencies=[Depends(require_admin)])
 def install_library(library_name: str):
     """Install a specific bias testing library"""
-    try:
-        # Find the library enum
-        library = None
-        for lib in TestingLibrary:
-            if lib.value == library_name:
-                library = lib
-                break
-        
-        if not library:
-            raise HTTPException(status_code=400, detail=f"Unknown library: {library_name}")
-        
-        # Attempt to install
-        success = bias_testing_library.install_library(library)
-        
-        if success:
-            return {"success": True, "message": f"Library {library_name} installation requested"}
-        else:
-            return {"success": False, "message": f"Failed to install library {library_name}"}
-            
-    except Exception as e:
-        logger.error(f"Error installing library {library_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"Installation failed: {str(e)}")
+    raise HTTPException(
+        status_code=501,
+        detail=f"Installing {library_name} from the app is not supported; add it to the backend's dependencies instead.",
+    )
 
 def _own(rows, org_id: str) -> list:
     return [r for r in rows if r.get("org_id") == org_id]

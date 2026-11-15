@@ -55,6 +55,8 @@ class ComplianceCheckResponse(BaseModel):
     results: List[Dict[str, Any]]
     gaps: List[Dict[str, Any]]
     timestamp: datetime
+    # "self_reported": scored from the system_data the caller sent, not from anything FairMind measured
+    evidence_source: str = "self_reported"
 
 
 class EvidenceResponse(BaseModel):

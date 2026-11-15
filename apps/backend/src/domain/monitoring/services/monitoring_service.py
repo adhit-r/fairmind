@@ -24,9 +24,9 @@ class SystemHealth:
     """System health status."""
     status: str
     uptime: float
-    memory_usage: float
-    cpu_usage: float
-    disk_usage: float
+    memory_usage: Optional[float]  # None when psutil is not installed
+    cpu_usage: Optional[float]
+    disk_usage: Optional[float]
     active_connections: int
     last_check: datetime
     services: Dict[str, str]
@@ -120,23 +120,31 @@ class MonitoringService(AsyncBaseService):
         return asdict(self.health_status)
 
     async def _update_health_status(self):
-        """Update health status (simulated/real)."""
+        """Update health status from the host and a real database round trip; nothing is assumed."""
         try:
             import psutil
             self.health_status.cpu_usage = psutil.cpu_percent(interval=None)
             self.health_status.memory_usage = psutil.virtual_memory().percent
             self.health_status.disk_usage = psutil.disk_usage('/').percent
         except ImportError:
-            # Fallback for dev environments without psutil
-            self.health_status.cpu_usage = 25.0
-            self.health_status.memory_usage = 45.0
-            self.health_status.disk_usage = 30.0
-            
+            self.health_status.cpu_usage = None
+            self.health_status.memory_usage = None
+            self.health_status.disk_usage = None
+
+        try:
+            from sqlalchemy import text
+            from database.connection import db_manager
+
+            with db_manager.get_session() as session:
+                session.execute(text("SELECT 1"))
+            database = "healthy"
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"Database health check failed: {e}")
+            database = "down"
+
         self.health_status.last_check = datetime.now(timezone.utc)
-        self.health_status.services = {
-            "api": "healthy",
-            "database": "healthy"
-        }
+        self.health_status.services = {"api": "healthy", "database": database}  # api: this request is being answered
+        self.health_status.status = "healthy" if database == "healthy" else "degraded"
 
     # Configuration Methods
     async def create_config(self, config: Dict[str, Any]) -> Dict[str, Any]:

@@ -99,7 +99,7 @@ class AnalysisResponse(BaseModel):
     bias_type: str
     analysis_method: str
     overall_bias_score: float
-    confidence_level: float
+    confidence_level: Optional[float] = None
     recommendations: List[str]
     risk_assessment: Dict[str, Any]
     metadata: Dict[str, Any]

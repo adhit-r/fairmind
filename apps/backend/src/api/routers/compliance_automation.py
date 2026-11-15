@@ -609,30 +609,9 @@ def get_compliance_reports(
     The query should include:
     SELECT * FROM compliance_reports WHERE org_id = :org_id ORDER BY created_at DESC
     """
-    org_id, user_id = m.org_id, m.user_id
-    try:
-        logger.info(f"Fetching compliance reports for org: {org_id}, user: {user_id}")
-
-        session = db_manager.get_sync_session()
-        try:
-            # For now, return empty list as reports are generated asynchronously
-            # In production, this will query a ComplianceReport table with org_id filtering:
-            # SELECT * FROM compliance_reports
-            # WHERE org_id = :org_id AND (framework = :framework OR :framework IS NULL)
-            # ORDER BY created_at DESC LIMIT :limit OFFSET :skip
-
-            return ComplianceReportListResponse(
-                reports=[],
-                total=0,
-                offset=skip,
-                limit=limit
-            )
-        finally:
-            session.close()
-
-    except Exception as e:
-        logger.error(f"Error getting compliance reports for org {org_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get reports"
-        )
+    # ponytail: scheduled runs write certificate files but record nothing in a table, so there is no
+    # history to list. Add a compliance_reports table (migration) and insert in generate_automated_report.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Report history is not stored yet, so it cannot be listed.",
+    )

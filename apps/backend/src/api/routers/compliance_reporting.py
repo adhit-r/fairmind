@@ -294,17 +294,17 @@ def assess_system_risk(
             risk_level = RiskLevel.LIMITED
             reasoning = "System requires transparency measures"
         
-        # Minimal risk
+        # No keyword matched: that is not evidence of minimal risk
         else:
-            risk_level = RiskLevel.MINIMAL
-            reasoning = "System poses minimal risk"
+            risk_level = None
+            reasoning = "Not classified: nothing in the purpose or domain matched a known risk indicator. Classify the tier manually."
         
         return {
-            "system_id": system_data.get("id", "unknown"),
+            "system_id": system_data.get("id"),
             "risk_level": risk_level,
             "reasoning": reasoning,
             "assessed_at": datetime.utcnow().isoformat(),
-            "requirements": _get_requirements_for_risk_level(risk_level),
+            "requirements": _get_requirements_for_risk_level(risk_level) if risk_level else [],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

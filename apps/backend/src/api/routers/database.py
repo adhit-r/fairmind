@@ -174,11 +174,11 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
             "activeScans": 0,
             "recentActivity": [],
             "systemHealth": {
-                "status": "healthy",
+                "status": None,  # set below from whether every query answered
                 "timestamp": datetime.now().isoformat(),
-                "version": "1.0.0"
             }
         }
+        failed = []
         
         with db_manager.get_session() as session:
             # Count models
@@ -190,7 +190,8 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 stats["totalModels"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting models: {e}")
-                stats["totalModels"] = 0
+                stats["totalModels"] = None  # unknown, not zero
+                failed.append("totalModels")
                 
             # Count datasets
             try:
@@ -200,7 +201,8 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 stats["totalDatasets"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting datasets (table may not exist): {e}")
-                stats["totalDatasets"] = 0
+                stats["totalDatasets"] = None  # unknown, not zero
+                failed.append("totalDatasets")
                 
             # Count active scans (from geographic_bias_analyses where compliance_status != 'completed')
             try:
@@ -212,7 +214,8 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
                 stats["activeScans"] = result.scalar() or 0
             except Exception as e:
                 logger.warning(f"Error counting active scans: {e}")
-                stats["activeScans"] = 0
+                stats["activeScans"] = None  # unknown, not zero
+                failed.append("activeScans")
                 
             # Get recent activity - format as ActivityItem[]
             try:
@@ -237,6 +240,11 @@ def get_dashboard_stats(m: OrgMembership = Depends(org_member)):
             except Exception as e:
                 logger.warning(f"Error fetching recent activity: {e}")
                 stats["recentActivity"] = []
+                failed.append("recentActivity")
+
+        stats["systemHealth"]["status"] = "degraded" if failed else "healthy"
+        if failed:
+            stats["systemHealth"]["unavailable"] = failed
 
         return {
             "success": True,

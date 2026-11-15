@@ -446,6 +446,7 @@ function RemediationSection() {
 function ReportsSection() {
   const [reports, setReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReports();
@@ -454,6 +455,7 @@ function ReportsSection() {
   const fetchReports = async () => {
     try {
       const response = await apiClient.get("/api/v1/compliance/reports?limit=20");
+      if (!response.success) setUnavailable(response.error || "Report history could not be loaded.");
       setReports((response.data as any)?.reports || []);
     } catch (err) {
       console.error("Failed to fetch reports:", err);
@@ -471,7 +473,7 @@ function ReportsSection() {
       <h2 className="mb-6 text-2xl font-bold text-black">Generated Reports</h2>
       {reports.length === 0 ? (
         <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-          <p className="text-gray-600">No reports generated yet. Create a schedule to get started.</p>
+          <p className="text-gray-600">{unavailable ?? "No reports generated yet. Create a schedule to get started."}</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--fm-line)]">

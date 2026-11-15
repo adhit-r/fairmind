@@ -626,7 +626,7 @@ class ComplianceReportingService:
             "report_date": datetime.utcnow().isoformat(),
             "system_name": system_data.get("name", "Unknown"),
             "system_description": system_data.get("description", ""),
-            "risk_level": system_data.get("risk_level", RiskLevel.MINIMAL),
+            "risk_level": system_data.get("risk_level"),  # None: not classified
             "overall_compliance_score": avg_score,
             "frameworks_assessed": [f.value for f in frameworks],
             "compliance_results": compliance_results,
@@ -710,7 +710,7 @@ class ComplianceReportingService:
             "generated_date": datetime.utcnow().isoformat(),
             "model_info": {
                 "name": model_data.get("name", "Unknown"),
-                "version": model_data.get("version", "1.0"),
+                "version": model_data.get("version"),
                 "type": model_data.get("type", "Unknown"),
                 "purpose": model_data.get("purpose", ""),
             },
@@ -718,7 +718,7 @@ class ComplianceReportingService:
                 "metrics_evaluated": bias_test_results.get("metrics", []),
                 "protected_attributes": bias_test_results.get("protected_attributes", []),
                 "fairness_scores": bias_test_results.get("scores", {}),
-                "bias_detected": bias_test_results.get("bias_detected", False),
+                "bias_detected": bias_test_results.get("bias_detected"),  # None: not reported
             },
             "mitigation_strategies": self._generate_mitigation_strategies(bias_test_results),
             "monitoring_plan": self._generate_monitoring_plan(),
@@ -764,6 +764,7 @@ class ComplianceReportingService:
     def _generate_monitoring_plan(self) -> Dict[str, Any]:
         """Generate fairness monitoring plan"""
         return {
+            "status": "recommended",  # a template to adopt, not evidence that monitoring runs
             "frequency": "monthly",
             "metrics_to_track": [
                 "Statistical Parity",
@@ -782,14 +783,20 @@ class ComplianceReportingService:
         self,
         bias_test_results: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Generate stakeholder communication plan"""
+        """Generate stakeholder communication plan; key messages state only what the supplied results show."""
+        metrics = bias_test_results.get("metrics") or []
+        detected = bias_test_results.get("bias_detected")
+        if not metrics:
+            messages = ["No fairness test results were supplied"]
+        else:
+            messages = [f"Tested for fairness on: {', '.join(map(str, metrics))}"]
+            if detected is True:
+                messages.append("Bias was detected; mitigation is recommended")
+            elif detected is False:
+                messages.append("No bias was detected on the metrics evaluated")
         return {
             "target_audiences": ["Users", "Regulators", "Internal Teams"],
-            "key_messages": [
-                "System has been tested for fairness",
-                "Ongoing monitoring is in place",
-                "Mitigation strategies are implemented",
-            ],
+            "key_messages": messages,
             "transparency_measures": [
                 "Publish fairness metrics",
                 "Provide model cards",
