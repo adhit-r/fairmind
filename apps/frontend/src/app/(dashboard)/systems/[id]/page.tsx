@@ -89,7 +89,7 @@ function SystemFileBody({ id }: { id: string }) {
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId } = useSystemContext()
   const file = useSystemFile(id)
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
+  const { system, evidence, approval, remediation, risks, reports, gate, policyGate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
   const ap = useAutopilot(id, `${gate?.confidence ?? ''}-${evidence?.totalEvidence ?? 0}-${approval?.decisions.length ?? 0}`)
   const { confirm: confirmApplicability, acceptOverride } = useApplicability()
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
@@ -398,6 +398,47 @@ function SystemFileBody({ id }: { id: string }) {
             </VStack>
           ) : (
             <EmptyState isCompact title="Release gate not available yet" description="The gate could not be read for this system." actions={<Button label="Try again" variant="secondary" onClick={() => void refresh()} />} />
+          )}
+          {policyGate && (
+            <VStack gap={3}>
+              <Divider />
+              <HStack gap={3} vAlign="center" wrap="wrap">
+                <Heading level={3}>Policy gate</Heading>
+                <Badge variant={policyGate.allowed ? 'green' : 'red'} label={policyGate.allowed ? 'Allowed' : 'Blocked'} />
+                <Text type="supporting" color="secondary">
+                  {policyGate.blocking.length} blocking, {policyGate.warnings.length} {policyGate.warnings.length === 1 ? 'warning' : 'warnings'}. Evaluated {when(policyGate.evaluatedAt)}.
+                </Text>
+              </HStack>
+              {policyGate.blocking.length > 0 && (
+                <VStack gap={1}>
+                  <Text type="supporting" weight="semibold">Blocking rules</Text>
+                  {policyGate.blocking.map((r) => (
+                    <HStack key={`${r.policyId}:${r.ruleId}`} gap={2} vAlign="center" wrap="wrap">
+                      <Badge variant="red" label="Blocks release" />
+                      <Text type="supporting">{r.ruleTitle}</Text>
+                      <Link href={`/policies/${r.policyId}`} type="supporting">{r.policyName}</Link>
+                      {r.detail && <Text type="supporting" color="secondary">{r.detail}</Text>}
+                    </HStack>
+                  ))}
+                </VStack>
+              )}
+              {policyGate.warnings.length > 0 && (
+                <VStack gap={1}>
+                  <Text type="supporting" weight="semibold">Warnings</Text>
+                  {policyGate.warnings.map((r) => (
+                    <HStack key={`${r.policyId}:${r.ruleId}`} gap={2} vAlign="center" wrap="wrap">
+                      <Badge variant="orange" label="Warning" />
+                      <Text type="supporting">{r.ruleTitle}</Text>
+                      <Link href={`/policies/${r.policyId}`} type="supporting">{r.policyName}</Link>
+                      {r.detail && <Text type="supporting" color="secondary">{r.detail}</Text>}
+                    </HStack>
+                  ))}
+                </VStack>
+              )}
+              {policyGate.blocking.length === 0 && policyGate.warnings.length === 0 && (
+                <Text type="supporting" color="secondary">No policy rule fails for this system.</Text>
+              )}
+            </VStack>
           )}
         </VStack>
       </section>

@@ -34,6 +34,20 @@ function harness(initialKey: string) {
       systems.set(match[1], d)
       return d.promise as Promise<ApiResponse<T>>
     }
+    const gate = path.match(/\/gate\/([^/?]+)$/)
+    if (gate) {
+      return Promise.resolve({
+        success: true,
+        data: {
+          systemId: gate[1],
+          allowed: false,
+          blocking: [{ policyId: 'pol-1', policyName: 'Access policy', ruleId: 'rule-1', ruleTitle: 'MFA required', detail: 'MFA is off' }],
+          warnings: [],
+          runId: 'run-1',
+          evaluatedAt: '2026-11-14T00:00:00Z',
+        },
+      }) as Promise<ApiResponse<T>>
+    }
     return Promise.resolve({ success: false, error: 'not found' })
   }
   const update = (next: (s: SystemFileState) => SystemFileState) => {
@@ -94,6 +108,18 @@ describe('system file scope', () => {
     await stale
     assert.equal(h.state.scopeKey, SYSTEM_B)
     assert.equal(viewSystemFile(h.state, SYSTEM_B).file.system, null)
+  })
+
+  test('loads the live policy gate with the system file', async () => {
+    const h = harness(SYSTEM_A)
+    const loading = h.load('system-a', SYSTEM_A)
+    h.release('system-a')
+    await loading
+    const view = viewSystemFile(h.state, SYSTEM_A)
+    assert.equal(view.file.policyGate?.allowed, false)
+    assert.equal(view.file.policyGate?.blocking.length, 1)
+    assert.equal(view.file.policyGate?.blocking[0].ruleTitle, 'MFA required')
+    assert.equal(view.loading, false)
   })
 
   test('waits for the organisations before fetching, so a cold load fetches the file once', () => {
