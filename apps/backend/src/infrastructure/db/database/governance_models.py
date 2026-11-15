@@ -3930,6 +3930,49 @@ class GovernanceMonitoringPolicy(Base):
         return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
 
 
+class GovernanceSystemChange(Base):
+    """A recorded change to an AI system: the parts that changed and the gate checks they reopened."""
+
+    __tablename__ = "governance_system_changes"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    system_id = Column(String, nullable=False, index=True)
+    org_id = Column(String, nullable=True, index=True)
+    number = Column(Integer, nullable=False)
+    parts_json = Column(Text, nullable=False, default="[]")
+    reopens_json = Column(Text, nullable=False, default="[]")
+    material = Column(Boolean, nullable=False, default=False)
+    from_version = Column(String, nullable=True)
+    to_version = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    gate_before_json = Column(Text, nullable=False, default="[]")
+    recorded_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    prev_seal = Column(String, nullable=True)
+    seal = Column(String, nullable=False)
+
+
+class GovernanceSystemRetirement(Base):
+    """The retirement of an AI system: why, the closing tasks, how long records are kept, and who signed off."""
+
+    __tablename__ = "governance_system_retirements"
+
+    system_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=True, index=True)
+    reason = Column(String, nullable=False)
+    replaced_by = Column(String, nullable=True)
+    last_day = Column(String, nullable=False)
+    tasks_json = Column(Text, nullable=False, default="[]")
+    retain_until = Column(String, nullable=False)
+    retain_basis = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    gate_snapshot_json = Column(Text, nullable=False, default="[]")
+    retired_by = Column(String, nullable=False)
+    retired_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    prev_seal = Column(String, nullable=True)
+    seal = Column(String, nullable=False)
+
+
 class GovernanceBiasAnalysis(Base):
     """A stored LLM-judge or advanced-bias analysis run against one AI system."""
 

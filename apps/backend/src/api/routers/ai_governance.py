@@ -416,7 +416,7 @@ def _require_system_access(
 ) -> OrgMembership:
     """Resolve a system's tenant and fail closed for missing or legacy unscoped rows."""
     row = db.execute(
-        text("SELECT org_id FROM governance_ai_systems WHERE id = :id"),
+        text("SELECT org_id, lifecycle_stage FROM governance_ai_systems WHERE id = :id"),
         {"id": system_id},
     ).fetchone()
     if not row or not row[0]:
@@ -432,6 +432,8 @@ def _require_system_access(
         raise HTTPException(status_code=404, detail="AI system not found")
     if mutate and not service.may_mutate(membership):
         raise HTTPException(status_code=403, detail="Organization mutation permission required")
+    if mutate and row[1] == "retired":
+        raise HTTPException(status_code=409, detail="This AI system is retired; its file is read only")
     return membership
 
 
@@ -884,7 +886,9 @@ def _derive_lifecycle_status(
 ) -> Dict[str, Any]:
     stored_stage = system.get("lifecycleStage") or "onboard"
 
-    if approval_request and approval_request.get("status") == "approved":
+    if stored_stage == "retired":
+        stage = "retired"  # set only by retirement; nothing derives a system back out of it
+    elif approval_request and approval_request.get("status") == "approved":
         stage = "operate"
     # SYSTEM_JOURNEY.md: Remediate lasts until no open high or critical risk and no active task.
     elif (
