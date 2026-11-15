@@ -272,14 +272,16 @@ def get_models(m: OrgMembership = Depends(org_member)):
                     except:
                         metadata = {}
                 
-                # Extract accuracy from metadata if available
-                accuracy = metadata.get("accuracy") or metadata.get("r2_score") or 0.85
-                
-                # Handle dates
+                # Scores come from the model's own metadata; None when nothing measured them.
+                def metric(*keys):
+                    for k in keys:
+                        v = metadata.get(k)
+                        if isinstance(v, (int, float)) and not isinstance(v, bool):
+                            return float(v)
+                    return None
+
                 def format_date(date_value):
-                    if date_value is None:
-                        return datetime.now().isoformat()
-                    return str(date_value)
+                    return str(date_value) if date_value is not None else None
                 
                 model_dict = {
                     "id": str(row.id),
@@ -288,9 +290,9 @@ def get_models(m: OrgMembership = Depends(org_member)):
                     "type": row.model_type,
                     "version": row.version,
                     "status": "active" if row.status else "inactive",
-                    "accuracy": float(accuracy) if isinstance(accuracy, (int, float)) else 0.85,
-                    "bias_score": 0.15,
-                    "fairness_score": 0.88,
+                    "accuracy": metric("accuracy", "r2_score"),
+                    "bias_score": metric("bias_score"),
+                    "fairness_score": metric("fairness_score"),
                     "created_at": format_date(row.upload_date),
                     "updated_at": format_date(row.updated_at),
                     "tags": tags,

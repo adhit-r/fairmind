@@ -954,7 +954,7 @@ def test_compliance_violations_are_per_organisation(automation):
     assert automation.get("/api/v1/compliance/violations/violation-orphan", headers=A).status_code == 404
     assert automation.patch(
         f"/api/v1/compliance/violations/violation-{ORG_B}/acknowledge", headers=A, json={"notes": "n"}
-    ).status_code == 404
+    ).status_code == 501  # not stored yet, refused for every violation alike
 
 
 def test_compliance_schedules_of_another_organisation_are_not_found(automation):

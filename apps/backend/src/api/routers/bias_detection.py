@@ -341,59 +341,11 @@ async def analyze_image_bias(
     test_prompts: str = Form(...),  # JSON string of test prompts
     expected_features: str = Form(...)  # JSON string of expected features
 ):
-    """
-    Analyze images for bias using computer vision libraries
-    
-    This endpoint can detect various types of visual bias including:
-    - Hand preference bias (left vs right handed)
-    - Cultural representation bias
-    - Demographic bias in visual features
-    - Accessibility bias
-    """
-    try:
-        # Parse JSON inputs
-        prompts = json.loads(test_prompts)
-        features = json.loads(expected_features)
-        
-        # Save uploaded images temporarily
-        image_paths = []
-        for i, image in enumerate(images):
-            # In production, you'd save to a proper storage system
-            temp_path = f"/tmp/bias_test_image_{i}_{datetime.now().timestamp()}.jpg"
-            with open(temp_path, "wb") as f:
-                f.write(image.file.read())
-            image_paths.append(temp_path)
-        
-        # Analyze images for bias
-        results = await bias_testing_library.analyze_image_bias(
-            image_paths=image_paths,
-            test_prompts=prompts,
-            expected_features=features
-        )
-        
-        # Clean up temporary files
-        import os
-        for path in image_paths:
-            if os.path.exists(path):
-                os.remove(path)
-        
-        return {
-            "success": True,
-            "results": [
-                {
-                    "image_index": i,
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "metadata": result.metadata
-                } for i, result in enumerate(results)
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing image bias: {e}")
-        raise HTTPException(status_code=500, detail=f"Image bias analysis failed: {str(e)}")
+    """Not available yet: answers 501 until an image analyser is connected."""
+    raise HTTPException(
+        status_code=501,
+        detail="Image bias analysis is not available yet: no analyser is connected, so no score can be given.",
+    )
 
 @router.post("/test/text")
 async def analyze_text_bias(
@@ -401,40 +353,11 @@ async def analyze_text_bias(
     test_prompts: List[str] = Form(...),
     sensitive_attributes: List[str] = Form(...)
 ):
-    """
-    Analyze text for bias using NLP libraries
-    
-    This endpoint can detect various types of text bias including:
-    - Gender bias in role assignments
-    - Age bias in descriptions
-    - Cultural bias in language use
-    - Linguistic bias in dialect representation
-    """
-    try:
-        # Run text bias analysis
-        results = await bias_testing_library.analyze_text_bias(
-            texts=texts,
-            test_prompts=test_prompts,
-            sensitive_attributes=sensitive_attributes
-        )
-        
-        return {
-            "success": True,
-            "results": [
-                {
-                    "text_index": i,
-                    "bias_score": result.bias_score,
-                    "confidence": result.confidence,
-                    "p_value": result.p_value,
-                    "effect_size": result.effect_size,
-                    "metadata": result.metadata
-                } for i, result in enumerate(results)
-            ]
-        }
-        
-    except Exception as e:
-        logger.error(f"Error analyzing text bias: {e}")
-        raise HTTPException(status_code=500, detail=f"Text bias analysis failed: {str(e)}")
+    """Not available yet: answers 501 until a text analyser is connected."""
+    raise HTTPException(
+        status_code=501,
+        detail="Text bias analysis is not available yet: no analyser is connected, so no score can be given.",
+    )
 
 @router.post("/templates")
 def add_custom_template():
