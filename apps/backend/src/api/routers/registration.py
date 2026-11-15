@@ -87,18 +87,21 @@ async def submit_registration(payload: RegistrationRequest, request: Request):
             )
 
         # Notify admin via Resend
-        import asyncio
-        asyncio.create_task(
-            email_service.send_registration_request_to_admin(
-                admin_email=settings.admin_email,
-                requester_name=payload.name,
-                requester_email=payload.email,
-                org_name=payload.org_name,
-                requested_role=payload.requested_role,
-                request_id=request_id,
-                message=payload.message,
+        if settings.admin_email:
+            import asyncio
+            asyncio.create_task(
+                email_service.send_registration_request_to_admin(
+                    admin_email=settings.admin_email,
+                    requester_name=payload.name,
+                    requester_email=payload.email,
+                    org_name=payload.org_name,
+                    requested_role=payload.requested_role,
+                    request_id=request_id,
+                    message=payload.message,
+                )
             )
-        )
+        else:
+            logger.warning("ADMIN_EMAIL is not set; access request %s was saved but no notice was sent", request_id)
 
         logger.info(f"Registration request submitted: {payload.email} for {payload.org_name}")
         return {"id": request_id, "status": "pending", "message": "Request submitted. You will be notified by email."}

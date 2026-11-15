@@ -4,6 +4,8 @@ Provides endpoints for sophisticated bias detection methods
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
@@ -376,10 +378,10 @@ async def health_check():
         }
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
-        return {
+        return JSONResponse(status_code=503, content=jsonable_encoder({
             "success": False,
             "status": "unhealthy",
             "service": "advanced_bias_detection",
             "error": "Health check failed; see the server log",
             "timestamp": datetime.now()
-        }
+        }))

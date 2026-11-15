@@ -4,6 +4,7 @@ Comprehensive bias detection endpoints for text and image models
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
@@ -467,7 +468,7 @@ def bias_detection_health():
         library_available = len(bias_testing_library.available_libraries) > 0
         
         return {
-            "status": "healthy",
+            "status": "healthy" if llm_available and library_available else "degraded",
             "timestamp": datetime.now().isoformat(),
             "services": {
                 "llm_bias_service": llm_available,
@@ -478,8 +479,8 @@ def bias_detection_health():
         
     except Exception as e:
         logger.error(f"Health check failed: {e}")
-        return {
+        return JSONResponse(status_code=503, content={
             "status": "unhealthy",
             "error": "Health check failed; see the server log",
             "timestamp": datetime.now().isoformat()
-        }
+        })

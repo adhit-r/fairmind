@@ -753,20 +753,15 @@ def root():
         "environment": settings.environment,
         "status": "running",
         "description": settings.api_description,
+        # Only what this server mounts; see /docs for the full route list.
         "features": [
-            "Advanced Bias Detection & Fairness Analysis",
-            "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
-            "Multimodal Bias Detection (Image, Audio, Video)",
-            "Real-time Monitoring & Alerting",
-            "Model Explainability & Interpretability",
-            "OWASP AI Security Testing",
-            "Model Provenance & Lineage Tracking",
-            "Comprehensive Evaluation Pipeline",
-            "Production-Ready API with Security",
-            "Rate Limiting & Request Monitoring",
-            "Health Checks & System Monitoring",
-            "Error Tracking & Logging",
-            "Automated Testing & Quality Assurance"
+            "AI system inventory and governance assurance",
+            "Fairness runs and bias detection (WEAT, advanced methods)",
+            "Evaluation packs and runs",
+            "Compliance checks (EU AI Act, NIST AI RMF, ISO/IEC 42001, GDPR, India frameworks)",
+            "Monitoring and alerting",
+            "Model provenance",
+            "Audit reports and audit logs",
         ],
         "endpoints": {
             "health": "/health",
@@ -781,8 +776,8 @@ def root():
 def api_info():
     """API information endpoint"""
     return {
-        "name": "Fairmind ML Service API",
-        "version": "1.0.0",
+        "name": settings.api_title,
+        "version": settings.api_version,
         "description": "Comprehensive AI governance and bias detection API with database support",
         "endpoints": {
             "health": "/health",

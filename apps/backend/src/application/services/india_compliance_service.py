@@ -552,7 +552,9 @@ class IndiaComplianceService(ComplianceReportingService):
         report_id = f"INDIA-COMPLIANCE-{system_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         
         # Calculate overall metrics
-        overall_score = sum(r.overall_score for r in compliance_results) / len(compliance_results) if compliance_results else 0
+        # A pending framework (no assessable requirements yet) has no score to average.
+        scored = [r for r in compliance_results if getattr(r.status, "value", r.status) != "pending"]
+        overall_score = sum(r.overall_score for r in scored) / len(scored) if scored else 0
         overall_status = self._determine_compliance_status(overall_score)
         
         # Collect all gaps

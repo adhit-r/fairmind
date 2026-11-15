@@ -912,15 +912,15 @@ async def auth_health_check():
         cache_status = await cache_manager.health_check()
 
         return {
-            "status": "healthy",
+            "status": "healthy" if cache_status else "degraded",
             "cache_available": cache_status,
             "timestamp": datetime.utcnow().isoformat()
         }
 
     except Exception as e:
         logger.error(f"Auth health check error: {e}")
-        return {
+        return JSONResponse(status_code=503, content={
             "status": "unhealthy",
             "error": "Health check failed; see the server log",
             "timestamp": datetime.utcnow().isoformat()
-        }
+        })

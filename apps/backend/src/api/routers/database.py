@@ -3,6 +3,7 @@ Database API Routes - Real data from Supabase/Prisma
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from typing import List, Dict, Any
 import logging
 from datetime import datetime
@@ -240,11 +241,11 @@ def database_health():
         }
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
-        return {
+        return JSONResponse(status_code=503, content={
             "success": False,
             "status": "disconnected",
             "message": "Database is not reachable; see the server log"
-        }
+        })
 
 # Main API endpoints (accessible at /api/v1/*)
 @main_router.get("/models")

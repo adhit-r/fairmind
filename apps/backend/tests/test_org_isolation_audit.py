@@ -681,6 +681,44 @@ def test_india_check_digital_india_act_is_pending_not_an_error(client):
     assert result["status"] == "pending" and result["total_requirements"] == 0
 
 
+def test_india_pending_framework_does_not_lower_the_score(client):
+    body = {"system_id": "system-a", "frameworks": ["digital_india_act"]}
+    pending = client.post("/api/v1/india/check", json=body, headers=A).json()
+    assert pending["status"] == "pending"
+    both = client.post(
+        "/api/v1/india/check", json={**body, "frameworks": ["dpdp_act_2023", "digital_india_act"]}, headers=A
+    ).json()
+    dpdp = client.post("/api/v1/india/check", json={**body, "frameworks": ["dpdp_act_2023"]}, headers=A).json()
+    assert both["overall_score"] == dpdp["overall_score"]
+
+
+def test_india_evidence_report_and_gender_bias(client):
+    from api.routes import india_compliance as router
+
+    client.post("/api/v1/india/check", json={"system_id": "system-a", "frameworks": ["dpdp_act_2023"]}, headers=A)
+    stored = router._india_evidence.list(scope="system-a")
+    assert stored, "the check keeps the evidence it collected"
+    evidence_id = stored[-1]["id"]
+    got = client.get(f"/api/v1/india/evidence/{evidence_id}", headers=A)
+    assert got.status_code == 200, got.text
+    assert got.json()["system_id"] == "system-a"
+    assert client.get(f"/api/v1/india/evidence/{evidence_id}", headers=B).status_code == 404
+    assert client.get("/api/v1/india/evidence/never-collected", headers=A).status_code == 404
+
+    report = client.post(
+        "/api/v1/india/report", params={"system_id": "system-a", "frameworks": "dpdp_act_2023"}, headers=A
+    )
+    assert report.status_code == 200, report.text
+    assert report.json()["report_data"]["overall_compliance"]["frameworks_assessed"] == ["dpdp_act_2023"]
+
+    gender = client.post(
+        "/api/v1/india/bias-detection",
+        json={"system_id": "system-a", "model_id": "m", "bias_types": ["gender_bias"], "test_data": {}},
+        headers=A,
+    )
+    assert gender.status_code == 501, gender.text
+
+
 def test_cross_border_control_without_data_flows_is_not_assessed():
     import asyncio
 

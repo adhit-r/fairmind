@@ -193,7 +193,8 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             "title": f"{evaluation_id} {EVALUATIONS[evaluation_id].name}: {outcome['status']}",
             "source": "fairmind.eval_engines",
             "content": json.dumps(content, default=str),
-            "confidence": 1.0 if outcome["status"] != "insufficient" else 0.5,
+            # Measured by the engine from the data itself; an insufficient run measured nothing.
+            "confidence": 0.0 if outcome["status"] == "insufficient" else 1.0,
             "by": user_id,
             "metadata": json.dumps({"provenance_class": "measured", "engine": evaluation_id, "source": outcome.get("source", "upload"), "computed_at": now}),
             "now": now,
