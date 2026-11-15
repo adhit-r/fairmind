@@ -27,7 +27,6 @@ PINS=(
   'app/(auth)/callback/page.tsx:2'
   'app/(dashboard)/admin/audit-log/page.tsx:1'
   'app/(dashboard)/admin/registrations/page.tsx:2'
-  'app/(dashboard)/admin/roles/page.tsx:2'
   'app/(dashboard)/admin/users/page.tsx:3'
   'app/(dashboard)/ai-governance/page.tsx:7'
   'app/(dashboard)/assurance/evaluations/[runId]/page.tsx:2'
