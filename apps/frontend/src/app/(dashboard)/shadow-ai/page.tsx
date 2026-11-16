@@ -27,6 +27,7 @@ import {
   downloadScript,
   getAgent,
   newAgentSecret,
+  setAgentRules,
   getReading,
   getScriptStatus,
   getTenantRules,
@@ -40,6 +41,9 @@ import {
   type Evidence,
   type EvidenceRow,
   type Finding,
+  type AgentAction,
+  type AgentEvent,
+  type AgentRule,
   type AgentStatus,
   type EdgeModel,
   type Reading,
@@ -976,6 +980,22 @@ function ModelsOnLaptop({ models }: { models: EdgeModel[] }) {
   )
 }
 
+const RULE_LABEL: Record<AgentRule, string> = {
+  personal_account: 'A personal account signs in to an approved tool',
+  not_allowed_app: 'A tool you do not allow starts',
+  unregistered_mcp: 'An MCP server not in your registry starts',
+  model_added: 'A new local model is downloaded',
+}
+const ACTION_LABEL: Record<AgentAction, string> = { log: 'Log only', tell_you: 'Tell you', tell_person: 'Tell the person', tell_both: 'Tell you and the person' }
+const ACTION_DONE: Record<AgentAction, string> = { log: 'Logged', tell_you: 'Told you', tell_person: 'For the person', tell_both: 'Told you, for the person' }
+
+function eventText(e: AgentEvent): string {
+  if (e.kind === 'account') return `Cursor signed in with a personal account on ${e.laptop}`
+  if (e.kind === 'mcp_started') return `MCP server ${e.server} started on ${e.laptop}`
+  if (e.kind === 'model_added') return `New local model ${e.name} on ${e.laptop}`
+  return `${e.app ?? e.service} started on ${e.laptop}`
+}
+
 /** The FairMind agent: osquery reporting to FairMind. Setup, health and what it saw today. */
 function AgentCard() {
   const [st, setSt] = useState<AgentStatus | null>(null)
@@ -1057,20 +1077,45 @@ function AgentCard() {
                 ))}
               </VStack>
             )}
+            <VStack gap={2}>
+              <Text size="sm" weight="semibold">
+                What the agent does
+              </Text>
+              {(Object.keys(RULE_LABEL) as AgentRule[]).map((r) => (
+                <HStack key={r} hAlign="between" vAlign="center" wrap="wrap" gap={2}>
+                  <Text size="sm">{RULE_LABEL[r]}</Text>
+                  <Selector
+                    label={`What the agent does when ${RULE_LABEL[r].toLowerCase()}`}
+                    isLabelHidden
+                    size="sm"
+                    value={st.rules[r]}
+                    options={(Object.keys(ACTION_LABEL) as AgentAction[]).map((a) => ({ value: a, label: ACTION_LABEL[a] }))}
+                    onChange={(v: string) => void act(async () => setSt(await setAgentRules({ [r]: v as AgentAction })))}
+                  />
+                </HStack>
+              ))}
+              <Text size="sm" color="secondary">
+                {st.domains.length
+                  ? `The account check compares with your company domains (${st.domains.join(', ')}), on the laptop.`
+                  : 'Set your company domains in the laptop script card to turn on the account check.'}{' '}
+                Messages to the person wait until the FairMind notifier is installed. The agent never blocks.
+              </Text>
+            </VStack>
             {st.events.length > 0 && (
               <VStack gap={1}>
                 <Text size="sm" weight="semibold">
                   As it happens
                 </Text>
                 <ol className="sh-cites">
-                  {st.events.slice(0, 8).map((e, i) => (
+                  {st.events.slice(0, 10).map((e, i) => (
                     <li key={i}>
                       <span className="sh-ref" aria-hidden="true">
-                        {(e.app ?? e.service ?? '?').slice(0, 2).toUpperCase()}
+                        {(e.app ?? e.server ?? e.name ?? e.service ?? '?').replace(/^@/, '').slice(0, 2).toUpperCase()}
                       </span>
                       <span>
-                        {e.app ?? e.service} started on {e.laptop}
+                        {eventText(e)}
                         {e.user ? ` (${e.user})` : ''}, {ago(e.at)}
+                        {e.action && e.action !== 'log' ? ` · ${ACTION_DONE[e.action]}` : ''}
                       </span>
                     </li>
                   ))}

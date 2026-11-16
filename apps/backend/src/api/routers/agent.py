@@ -1,7 +1,9 @@
 """
 The FairMind agent: osquery on each laptop, configured and collected by FairMind acting as its TLS server.
 osquery's official builds are signed with Apple's Endpoint Security entitlement, so AI apps are seen as they
-start on macOS; Windows checks the process list every minute. FairMind sends only its own queries, and only
+start on macOS; Windows checks the process list every minute. It also sees MCP servers start (their package
+name only, cut from the command on the laptop), which account Cursor is signed in with (work or personal,
+compared on the laptop), and new edge models. The organisation's rules decide what happens for each. FairMind sends only its own queries, and only
 what matches the catalogue is kept. It never reads prompts, files, keystrokes or command-line arguments.
 
 osquery talks to (public, authenticated by the enrol secret, then by the per-laptop node key):
@@ -42,6 +44,9 @@ router = APIRouter(prefix="/shadow-ai/agent", tags=["shadow-ai"], dependencies=[
 public_router = APIRouter(prefix="/osquery", tags=["shadow-ai"])
 
 KIND = "osquery_agent"
+# What the agent does for each kind of event, unless the organisation changed it.
+RULES = {"personal_account": "tell_person", "not_allowed_app": "tell_both", "unregistered_mcp": "tell_you", "model_added": "log"}
+ACTIONS = ("log", "tell_you", "tell_person", "tell_both")
 KEEP_DAYS = 30
 QUIET_DAYS = 3
 MAX_LOG_LINES = 2000
@@ -98,8 +103,48 @@ def _models_query(platform: str) -> str:
     return " UNION ALL ".join(f"SELECT path, size, mtime FROM file WHERE path LIKE '{g}'" for g in _MODEL_GLOBS[platform]) + ";"
 
 
-def schedule(platform: str) -> Dict[str, Any]:
+# An MCP server's package name, cut from its command line on the laptop; the rest of the command never leaves it.
+# Package-shaped names only (group 2): flags such as --strict-mcp-config and files such as mcp.json do not match.
+MCP_NAME = (
+    r"(^|[\s/.=])(@modelcontextprotocol/[a-z0-9_.-]+|@[a-z0-9_.-]+/[a-z0-9_.-]*mcp[a-z0-9_.-]*|"
+    r"[a-z0-9_-]*mcp[_-]server[a-z0-9_-]*|mcp-[a-z0-9_-]+|[a-z0-9_-]+-mcp)([\s.@:/]|$)"
+)
+_CURSOR_DB = {
+    "darwin": "/Users/%/Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+    "windows": "C:\\Users\\%\\AppData\\Roaming\\Cursor\\User\\globalStorage\\state.vscdb",
+}
+
+
+def account_tables(domains: List[str], platform: str) -> Dict[str, Any]:
+    """An osquery table over Cursor's local database that answers work, personal or unknown. The address is
+    compared with the company domains inside the query, on the laptop; only the answer is returned.
+    Only the cached email key is read; the sign-in tokens beside it are never selected."""
+    if not domains:
+        return {}
+    email = "lower(trim(value, '\"'))"
+    domain = f"substr({email}, instr({email}, '@') + 1)"
+    work = " OR ".join(f"{domain} = '{d}' OR {domain} LIKE '%.{d}'" for d in domains)  # domains are validated plain names
+    query = f"SELECT CASE WHEN instr({email}, '@') = 0 THEN 'unknown' WHEN {work} THEN 'work' ELSE 'personal' END AS class FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'"
+    return {"fm_cursor_account": {"query": query, "path": _CURSOR_DB[platform], "columns": ["class"], "platform": platform}}
+
+
+def schedule(platform: str, domains: Optional[List[str]] = None) -> Dict[str, Any]:
     """FairMind's queries for one platform family, as osquery's config schedule."""
+    mcp = f"regex_match(lower(cmdline), '{MCP_NAME}', 2)"
+    extra: Dict[str, Any] = {}
+    if domains:
+        extra["fm_accounts"] = {"query": "SELECT path, class FROM fm_cursor_account;", "interval": 600, "snapshot": True}
+    if platform == "darwin":
+        extra["fm_mcp_started"] = {
+            "query": f"SELECT path, username, time, {mcp} AS server FROM es_process_events WHERE event_type = 'exec' AND lower(cmdline) LIKE '%mcp%' AND {mcp} <> '';",
+            "interval": 60, "removed": False,
+        }
+    else:
+        extra["fm_mcp_started"] = {"query": f"SELECT name, path, {mcp} AS server FROM processes WHERE lower(cmdline) LIKE '%mcp%' AND {mcp} <> '';", "interval": 60, "removed": False}
+    return {**_schedule(platform), **extra}
+
+
+def _schedule(platform: str) -> Dict[str, Any]:
     if platform == "darwin":
         started = (
             "SELECT path, signing_id, username, time FROM es_process_events WHERE event_type = 'exec' AND "
@@ -223,7 +268,17 @@ def config(body: NodeRequest, db: Session = Depends(get_db)):
         return {"node_invalid": True}
     db.execute(text("UPDATE governance_agent_nodes SET last_seen = :now WHERE id = :id"), {"now": _now().isoformat(), "id": node[0]})
     db.commit()
-    return {"schedule": schedule("darwin" if node[2] == "darwin" else "windows"), "decorators": DECORATORS, "node_invalid": False}
+    platform = "darwin" if node[2] == "darwin" else "windows"
+    domains = org_domains(db, node[1])
+    return {"schedule": schedule(platform, domains), "auto_table_construction": account_tables(domains, platform), "decorators": DECORATORS, "node_invalid": False}
+
+
+def org_domains(db: Session, org: str) -> List[str]:
+    """The company email domains set for the laptop script; the agent's account check uses the same ones."""
+    from api.routes.laptop_reports import KIND as SCRIPT, domains_of
+
+    row = db.execute(text("SELECT config_json FROM governance_integrations WHERE org_id = :org AND kind = :k ORDER BY created_at LIMIT 1"), {"org": org, "k": SCRIPT}).fetchone()
+    return domains_of(hub._load_json_value(row[0], {}).get("domains")) if row else []
 
 
 _APP_MARK = ".app/Contents/MacOS/"
@@ -252,6 +307,8 @@ def log(body: LogRequest, db: Session = Depends(get_db)):
         return {"node_invalid": True}
     now = _now()
     sets: Dict[str, Any] = {"last_seen": now.isoformat()}
+    seen: List[tuple] = []  # (kind, service, detail)
+    state = db.execute(text("SELECT models_json, accounts_json, name FROM governance_agent_nodes WHERE id = :id"), {"id": node[0]}).fetchone()
     if body.log_type == "status":
         errors = [str(d.get("message") or "") for d in body.data if str(d.get("severity")) in ("1", "2") or "endpointsecurity" in str(d.get("message") or "").lower()]
         if errors:
@@ -265,24 +322,113 @@ def log(body: LogRequest, db: Session = Depends(get_db)):
                 sets["name"] = str(deco["computer"])[:120]
             if deco.get("console_user"):
                 sets["console_user"] = str(deco["console_user"])[:120]
-            if line.get("name") == "fm_models" and isinstance(line.get("snapshot"), list):
-                sets["models_json"] = json.dumps(models_from_rows(line["snapshot"]))
-            elif line.get("name") == "fm_ai_started" and line.get("action", "added") == "added":
-                cols = line.get("columns") or {}
+            name, cols = line.get("name"), line.get("columns") or {}
+            user = cols.get("username") or deco.get("console_user")
+            if name == "fm_models" and isinstance(line.get("snapshot"), list):
+                models = models_from_rows(line["snapshot"])
+                sets["models_json"] = json.dumps(models)
+                if state and state[0] is not None:  # the first list after enrolment is the baseline, not news
+                    before = {(m["runtime"], m["name"]) for m in json.loads(state[0])}
+                    seen += [("model_added", None, {"runtime": m["runtime"], "name": m["name"], "user": m.get("owner")}) for m in models if (m["runtime"], m["name"]) not in before]
+            elif name == "fm_accounts" and isinstance(line.get("snapshot"), list):
+                accounts: Dict[str, Dict[str, str]] = {"cursor": {}}
+                for r in line["snapshot"]:
+                    owner = _owner(str(r.get("path") or ""))
+                    if owner and r.get("class") in ("work", "personal"):
+                        accounts["cursor"][owner] = r["class"]
+                before = json.loads(state[1]) if state and state[1] else {}
+                sets["accounts_json"] = json.dumps(accounts)
+                for owner, cls in accounts["cursor"].items():
+                    if cls == "personal" and (before.get("cursor") or {}).get(owner) != "personal":
+                        seen.append(("account", "cursor", {"user": owner, "class": cls}))
+            elif name == "fm_mcp_started" and line.get("action", "added") == "added":
+                server = str(cols.get("server") or "").strip()[:120]
+                if server:
+                    seen.append(("mcp_started", None, {"server": server, "program": _bundle_name(str(cols.get("path") or cols.get("name") or ""))[:120], "user": user}))
+            elif name == "fm_ai_started" and line.get("action", "added") == "added":
                 svc = _service(cols)
                 if svc:
-                    at = datetime.fromtimestamp(int(line.get("unixTime") or now.timestamp()), tz=timezone.utc).isoformat()
-                    detail = {"user": cols.get("username") or deco.get("console_user"), "app": _app_name(cols)}
-                    db.execute(
-                        text("INSERT INTO governance_agent_events (id, org_id, node_id, kind, service, detail_json, at) VALUES (:id, :org, :n, 'app_started', :s, :d, :at)"),
-                        {"id": str(uuid.uuid4()), "org": node[1], "n": node[0], "s": svc, "d": json.dumps(detail), "at": at},
-                    )
+                    seen.append(("app_started", svc, {"user": user, "app": _app_name(cols)}))
+    laptop = sets.get("name") or (state[2] if state else None) or "a laptop"
+    if seen:
+        _record(db, node, seen, laptop, now)
     cols_sql = ", ".join(f"{k} = :{k}" for k in sets)
     db.execute(text(f"UPDATE governance_agent_nodes SET {cols_sql} WHERE id = :id"), {**sets, "id": node[0]})
     # ponytail: old events are pruned on write; a nightly job would keep the table trim when laptops are quiet.
     db.execute(text("DELETE FROM governance_agent_events WHERE node_id = :n AND at < :cut"), {"n": node[0], "cut": (now - timedelta(days=KEEP_DAYS)).isoformat()})
     db.commit()
     return {"node_invalid": False}
+
+
+def _owner(path: str) -> Optional[str]:
+    p = path.replace("\\", "/")[:1024]
+    i = p.lower().find("/users/")
+    return p[i + 7 :].split("/", 1)[0].lower() or None if i >= 0 else None
+
+
+def rule_for(kind: str, service: Optional[str], detail: Dict[str, Any], stance: Dict[str, Dict[str, Any]], registry: Optional[set]) -> Optional[str]:
+    """Which of the organisation's rules an event falls under, if any."""
+    status = (stance.get(service or "") or {}).get("status")
+    if kind == "app_started" and status == "not_allowed":
+        return "not_allowed_app"
+    if kind == "account" and detail.get("class") == "personal" and status in ("approved", "limited"):
+        return "personal_account"
+    if kind == "mcp_started" and registry is not None and re.sub(r"[^a-z0-9]", "", detail["server"].split("/")[-1].lower()) not in registry:
+        return "unregistered_mcp"
+    if kind == "model_added":
+        return "model_added"
+    return None
+
+
+def _messages(rule: str, label: str, detail: Dict[str, Any], laptop: str) -> tuple:
+    """(title for the governance team, message for the person or None)."""
+    if rule == "personal_account":
+        return f"Personal {label} account on {laptop}", f"{label} on this laptop is signed in with an account outside your company's domains. Sign in with your work account so your work stays under the company agreement."
+    if rule == "not_allowed_app":
+        return f"{label} started on {laptop}, and you do not allow it", f"{label} is not allowed at your company. Close it and use an approved tool instead."
+    if rule == "unregistered_mcp":
+        return f"An MCP server not in your registry started on {laptop}: {detail['server']}", None
+    return f"A new local AI model on {laptop}: {detail.get('name')}", None
+
+
+def _record(db: Session, node: Any, seen: List[tuple], laptop: str, now: datetime) -> None:
+    """Store events, apply the organisation's rules, and tell the governance team at most once a day per thing."""
+    from api.routes import shadow_ai as sa
+    from src.application.services.reviewer_notify import decision_email, reviewer_emails, send_in_background
+
+    org = node[1]
+    stance = sa._stance(db, org)
+    reg_rows = db.execute(text("SELECT name, metadata_json FROM governance_discovered_assets WHERE org_id = :org AND source = 'mcp_registry'"), {"org": org}).fetchall()
+    registry = {re.sub(r"[^a-z0-9]", "", str(n or "").lower()) for n, _ in reg_rows} | {
+        re.sub(r"[^a-z0-9]", "", str(json.loads(m or "{}").get("server_name") or "").split("/")[-1].lower()) for _, m in reg_rows
+    } if reg_rows else None
+    row = db.execute(text("SELECT config_json FROM governance_integrations WHERE org_id = :org AND kind = :k ORDER BY created_at LIMIT 1"), {"org": org, "k": KIND}).fetchone()
+    rules = {**RULES, **(hub._load_json_value(row[0], {}).get("rules") or {} if row else {})}
+    since = (now - timedelta(days=1)).isoformat()
+    for kind, service, detail in seen:
+        rule = rule_for(kind, service, detail, stance, registry)
+        action = rules.get(rule, "log") if rule else "log"
+        label = sa._BY_KEY[service].label if service in sa._BY_KEY else detail.get("server") or detail.get("name") or "An AI tool"
+        detail = {**detail, "rule": rule, "action": action}
+        if rule and action != "log":
+            title, person = _messages(rule, label, detail, laptop)
+            detail["title"] = title
+            if action in ("tell_person", "tell_both") and person:
+                detail["forPerson"] = person  # delivered by the notifier once it is installed (phase 5c)
+            if action in ("tell_you", "tell_both"):
+                key = f"{rule}:{service or detail.get('server') or detail.get('name')}"
+                told = db.execute(
+                    text("SELECT 1 FROM governance_agent_events WHERE node_id = :n AND at >= :since AND detail_json LIKE :k LIMIT 1"),
+                    {"n": node[0], "since": since, "k": f'%"toldKey": "{key}"%'},
+                ).fetchone()
+                if not told:
+                    send_in_background(reviewer_emails(db, org), title, decision_email(title, ["FairMind's agent saw this on the laptop just now."], "/shadow-ai?view=laptops"))
+                    detail["toldKey"] = key
+                detail["told"] = True
+        db.execute(
+            text("INSERT INTO governance_agent_events (id, org_id, node_id, kind, service, detail_json, at) VALUES (:id, :org, :n, :k, :s, :d, :at)"),
+            {"id": str(uuid.uuid4()), "org": org, "n": node[0], "k": kind, "s": service, "d": json.dumps(detail), "at": now.isoformat()},
+        )
 
 
 def _app_name(cols: Dict[str, Any]) -> str:
@@ -299,17 +445,26 @@ def _app_name(cols: Dict[str, Any]) -> str:
 def agent_as_facts(db: Session, org: str) -> List[tuple]:
     """Each enrolled laptop as a laptop record: AI apps it started in 30 days (kind used) and its edge models."""
     cut = (_now() - timedelta(days=KEEP_DAYS)).isoformat()
-    nodes = db.execute(text("SELECT id, serial, name, console_user, models_json FROM governance_agent_nodes WHERE org_id = :org AND last_seen >= :cut"), {"org": org, "cut": cut}).fetchall()
+    nodes = db.execute(text("SELECT id, serial, name, console_user, models_json, accounts_json FROM governance_agent_nodes WHERE org_id = :org AND last_seen >= :cut"), {"org": org, "cut": cut}).fetchall()
     if not nodes:
         return []
     started: Dict[str, set] = {}
-    for node_id, svc in db.execute(text("SELECT DISTINCT node_id, service FROM governance_agent_events WHERE org_id = :org AND at >= :cut AND service IS NOT NULL"), {"org": org, "cut": cut}).fetchall():
-        started.setdefault(node_id, set()).add(svc)
+    mcp: Dict[str, Dict[str, str]] = {}
+    for node_id, kind, svc, detail in db.execute(
+        text("SELECT node_id, kind, service, detail_json FROM governance_agent_events WHERE org_id = :org AND at >= :cut AND kind IN ('app_started', 'mcp_started')"), {"org": org, "cut": cut}
+    ).fetchall():
+        if kind == "app_started" and svc:
+            started.setdefault(node_id, set()).add(svc)
+        elif kind == "mcp_started":
+            d = json.loads(detail)
+            mcp.setdefault(node_id, {})[d["server"]] = d.get("program") or ""
     devices = [
         {
             "serial": n[1], "name": n[2], "device_id": None, "user": (n[3] or "").lower() or None,
             "apps": [{"service": s, "name": s, "version": None, "kind": "used"} for s in sorted(started.get(n[0], ()))],
             "models": json.loads(n[4] or "[]"),
+            "accounts": [{"service": svc, "class": cls} for svc, by in json.loads(n[5] or "{}").items() for who, cls in by.items() if who == (n[3] or "").lower()],
+            "mcp": [{"name": name, "client": "FairMind agent", "command": prog or None} for name, prog in sorted(mcp.get(n[0], {}).items())],
         }
         for n in nodes
     ]
@@ -322,7 +477,7 @@ def agent_status(http: Request, db: Session = Depends(get_db)):
     org = _caller_org(http)
     row = _row(db, org)
     if not row:
-        return {"connected": False, "hasSecret": False, "laptops": 0, "quiet": [], "problems": [], "events": []}
+        return {"connected": False, "hasSecret": False, "laptops": 0, "quiet": [], "problems": [], "events": [], "rules": RULES, "domains": []}
     quiet_cut = (_now() - timedelta(days=QUIET_DAYS)).isoformat()
     nodes = db.execute(text("SELECT id, name, serial, platform, osquery_version, last_seen, problem FROM governance_agent_nodes WHERE org_id = :org"), {"org": org}).fetchall()
     names = {n[0]: n[1] or n[2] or "A laptop" for n in nodes}
@@ -337,7 +492,30 @@ def agent_status(http: Request, db: Session = Depends(get_db)):
         "quiet": [{"name": names[n[0]], "lastSeen": n[5]} for n in nodes if n[5] < quiet_cut],
         "problems": [{"name": names[n[0]], "problem": n[6]} for n in nodes if n[6]],
         "events": [{"laptop": names.get(e[0], "A laptop"), "kind": e[1], "service": e[2], **json.loads(e[3]), "at": e[4]} for e in events],
+        "rules": {**RULES, **(config.get("rules") or {})},
+        "domains": org_domains(db, org),
     }
+
+
+class RulesBody(BaseModel):
+    rules: Dict[str, Literal["log", "tell_you", "tell_person", "tell_both"]]
+
+
+@router.put("/rules")
+def set_rules(body: RulesBody, http: Request, db: Session = Depends(get_db), who: Any = Depends(org_mutator)):
+    hub._ensure_tables()
+    org = _caller_org(http)
+    row = _row(db, org)
+    if not row:
+        raise HTTPException(status_code=409, detail="Set up the agent first")
+    unknown = sorted(set(body.rules) - set(RULES))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown events: {', '.join(unknown)}")
+    config = hub._load_json_value(row[4], {})
+    config["rules"] = {**(config.get("rules") or {}), **body.rules}
+    db.execute(text("UPDATE governance_integrations SET config_json = :c WHERE id = :id"), {"c": json.dumps(config), "id": row[0]})
+    db.commit()
+    return agent_status(http, db)
 
 
 @router.put("")
