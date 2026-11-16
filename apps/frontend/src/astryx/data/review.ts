@@ -175,7 +175,7 @@ export interface ShadowAI {
     teams: string[]
     cells: Record<string, Record<string, { company: number; personal: number; unapproved: number }>>
   }
-  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number }
+  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number; sourceKinds: string[] }
 }
 
 export interface ToolStance {
@@ -226,4 +226,79 @@ export async function reopenFinding(key: string) {
 
 export async function nudgePerson(key: string, message: string) {
   return unwrap(await apiClient.post<{ sentTo: string }>(`${S}/findings/nudge`, { key, message }))
+}
+
+export interface EvidenceRow {
+  service: string
+  label: string
+  vendor: string
+  stance: Stance
+  onLaptop: { laptops: string[]; sources: string[]; kinds: string[]; versions: string[] } | null
+  traffic: { requests: number; sources: string[] } | null
+  seat: { status: 'held' | 'none' | 'unknown'; source: string } | null
+}
+
+export interface Evidence {
+  person: string | null
+  team: string | null
+  laptops: { id: string; name: string; serial: string | null; sources: string[] }[]
+  people: string[]
+  rows: EvidenceRow[]
+}
+
+export interface LaptopSummary {
+  id: string
+  name: string
+  serial: string | null
+  people: string[]
+  team: string
+  sources: string[]
+  tools: { service: string; label: string; stance: Stance }[]
+  flagged: number
+}
+
+/** Every AI tool for one person or one laptop, by kind of evidence. */
+export function useEvidence(person: string | null, laptop: string | null) {
+  const [data, setData] = useState<Evidence | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!person && !laptop) return
+    let cancelled = false
+    const q = person ? `person=${encodeURIComponent(person)}` : `laptop=${encodeURIComponent(laptop ?? '')}`
+    apiClient
+      .get<Evidence>(`${S}/evidence?${q}`)
+      .then((res) => {
+        if (cancelled) return
+        setData(unwrap(res))
+        setError(null)
+      })
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the evidence'))
+    return () => {
+      cancelled = true
+    }
+  }, [person, laptop])
+  return { data, error }
+}
+
+export function useLaptops(query: string) {
+  const [data, setData] = useState<{ total: number; laptops: LaptopSummary[] } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const t = setTimeout(() => {
+      apiClient
+        .get<{ total: number; laptops: LaptopSummary[] }>(`${S}/laptops?q=${encodeURIComponent(query)}`)
+        .then((res) => {
+          if (cancelled) return
+          setData(unwrap(res))
+          setError(null)
+        })
+        .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load laptops'))
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [query])
+  return { data, error }
 }

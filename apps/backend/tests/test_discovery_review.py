@@ -304,7 +304,8 @@ def test_laptops_merge_on_serial_not_name():
     laptops = merge_laptops(raw)
     arjun = next(lt for lt in laptops if lt["serial"] == "C02X")
     assert len(laptops) == 3 and arjun["sources"] == ["defender", "intune", "jamf"] and arjun["names"] == ["Arjuns-MacBook-Pro", "LT-ENG-0231", "lt-eng-0231"]
-    assert arjun["apps"]["cursor"] == {"versions": ["0.44", "0.45"], "sources": ["intune", "jamf"]}
+    assert arjun["apps"]["cursor"] == {"versions": ["0.44", "0.45"], "sources": ["intune", "jamf"], "kinds": ["installed"]}
+    assert arjun["id"] == "d:aad-1" and "s:C02X" in arjun["keys"]
 
 
 def test_shadow_ai_seats_and_laptops(env):
@@ -359,3 +360,38 @@ def test_seat_source_sync_keeps_facts(env, monkeypatch):
     steps = c.get("/api/v1/integrations").json()
     step = next(i for i in (steps if isinstance(steps, list) else steps.get("integrations", [])) if i["id"] == cur)["recentRuns"][0]["steps"][0]
     assert step["key"] == "seats" and step["found"] == 2
+
+
+def test_laptop_traffic_confirms_and_evidence_grid(env):
+    c, factory, sent = env
+    okta = _integration(c, "okta", domain="acme.okta.com")
+    cur = _integration(c, "cursor")
+    mde = _integration(c, "defender", tenant_id="t", client_id="c")
+    _facts(factory, okta, "okta", {"arjun@acme.com": {"team": "Engineering", "status": "active"}, "priya@acme.com": {"team": "Engineering", "status": "active"}}, [])
+    _raw_facts(factory, cur, "cursor", {"seats": {"cursor": {"priya@acme.com": {"last_active": None}}}, "complete": {"cursor": True}})
+    _raw_facts(factory, mde, "defender", {
+        "devices": [{"serial": None, "device_id": "AAD-1", "name": "LT-ENG-0231", "user": "arjun@acme.com", "apps": [{"service": "cursor", "kind": "used"}, {"service": "deepseek", "kind": "extension"}]}],
+        "traffic": [
+            {"device_id": "AAD-1", "name": "LT-ENG-0231", "user": "arjun@acme.com", "service": "cursor", "requests": 214},
+            {"device_id": "AAD-1", "name": "LT-ENG-0231", "user": "arjun@acme.com", "service": "claude", "requests": 9},
+        ],
+    })
+    assert c.put("/api/v1/shadow-ai/tools/cursor", json={"status": "approved"}).status_code == 200
+    body = c.get("/api/v1/shadow-ai").json()
+    arjun = next(f for f in body["findings"] if f["key"] == "personal:cursor:arjun@acme.com")
+    assert arjun["confidence"] == "confirmed" and arjun["evidence"][0]["title"] == "Laptop traffic" and "214 connections" in arjun["evidence"][0]["detail"]
+    assert "defender" in body["coverage"]["sourceKinds"]
+
+    grid = c.get("/api/v1/shadow-ai/evidence", params={"person": "arjun@acme.com"}).json()
+    rows = {r["service"]: r for r in grid["rows"]}
+    assert grid["team"] == "Engineering" and grid["laptops"][0]["name"] == "LT-ENG-0231"
+    assert rows["cursor"]["onLaptop"]["kinds"] == ["used"] and rows["cursor"]["traffic"]["requests"] == 214 and rows["cursor"]["seat"]["status"] == "none"
+    assert rows["claude"]["onLaptop"] is None and rows["claude"]["traffic"]["sources"] == ["Defender for Endpoint"]
+    assert rows["deepseek"]["onLaptop"]["kinds"] == ["extension"] and rows["deepseek"]["stance"] == "not_reviewed"
+    by_laptop = c.get("/api/v1/shadow-ai/evidence", params={"laptop": grid["laptops"][0]["id"]}).json()
+    assert {r["service"] for r in by_laptop["rows"]} == set(rows)
+    assert c.get("/api/v1/shadow-ai/evidence").status_code == 422
+
+    listed = c.get("/api/v1/shadow-ai/laptops", params={"q": "eng-0231"}).json()
+    assert listed["total"] == 1 and listed["laptops"][0]["flagged"] == 1 and listed["laptops"][0]["people"] == ["arjun@acme.com"]
+    assert c.get("/api/v1/shadow-ai/laptops", params={"q": "nothing"}).json()["total"] == 0

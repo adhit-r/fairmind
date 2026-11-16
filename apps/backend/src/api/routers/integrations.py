@@ -442,6 +442,9 @@ _READERS = {
     "chatgpt_enterprise": seats.chatgpt_enterprise,
     "jamf": devices.jamf,
     "intune": devices.intune,
+    "defender": devices.defender,
+    "crowdstrike": devices.crowdstrike,
+    "chrome": devices.chrome,
 }
 
 

@@ -23,12 +23,16 @@ VENDOR = "Google Cloud"
 MAX_PER_LIST = 500
 
 
-async def _access_token(client: httpx.AsyncClient, key_json: str) -> str:
+async def _access_token(client: httpx.AsyncClient, key_json: str, scope: str = "https://www.googleapis.com/auth/cloud-platform", subject: Optional[str] = None) -> str:
+    """A token for the service account; with subject, acting as that Workspace user (domain-wide delegation)."""
     try:
         sa = json.loads(key_json)
         now = int(time.time())
+        claims = {"iss": sa["client_email"], "scope": scope, "aud": TOKEN_URI, "iat": now, "exp": now + 3600}
+        if subject:
+            claims["sub"] = subject
         assertion = jwt.encode(
-            {"iss": sa["client_email"], "scope": "https://www.googleapis.com/auth/cloud-platform", "aud": TOKEN_URI, "iat": now, "exp": now + 3600},
+            claims,
             sa["private_key"],
             algorithm="RS256",
             headers={"kid": sa.get("private_key_id")} if sa.get("private_key_id") else None,

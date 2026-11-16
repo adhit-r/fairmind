@@ -16,14 +16,18 @@ import { Heading, Text } from '@astryxdesign/core/Text'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { SourceMark } from '@/astryx/DiscoveryParts'
-import { ago } from '@/astryx/data/discovery'
+import { LANES, SOURCES, ago, type IntegrationKind } from '@/astryx/data/discovery'
 import {
   listTools,
   markExpected,
   nudgePerson,
   reopenFinding,
   setToolStance,
+  useEvidence,
+  useLaptops,
   useShadowAI,
+  type Evidence,
+  type EvidenceRow,
   type Finding,
   type FindingType,
   type ShadowAI,
@@ -299,6 +303,8 @@ function FindingPanel({ f, onChanged }: { f: Finding; onChanged: () => Promise<v
         </VStack>
       </section>
 
+      {f.person && <PersonTools person={f.person} />}
+
       {note && <Banner status={note.ok ? 'success' : 'error'} title={note.ok ? 'Done' : 'That did not work'} description={note.text} isDismissable onDismiss={() => setNote(null)} />}
 
       <div className="dv-two">
@@ -489,11 +495,190 @@ function ReadsTab({ coverage }: { coverage: ShadowAI['coverage'] }) {
   )
 }
 
+/** Which places the connected sources watch, as a bar of segments, one per Discovery area. */
+function CoverageStrip({ kinds }: { kinds: string[] }) {
+  const lanes = LANES.filter((l) => l.key !== 'code' && l.key !== 'cloud')
+  const on = new Set(kinds.map((k) => SOURCES[k as IntegrationKind]?.lane).filter(Boolean))
+  const seen = lanes.filter((l) => on.has(l.key))
+  return (
+    <div className="sh-strip">
+      <Text size="sm" weight="semibold" color="secondary">
+        Seeing with
+      </Text>
+      <span className="sh-seg" aria-hidden="true">
+        {lanes.map((l) => (
+          <i key={l.key} className={on.has(l.key) ? 'f' : undefined} />
+        ))}
+      </span>
+      <Text size="sm">{seen.length ? seen.map((l) => l.label).join(', ') : 'No sources yet'}</Text>
+      {seen.length < lanes.length && (
+        <Text size="sm" color="secondary">
+          Not yet: {lanes.filter((l) => !on.has(l.key)).map((l) => l.label).join(', ')}
+        </Text>
+      )}
+      <span className="sh-strip-end">
+        <Button size="sm" variant="ghost" label="Sources" href="/discovery/connect" />
+      </span>
+    </div>
+  )
+}
+
+function cell(r: EvidenceRow, k: 'onLaptop' | 'traffic'): { cls: string; label: string } {
+  const approved = r.stance === 'approved' || r.stance === 'limited'
+  const v = r[k]
+  if (!v) return { cls: 'none', label: 'Not seen' }
+  const how =
+    k === 'onLaptop' && r.onLaptop
+      ? `${r.onLaptop.kinds.map((x) => (x === 'used' ? 'run' : x === 'extension' ? 'browser extension' : 'installed')).join(', ')}, seen by ${r.onLaptop.sources.join(', ')}`
+      : r.traffic
+        ? `${r.traffic.requests} connections, seen by ${r.traffic.sources.join(', ')}`
+        : ''
+  return { cls: approved ? 'co' : 'un', label: `${approved ? '' : 'Not approved: '}${how}` }
+}
+
+function seatCell(r: EvidenceRow): { cls: string; label: string } {
+  if (!r.seat) return { cls: 'none', label: 'No seat list connected' }
+  if (r.seat.status === 'held') return { cls: 'co', label: `Company seat, from ${r.seat.source}` }
+  if (r.seat.status === 'unknown') return { cls: 'none', label: `${r.seat.source} shows too few emails to compare` }
+  return r.onLaptop || r.traffic ? { cls: 'pe', label: `In use with no company seat, from ${r.seat.source}` } : { cls: 'none', label: `No company seat, from ${r.seat.source}` }
+}
+
+/** Each AI tool against each kind of evidence, as squares. */
+function EvidenceGrid({ ev }: { ev: Evidence }) {
+  if (!ev.rows.length) return <Text color="secondary">No AI tools seen yet.</Text>
+  return (
+    <VStack gap={2}>
+      <div className="sh-mapwrap">
+        <table className="sh-map sh-grid">
+          <thead>
+            <tr>
+              <th scope="col">Tool</th>
+              <th scope="col">On the laptop</th>
+              <th scope="col">Traffic</th>
+              <th scope="col">Company seat</th>
+              <th scope="col">Your stance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ev.rows.map((r) => {
+              const cells = [cell(r, 'onLaptop'), cell(r, 'traffic'), seatCell(r)]
+              return (
+                <tr key={r.service}>
+                  <th scope="row">
+                    {r.label}
+                    <span className="st">{r.vendor}</span>
+                  </th>
+                  {cells.map((c, i) => (
+                    <td key={i}>
+                      <span className={`sh-sq ${c.cls}`} title={c.label} role="img" aria-label={c.label} />
+                      {i === 1 && r.traffic ? <span className="sh-n">{r.traffic.requests}</span> : null}
+                    </td>
+                  ))}
+                  <td>
+                    <span className={`st ${r.stance}`}>{STANCE_LABEL[r.stance]}</span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="sh-legend">
+        <span><span className="sh-sq co" />Seen, approved or company seat</span>
+        <span><span className="sh-sq pe" />In use with no company seat</span>
+        <span><span className="sh-sq un" />Seen, not approved</span>
+        <span><span className="sh-sq none" />Not seen</span>
+      </div>
+    </VStack>
+  )
+}
+
+function PersonTools({ person }: { person: string }) {
+  const { data, error } = useEvidence(person, null)
+  return (
+    <section className="fm-card" aria-labelledby="tools-title">
+      <VStack gap={3}>
+        <div>
+          <Heading level={3} id="tools-title">
+            Every AI tool for {person}
+          </Heading>
+          <Text size="sm" color="secondary">
+            {data?.laptops.length ? `On ${data.laptops.map((l) => l.name).join(', ')}, merged from ${[...new Set(data.laptops.flatMap((l) => l.sources))].join(', ')}.` : 'From every connected source.'} Hover a square to see which sources said it.
+          </Text>
+        </div>
+        {error ? <Text color="secondary">{error}</Text> : data ? <EvidenceGrid ev={data} /> : <Skeleton height={140} />}
+      </VStack>
+    </section>
+  )
+}
+
+function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: string) => void }) {
+  const [q, setQ] = useState('')
+  const { data, error } = useLaptops(q)
+  const selected = data?.laptops.find((l) => l.id === picked) ?? data?.laptops[0] ?? null
+  const ev = useEvidence(null, selected?.id ?? null)
+  if (error) return <EmptyState title="Laptops could not load" description={error} />
+  if (!data) return <Skeleton height={360} />
+  if (!data.total && !q)
+    return (
+      <EmptyState
+        title="No laptops yet"
+        description="Connect Jamf, Intune, Defender for Endpoint, CrowdStrike or Chrome Enterprise to see which AI tools are on each laptop."
+        actions={<Button label="Connect a source" href="/discovery/connect" />}
+      />
+    )
+  return (
+    <div className="dv-split">
+      <section className="fm-card dv-wlist" aria-label="Laptops">
+        <div className="dv-wlist-hd">
+          <TextInput label="Find a laptop, serial or person" isLabelHidden placeholder="Find a laptop, serial or person" size="sm" value={q} onChange={setQ} />
+        </div>
+        {data.laptops.map((l) => (
+          <button key={l.id} type="button" className={`dv-witem${selected?.id === l.id ? ' on' : ''}`} aria-current={selected?.id === l.id} onClick={() => onPick(l.id)}>
+            <span style={{ minWidth: 0 }}>
+              <span className="nm">{l.name}</span>
+              <span className="k">{[l.people[0], l.team !== 'No team' ? l.team : null, `${l.tools.length} AI ${l.tools.length === 1 ? 'tool' : 'tools'}`].filter(Boolean).join(' · ')}</span>
+            </span>
+            {l.flagged > 0 ? <span className="dv-chip sev-high">{l.flagged} not approved</span> : <span />}
+            <span />
+            <span />
+          </button>
+        ))}
+        {data.total > data.laptops.length && (
+          <div className="dv-wlist-hd">
+            <Text size="sm" color="secondary">
+              Showing {data.laptops.length} of {data.total}. Search to narrow.
+            </Text>
+          </div>
+        )}
+      </section>
+      {selected && (
+        <VStack gap={4}>
+          <section className="fm-card">
+            <VStack gap={2}>
+              <Heading level={2}>{selected.name}</Heading>
+              <Text size="sm" color="secondary">
+                {[selected.serial ? `Serial ${selected.serial}` : null, selected.people.join(', ') || 'No person on record', `seen by ${selected.sources.join(', ')}`].filter(Boolean).join(' · ')}
+              </Text>
+            </VStack>
+          </section>
+          <section className="fm-card" aria-label="Every AI tool on this laptop">
+            <VStack gap={3}>
+              <Heading level={3}>Every AI tool on this laptop</Heading>
+              {ev.error ? <Text color="secondary">{ev.error}</Text> : ev.data ? <EvidenceGrid ev={ev.data} /> : <Skeleton height={140} />}
+            </VStack>
+          </section>
+        </VStack>
+      )}
+    </div>
+  )
+}
+
 function ShadowView() {
   const router = useRouter()
   const params = useSearchParams()
   const v = params.get('view')
-  const view = v === 'expected' || v === 'resolved' || v === 'tools' || v === 'reads' ? v : 'open'
+  const view = v === 'expected' || v === 'resolved' || v === 'tools' || v === 'reads' || v === 'laptops' ? v : 'open'
   const { data, loading, error, refresh } = useShadowAI()
   const [type, setType] = useState<FindingType | null>(null)
   const open = useMemo(() => (data?.findings ?? []).filter((f) => f.status === 'open'), [data])
@@ -511,9 +696,11 @@ function ShadowView() {
           <Heading level={1}>Shadow AI</Heading>
           <Text color="secondary">AI used outside what you approved, worked out by comparing your connected sources with each other. It never reads prompts or file contents.</Text>
         </VStack>
+        {data && <CoverageStrip kinds={data.coverage.sourceKinds} />}
         <TabList value={view} onChange={(t) => go(t)} hasDivider aria-label="Shadow AI view">
           <Tab value="open" label={`Open${open.length ? ` ${open.length}` : ''}`} />
           <Tab value="expected" label={`Expected${expected.length ? ` ${expected.length}` : ''}`} />
+          <Tab value="laptops" label={`Laptops${data?.coverage.laptops ? ` ${data.coverage.laptops}` : ''}`} />
           <Tab value="resolved" label="Resolved" />
           <Tab value="tools" label="Approved tools" />
           <Tab value="reads" label={`What it reads${off ? ` · ${off} off` : ''}`} />
@@ -522,6 +709,8 @@ function ShadowView() {
           <Skeleton height={360} />
         ) : error || !data ? (
           <EmptyState title="Shadow AI could not load" description={error ?? ''} actions={<Button label="Try again" onClick={() => void refresh()} />} />
+        ) : view === 'laptops' ? (
+          <LaptopsTab picked={picked} onPick={(id) => go('laptops', id)} />
         ) : view === 'tools' ? (
           <ToolsTab onSaved={() => void refresh()} />
         ) : view === 'reads' ? (
