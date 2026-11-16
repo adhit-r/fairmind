@@ -51,3 +51,10 @@
   .sh-tool { grid-template-columns: minmax(0, 1fr); }
   .sh-scale { min-width: 0; }
 }
+.sh-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); }
+.sh-strip-end { margin-left: auto; }
+.sh-seg { display: inline-flex; gap: 3px; }
+.sh-seg i { width: 22px; height: 8px; border-radius: 2px; background: var(--color-border); }
+.sh-seg i.f { background: var(--color-text-primary); }
+.sh-grid td { vertical-align: middle; }
+.sh-n { margin-left: 6px; font-size: 12px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }

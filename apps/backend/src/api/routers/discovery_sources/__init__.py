@@ -69,6 +69,14 @@ async def get_json(client: httpx.AsyncClient, url: str, vendor: str, **kwargs: A
     return _decode(resp, vendor)
 
 
+async def post_json(client: httpx.AsyncClient, url: str, vendor: str, body: Any, **kwargs: Any) -> Any:
+    try:
+        resp = await client.post(url, json=body, **kwargs)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach {vendor}: {type(exc).__name__}") from None
+    return _decode(resp, vendor)
+
+
 async def post_form(client: httpx.AsyncClient, url: str, vendor: str, data: Dict[str, str]) -> Any:
     try:
         resp = await client.post(url, data=data)

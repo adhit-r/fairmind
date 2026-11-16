@@ -401,7 +401,7 @@ def test_jamf_keeps_only_ai_apps(fake_http):
 
     fake_http(handler)
     tools, facts = run(devices.jamf({"url": "https://acme.jamfcloud.com", "client_id": "c"}, "s"))
-    assert facts["devices"] == [{"serial": "C02X", "name": "Arjuns-MacBook-Pro", "device_id": None, "user": "arjun@acme.com", "apps": [{"service": "cursor", "name": "Cursor.app", "version": "0.45"}]}]
+    assert facts["devices"] == [{"serial": "C02X", "name": "Arjuns-MacBook-Pro", "device_id": None, "user": "arjun@acme.com", "apps": [{"service": "cursor", "name": "Cursor.app", "version": "0.45", "kind": "installed"}]}]
     assert [t["name"] for t in tools] == ["Cursor"] and tools[0]["metadata"]["devices"] == 1
 
 
@@ -420,3 +420,73 @@ def test_intune_reads_devices_per_ai_app(fake_http):
     tools, facts = run(devices.intune({"tenant_id": "t", "client_id": "c"}, "s"))
     assert not any("/a2/" in str(c.url) for c in calls)  # apps that are not AI are never followed
     assert facts["devices"][0]["user"] == "arjun@acme.com" and facts["devices"][0]["apps"][0]["service"] == "chatgpt"
+
+
+def test_defender_hunting_apps_traffic_extensions(fake_http):
+    def handler(r):
+        if t := ms_token(r):
+            return t
+        assert r.url.path.endswith("/security/runHuntingQuery")
+        query = json.loads(r.content)["Query"]
+        if query.startswith("DeviceProcessEvents"):
+            return (200, {"results": [{"DeviceId": "m1", "AadDeviceId": "AAD-1", "DeviceName": "lt-eng-0231", "FileName": "Cursor.exe", "Upn": "arjun@acme.com", "Version": "0.45", "Runs": 40}]})
+        if query.startswith("DeviceNetworkEvents"):
+            return (200, {"results": [
+                {"DeviceId": "m1", "AadDeviceId": "AAD-1", "DeviceName": "lt-eng-0231", "Host": "api2.cursor.sh", "Upn": "arjun@acme.com", "Requests": 200},
+                {"DeviceId": "m1", "AadDeviceId": "AAD-1", "DeviceName": "lt-eng-0231", "Host": "cursor.com", "Upn": "arjun@acme.com", "Requests": 14},
+                {"DeviceId": "m1", "AadDeviceId": "AAD-1", "DeviceName": "lt-eng-0231", "Host": "example.org", "Upn": "arjun@acme.com", "Requests": 5},
+            ]})
+        return (200, {"results": [{"DeviceId": "m1", "AadDeviceId": "AAD-1", "DeviceName": "lt-eng-0231", "ExtensionName": "Grammarly: AI Writing", "ExtensionVersion": "14"}]})
+
+    fake_http(handler)
+    tools, facts = run(devices.defender({"tenant_id": "t", "client_id": "c"}, "s"))
+    d = facts["devices"][0]
+    assert d["device_id"] == "AAD-1" and d["user"] == "arjun@acme.com"
+    assert {(a["service"], a["kind"]) for a in d["apps"]} == {("cursor", "used"), ("grammarly", "extension")}
+    assert facts["traffic"] == [{"device_id": "AAD-1", "name": "lt-eng-0231", "user": "arjun@acme.com", "service": "cursor", "requests": 214}]
+    assert {t["name"]: t["metadata"].get("requests") for t in tools} == {"Cursor": 214, "Grammarly": None}
+
+
+def test_defender_queries_carry_only_catalogue_values():
+    for q in devices.DEFENDER_QUERIES.values():
+        assert "take 50000" in q and "{" not in q
+
+
+def test_crowdstrike_apps_with_host_serials(fake_http):
+    def handler(r):
+        if r.url.path == "/oauth2/token":
+            return (201, {"access_token": "t"})
+        if r.url.path == "/discover/combined/applications/v1":
+            assert "Cursor" in q(r)["filter"][0]
+            return (200, {"resources": [{"name": "Cursor", "version": "0.45", "host": {"aid": "h1", "hostname": "LT-ENG-0231"}, "last_used_user_name": "arjun"}], "meta": {"pagination": {}}})
+        if r.url.path == "/devices/entities/devices/v2":
+            return (200, {"resources": [{"device_id": "h1", "serial_number": "C02X", "hostname": "LT-ENG-0231"}]})
+        return (404, {})
+
+    fake_http(handler)
+    tools, facts = run(devices.crowdstrike({"client_id": "c"}, "s"))
+    assert facts["devices"] == [{"serial": "C02X", "name": "LT-ENG-0231", "device_id": None, "user": "arjun", "apps": [{"service": "cursor", "name": "Cursor", "version": "0.45", "kind": "installed"}]}]
+
+
+def test_chrome_ai_extensions_with_directory_serials(fake_http, monkeypatch):
+    async def token(client, key_json, scope, subject):
+        assert subject == "admin@acme.com" and "chrome.management.reports.readonly" in scope
+        return "t"
+
+    monkeypatch.setattr(devices, "google_token", token)
+
+    def handler(r):
+        p = r.url.path
+        if p.endswith("reports:countInstalledApps"):
+            return (200, {"installedApps": [{"appId": "ext1", "appType": "EXTENSION", "displayName": "Claude"}, {"appId": "ext2", "appType": "EXTENSION", "displayName": "uBlock Origin"}]})
+        if p.endswith("reports:findInstalledAppDevices"):
+            assert q(r)["appId"] == ["ext1"]
+            return (200, {"devices": [{"deviceId": "b1", "machine": "LT-ENG-0231"}]})
+        if p.endswith("/devices/chromebrowsers"):
+            return (200, {"browsers": [{"deviceId": "b1", "serialNumber": "C02X", "lastDeviceUser": "Arjun@acme.com"}]})
+        return (404, {})
+
+    fake_http(handler)
+    tools, facts = run(devices.chrome({"admin_email": "admin@acme.com"}, "{}"))
+    assert facts["devices"][0]["serial"] == "C02X" and facts["devices"][0]["user"] == "arjun@acme.com"
+    assert facts["devices"][0]["apps"] == [{"service": "claude", "name": "Claude", "version": None, "kind": "extension"}] and [t["name"] for t in tools] == ["Claude"]

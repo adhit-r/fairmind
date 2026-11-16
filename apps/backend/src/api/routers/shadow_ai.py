@@ -3,6 +3,8 @@ Shadow AI: AI used outside what the organisation approved, worked out by compari
 connected sources already read. No source here reads prompts, replies or file contents.
 
 GET  /shadow-ai                     findings (open, expected, resolved), the approved-versus-used map, coverage
+GET  /shadow-ai/laptops             laptops with AI on them, merged across sources (search with q)
+GET  /shadow-ai/evidence            every AI tool for one person or laptop: on the laptop, traffic, company seat, stance
 GET  /shadow-ai/tools               every known AI service with the organisation's stance on it
 PUT  /shadow-ai/tools/{service}     set or clear the stance on one service
 POST /shadow-ai/findings/expected   mark a finding as expected, with a reason
@@ -111,6 +113,16 @@ class People:
         return (self.by_email.get(email or "") or {}).get("team") or NO_TEAM
 
 
+def _laptop_keys(d: Dict[str, Any]) -> List[str]:
+    keys = [f"s:{d['serial'].strip().upper()}"] if d.get("serial") else []
+    keys += [f"d:{d['device_id'].strip().lower()}"] if d.get("device_id") else []
+    if not keys and d.get("name") and d.get("user"):
+        keys = [f"n:{_norm(d['name'])}|{d['user']}"]
+    if not keys and d.get("name"):
+        keys = [f"o:{d['source']}:{_norm(d['name'])}"]  # one source's own name for it; never joins another source
+    return keys
+
+
 def merge_laptops(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """One record per laptop from every device source. Serial number and Microsoft device ID are strong keys;
     a record with neither merges on name plus person. A name alone never merges."""
@@ -124,11 +136,7 @@ def merge_laptops(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     first: Dict[str, int] = {}
     for i, d in enumerate(raw):
-        keys = [f"s:{d['serial'].strip().upper()}"] if d.get("serial") else []
-        keys += [f"d:{d['device_id'].strip().lower()}"] if d.get("device_id") else []
-        if not keys and d.get("name") and d.get("user"):
-            keys = [f"n:{_norm(d['name'])}|{d['user']}"]
-        for k in keys:
+        for k in _laptop_keys(d):
             if k in first:
                 parent[find(i)] = find(first[k])
             else:
@@ -143,18 +151,21 @@ def merge_laptops(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         apps: Dict[str, Dict[str, Any]] = {}
         for m in members:
             for a in m.get("apps") or []:
-                e = apps.setdefault(a["service"], {"versions": set(), "sources": set()})
+                e = apps.setdefault(a["service"], {"versions": set(), "sources": set(), "kinds": set()})
                 if a.get("version"):
                     e["versions"].add(a["version"])
                 e["sources"].add(m["source"])
+                e["kinds"].add(a.get("kind") or "installed")
         out.append(
             {
+                "id": min(k for m in members for k in _laptop_keys(m)) if any(_laptop_keys(m) for m in members) else f"x:{len(out)}",
+                "keys": sorted({k for m in members for k in _laptop_keys(m)}),
                 "name": names[0] if names else serial or "Unnamed laptop",
                 "names": names,
                 "serial": serial,
                 "users": sorted({m["user"] for m in members if m.get("user")}),
                 "sources": sorted({m["source"] for m in members}),
-                "apps": {k: {"versions": sorted(v["versions"]), "sources": sorted(v["sources"])} for k, v in apps.items()},
+                "apps": {k: {"versions": sorted(v["versions"]), "sources": sorted(v["sources"]), "kinds": sorted(v["kinds"])} for k, v in apps.items()},
             }
         )
     out.sort(key=lambda l: l["name"])
@@ -168,6 +179,7 @@ class Fleet:
         self.seats: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
         self.complete: Dict[str, bool] = {}
         raw: List[Dict[str, Any]] = []
+        traffic: List[Dict[str, Any]] = []
         for source, facts_json in rows:
             facts = json.loads(facts_json or "{}")
             for svc, held in (facts.get("seats") or {}).items():
@@ -176,7 +188,20 @@ class Fleet:
                 # Two lists for one tool (two Cursor teams) are compared only if both carry emails.
                 self.complete[svc] = self.complete.get(svc, True) and bool((facts.get("complete") or {}).get(svc))
             raw += [{**d, "source": source} for d in facts.get("devices") or []]
+            traffic += [{**t, "source": source} for t in facts.get("traffic") or []]
         self.laptops = merge_laptops(raw)
+        by_key = {k: lt for lt in self.laptops for k in lt["keys"]}
+        # service -> person as the source names them -> requests, laptops, sources
+        self.traffic: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+        for t in traffic:
+            if not t.get("user"):
+                continue
+            lt = next((by_key[k] for k in _laptop_keys({**t, "user": None}) if k in by_key), None)
+            e = self.traffic[t["service"]].setdefault(t["user"].lower(), {"requests": 0, "laptops": set(), "sources": set()})
+            e["requests"] += int(t.get("requests") or 0)
+            e["sources"].add(t["source"])
+            if lt or t.get("name"):
+                e["laptops"].add(lt["name"] if lt else t["name"])
         self.installs: Dict[str, Dict[str, List[Dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
         for lt in self.laptops:
             for u in lt["users"]:
@@ -200,7 +225,18 @@ def _laptops_detail(laptops: List[Dict[str, Any]], svc: str) -> str:
     return f"Installed on {shown}, seen by {', '.join(sources)}"
 
 
+def _laptop_traffic(s: Any, t: Dict[str, Any]) -> Dict[str, str]:
+    where = sorted(t["laptops"])
+    shown = ", ".join(where[:3]) + (f" and {len(where) - 3} more" if len(where) > 3 else "")
+    n = t["requests"]
+    return {
+        "source": "devices", "title": "Laptop traffic",
+        "detail": f"{n} connection{'s' if n != 1 else ''} to {s.label}" + (f" from {shown}" if shown else "") + f", seen by {', '.join(sorted(hub_label(x) for x in t['sources']))}",
+    }
+
+
 _RANK = {"possible": 0, "likely": 1, "confirmed": 2}
+LAPTOP_SOURCES = ("jamf", "intune", "defender", "crowdstrike", "chrome")
 
 
 def _finding(key: str, kind: str, title: str, severity: str, confidence: str, subject: str, evidence: List[Dict[str, str]], verdict: str, **extra: Any) -> Dict[str, Any]:
@@ -264,9 +300,14 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
                 email = None if _IP.match(who.strip()) else people.resolve(who)
                 if email and not fleet.holds(svc, email):
                     candidate(svc, who, email, "confirmed", [traffic(a, s, who, n), no_seat])
-        for email, by_svc in fleet.installs.items():
-            if svc in by_svc and not fleet.holds(svc, email):
-                candidate(svc, email, email, "likely", [{"source": "devices", "title": "Laptops", "detail": _laptops_detail(by_svc[svc], svc)}, no_seat])
+        for who, t in sorted(fleet.traffic.get(svc, {}).items()):
+            email = people.resolve(who)
+            if email and not fleet.holds(svc, email):
+                candidate(svc, who, email, "confirmed", [_laptop_traffic(s, t), no_seat])
+        for who, by_svc in fleet.installs.items():
+            email = people.resolve(who)
+            if svc in by_svc and email and not fleet.holds(svc, email):
+                candidate(svc, who, email, "likely", [{"source": "devices", "title": "Laptops", "detail": _laptops_detail(by_svc[svc], svc)}, no_seat])
 
     for (svc, _), c in sorted(cands.items()):
         s = _BY_KEY[svc]
@@ -364,11 +405,15 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
         for svc in lt["apps"]:
             if (stance.get(svc) or {}).get("status") == "not_allowed":
                 installed[svc].append(lt)
-    for key in sorted(set(seen) | set(installed)):
+    talked = {k for k in fleet.traffic if (stance.get(k) or {}).get("status") == "not_allowed"}
+    for key in sorted(set(seen) | set(installed) | talked):
         s = _BY_KEY[key]
-        evidence = [{"source": a["source"], "title": hub_label(a["source"]), "detail": _seen_detail(a)} for a in seen[key] if a["source"] not in ("jamf", "intune")]
+        evidence = [{"source": a["source"], "title": hub_label(a["source"]), "detail": _seen_detail(a)} for a in seen[key] if a["source"] not in LAPTOP_SOURCES]
         if installed[key]:
             evidence.append({"source": "devices", "title": "Laptops", "detail": _laptops_detail(installed[key], key)})
+        for t in fleet.traffic.get(key, {}).values():
+            evidence.append(_laptop_traffic(s, t))
+            break  # one line is enough; the evidence grid lists every person
         out.append(_finding(f"not_allowed:{key}", "not_allowed", f"{s.label} is in use, and you do not allow it", "high", "confirmed", s.label, evidence, f"Ask the people using {s.label} to stop, and block it at your gateway.", service=key))
 
     # People consenting to an AI app on their own, for an app the organisation has not approved.
@@ -445,9 +490,12 @@ def usage_map(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Di
                 if not _IP.match(u.strip()):
                     users[s.key].add(people.resolve(u) or u.lower())
     fleet = fleet or Fleet([])
-    for email, by_svc in fleet.installs.items():
+    for who, by_svc in fleet.installs.items():
         for svc in by_svc:
-            users[svc].add(email)
+            users[svc].add(people.resolve(who) or who)
+    for svc, by_who in fleet.traffic.items():
+        for who in by_who:
+            users[svc].add(people.resolve(who) or who)
     since = datetime.now(timezone.utc) - timedelta(days=30)
     for svc, held in fleet.seats.items():
         for email, v in held.items():
@@ -479,6 +527,97 @@ def usage_map(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Di
         cells[team] = row
     tools = [{"key": k, "label": _BY_KEY[k].label, "status": (stance.get(k) or {}).get("status") or "not_reviewed", "teams": (stance.get(k) or {}).get("teams") or []} for k in keys]
     return {"tools": tools, "teams": teams, "cells": cells}
+
+
+def _stance_of(stance: Dict[str, Dict[str, Any]], svc: str) -> str:
+    return (stance.get(svc) or {}).get("status") or "not_reviewed"
+
+
+def evidence(
+    assets: List[Dict[str, Any]], people: People, fleet: Fleet, stance: Dict[str, Dict[str, Any]], person: Optional[str] = None, laptop: Optional[str] = None
+) -> Dict[str, Any]:
+    """Every AI tool for one person or one laptop, by kind of evidence: on the laptop, traffic, company seat, stance."""
+    if laptop:
+        laptops = [lt for lt in fleet.laptops if laptop == lt["id"] or laptop in lt["keys"]]
+        whos = {u for lt in laptops for u in lt["users"]}
+        persons = {people.resolve(u) or u for u in whos}
+    else:
+        p = (person or "").strip().lower()
+        persons = {p}
+        laptops = [lt for lt in fleet.laptops if any((people.resolve(u) or u) == p for u in lt["users"])]
+    mine = lambda who: (people.resolve(who) or who.lower()) in persons  # noqa: E731
+    rows: Dict[str, Dict[str, Any]] = {}
+
+    def row(svc: str) -> Dict[str, Any]:
+        s = _BY_KEY[svc]
+        return rows.setdefault(svc, {"service": svc, "label": s.label, "vendor": s.vendor, "stance": _stance_of(stance, svc), "onLaptop": None, "traffic": None, "seat": None})
+
+    for lt in laptops:
+        for svc, a in lt["apps"].items():
+            if svc not in _BY_KEY:
+                continue
+            on = row(svc)["onLaptop"] or {"laptops": [], "sources": set(), "kinds": set(), "versions": set()}
+            on["laptops"].append(lt["name"])
+            on["sources"] |= {hub_label(x) for x in a["sources"]}
+            on["kinds"] |= set(a["kinds"])
+            on["versions"] |= set(a["versions"])
+            rows[svc]["onLaptop"] = on
+    for svc, by_who in fleet.traffic.items():
+        for who, t in by_who.items():
+            if svc in _BY_KEY and mine(who):
+                tr = row(svc)["traffic"] or {"requests": 0, "sources": set()}
+                tr["requests"] += t["requests"]
+                tr["sources"] |= {hub_label(x) for x in t["sources"]}
+                rows[svc]["traffic"] = tr
+    for a in assets:
+        s = _service_of(a)
+        if a["source"] != "proxy_logs" or not s:
+            continue
+        n = sum(v for who, v in (a["metadata"].get("requests_by_user") or {}).items() if not _IP.match(who.strip()) and mine(who))
+        if n:
+            tr = row(s.key)["traffic"] or {"requests": 0, "sources": set()}
+            tr["requests"] += n
+            tr["sources"].add("Proxy logs")
+            rows[s.key]["traffic"] = tr
+    for svc in list(rows) + [k for k in fleet.seats if any(fleet.holds(k, x) for x in persons if "@" in x)]:
+        if not fleet.seats.get(svc) or svc not in _BY_KEY:
+            continue
+        held = any(fleet.holds(svc, x) for x in persons if "@" in x)
+        source = hub_label(next(iter(fleet.seats[svc].values()))["source"])
+        row(svc)["seat"] = {"status": "held" if held else "none" if fleet.compared(svc) else "unknown", "source": source}
+    out = []
+    for r in rows.values():
+        for k in ("onLaptop", "traffic"):
+            if r[k]:
+                r[k] = {kk: sorted(v) if isinstance(v, set) else v for kk, v in r[k].items()}
+        out.append(r)
+    out.sort(key=lambda r: (r["stance"] in ("approved", "limited"), r["label"]))
+    subject = {"person": sorted(persons)[0] if not laptop and persons else None, "team": people.team(sorted(persons)[0]) if persons and not laptop else None}
+    return {
+        **subject,
+        "laptops": [{"id": lt["id"], "name": lt["name"], "serial": lt["serial"], "sources": [hub_label(x) for x in lt["sources"]]} for lt in laptops],
+        "people": sorted(persons),
+        "rows": out,
+    }
+
+
+def laptop_list(people: People, fleet: Fleet, stance: Dict[str, Dict[str, Any]], q: str = "") -> List[Dict[str, Any]]:
+    q = q.strip().lower()
+    out = []
+    for lt in fleet.laptops:
+        users = [people.resolve(u) or u for u in lt["users"]]
+        if q and not any(q in x.lower() for x in [*lt["names"], lt["serial"] or "", *users]):
+            continue
+        tools = [{"service": k, "label": _BY_KEY[k].label, "stance": _stance_of(stance, k)} for k in sorted(lt["apps"]) if k in _BY_KEY]
+        out.append(
+            {
+                "id": lt["id"], "name": lt["name"], "serial": lt["serial"], "people": users, "team": people.team(users[0] if users else None),
+                "sources": [hub_label(x) for x in lt["sources"]], "tools": tools,
+                "flagged": sum(1 for t in tools if t["stance"] not in ("approved", "limited")),
+            }
+        )
+    out.sort(key=lambda x: (-x["flagged"], x["name"].lower()))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -554,9 +693,29 @@ def shadow_ai(http: Request, db: Session = Depends(get_db)):
             "approvedTools": len(cur["stance"]),
             "ssoTools": sum(1 for s in cur["stance"].values() if s["sso_required"]),
             "seatLists": sorted(k for k in cur["fleet"].seats if cur["fleet"].compared(k)),
+            "sourceKinds": sorted(k),
             "laptops": len(cur["fleet"].laptops),
         },
     }
+
+
+LAPTOPS_SHOWN = 300
+
+
+@router.get("/laptops")
+def laptops(http: Request, q: str = "", db: Session = Depends(get_db)):
+    # ponytail: built from every source's facts on each read; page in SQL if fleets grow past tens of thousands.
+    cur = _current(db, _caller_org(http))
+    found = laptop_list(cur["people"], cur["fleet"], cur["stance"], q[:200])
+    return {"total": len(found), "laptops": found[:LAPTOPS_SHOWN]}
+
+
+@router.get("/evidence")
+def evidence_for(http: Request, person: Optional[str] = None, laptop: Optional[str] = None, db: Session = Depends(get_db)):
+    if bool(person) == bool(laptop):
+        raise HTTPException(status_code=422, detail="Ask for one person or one laptop")
+    cur = _current(db, _caller_org(http))
+    return evidence(cur["assets"], cur["people"], cur["fleet"], cur["stance"], person=person, laptop=laptop)
 
 
 @router.get("/tools")
