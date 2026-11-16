@@ -106,6 +106,21 @@ class ResendEmailService:
         """
         return await self._send(user_email, "Your FairMind access has been approved", html)
 
+    async def send_org_invitation(self, email: str, token: str, role: str, expires_at: str) -> bool:
+        url = f"{settings.frontend_url}/invitations/{token}"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:22px;font-weight:600;padding-bottom:12px">You are invited to FairMind</h1>
+          <p>You have been invited to join an organisation on FairMind as <strong>{escape(role)}</strong>.</p>
+          <a href="{url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:16px">
+            Accept invitation
+          </a>
+          <p style="margin-top:24px;font-size:12px;color:#666">The link expires on {escape(expires_at[:10])}.</p>
+        </div>
+        """
+        return await self._send(email, "You are invited to FairMind", html)
+
     async def send_denial_email(self, user_email: str, user_name: str, org_name: str, notes: Optional[str] = None) -> bool:
         notes_block = f"<p><strong>Reason:</strong> {escape(notes)}</p>" if notes else ""
         user_name, org_name = escape(user_name), escape(org_name)

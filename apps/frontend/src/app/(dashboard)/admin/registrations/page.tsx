@@ -67,7 +67,8 @@ export default function RegistrationsPage() {
     if (!reviewModal) return
     setSubmitting(true)
     try {
-      await apiClient.post(`/api/v1/registrations/${reviewModal.id}/${reviewModal.action}`, { notes })
+      const res = await apiClient.post(`/api/v1/registrations/${reviewModal.id}/${reviewModal.action}`, { notes })
+      if (!res.success) throw new Error(res.error || 'Please try again.')
       toast({
         title: reviewModal.action === 'approve' ? 'Request approved' : 'Request denied',
         description: 'The applicant has been notified by email.',
