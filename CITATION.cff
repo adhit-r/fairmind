@@ -22,9 +22,10 @@ authors:
     orcid: "https://orcid.org/0009-0004-1682-7958"
 repository-code: "https://github.com/adhit-r/fairmind"
 url: "https://www.fairmind.xyz"
-license:
-  - AGPL-3.0-only
-  - Apache-2.0
+# Zenodo cannot load a license list (v0.4.0-alpha failed to archive), so this
+# names the repository licence only. The SDK, CLI and MCP server are
+# Apache-2.0; see their LICENSE files.
+license: AGPL-3.0-only
 keywords:
   - ai-governance
   - ai-assurance
