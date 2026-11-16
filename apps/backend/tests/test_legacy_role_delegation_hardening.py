@@ -133,7 +133,7 @@ async def test_legacy_org_checks_require_active_membership() -> None:
 
     assert await org_management._check_org_membership(ORG_ID, ACTOR_ID, database) is None
     assert not await org_management._check_org_admin(ORG_ID, ACTOR_ID, database)
-    assert await org_management._count_org_admins(ORG_ID, database) == 0
+    assert await org_management._count_active_owners(ORG_ID, database) == 0
     assert all("status = 'active'" in query for query in database.queries)
 
 
@@ -163,10 +163,16 @@ class _RoleMutationDatabase:
     async def fetch_one(self, query: str, _values: dict) -> object:
         if "role IN ('admin', 'owner')" in query:
             return {"id": "active-admin"} if self.is_admin else None
+        if "SELECT id, role FROM org_members" in query:
+            return {"id": "active-admin", "role": "admin"} if self.is_admin else None
+        if "COUNT(*) AS count FROM org_members" in query:
+            return {"count": 1}
+        if "SELECT 1 FROM org_roles" in query:
+            return {"exists": 1}
         if "SELECT permissions FROM org_roles" in query:
             return {"permissions": self.role_permissions}
-        if "SELECT id, user_id, role FROM org_members" in query:
-            return {"id": "member-1", "user_id": TARGET_ID, "role": self.member_role}
+        if "SELECT id, user_id, role, status FROM org_members" in query:
+            return {"id": "member-1", "user_id": TARGET_ID, "role": self.member_role, "status": "active"}
         if "SELECT om.id FROM org_members om" in query:
             return None
         if "SELECT id FROM org_invitations" in query:

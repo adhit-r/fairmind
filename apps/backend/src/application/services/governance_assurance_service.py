@@ -170,7 +170,7 @@ class GovernanceAssuranceService:
 
     @staticmethod
     def may_mutate(membership: OrgMembership) -> bool:
-        return membership.role in {"owner", "admin"} or MUTATION_PERMISSION in membership.permissions
+        return membership.role in {"owner", "admin", "editor"} or MUTATION_PERMISSION in membership.permissions
 
     @staticmethod
     def may_import(membership: OrgMembership) -> bool:

@@ -164,7 +164,7 @@ function Connections({ spec, systemId, onReady }: { spec: EngineSpec; systemId: 
           `${cfg.providerName}, ${cfg.model}`
         ) : (
           <span>
-            No AI provider is on. <Link href="/org-admin/settings#ai-provider" className="font-semibold underline">Set one up in organisation settings</Link>
+            No AI provider is on. <Link href="/settings?section=ai-provider" className="font-semibold underline">Set one up in organisation settings</Link>
           </span>
         ),
       )}
@@ -301,7 +301,7 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
           </div>
           {from === 'connection' && !connection && !connections.loading && (
             <span className={`text-xs ${MUTED}`}>
-              No agent platform is connected. Connect one in <Link href="/org-admin/settings#platform-connections" className="font-semibold underline">organization settings</Link>, or upload an export.
+              No agent platform is connected. Connect one in <Link href="/settings?section=connections" className="font-semibold underline">organization settings</Link>, or upload an export.
             </span>
           )}
           {from === 'connection' && connection && (

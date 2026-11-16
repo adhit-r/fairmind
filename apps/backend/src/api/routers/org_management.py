@@ -27,7 +27,6 @@ from pydantic import BaseModel, EmailStr
 from config.database import get_db_connection, get_database
 from config.settings import settings
 from config.auth import get_current_active_user, TokenData
-from core.decorators.org_permissions import require_org_admin, require_org_member
 from src.application.services.governance_assurance_service import (
     has_legacy_role_delegation_blocked_permission,
     normalize_org_role_permissions,
@@ -112,13 +111,13 @@ class OrganizationsListResponse(BaseModel):
 class InviteMemberRequest(BaseModel):
     """Request to invite a new member to organization."""
     email: EmailStr
-    role: str = "analyst"  # Default role
+    role: str = "editor"  # owner, admin, editor, viewer or a custom role
 
     class Config:
         schema_extra = {
             "example": {
                 "email": "newuser@company.com",
-                "role": "analyst"
+                "role": "editor"
             }
         }
 
@@ -255,13 +254,86 @@ async def _check_org_admin(org_id: str, user_id: str, db):
     return admin is not None
 
 
-async def _count_org_admins(org_id: str, db):
-    """Count number of admins in organization."""
-    result = await db.fetch_one(
-        "SELECT COUNT(*) as count FROM org_members WHERE org_id = :org_id AND status = 'active' AND role IN ('admin', 'owner')",
-        {"org_id": org_id}
+# Built-in org roles. Owners and admins manage people; editors change governance records
+# (GovernanceAssuranceService.may_mutate); viewers read. Only an owner grants, changes or
+# removes the owner role, and an organisation always keeps one active owner.
+BUILT_IN_ROLES = ("owner", "admin", "editor", "viewer")
+MANAGER_ROLES = ("owner", "admin")
+MEMBER_STATUSES = ("active", "suspended")
+
+
+async def _caller_role(org_id: str, user_id: str, db) -> Optional[str]:
+    """The caller's active role. An admin of an org with no active owner acts as owner, so it can appoint one."""
+    member = await _check_org_membership(org_id, user_id, db)
+    if not member:
+        return None
+    if member["role"] == "admin" and await _count_active_owners(org_id, db) == 0:
+        return "owner"
+    return member["role"]
+
+
+async def _count_active_owners(org_id: str, db) -> int:
+    row = await db.fetch_one(
+        "SELECT COUNT(*) AS count FROM org_members WHERE org_id = :org_id AND status = 'active' AND role = 'owner'",
+        {"org_id": org_id},
     )
-    return result["count"] if result else 0
+    return row["count"] if row else 0
+
+
+async def _require_assignable_role(org_id: str, role: str, db) -> None:
+    """A built-in role, or a custom role this org defined; anything else would silently grant nothing."""
+    if role in BUILT_IN_ROLES:
+        return
+    custom = await db.fetch_one("SELECT 1 FROM org_roles WHERE org_id = :org_id AND name = :name", {"org_id": org_id, "name": role})
+    if not custom:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown role {role!r}; use owner, admin, editor, viewer or a custom role")
+
+
+def _require_may_manage(caller_role: Optional[str], *roles_touched: Optional[str]) -> None:
+    if caller_role not in MANAGER_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    if "owner" in roles_touched and caller_role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only an owner can grant, change or remove the owner role")
+
+
+async def _require_owner_remains(org_id: str, member, db) -> None:
+    """Call before a change that takes an active owner away; refuses when they are the last one."""
+    if member["role"] == "owner" and member["status"] == "active" and await _count_active_owners(org_id, db) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An organisation needs at least one active owner. Make someone else owner first.",
+        )
+
+
+async def _sync_owner_id(org_id: str, db) -> None:
+    """Keep organizations.owner_id on an active owner after a role change, removal or leave."""
+    await db.execute(
+        """
+        UPDATE organizations o SET owner_id = (
+            SELECT m.user_id FROM org_members m
+            WHERE m.org_id = o.id AND m.role = 'owner' AND m.status = 'active'
+            ORDER BY (m.user_id = o.owner_id) DESC, m.joined_at NULLS LAST LIMIT 1
+        )
+        WHERE o.id = :org_id AND NOT EXISTS (
+            SELECT 1 FROM org_members m WHERE m.org_id = o.id AND m.user_id = o.owner_id AND m.role = 'owner' AND m.status = 'active'
+        ) AND EXISTS (SELECT 1 FROM org_members m WHERE m.org_id = o.id AND m.role = 'owner' AND m.status = 'active')
+        """,
+        {"org_id": org_id},
+    )
+
+
+async def _end_sessions(db, user_id, org_id: Optional[str] = None) -> None:
+    """Tokens carry the old rights; bump the version. Leaving an org also clears the user's pointer to it."""
+    if org_id is None:
+        await db.execute("UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = :uid", {"uid": user_id})
+        return
+    await db.execute(
+        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, "
+        "org_id = CASE WHEN CAST(org_id AS TEXT) = :org_id THEN NULL ELSE org_id END, "
+        "primary_org_id = CASE WHEN CAST(primary_org_id AS TEXT) = :org_id THEN NULL ELSE primary_org_id END "
+        "WHERE id = :user_id",
+        {"org_id": str(org_id), "user_id": user_id},
+    )
 
 
 async def _role_has_delegation_blocked_permission(org_id: str, role: str, db) -> bool:
@@ -446,9 +518,8 @@ async def invite_member(
     """
     try:
         async with get_db_connection() as db:
-            # Check admin authorization
-            is_admin = await _check_org_admin(org_id, current_user.user_id, db)
-            if not is_admin:
+            caller = await _caller_role(org_id, current_user.user_id, db)
+            if caller not in MANAGER_ROLES:
                 await _log_org_audit(
                     org_id=org_id,
                     user_id=current_user.user_id,
@@ -463,6 +534,8 @@ async def invite_member(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Admin access required"
                 )
+            await _require_assignable_role(org_id, payload.role, db)
+            _require_may_manage(caller, payload.role)
 
             if await _role_has_delegation_blocked_permission(org_id, payload.role, db):
                 raise HTTPException(
@@ -827,26 +900,27 @@ async def update_member(
     """
     Update member role or status.
 
-    Requires: Organization admin authorization
-    Returns: Updated member status
+    Requires: owner or admin; only an owner grants, changes or removes the owner role.
+    Safeguard: the organisation keeps at least one active owner.
     """
     try:
         async with get_db_connection() as db:
-            # Check admin authorization
-            is_admin = await _check_org_admin(org_id, current_user.user_id, db)
-            if not is_admin:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin access required"
-                )
+            caller = await _caller_role(org_id, current_user.user_id, db)
+            if caller not in MANAGER_ROLES:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
-            # Verify member exists in this org
             member = await db.fetch_one(
-                "SELECT id, user_id, role FROM org_members WHERE id = :id AND org_id = :org_id",
+                "SELECT id, user_id, role, status FROM org_members WHERE id = :id AND org_id = :org_id",
                 {"id": member_id, "org_id": org_id}
             )
             if not member:
                 raise HTTPException(status_code=404, detail="Member not found")
+
+            if payload.status is not None and payload.status not in MEMBER_STATUSES:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status must be active or suspended")
+            if payload.role is not None:
+                await _require_assignable_role(org_id, payload.role, db)
+            _require_may_manage(caller, member["role"], payload.role)
 
             assigned_role = payload.role or (
                 member["role"] if payload.status == "active" else None
@@ -859,16 +933,11 @@ async def update_member(
                     detail="This role cannot be assigned through organization management",
                 )
 
-            # Prevent removing last admin
-            if payload.role and payload.role not in ('admin', 'owner') and member["role"] in ('admin', 'owner'):
-                admin_count = await _count_org_admins(org_id, db)
-                if admin_count == 1:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Cannot remove the last organization admin"
-                    )
+            demoted = payload.role is not None and payload.role != "owner"
+            suspended = payload.status is not None and payload.status != "active"
+            if demoted or suspended:
+                await _require_owner_remains(org_id, member, db)
 
-            # Build update query
             updates = []
             params = {"id": member_id, "org_id": org_id}
             changes = {}
@@ -891,10 +960,8 @@ async def update_member(
                 if payload.role and payload.role != member["role"]:
                     # Tokens carry the rights of the old role; end them. A suspended
                     # member needs no bump: tokens require an active membership.
-                    await db.execute(
-                        "UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = :uid",
-                        {"uid": member["user_id"]},
-                    )
+                    await _end_sessions(db, member["user_id"])
+                await _sync_owner_id(org_id, db)
 
                 # Log audit event
                 await _log_org_audit(
@@ -927,49 +994,31 @@ async def remove_member(
     """
     Remove a member from organization.
 
-    Requires: Organization admin authorization
-    Safeguard: Cannot remove the last organization admin
+    Requires: owner or admin; only an owner removes an owner.
+    Safeguard: the organisation keeps at least one active owner.
     """
     try:
         async with get_db_connection() as db:
-            # Check admin authorization
-            is_admin = await _check_org_admin(org_id, current_user.user_id, db)
-            if not is_admin:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin access required"
-                )
+            caller = await _caller_role(org_id, current_user.user_id, db)
+            if caller not in MANAGER_ROLES:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
-            # Verify member exists
             member = await db.fetch_one(
-                "SELECT id, role, user_id FROM org_members WHERE id = :id AND org_id = :org_id",
+                "SELECT id, role, status, user_id FROM org_members WHERE id = :id AND org_id = :org_id",
                 {"id": member_id, "org_id": org_id}
             )
             if not member:
                 raise HTTPException(status_code=404, detail="Member not found")
+            _require_may_manage(caller, member["role"])
+            await _require_owner_remains(org_id, member, db)
 
-            # Prevent removing last admin
-            if member["role"] in ('admin', 'owner'):
-                admin_count = await _count_org_admins(org_id, db)
-                if admin_count == 1:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Cannot remove the last organization admin"
-                    )
-
-            # Delete member
             await db.execute(
                 "DELETE FROM org_members WHERE id = :id AND org_id = :org_id",
                 {"id": member_id, "org_id": org_id}
             )
             # End the removed user's sessions, and stop their stored org pointing here.
-            await db.execute(
-                "UPDATE users SET token_version = COALESCE(token_version, 0) + 1, "
-                "org_id = CASE WHEN CAST(org_id AS TEXT) = :org_id THEN NULL ELSE org_id END, "
-                "primary_org_id = CASE WHEN CAST(primary_org_id AS TEXT) = :org_id THEN NULL ELSE primary_org_id END "
-                "WHERE id = :user_id",
-                {"org_id": str(org_id), "user_id": member["user_id"]},
-            )
+            await _end_sessions(db, member["user_id"], org_id)
+            await _sync_owner_id(org_id, db)
 
             # Log audit event
             await _log_org_audit(
@@ -990,6 +1039,107 @@ async def remove_member(
     except Exception as e:
         logger.error(f"Error removing member: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to remove member")
+
+
+class TransferOwnershipRequest(BaseModel):
+    member_id: str
+
+
+@router.post("/{org_id}/transfer-ownership")
+async def transfer_ownership(
+    org_id: str,
+    payload: TransferOwnershipRequest,
+    request: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+):
+    """Make another active member the owner of record; the caller, an owner, becomes an admin."""
+    async with get_db_connection() as db:
+        caller = await _check_org_membership(org_id, current_user.user_id, db)
+        if not caller or await _caller_role(org_id, current_user.user_id, db) != "owner":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only an owner can transfer ownership")
+        target = await db.fetch_one(
+            "SELECT id, user_id, role, status FROM org_members WHERE id = :id AND org_id = :org_id",
+            {"id": payload.member_id, "org_id": org_id},
+        )
+        if not target or target["status"] != "active":
+            raise HTTPException(status_code=404, detail="Active member not found")
+        if str(target["user_id"]) == str(current_user.user_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You already own this organisation")
+        await db.execute("UPDATE org_members SET role = 'owner' WHERE id = :id", {"id": target["id"]})
+        await db.execute("UPDATE org_members SET role = 'admin' WHERE id = :id", {"id": caller["id"]})
+        await db.execute("UPDATE organizations SET owner_id = :uid WHERE id = :org_id", {"uid": str(target["user_id"]), "org_id": org_id})
+        for uid in (target["user_id"], current_user.user_id):
+            await _end_sessions(db, uid)
+    await _log_org_audit(
+        org_id=org_id, user_id=current_user.user_id, action="transfer_ownership", resource_type="member",
+        resource_id=payload.member_id, changes={"new_owner": str(target["user_id"])},
+        ip_address=request.client.host if request.client else None, user_agent=request.headers.get("user-agent"),
+    )
+    return {"status": "transferred", "owner_member_id": payload.member_id}
+
+
+@router.post("/{org_id}/leave", status_code=status.HTTP_204_NO_CONTENT)
+async def leave_organization(org_id: str, request: Request, current_user: TokenData = Depends(get_current_active_user)):
+    """Leave an organisation. The last active owner must hand ownership on first."""
+    async with get_db_connection() as db:
+        member = await db.fetch_one(
+            "SELECT id, user_id, role, status FROM org_members WHERE org_id = :org_id AND user_id = :uid",
+            {"org_id": org_id, "uid": current_user.user_id},
+        )
+        if not member:
+            raise HTTPException(status_code=404, detail="You are not a member of this organisation")
+        await _require_owner_remains(org_id, member, db)
+        await db.execute("DELETE FROM org_members WHERE id = :id", {"id": member["id"]})
+        await _end_sessions(db, member["user_id"], org_id)
+        await _sync_owner_id(org_id, db)
+    await _log_org_audit(
+        org_id=org_id, user_id=current_user.user_id, action="leave_organization", resource_type="member",
+        resource_id=str(member["id"]), ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return None
+
+
+@router.get("/{org_id}/invitations")
+async def list_invitations(org_id: str, current_user: TokenData = Depends(get_current_active_user)):
+    """Pending, unexpired invitations; owners and admins only."""
+    async with get_db_connection() as db:
+        if await _caller_role(org_id, current_user.user_id, db) not in MANAGER_ROLES:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        rows = await db.fetch_all(
+            "SELECT id, email, role, expires_at, created_at FROM org_invitations "
+            "WHERE org_id = :org_id AND status = 'pending' AND expires_at > :now ORDER BY created_at DESC",
+            {"org_id": org_id, "now": datetime.utcnow()},
+        )
+    return {"invitations": [
+        {"id": str(r["id"]), "email": r["email"], "role": r["role"],
+         "expires_at": r["expires_at"].isoformat() if r["expires_at"] else None,
+         "created_at": r["created_at"].isoformat() if r["created_at"] else None}
+        for r in rows
+    ]}
+
+
+@router.delete("/{org_id}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_invitation(org_id: str, invitation_id: str, request: Request, current_user: TokenData = Depends(get_current_active_user)):
+    """Revoke a pending invitation so its link stops working; an owner invitation needs an owner."""
+    async with get_db_connection() as db:
+        caller = await _caller_role(org_id, current_user.user_id, db)
+        invitation = await db.fetch_one(
+            "SELECT id, role, status FROM org_invitations WHERE id = :id AND org_id = :org_id",
+            {"id": invitation_id, "org_id": org_id},
+        )
+        if not invitation or invitation["status"] != "pending":
+            if caller not in MANAGER_ROLES:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+            raise HTTPException(status_code=404, detail="Pending invitation not found")
+        _require_may_manage(caller, invitation["role"])
+        await db.execute("UPDATE org_invitations SET status = 'revoked' WHERE id = :id", {"id": invitation_id})
+    await _log_org_audit(
+        org_id=org_id, user_id=current_user.user_id, action="revoke_invitation", resource_type="invitation",
+        resource_id=invitation_id, ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return None
 
 
 # ── Role Management Endpoints ────────────────────────────────────────────────
@@ -1238,18 +1388,13 @@ async def get_audit_report(
     """
     Generate audit report for organization with compliance metrics and audit logs.
 
-    Requires: Organization membership
+    Requires: owner or admin, as for the audit-log list: the report carries member emails and IP addresses.
     Returns: Audit report in requested format (JSON, CSV, or PDF)
     """
     try:
-        # Verify user is member of this org
         async with get_db_connection() as db:
-            membership = await _check_org_membership(org_id, current_user.user_id, db)
-            if not membership:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You are not a member of this organization"
-                )
+            if await _caller_role(org_id, current_user.user_id, db) not in MANAGER_ROLES:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
             # Parse dates
             try:

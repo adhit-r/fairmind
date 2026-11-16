@@ -507,6 +507,8 @@ export class ApiClient {
         }
 
         if (responseType === 'blob') return { success: true, data: (await response.blob()) as T }
+        // No body (204, or an empty 200): parsing it would throw, and the catch below would retry a DELETE that already succeeded.
+        if (response.status === 204 || response.headers?.get?.('content-length') === '0') return { success: true, data: undefined as T }
 
         const jsonData = await response.json()
 

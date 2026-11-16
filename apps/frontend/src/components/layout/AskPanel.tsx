@@ -46,7 +46,7 @@ export function AskPanel({ open, onOpenChange }: { open: boolean; onOpenChange: 
           {!provider.loading && !ready && (
             <div className="fm-card p-4 text-[13px] leading-relaxed text-[var(--fm-ink2)]">
               No AI provider is switched on for this organisation. An owner or admin can add one, with your own key, in{' '}
-              <Link href="/org-admin/settings" className="font-semibold text-[var(--fm-ink)] underline underline-offset-2" onClick={() => onOpenChange(false)}>
+              <Link href="/settings?section=ai-provider" className="font-semibold text-[var(--fm-ink)] underline underline-offset-2" onClick={() => onOpenChange(false)}>
                 organisation settings
               </Link>
               .
