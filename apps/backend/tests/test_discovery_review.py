@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from api.routes import discovery_review, integrations, laptop_reports, org_scope, shadow_ai, shadow_reading
+from api.routes import agent, discovery_review, integrations, laptop_reports, org_scope, shadow_ai, shadow_reading
 from database.connection import get_db
 from src.application.services import reviewer_notify
 from src.application.services.governance_assurance_service import OrgMembership
@@ -34,10 +34,11 @@ def env(monkeypatch):
             db.close()
 
     app = FastAPI()
-    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router, laptop_reports.router):
+    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router, laptop_reports.router, agent.router):
         app.include_router(r, prefix="/api/v1")
     app.include_router(discovery_review.public_router, prefix="/api/v1/public")
     app.include_router(laptop_reports.public_router, prefix="/api/v1/public")
+    app.include_router(agent.public_router, prefix="/api/v1/public")
     app.dependency_overrides[get_db] = override_db
     owner = OrgMembership(ORG, "review-test-owner", "owner", ())
     app.dependency_overrides[org_scope.org_member] = lambda: owner
@@ -486,6 +487,7 @@ def test_laptop_script_end_to_end(env):
         "extensions": [{"id": "github.copilot-1.250.0", "editor": "VS Code"}, {"id": "ms-python.python"}],
         "mcp_servers": [{"name": "postgres", "client": "Claude Desktop", "command": "/usr/local/bin/npx"}, {"name": "github", "client": "Cursor", "command": "docker"}],
         "accounts": [{"app": "cursor", "domain": "personal"}, {"app": "nope", "domain": "work"}],
+        "models": [{"runtime": "ollama", "name": "llama3:latest"}],
     }
     assert c.post("/api/v1/public/laptop-report", json=report).status_code == 401
     assert c.post("/api/v1/public/laptop-report", json=report, headers={"Authorization": "Bearer fmls_wrong_token_value_123"}).status_code == 401
@@ -504,6 +506,7 @@ def test_laptop_script_end_to_end(env):
     grid = c.get("/api/v1/shadow-ai/evidence", params={"person": "arjun@acme.com"}).json()
     rows = {x["service"]: x for x in grid["rows"]}
     assert rows["cursor"]["signedIn"]["class"] == "personal" and rows["github_copilot"]["onLaptop"]["kinds"] == ["extension"]
+    assert grid["models"] == [{"runtime": "ollama", "name": "llama3:latest", "size": 0, "laptop": "Arjuns-MacBook-Pro", "source": "Laptop script"}]
 
     old = token
     token = c.post("/api/v1/shadow-ai/laptop-script/token").json()["token"]
@@ -520,3 +523,60 @@ def test_tenant_rules_for_proxies(env):
     assert rules["rules"] == [{"service": "chatgpt", "label": "ChatGPT", "header": "ChatGPT-Allowed-Workspace-Id", "value": "ws-1234567", "hosts": ["chatgpt.com", "chat.openai.com"]}]
     assert [m["service"] for m in rules["missing"]] == ["claude"]
     assert c.get("/api/v1/shadow-ai/tools").json()[1]["stance"]["tenantIds"] == ["ws-1234567"]
+
+
+def test_edge_models_from_paths():
+    rows = [
+        {"path": "/Users/arjun/.ollama/models/manifests/registry.ollama.ai/library/llama3/latest", "size": "512"},
+        {"path": "C:\\Users\\meera\\.ollama\\models\\manifests\\registry.ollama.ai\\acme\\coder\\7b", "size": "300"},
+        {"path": "/Users/arjun/.lmstudio/models/lmstudio-community/Qwen2.5-7B-GGUF/qwen2.5-7b-q4.gguf", "size": "4600000000"},
+        {"path": "/Users/arjun/.lmstudio/models/lmstudio-community/Qwen2.5-7B-GGUF/link.gguf", "size": "104"},
+        {"path": "/Users/arjun/.cache/huggingface/hub/models--meta-llama--Llama-3.2-1B", "size": "96"},
+        {"path": "/Users/arjun/Documents/notes.txt", "size": "1"},
+    ]
+    out = {(m["runtime"], m["name"]): m for m in agent.models_from_rows(rows)}
+    assert set(out) == {("ollama", "llama3:latest"), ("ollama", "acme/coder:7b"), ("lm_studio", "lmstudio-community/Qwen2.5-7B-GGUF"), ("huggingface", "meta-llama/Llama-3.2-1B")}
+    assert out[("lm_studio", "lmstudio-community/Qwen2.5-7B-GGUF")]["size"] == 4600000000 and out[("ollama", "llama3:latest")]["owner"] == "arjun"
+
+
+def test_flags_file_points_osquery_at_fairmind():
+    mac = agent.flags_file("https://app.fairmind.example", "macos")
+    assert "--tls_hostname=app.fairmind.example" in mac and "--enroll_tls_endpoint=/api/proxy/api/v1/public/osquery/enroll" in mac
+    assert "--disable_endpointsecurity=false" in mac and "--disable_endpointsecurity" not in agent.flags_file("https://app.fairmind.example", "windows")
+
+
+def test_agent_enrols_configures_and_logs(env):
+    c, factory, sent = env
+    okta = _integration(c, "okta", domain="acme.okta.com")
+    _facts(factory, okta, "okta", {"arjun@acme.com": {"team": "Engineering", "status": "active"}}, [])
+    assert c.post("/api/v1/shadow-ai/agent/secret").status_code == 409
+    assert c.put("/api/v1/shadow-ai/agent").json()["connected"] is True
+    secret = c.post("/api/v1/shadow-ai/agent/secret").json()["secret"]
+    assert c.get("/api/v1/shadow-ai/agent/settings", params={"os": "macos"}).json()["filename"] == "osquery.flags"
+
+    assert c.post("/api/v1/public/osquery/enroll", json={"enroll_secret": "fmes_wrong_secret_value_1234"}).json() == {"node_invalid": True}
+    details = {"system_info": {"hardware_serial": "C02X", "computer_name": "LT-ENG-0231"}, "os_version": {"platform": "darwin"}, "osquery_info": {"version": "5.21.0"}}
+    node_key = c.post("/api/v1/public/osquery/enroll", json={"enroll_secret": secret, "host_identifier": "uuid-1", "host_details": details}).json()["node_key"]
+    assert c.post("/api/v1/public/osquery/config", json={"node_key": "fmnk_not_a_real_node_key_123"}).json() == {"node_invalid": True}
+    cfg = c.post("/api/v1/public/osquery/config", json={"node_key": node_key}).json()
+    assert set(cfg["schedule"]) == {"fm_ai_started", "fm_models"} and "es_process_events" in cfg["schedule"]["fm_ai_started"]["query"] and cfg["decorators"]["load"]
+
+    deco = {"serial": "C02X", "computer": "LT-ENG-0231", "console_user": "arjun"}
+    lines = [
+        {"name": "fm_ai_started", "action": "added", "unixTime": 1794800000, "decorations": deco,
+         "columns": {"path": "/Applications/Cursor.app/Contents/MacOS/Cursor", "signing_id": "com.todesktop.230313mzl4w4u92", "username": "arjun"}},
+        {"name": "fm_ai_started", "action": "added", "unixTime": 1794800001, "decorations": deco, "columns": {"path": "/Applications/Slack.app/Contents/MacOS/Slack", "signing_id": "com.tinyspeck.slackmacgap"}},
+        {"name": "fm_models", "action": "snapshot", "decorations": deco, "snapshot": [{"path": "/Users/arjun/.ollama/models/manifests/registry.ollama.ai/library/llama3/latest", "size": "512"}]},
+    ]
+    assert c.post("/api/v1/public/osquery/log", json={"node_key": node_key, "log_type": "result", "data": lines}).json() == {"node_invalid": False}
+    c.post("/api/v1/public/osquery/log", json={"node_key": node_key, "log_type": "status", "data": [{"severity": "2", "message": "EndpointSecurity client could not start: not permitted"}]})
+
+    st = c.get("/api/v1/shadow-ai/agent").json()
+    assert st["laptops"] == 1 and [e["service"] for e in st["events"]] == ["cursor"] and st["events"][0]["laptop"] == "LT-ENG-0231"
+    assert "EndpointSecurity" in st["problems"][0]["problem"]
+    listed = c.get("/api/v1/shadow-ai/laptops").json()["laptops"][0]
+    assert listed["models"] == 1 and [t["service"] for t in listed["tools"]] == ["cursor"]
+    grid = c.get("/api/v1/shadow-ai/evidence", params={"laptop": listed["id"]}).json()
+    assert grid["models"][0]["name"] == "llama3:latest" and grid["models"][0]["source"] == "FairMind agent"
+    rows = {r["service"]: r for r in grid["rows"]}
+    assert rows["cursor"]["onLaptop"]["kinds"] == ["used"]

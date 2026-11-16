@@ -28,6 +28,7 @@ export type IntegrationKind =
   | 'chrome'
   | 'fleet'
   | 'laptop_script'
+  | 'osquery_agent'
   | 'litellm'
   | 'proxy_logs'
   | 'mcp_registry'

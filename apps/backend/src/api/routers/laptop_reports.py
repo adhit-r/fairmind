@@ -2,6 +2,7 @@
 The FairMind laptop script: a read-only check the organisation's device management runs once a day on each
 laptop. It reports AI apps, editor extensions, MCP server names and, per app, whether it is signed in with a
 work or personal account. The script compares the account's domain on the laptop; only the answer leaves it.
+It also lists edge AI models that local runtimes downloaded (Ollama, LM Studio, the Hugging Face cache), by name.
 It never reads prompts, files, tokens or MCP server settings, and it sends only what matches the catalogue.
 
 GET  /shadow-ai/laptop-script              whether it is set up, its company domains, how many laptops reported
@@ -90,6 +91,12 @@ class ReportMcp(BaseModel):
     command: Optional[str] = Field(default=None, max_length=120)  # the program's name only, never its arguments
 
 
+class ReportModel(BaseModel):
+    runtime: Literal["ollama", "lm_studio", "huggingface"]
+    name: str = Field(max_length=200)
+    size: Optional[int] = Field(default=None, ge=0)
+
+
 class ReportAccount(BaseModel):
     app: str = Field(max_length=40)
     domain: Literal["work", "personal"]
@@ -104,6 +111,7 @@ class LaptopReport(BaseModel):
     extensions: List[ReportExtension] = Field(default_factory=list, max_length=200)
     mcp_servers: List[ReportMcp] = Field(default_factory=list, max_length=200)
     accounts: List[ReportAccount] = Field(default_factory=list, max_length=20)
+    models: List[ReportModel] = Field(default_factory=list, max_length=300)
     script_version: Optional[str] = Field(default=None, max_length=20)
 
 
@@ -130,6 +138,7 @@ def device_record(r: LaptopReport) -> Dict[str, Any]:
         "accounts": [{"service": k, "class": v} for k, v in sorted(accounts.items())],
         "mcp": [{"name": n, "client": c, "command": (cmd or "").split("/")[-1].split("\\")[-1][:120] or None} for (n, c), cmd in sorted(mcp.items())],
         "os": r.os,
+        "models": [{"runtime": m.runtime, "name": m.name.strip(), "size": m.size or 0} for m in r.models if m.name.strip()],
     }
 
 
@@ -296,6 +305,11 @@ function run(argv) {
       report.mcp_servers.push({ name: String(name).slice(0, 120), client: client, command: cmd })
     }
   }
+  report.models = []
+  for (const host of ls(home + '/.ollama/models/manifests')) for (const ns of ls(home + '/.ollama/models/manifests/' + host)) for (const model of ls(home + '/.ollama/models/manifests/' + host + '/' + ns)) for (const tag of ls(home + '/.ollama/models/manifests/' + host + '/' + ns + '/' + model)) report.models.push({ runtime: 'ollama', name: (ns === 'library' ? model : ns + '/' + model) + ':' + tag })
+  for (const root of [home + '/.lmstudio/models', home + '/.cache/lm-studio/models']) for (const pub of ls(root)) for (const model of ls(root + '/' + pub)) report.models.push({ runtime: 'lm_studio', name: pub + '/' + model })
+  for (const d of ls(home + '/.cache/huggingface/hub')) if (d.startsWith('models--')) report.models.push({ runtime: 'huggingface', name: d.slice(8).replace('--', '/') })
+  report.models = report.models.slice(0, 300)
   const db = lib + '/Cursor/User/globalStorage/state.vscdb'
   // Only the cached email is selected; the same table holds sign-in tokens, which are never read.
   const cursorEmail = sh('/usr/bin/sqlite3 -readonly ' + q('file:' + db + '?immutable=1') + " \"SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'\"").replace(/^"|"$/g, '')
@@ -344,6 +358,13 @@ $cc = ReadJson "$homeDir\.claude.json"
 $files = @(@('Claude Desktop', (ReadJson "$homeDir\AppData\Roaming\Claude\claude_desktop_config.json"), 'mcpServers'), @('Cursor', (ReadJson "$homeDir\.cursor\mcp.json"), 'mcpServers'), @('Claude Code', $cc, 'mcpServers'), @('Windsurf', (ReadJson "$homeDir\.codeium\windsurf\mcp_config.json"), 'mcpServers'), @('VS Code', (ReadJson "$homeDir\AppData\Roaming\Code\User\mcp.json"), 'servers'))
 if ($cc -and $cc.projects) { foreach ($p in $cc.projects.PSObject.Properties) { $files += ,@('Claude Code', $p.Value, 'mcpServers') } }
 foreach ($f in $files) { $doc = $f[1]; if ($doc -and $doc.($f[2])) { foreach ($s in $doc.($f[2]).PSObject.Properties) { $cmd = if ($s.Value.command) { Split-Path -Leaf "$($s.Value.command)" } elseif ($s.Value.url -or $s.Value.serverUrl) { 'remote' } else { $null }; $report.mcp_servers += @{ name = "$($s.Name)"; client = $f[0]; command = $cmd } } } }
+$models = @()
+$om = "$homeDir\.ollama\models\manifests"
+if (Test-Path -LiteralPath $om) { foreach ($t in Get-ChildItem -LiteralPath $om -Recurse -File -Depth 3) { $rel = $t.FullName.Substring($om.Length + 1).Split('\'); if ($rel.Count -eq 4) { $n = if ($rel[1] -eq 'library') { $rel[2] } else { "$($rel[1])/$($rel[2])" }; $models += @{ runtime = 'ollama'; name = "$($n):$($rel[3])" } } } }
+foreach ($root in @("$homeDir\.lmstudio\models", "$homeDir\.cache\lm-studio\models")) { if (Test-Path -LiteralPath $root) { foreach ($p in Get-ChildItem -LiteralPath $root -Directory) { foreach ($m in Get-ChildItem -LiteralPath $p.FullName -Directory) { $models += @{ runtime = 'lm_studio'; name = "$($p.Name)/$($m.Name)" } } } } }
+$hf = "$homeDir\.cache\huggingface\hub"
+if (Test-Path -LiteralPath $hf) { foreach ($d in Get-ChildItem -LiteralPath $hf -Directory -Filter 'models--*') { $models += @{ runtime = 'huggingface'; name = ($d.Name.Substring(8) -replace '--', '/') } } }
+$report.models = @($models | Select-Object -First 300)
 # Cursor keeps its account in a SQLite file that Windows cannot read without extra tools, so only Claude Code is checked here.
 if ($cc -and $cc.oauthAccount) { $d = DomainOf $cc.oauthAccount.emailAddress; if ($d) { $report.accounts += @{ app = 'claude'; domain = $d }; if ($d -eq 'work') { $report.user = "$($cc.oauthAccount.emailAddress)".ToLower() } } }
 Invoke-RestMethod -Uri $Config.url -Method Post -Headers @{ Authorization = "Bearer $Token" } -ContentType 'application/json' -Body ($report | ConvertTo-Json -Depth 6 -Compress)

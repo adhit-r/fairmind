@@ -166,6 +166,7 @@ def merge_laptops(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "users": sorted({m["user"] for m in members if m.get("user")}),
                 "sources": sorted({m["source"] for m in members}),
                 "apps": {k: {"versions": sorted(v["versions"]), "sources": sorted(v["sources"]), "kinds": sorted(v["kinds"])} for k, v in apps.items()},
+                "models": sorted({(x["runtime"], x["name"]): {**x, "source": m["source"]} for m in members for x in (m.get("models") or [])}.values(), key=lambda x: (x["runtime"], x["name"])),
             }
         )
     out.sort(key=lambda l: l["name"])
@@ -253,7 +254,7 @@ def _laptop_traffic(s: Any, t: Dict[str, Any]) -> Dict[str, str]:
 
 
 _RANK = {"possible": 0, "likely": 1, "confirmed": 2}
-LAPTOP_SOURCES = ("jamf", "intune", "defender", "crowdstrike", "chrome", "fleet", "laptop_script")
+LAPTOP_SOURCES = ("jamf", "intune", "defender", "crowdstrike", "chrome", "fleet", "laptop_script", "osquery_agent")
 
 
 def _finding(key: str, kind: str, title: str, severity: str, confidence: str, subject: str, evidence: List[Dict[str, str]], verdict: str, **extra: Any) -> Dict[str, Any]:
@@ -650,6 +651,7 @@ def evidence(
     return {
         **subject,
         "laptops": [{"id": lt["id"], "name": lt["name"], "serial": lt["serial"], "sources": [hub_label(x) for x in lt["sources"]]} for lt in laptops],
+        "models": [{"runtime": x["runtime"], "name": x["name"], "size": x.get("size") or 0, "laptop": lt["name"], "source": hub_label(x["source"])} for lt in laptops for x in lt.get("models") or []],
         "people": sorted(persons),
         "rows": out,
     }
@@ -666,7 +668,7 @@ def laptop_list(people: People, fleet: Fleet, stance: Dict[str, Dict[str, Any]],
         out.append(
             {
                 "id": lt["id"], "name": lt["name"], "serial": lt["serial"], "people": users, "team": people.team(users[0] if users else None),
-                "sources": [hub_label(x) for x in lt["sources"]], "tools": tools,
+                "sources": [hub_label(x) for x in lt["sources"]], "tools": tools, "models": len(lt.get("models") or []),
                 "flagged": sum(1 for t in tools if t["stance"] not in ("approved", "limited")),
             }
         )
@@ -726,9 +728,11 @@ def _stance(db: Session, org: str) -> Dict[str, Dict[str, Any]]:
 def _current(db: Session, org: str) -> Dict[str, Any]:
     hub._ensure_tables()
     assets = [hub._asset_out(r) for r in db.execute(text(f"SELECT {hub._ASSET_COLS} FROM governance_discovered_assets WHERE org_id = :org"), {"org": org}).fetchall()]
+    from api.routes.agent import agent_as_facts
     from api.routes.laptop_reports import reports_as_facts
 
-    facts = list(db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall()) + reports_as_facts(db, org)
+    facts = list(db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall())
+    facts += reports_as_facts(db, org) + agent_as_facts(db, org)
     people, fleet = People(facts), Fleet(facts)
     stance = _stance(db, org)
     kinds = {r[0] for r in db.execute(text("SELECT DISTINCT kind FROM governance_integrations WHERE org_id = :org"), {"org": org}).fetchall()}
