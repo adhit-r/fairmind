@@ -253,3 +253,88 @@ def test_eval_run_local_refuses_a_system_fairmind_calls_directly(monkeypatch, ca
 
     code, _, _ = run_cli(["eval", "run", "EV-SEC-01", "--system", "sys-1", "--local"], handler, monkeypatch=monkeypatch)
     assert code == EXIT_ERROR and "not set to a runner" in capsys.readouterr().err
+
+
+def _clause(key, control, state, label="Data governance"):
+    return {"key": f"ISO42001|{key}", "control": control, "title": f"Clause {control}", "state": state, "checks": [{"check": "data_governance", "label": label, "state": state}]}
+
+
+def _iso(clauses):
+    counts = {s: sum(1 for c in clauses if c["state"] == s) for s in ("proven", "attested", "open")}
+    return {"verdict": "no_go", "confidence": 0.4, "frameworks": [
+        {"key": "ISO42001", "name": "ISO/IEC 42001", "clauses": clauses, "counts": {**counts, "total": len(clauses)}},
+        {"key": "EUAIA", "name": "EU AI Act", "clauses": [], "counts": {"proven": 0, "attested": 0, "open": 0, "total": 0}}]}
+
+
+def _ev(eid, clause, runnable=True, results=None):
+    return {"id": eid, "name": f"{eid} name", "runnable": runnable, "results": results,
+            "tests": [{"key": f"ISO42001|{clause}", "framework": "ISO42001", "control": clause, "title": "t"}]}
+
+
+def test_audit_runs_what_it_can_then_packs_shares_and_names_what_stays_open(tmp_path, monkeypatch):
+    """audit: open clauses -> mapped evaluations -> run those with inputs -> pack -> link -> clauses still open."""
+    (tmp_path / "train.csv").write_text("region,label\nN,1\n")
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"EV-DAT-04": {"files": {"dataset": "train.csv"}, "params": {"rules": {"region": "required"}}}}))
+    clauses = [_clause("A.7.4", "A.7.4", "open"), _clause("A.6.2.4", "A.6.2.4", "open", "Fairness measured"), _clause("A.7.2", "A.7.2", "proven")]
+    engines = {
+        "EV-DAT-04": {"live": "", "alternate": None, "slots": [{"name": "dataset", "required": True}], "params": [{"name": "rules", "required": True}]},
+        "EV-TST-01": {"live": "", "alternate": None, "slots": [{"name": "predictions", "required": True}], "params": [{"name": "baseline", "required": True}]},
+    }
+    evaluations = [
+        _ev("EV-DAT-04", "A.7.4"),
+        _ev("EV-TST-01", "A.6.2.4"),
+        _ev("EV-DAT-05", "A.7.4", results={"status": "passed", "systems": [{"systemId": "sys-1", "status": "passed"}]}),
+        _ev("EV-DOC-01", "A.6.2.4", runnable=False),
+        _ev("EV-DAT-06", "A.7.2"),  # its clause is proven, so the audit leaves it alone
+    ]
+    calls = []
+
+    def handler(request):
+        path, method = request.url.path, request.method
+        calls.append((method, path))
+        if path == "/api/v1/organizations":
+            return httpx.Response(200, json={"organizations": [{"id": "org-1"}]})
+        if path == "/api/v1/ai-governance/systems/sys-1/clause-map":
+            return httpx.Response(200, json=_iso(clauses))
+        if path == "/api/v1/packs/evaluations":
+            assert request.url.params["org_id"] == "org-1"
+            return httpx.Response(200, json=evaluations)
+        if path.startswith("/api/v1/packs/evaluations/") and path.endswith("/engine"):
+            return httpx.Response(200, json=engines[path.split("/")[-2]])
+        if path == "/api/v1/packs/evaluations/EV-DAT-04/runs":
+            body = request.read()
+            assert b'filename="train.csv"' in body and b'"rules": {"region": "required"}' in body and b"mode" not in body
+            return httpx.Response(200, json={"id": "ev-9", "evaluationId": "EV-DAT-04", "status": "passed", "metrics": {}})
+        if path == "/api/v1/ai-governance/systems/sys-1":
+            return httpx.Response(200, json={"id": "sys-1", "name": "Loan scoring"})
+        if path == "/api/v1/ai-governance/packs" and method == "POST":
+            body = json.loads(request.content)
+            assert body["frameworks"] == ["ISO42001"] and body["system_ids"] == ["sys-1"] and body["title"].startswith("ISO/IEC 42001 audit: Loan scoring")
+            return httpx.Response(200, json={"id": "pk-1", "title": body["title"], "manifestHash": "f" * 64})
+        if path == "/api/v1/ai-governance/packs/pk-1/share":
+            return httpx.Response(200, json={"packId": "pk-1", "token": "tok", "expiresAt": "2026-12-01"})
+        raise AssertionError(f"{method} {path}")
+
+    argv = ["audit", "iso42001", "--system", "sys-1", "--run", "--inputs", str(plan), "--share", "--api-key", "k"]
+    code, text, _ = run_cli(argv, handler, monkeypatch=monkeypatch)
+    assert code == EXIT_NO_GO  # the gate check behind each clause is still open
+    assert [p for m, p in calls if p.endswith("/runs")] == ["/api/v1/packs/evaluations/EV-DAT-04/runs"]  # only the one with inputs
+    assert "EV-DAT-04: PASSED" in text
+    assert "EV-TST-01: skipped, needs file predictions, param baseline" in text
+    assert "fairmind eval run EV-TST-01 --system sys-1 --file predictions=<path> --param baseline=<value>" in text
+    assert "evidence only" in text and "EV-DAT-06" not in text
+    assert "Pack pk-1" in text and "auditor token (shown once): tok" in text
+    assert "still open: A.7.4 (waits on Data governance)" in text and "still open: A.6.2.4 (waits on Fairness measured)" in text
+    assert calls.index(("POST", "/api/v1/packs/evaluations/EV-DAT-04/runs")) < calls.index(("POST", "/api/v1/ai-governance/packs"))
+
+    # read-only by default: no runs, no pack; every clause closed exits 0
+    clauses[:] = [_clause("A.7.4", "A.7.4", "proven")]
+    calls.clear()
+    code, text, _ = run_cli(["audit", "ISO42001", "--system", "sys-1", "--api-key", "k"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_GO and not [c for c in calls if c[0] == "POST"] and "0 open of 1" in text
+
+
+def test_audit_names_the_frameworks_it_has_when_the_key_is_wrong(monkeypatch, capsys):
+    code, _, _ = run_cli(["audit", "ISO9001", "--system", "sys-1", "--api-key", "k"], lambda r: httpx.Response(200, json=_iso([])), monkeypatch=monkeypatch)
+    assert code == EXIT_ERROR and "ISO42001, EUAIA" in capsys.readouterr().err
