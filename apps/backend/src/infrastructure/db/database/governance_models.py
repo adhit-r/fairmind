@@ -4202,6 +4202,7 @@ class GovernanceApprovedAiTool(Base):
     status = Column(String, nullable=False)  # approved | limited | not_allowed
     teams_json = Column(Text, nullable=False, default="[]")  # for limited: the teams it is approved for
     sso_required = Column(Boolean, nullable=False, default=False)  # company accounts sign in through SSO only
+    tenant_ids_json = Column(Text, nullable=True)  # company workspace or organisation IDs, for proxy sign-in limits
     note = Column(Text, nullable=True)
     updated_by = Column(String, nullable=True)
     updated_at = Column(String, nullable=False)
@@ -4248,6 +4249,22 @@ class GovernanceShadowReading(Base):
     created_at = Column(String, nullable=False)
 
     __table_args__ = (Index("idx_governance_shadow_readings_org_subject", "org_id", "subject_key", unique=True),)
+
+
+class GovernanceLaptopReport(Base):
+    """The latest report one laptop sent through the FairMind laptop script: AI apps, editor extensions, MCP
+    server names and, per app, whether it is signed in with a work or personal account (never the address)."""
+
+    __tablename__ = "governance_laptop_reports"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False)
+    device_key = Column(String, nullable=False)  # the serial number, or name and user without one
+    report_json = Column(Text, nullable=False)
+    received_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("idx_governance_laptop_reports_device", "integration_id", "device_key", unique=True),)
 
 
 class PackInstall(Base):

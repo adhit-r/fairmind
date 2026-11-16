@@ -71,6 +71,7 @@ def _ensure_tables() -> None:
         # create_all never adds a column to a table that exists; scripts/setup_db.py does that elsewhere.
         with db_manager.engine.begin() as conn:
             conn.execute(text("ALTER TABLE governance_integration_runs ADD COLUMN IF NOT EXISTS steps_json TEXT"))
+            conn.execute(text("ALTER TABLE governance_approved_ai_tools ADD COLUMN IF NOT EXISTS tenant_ids_json TEXT"))
     _tables_ready = True
 
 
@@ -413,6 +414,10 @@ async def _sync_upload_only(config: Dict[str, Any], token: Optional[str]) -> Lis
     raise HTTPException(status_code=400, detail="Proxy logs are read from an upload; use Upload logs")
 
 
+async def _sync_reports_only(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+    raise HTTPException(status_code=400, detail="Laptops send their own reports once a day; there is nothing to fetch")
+
+
 _CONNECTORS = {
     "mlflow": _sync_mlflow,
     "github": _sync_github,
@@ -428,6 +433,7 @@ _CONNECTORS = {
     "m365_copilot": m365_copilot.sync,
     "litellm": litellm.sync,
     "proxy_logs": _sync_upload_only,
+    "laptop_script": _sync_reports_only,
     "mcp_registry": mcp_registry.sync,
     "vllm": vllm.sync,
     "chatgpt_workspace": workspace.chatgpt_sync,
@@ -445,6 +451,7 @@ _READERS = {
     "defender": devices.defender,
     "crowdstrike": devices.crowdstrike,
     "chrome": devices.chrome,
+    "fleet": devices.fleet,
 }
 
 

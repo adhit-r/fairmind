@@ -22,7 +22,12 @@ import {
   markExpected,
   nudgePerson,
   reopenFinding,
+  downloadScript,
   getReading,
+  getScriptStatus,
+  getTenantRules,
+  newScriptToken,
+  setScriptDomains,
   setToolStance,
   useEvidence,
   writeReading,
@@ -32,6 +37,8 @@ import {
   type EvidenceRow,
   type Finding,
   type Reading,
+  type ScriptStatus,
+  type TenantRules,
   type Story,
   type FindingType,
   type ShadowAI,
@@ -57,15 +64,15 @@ const STANCE_LABEL: Record<Stance, string> = { approved: 'Approved', limited: 'A
 const CHECKS: { type: FindingType; needs: string; on: (c: ShadowAI['coverage']) => boolean }[] = [
   {
     type: 'personal_account',
-    needs: 'a seat list (Cursor, Copilot or ChatGPT Enterprise) with proxy logs or Jamf or Intune; or proxy logs with a user column, Okta, and an approved tool marked "company accounts sign in through Okta"',
-    on: (c) => (c.proxyLogs && c.okta && c.ssoTools > 0) || (c.seatLists.length > 0 && (c.proxyLogs || c.laptops > 0)),
+    needs: 'the laptop script and an approved tool; or a seat list (Cursor, Copilot or ChatGPT Enterprise) with proxy logs or a laptop source; or proxy logs with a user column, Okta, and an approved tool marked "company accounts sign in through Okta"',
+    on: (c) => (c.proxyLogs && c.okta && c.ssoTools > 0) || (c.seatLists.length > 0 && (c.proxyLogs || c.laptops > 0)) || (!!c.laptopScript && c.approvedTools > 0),
   },
   { type: 'leaver_key', needs: 'OpenAI Admin API or LiteLLM, and Okta or Entra ID with the people step on', on: (c) => c.people > 0 },
   { type: 'leaver_seat', needs: 'a seat list, and Okta or Entra ID with the people step on', on: (c) => c.seatLists.length > 0 && c.people > 0 },
   { type: 'gateway_bypass', needs: 'proxy logs and a LiteLLM gateway', on: (c) => c.proxyLogs && c.gateway },
   { type: 'not_allowed', needs: 'any sign-in, traffic or laptop source, and a tool marked not allowed', on: (c) => (c.proxyLogs || c.okta || c.entra || c.laptops > 0) && c.approvedTools > 0 },
   { type: 'self_consent', needs: 'Entra ID', on: (c) => c.entra },
-  { type: 'unregistered_mcp', needs: 'GitHub and an MCP registry', on: (c) => c.mcpRegistry },
+  { type: 'unregistered_mcp', needs: 'an MCP registry, and GitHub or the laptop script', on: (c) => c.mcpRegistry && (!!c.sourceKinds?.includes('github') || !!c.laptopScript) },
 ]
 
 function nudgeText(f: Finding): string {
@@ -380,7 +387,7 @@ function ToolsTab({ onSaved }: { onSaved: () => void }) {
     setError(null)
     try {
       const teamList = (teams[t.key] ?? '').split(',').map((x) => x.trim()).filter(Boolean)
-      await setToolStance(t.key, { status: status === 'not_reviewed' ? null : status, teams: status === 'limited' ? teamList : [], sso_required: sso })
+      await setToolStance(t.key, { status: status === 'not_reviewed' ? null : status, teams: status === 'limited' ? teamList : [], sso_required: sso, tenant_ids: t.stance?.tenantIds ?? [] })
       setTools(await listTools())
       onSaved()
     } catch (e) {
@@ -442,6 +449,69 @@ function ToolsTab({ onSaved }: { onSaved: () => void }) {
             )
           })}
         </div>
+        <ProxyRules tools={tools} onSaved={async () => setTools(await listTools())} />
+      </VStack>
+    </section>
+  )
+}
+
+/** Proxy rules that limit ChatGPT and Claude sign-in to the company's own workspaces. */
+function ProxyRules({ tools, onSaved }: { tools: ToolStance[]; onSaved: () => Promise<void> }) {
+  const [rules, setRules] = useState<TenantRules | null>(null)
+  const [ids, setIds] = useState<Record<string, string>>({})
+  const [error, setError] = useState<string | null>(null)
+  const stamp = tools.map((t) => `${t.key}:${t.stance?.status ?? ''}:${(t.stance?.tenantIds ?? []).join(',')}`).join('|')
+  useEffect(() => {
+    getTenantRules()
+      .then(setRules)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the proxy rules'))
+  }, [stamp])
+  const eligible = tools.filter((t) => (t.key === 'chatgpt' || t.key === 'claude') && (t.stance?.status === 'approved' || t.stance?.status === 'limited'))
+  if (!eligible.length) return null
+  async function save(t: ToolStance) {
+    if (!t.stance) return
+    setError(null)
+    try {
+      const list = (ids[t.key] ?? (t.stance.tenantIds ?? []).join(', ')).split(/[\s,]+/).map((x) => x.trim()).filter(Boolean)
+      await setToolStance(t.key, { status: t.stance.status, teams: t.stance.teams, sso_required: t.stance.sso_required, tenant_ids: list })
+      await onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Not saved')
+    }
+  }
+  return (
+    <section className="sh-proxy" aria-labelledby="proxy-title">
+      <VStack gap={3}>
+        <div>
+          <Heading level={3} id="proxy-title">
+            Allow only your company workspaces
+          </Heading>
+          <Text size="sm" color="secondary">
+            ChatGPT and Claude each accept a header that limits sign-in to the workspaces you list. Add it at your web proxy and personal accounts cannot sign in. It works only on traffic the proxy inspects, so Shadow AI still watches laptops off the network.
+          </Text>
+        </div>
+        {error && <Banner status="error" title="Not saved" description={error} />}
+        {eligible.map((t) => (
+          <HStack key={t.key} gap={2} vAlign="end" wrap="wrap">
+            <TextInput
+              label={`${t.label} workspace IDs`}
+              description={rules?.missing.find((m) => m.service === t.key)?.where ?? 'Separate several with commas.'}
+              value={ids[t.key] ?? (t.stance?.tenantIds ?? []).join(', ')}
+              onChange={(v) => setIds((p) => ({ ...p, [t.key]: v }))}
+            />
+            <Button variant="secondary" label="Save" onClick={() => void save(t)} />
+          </HStack>
+        ))}
+        {rules?.rules.map((r) => (
+          <div key={r.service} className="sh-rule">
+            <Text size="sm" weight="semibold">
+              {r.label}: add on requests to {r.hosts.join(', ')}
+            </Text>
+            <code className="sh-code">
+              {r.header}: {r.value}
+            </code>
+          </div>
+        ))}
       </VStack>
     </section>
   )
@@ -696,6 +766,13 @@ function seatCell(r: EvidenceRow): { cls: string; label: string } {
   return r.onLaptop || r.traffic ? { cls: 'pe', label: `In use with no company seat, from ${r.seat.source}` } : { cls: 'none', label: `No company seat, from ${r.seat.source}` }
 }
 
+function signedInCell(r: EvidenceRow): { cls: string; label: string } {
+  if (!r.signedIn) return { cls: 'none', label: 'Not reported' }
+  return r.signedIn.class === 'work'
+    ? { cls: 'co', label: `Company account, on ${r.signedIn.laptops.join(', ')}` }
+    : { cls: 'pe', label: `Account outside your company domains, on ${r.signedIn.laptops.join(', ')}` }
+}
+
 /** Each AI tool against each kind of evidence, as squares. */
 function EvidenceGrid({ ev }: { ev: Evidence }) {
   if (!ev.rows.length) return <Text color="secondary">No AI tools seen yet.</Text>
@@ -709,12 +786,13 @@ function EvidenceGrid({ ev }: { ev: Evidence }) {
               <th scope="col">On the laptop</th>
               <th scope="col">Traffic</th>
               <th scope="col">Company seat</th>
+              <th scope="col">Signed in</th>
               <th scope="col">Your stance</th>
             </tr>
           </thead>
           <tbody>
             {ev.rows.map((r) => {
-              const cells = [cell(r, 'onLaptop'), cell(r, 'traffic'), seatCell(r)]
+              const cells = [cell(r, 'onLaptop'), cell(r, 'traffic'), seatCell(r), signedInCell(r)]
               return (
                 <tr key={r.service}>
                   <th scope="row">
@@ -738,7 +816,7 @@ function EvidenceGrid({ ev }: { ev: Evidence }) {
       </div>
       <div className="sh-legend">
         <span><span className="sh-sq co" />Seen, approved or company seat</span>
-        <span><span className="sh-sq pe" />In use with no company seat</span>
+        <span><span className="sh-sq pe" />No company seat, or a personal account</span>
         <span><span className="sh-sq un" />Seen, not approved</span>
         <span><span className="sh-sq none" />Not seen</span>
       </div>
@@ -765,6 +843,87 @@ function PersonTools({ person }: { person: string }) {
   )
 }
 
+function saveFile(name: string, body: string) {
+  const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/** The read-only laptop script: company domains, a one-time ingest token and the script per system. */
+function LaptopScriptCard() {
+  const [st, setSt] = useState<ScriptStatus | null>(null)
+  const [domains, setDomains] = useState('')
+  const [token, setToken] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    getScriptStatus()
+      .then((s) => {
+        setSt(s)
+        setDomains(s.domains.join(', '))
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the laptop script'))
+  }, [])
+  async function act(fn: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function download(os: 'macos' | 'windows') {
+    const d = await downloadScript(os)
+    saveFile(d.filename, d.script)
+  }
+  if (!st) return error ? <Banner status="error" title="Laptop script" description={error} /> : null
+  return (
+    <section className="fm-card" aria-labelledby="script-title">
+      <VStack gap={3}>
+        <HStack hAlign="between" vAlign="start" wrap="wrap" gap={2}>
+          <div>
+            <Heading level={3} id="script-title">
+              Laptop script
+            </Heading>
+            <Text size="sm" color="secondary">
+              Read-only, once a day, pushed by your device management. It reports AI apps, editor extensions, MCP server names and whether each app is signed in with a work or personal account. The address never leaves the laptop.
+            </Text>
+          </div>
+          {st.connected && <span className="dv-chip">{st.laptops ? `${st.laptops} ${st.laptops === 1 ? 'laptop' : 'laptops'} reporting, last ${ago(st.lastReportAt)}` : 'No laptop has reported yet'}</span>}
+        </HStack>
+        {error && <Banner status="error" title="Not saved" description={error} />}
+        <HStack gap={2} vAlign="end" wrap="wrap">
+          <TextInput label="Company email domains" description="An account on these domains counts as a work account." value={domains} onChange={setDomains} placeholder="acme.com, acme.in" />
+          <Button variant="secondary" label="Save domains" isDisabled={busy || !domains.trim()} onClick={() => void act(async () => setSt(await setScriptDomains(domains)))} />
+        </HStack>
+        {st.connected && (
+          <>
+            {token && (
+              <Banner
+                status="success"
+                title="Ingest token, shown once"
+                description={`${token}  Put it in the script's parameter in your device management (Jamf: parameter 4; Intune: -Token). Any earlier token has stopped working.`}
+                endContent={<Button size="sm" variant="secondary" label="Copy" onClick={() => void navigator.clipboard.writeText(token)} />}
+              />
+            )}
+            <HStack gap={2} wrap="wrap">
+              <Button variant="secondary" label={st.hasToken ? 'Create a new token' : 'Create the token'} isDisabled={busy} onClick={() => void act(async () => setToken((await newScriptToken()).token))} />
+              <Button variant="ghost" label="Download for macOS" isDisabled={busy} onClick={() => void act(() => download('macos'))} />
+              <Button variant="ghost" label="Download for Windows" isDisabled={busy} onClick={() => void act(() => download('windows'))} />
+            </HStack>
+          </>
+        )}
+      </VStack>
+    </section>
+  )
+}
+
 function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: string) => void }) {
   const [q, setQ] = useState('')
   const { data, error } = useLaptops(q)
@@ -774,17 +933,24 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
   if (!data) return <Skeleton height={360} />
   if (!data.total && !q)
     return (
-      <EmptyState
-        title="No laptops yet"
-        description="Connect Jamf, Intune, Defender for Endpoint, CrowdStrike or Chrome Enterprise to see which AI tools are on each laptop."
-        actions={<Button label="Connect a source" href="/discovery/connect" />}
-      />
+      <VStack gap={4}>
+        <LaptopScriptCard />
+        <EmptyState
+          title="No laptops yet"
+          description="Run the laptop script, or connect Jamf, Intune, Defender for Endpoint, CrowdStrike, Fleet or Chrome Enterprise, to see which AI tools are on each laptop."
+          actions={<Button label="Connect a source" href="/discovery/connect" />}
+        />
+      </VStack>
     )
   return (
-    <div className="dv-split">
+    <VStack gap={4}>
+      <LaptopScriptCard />
+      <div className="dv-split">
       <section className="fm-card dv-wlist" aria-label="Laptops">
         <div className="dv-wlist-hd">
-          <TextInput label="Find a laptop, serial or person" isLabelHidden placeholder="Find a laptop, serial or person" size="sm" value={q} onChange={setQ} />
+          <div style={{ flex: 1 }}>
+            <TextInput label="Find a laptop, serial or person" isLabelHidden placeholder="Find a laptop, serial or person" size="sm" value={q} onChange={setQ} />
+          </div>
         </div>
         {data.laptops.map((l) => (
           <button key={l.id} type="button" className={`dv-witem${selected?.id === l.id ? ' on' : ''}`} aria-current={selected?.id === l.id} onClick={() => onPick(l.id)}>
@@ -823,7 +989,8 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
           </section>
         </VStack>
       )}
-    </div>
+      </div>
+    </VStack>
   )
 }
 

@@ -490,3 +490,24 @@ def test_chrome_ai_extensions_with_directory_serials(fake_http, monkeypatch):
     tools, facts = run(devices.chrome({"admin_email": "admin@acme.com"}, "{}"))
     assert facts["devices"][0]["serial"] == "C02X" and facts["devices"][0]["user"] == "arjun@acme.com"
     assert facts["devices"][0]["apps"] == [{"service": "claude", "name": "Claude", "version": None, "kind": "extension"}] and [t["name"] for t in tools] == ["Claude"]
+
+
+def test_fleet_hosts_with_software_and_end_users(fake_http):
+    def handler(r):
+        assert r.headers["authorization"] == "Bearer tok" and q(r)["populate_software"] == ["without_vulnerability_details"]
+        return (200, {"hosts": [{
+            "hardware_serial": "C02X", "computer_name": "LT-ENG-0231",
+            "end_users": [{"idp_username": "Arjun@acme.com"}],
+            "software": [
+                {"name": "Cursor.app", "version": "0.45", "source": "apps", "bundle_identifier": "com.todesktop.230313mzl4w4u92"},
+                {"name": "github.copilot", "version": "1.2", "source": "vscode_extensions"},
+                {"name": "Claude", "version": "3", "source": "chrome_extensions"},
+                {"name": "Slack.app", "source": "apps", "bundle_identifier": "com.tinyspeck.slackmacgap"},
+            ],
+        }]})
+
+    fake_http(handler)
+    tools, facts = run(devices.fleet({"url": "https://fleet.acme.com"}, "tok"))
+    d = facts["devices"][0]
+    assert d["serial"] == "C02X" and d["user"] == "arjun@acme.com"
+    assert {(a["service"], a["kind"]) for a in d["apps"]} == {("cursor", "installed"), ("github_copilot", "extension"), ("claude", "extension")}

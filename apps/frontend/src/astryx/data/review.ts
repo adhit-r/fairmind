@@ -176,7 +176,7 @@ export interface ShadowAI {
     teams: string[]
     cells: Record<string, Record<string, { company: number; personal: number; unapproved: number }>>
   }
-  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number; sourceKinds: string[] }
+  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number; sourceKinds: string[]; laptopScript?: boolean }
 }
 
 export interface ToolStance {
@@ -184,7 +184,7 @@ export interface ToolStance {
   label: string
   vendor: string
   category: string
-  stance: { status: Exclude<Stance, 'not_reviewed'>; teams: string[]; sso_required: boolean; note: string | null; updatedAt: string } | null
+  stance: { status: Exclude<Stance, 'not_reviewed'>; teams: string[]; sso_required: boolean; note: string | null; updatedAt: string; tenantIds?: string[] } | null
 }
 
 const S = '/api/v1/shadow-ai'
@@ -213,7 +213,7 @@ export async function listTools() {
   return unwrap(await apiClient.get<ToolStance[]>(`${S}/tools`))
 }
 
-export async function setToolStance(key: string, body: { status: Exclude<Stance, 'not_reviewed'> | null; teams: string[]; sso_required: boolean }) {
+export async function setToolStance(key: string, body: { status: Exclude<Stance, 'not_reviewed'> | null; teams: string[]; sso_required: boolean; tenant_ids?: string[] }) {
   return unwrap(await apiClient.put<{ key: string }>(`${S}/tools/${encodeURIComponent(key)}`, body))
 }
 
@@ -237,6 +237,7 @@ export interface EvidenceRow {
   onLaptop: { laptops: string[]; sources: string[]; kinds: string[]; versions: string[] } | null
   traffic: { requests: number; sources: string[] } | null
   seat: { status: 'held' | 'none' | 'unknown'; source: string } | null
+  signedIn?: { class: 'work' | 'personal'; laptops: string[] } | null
 }
 
 export interface Evidence {
@@ -335,4 +336,37 @@ export async function getReading(key: string) {
 
 export async function writeReading(key: string) {
   return unwrap(await apiClient.post<{ reading: Reading; modelConnected: boolean }>(`${S}/reading`, { key }))
+}
+
+export interface ScriptStatus {
+  connected: boolean
+  domains: string[]
+  hasToken: boolean
+  laptops: number
+  lastReportAt: string | null
+}
+
+export async function getScriptStatus() {
+  return unwrap(await apiClient.get<ScriptStatus>(`${S}/laptop-script`))
+}
+
+export async function setScriptDomains(domains: string) {
+  return unwrap(await apiClient.put<ScriptStatus>(`${S}/laptop-script`, { domains }))
+}
+
+export async function newScriptToken() {
+  return unwrap(await apiClient.post<{ token: string }>(`${S}/laptop-script/token`, {}))
+}
+
+export async function downloadScript(os: 'macos' | 'windows') {
+  return unwrap(await apiClient.get<{ filename: string; script: string }>(`${S}/laptop-script/download?os=${os}`))
+}
+
+export interface TenantRules {
+  rules: { service: string; label: string; header: string; value: string; hosts: string[] }[]
+  missing: { service: string; label: string; where: string }[]
+}
+
+export async function getTenantRules() {
+  return unwrap(await apiClient.get<TenantRules>(`${S}/tenant-rules`))
 }

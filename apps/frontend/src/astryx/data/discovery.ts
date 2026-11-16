@@ -59,6 +59,8 @@ export interface SourceSpec {
   plan?: string
   /** Described by the workspace admin in a form, because the plan has no admin API to read. */
   described?: boolean
+  /** Set up on another page instead of in the connect drawer. */
+  managedIn?: { href: string; text: string }
 }
 
 const SECRET_NOTE = 'Stored encrypted on the server and never shown again.'
@@ -327,6 +329,26 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
     ],
     token: 'API client secret',
     tokenDescription: SECRET_NOTE,
+  },
+  fleet: {
+    label: 'Fleet (osquery)',
+    mark: 'FL',
+    lane: 'devices',
+    permissions: ['An API-only user with the observer role'],
+    reads: 'AI apps and extensions in the software inventory of every host osquery reports, with serial numbers and end users.',
+    fields: [{ key: 'url', label: 'Fleet address' }],
+    token: 'API token',
+    tokenDescription: SECRET_NOTE,
+  },
+  laptop_script: {
+    label: 'Laptop script',
+    mark: 'LS',
+    lane: 'devices',
+    permissions: ['Your device management pushes a read-only script'],
+    reads: 'Once a day per laptop: AI apps, editor extensions, MCP server names, and whether each app is signed in with a work or personal account. Never the address.',
+    fields: [],
+    token: null,
+    managedIn: { href: '/shadow-ai?view=laptops', text: 'Set up the laptop script in Shadow AI: choose your company domains, create the token and download the script for macOS or Windows.' },
   },
   chrome: {
     label: 'Chrome Enterprise',
