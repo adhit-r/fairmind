@@ -408,7 +408,9 @@ export function useDiscovery() {
     await refresh()
   }
   const remove = async (id: string) => {
-    unwrap(await apiClient.delete<null>(`${BASE}/${id}`))
+    // 204 has no body, so data is undefined on success: check success, not data.
+    const res = await apiClient.delete<null>(`${BASE}/${id}`)
+    if (!res.success) throw new Error(res.error || 'The source could not be removed')
     await refresh()
   }
   const sync = async (id: string) => {

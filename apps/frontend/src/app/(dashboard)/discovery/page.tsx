@@ -156,6 +156,42 @@ function lastChange(i: Integration): { text: string; err?: boolean } | null {
   return { text: `No change · ${r.found ?? 0} known` }
 }
 
+/** How much of the account the last read covered: a GitHub read only reports repos with AI in them. */
+function coverage(i: Integration): string | null {
+  const s = i.lastSync?.scanned
+  if (!s) return null
+  const part = s.read < s.listed ? `the first ${s.read} of ${s.listed}` : `all ${s.listed}`
+  return `Read ${part} repos${s.token ? '' : ' · no token, so public repos only'}`
+}
+
+/** What the last good read found, step by step, with examples. */
+function LastFound({ i }: { i: Integration }) {
+  const run = i.recentRuns?.find((r) => r.status === 'ok')
+  if (!run?.steps?.length) return null
+  const title = (key: string) => i.steps?.find((s) => s.key === key)?.title ?? key
+  return (
+    <details className="meta">
+      <summary>What the last read found</summary>
+      <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
+        {run.steps.map((st) => (
+          <li key={st.key}>
+            <b>{title(st.key)}</b>: {st.off ? 'turned off' : st.found === 0 ? 'nothing found' : `${st.found} (${st.samples.map((x) => x.name).join(', ')}${st.found > st.samples.length ? `, and ${st.found - st.samples.length} more` : ''})`}
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
+function confirmRemove(d: D, i: Integration): boolean {
+  const pending = d.discovered.filter((a) => a.integrationId === i.id && a.status !== 'promoted').length
+  return window.confirm(
+    `Remove ${i.name} (${where(i)})?\n\n` +
+      `FairMind stops reading it${pending ? ` and drops the ${pending} found item${pending === 1 ? '' : 's'} not yet registered` : ''}. ` +
+      'AI systems you already registered stay.\n\nTo read a different account, connect it again afterwards.',
+  )
+}
+
 function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; run: (id: string, fn: () => Promise<void>) => void; onUpload: (id: string) => void }) {
   const now = useNow(30_000)
   const { refresh } = d
@@ -199,6 +235,8 @@ function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; ru
                   <div style={{ fontWeight: 600 }}>{i.name}</div>
                   <div className="meta">{where(i)}</div>
                   {change && <div className={`dv-change${change.err ? ' err' : ''}`}>{change.text}</div>}
+                  {coverage(i) && <div className="meta">{coverage(i)}</div>}
+                  <LastFound i={i} />
                 </div>
               </HStack>
               <div className="meta">
@@ -228,7 +266,7 @@ function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; ru
                 ) : (
                   <Button size="sm" variant="secondary" label={busyId === i.id ? 'Reading' : 'Sync now'} isDisabled={busyId !== null} onClick={() => run(i.id, async () => void (await d.sync(i.id)))} />
                 )}
-                <Button size="sm" variant="ghost" label="Remove" isDisabled={busyId !== null} onClick={() => run(i.id, () => d.remove(i.id))} />
+                <Button size="sm" variant="ghost" label="Remove" isDisabled={busyId !== null} onClick={() => confirmRemove(d, i) && run(i.id, () => d.remove(i.id))} />
               </HStack>
             </div>
           )
