@@ -39,6 +39,8 @@ from api.routes.discovery_sources import (
     okta,
     openai_admin,
     proxy_logs,
+    vllm,
+    workspace,
 )
 from api.routes.discovery_sources import steps as read_steps
 from api.routes.org_scope import org_member, org_mutator
@@ -423,6 +425,9 @@ _CONNECTORS = {
     "litellm": litellm.sync,
     "proxy_logs": _sync_upload_only,
     "mcp_registry": mcp_registry.sync,
+    "vllm": vllm.sync,
+    "chatgpt_workspace": workspace.chatgpt_sync,
+    "claude_team": workspace.claude_team_sync,
 }
 # Sign-in sources also read directory facts (team, left or not) for Shadow AI, as the "people" step.
 _FACTS = {"okta": okta.facts, "entra": entra.facts}
