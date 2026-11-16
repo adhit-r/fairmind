@@ -39,6 +39,28 @@ First set the system's connection, on its page, to "A runner inside your network
 
 The run itself stays on FairMind: it writes the probes, judges the answers with your organisation's AI provider and stores the result as evidence like any behaviour test. The CLI picks up each prompt over https, sends it to the model (four at a time, 60 seconds each) and posts the answer back. Nothing connects in to your network. The stored run records that its answers came through your runner. If the CLI stops, the remaining probes fail within a minute and the run is stored as insufficient.
 
+## Getting a system ready for a framework audit
+
+One command reads where a system stands against a framework and does what can be done from here:
+
+```bash
+fairmind audit ISO42001 --system <id>                                  # read only: open clauses and the evaluations that test them
+fairmind audit ISO42001 --system <id> --run --inputs plan.json --share # run them, build the pack, mint the auditor link
+```
+
+It reads the clause map for that framework, then finds the catalogue evaluations that test each open clause and shows, per evaluation, this system's latest result and what it needs to run (files and params, or nothing for a behaviour test). With `--run` it runs every mapped evaluation that has not passed for this system. An evaluation that needs files or params runs only when `--inputs` supplies them; otherwise it is skipped and the exact `fairmind eval run ...` line is printed. One failure does not stop the rest. `--local` runs behaviour tests through this machine, as in the section above. `--pack` builds the inspection pack after the runs, so it freezes their evidence; `--share` also mints the auditor link. It ends by reading the clause map again and listing each clause still open with the gate check it waits on. Exit 0 when no clause of the framework is open, 1 when any is.
+
+`plan.json` gives each evaluation its files (paths relative to the plan file) and params; `connection: true` reads the organisation's agent platform instead of files. `fairmind eval show <id>` lists what an evaluation takes.
+
+```json
+{
+  "EV-DAT-04": {"files": {"dataset": "data/train.csv"}, "params": {"rules": {"region": "required"}}},
+  "EV-TST-01": {"files": {"predictions": "data/preds.csv"}, "params": {"baseline": 0.81}}
+}
+```
+
+A clause's state comes from the release gate's five checks (fairness, data governance, human oversight, monitoring, environmental). A passing evaluation is stored and hashed into the pack as evidence, but it does not close its clause on its own: the clause closes when its gate check has evidence. For ISO 42001 every mapped evaluation reads files (datasets, predictions, logs, lineage records), so `--run` does nothing for it without `--inputs`.
+
 ## In GitHub Actions
 
 ```yaml

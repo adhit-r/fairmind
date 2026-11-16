@@ -209,9 +209,11 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
     async with httpx.AsyncClient(timeout=20, headers=headers, base_url="https://api.github.com") as client:
         repos = await _github_json(client, f"/orgs/{owner}/repos", per_page=100, type="all")
         if repos is None:
-            repos = await _github_json(client, f"/users/{owner}/repos", per_page=100)
-        if repos is None:
-            raise HTTPException(status_code=404, detail=f"GitHub owner {owner} not found")
+            # Organisation accounts only: a personal account's repos are not the organisation's to inventory.
+            raise HTTPException(
+                status_code=400,
+                detail=f"github.com/{owner} is not a GitHub organisation. Connect your company's organisation, not a personal account.",
+            )
         wanted = [r for r in repos if not r.get("archived") and (not only or r["name"] in only or r["full_name"] in only)]
         # ponytail: scan size rides back on the in-memory config (never saved); a typed result if a second connector needs it.
         config["_scanned"] = {"read": min(len(wanted), max_repos), "listed": len(wanted), "token": bool(token)}

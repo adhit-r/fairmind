@@ -17,6 +17,8 @@
     fairmind report generate|list               audit report snapshots
     fairmind eval list|show|run|result          evaluation catalogue and runs
     fairmind eval run <id> --system <id> --live --local   behaviour test on a model only your network can reach
+    fairmind audit ISO42001 --system <id> [--run --inputs plan.json --local] [--pack] [--share]
+                                                one framework audit: open clauses, their evaluations, pack, auditor link
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
 http://localhost:8010) and FAIRMIND_API_KEY, a key minted at POST /api/v1/auth/api-keys.
@@ -523,9 +525,62 @@ def _answer_prompts(model: httpx.Client, target: Dict[str, Any], auth: str, prom
         return list(pool.map(one, prompts))
 
 
+def _packs(client: httpx.Client) -> Callable[..., Any]:
+    """Caller for the /api/v1/packs routes, which take the organisation as a query parameter."""
+    org = _org(client)
+    return lambda path, **kw: _call(client, kw.pop("method", "GET"), f"/api/v1/packs{path}", **{**kw, "params": {**kw.get("params", {}), "org_id": org}})
+
+
+def _run_eval(packs: Callable[..., Any], factory: ClientFactory, eval_id: str, system: str, files: Dict[str, Path], params: Dict[str, Any],
+              *, live: bool, local: bool, connection: bool, timeout: float) -> Dict[str, Any]:
+    """Start one evaluation run, answer its prompts when local, wait for the stored result and return it."""
+    data = {"system_id": system, "params": json.dumps(params), "source": "connection" if connection else "upload"}
+    target = None
+    if local:
+        target = packs(f"/ai-systems/{system}/target").get("target")
+        if not target or target.get("via") != "runner":
+            raise CliError("This system's connection is not set to a runner; on the system's page choose 'A runner inside your network', or drop --local")
+        data["runner"] = "1"
+    if live or local:
+        data["mode"] = "live"
+    handles = {slot: (p.name, p.open("rb")) for slot, p in files.items()}
+    try:
+        result = packs(f"/evaluations/{eval_id}/runs", method="POST", data=data, files=handles or None)
+    finally:
+        for _, handle in handles.values():
+            handle.close()
+    job = result.get("job") if isinstance(result, dict) else None
+    if not job:
+        return result
+    deadline = time.monotonic() + timeout
+    model = factory("", {"User-Agent": f"fairmind-cli/{__version__}"}) if target else None
+    auth = os.environ.get("FAIRMIND_TARGET_AUTH", "")
+    try:
+        while job["status"] not in ("done", "failed"):
+            if time.monotonic() > deadline:
+                raise CliError(f"Evaluation job {job['id']} is still running after {timeout:.0f}s; check it later")
+            if not model:
+                time.sleep(3)
+                job = packs(f"/evaluation-jobs/{job['id']}")
+                continue
+            waiting = packs(f"/evaluation-jobs/{job['id']}/prompts")
+            job = waiting["job"]
+            if waiting["prompts"]:
+                answers = _answer_prompts(model, target, auth, waiting["prompts"])
+                packs(f"/evaluation-jobs/{job['id']}/answers", method="POST", json={"answers": answers})
+            else:
+                time.sleep(1)
+    finally:
+        if model:
+            model.close()
+    if job["status"] == "failed":
+        raise CliError(f"Evaluation {eval_id} failed: {job.get('error') or 'no reason given'}")
+    return packs(f"/evaluation-runs/{job['evidenceId']}")
+
+
 def cmd_eval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
     with _client(args, factory) as client:
-        packs = lambda path, **kw: _call(client, kw.pop("method", "GET"), f"/api/v1/packs{path}", **{**kw, "params": {**kw.get("params", {}), "org_id": _org(client)}})  # noqa: E731
+        packs = _packs(client)
         if args.action == "list":
             params = {k: v for k, v in (("q", args.query), ("pillar", args.pillar)) if v}
             return _show(out, args, packs("/evaluations", params=params), lambda es: "\n".join(f"{e['id']}  {'runnable' if e.get('runnable') else 'evidence only'}  {e['name']}" for e in es) or "No evaluation matches.")
@@ -545,49 +600,127 @@ def cmd_eval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
                 params[key] = json.loads(value)
             except ValueError:
                 params[key] = value
-        data = {"system_id": args.system, "params": json.dumps(params), "source": "connection" if args.use_connection else "upload"}
-        target = None
-        if args.local:
-            target = packs(f"/ai-systems/{args.system}/target").get("target")
-            if not target or target.get("via") != "runner":
-                raise CliError("This system's connection is not set to a runner; on the system's page choose 'A runner inside your network', or drop --local")
-            data["runner"] = "1"
-        if args.live or args.local:
-            data["mode"] = "live"
-        handles = {slot: (p.name, p.open("rb")) for slot, p in files.items()}
-        try:
-            result = packs(f"/evaluations/{args.id}/runs", method="POST", data=data, files=handles or None)
-        finally:
-            for _, handle in handles.values():
-                handle.close()
-        job = result.get("job") if isinstance(result, dict) else None
-        if job:
-            deadline = time.monotonic() + args.timeout
-            model = factory("", {"User-Agent": f"fairmind-cli/{__version__}"}) if target else None
-            auth = os.environ.get("FAIRMIND_TARGET_AUTH", "")
-            try:
-                while job["status"] not in ("done", "failed"):
-                    if time.monotonic() > deadline:
-                        raise CliError(f"Evaluation job {job['id']} is still running after {args.timeout:.0f}s; check it later")
-                    if not model:
-                        time.sleep(3)
-                        job = packs(f"/evaluation-jobs/{job['id']}")
-                        continue
-                    waiting = packs(f"/evaluation-jobs/{job['id']}/prompts")
-                    job = waiting["job"]
-                    if waiting["prompts"]:
-                        answers = _answer_prompts(model, target, auth, waiting["prompts"])
-                        packs(f"/evaluation-jobs/{job['id']}/answers", method="POST", json={"answers": answers})
-                    else:
-                        time.sleep(1)
-            finally:
-                if model:
-                    model.close()
-            if job["status"] == "failed":
-                raise CliError(f"Evaluation {args.id} failed: {job.get('error') or 'no reason given'}")
-            result = packs(f"/evaluation-runs/{job['evidenceId']}")
+        result = _run_eval(packs, factory, args.id, args.system, files, params, live=args.live, local=args.local, connection=args.use_connection, timeout=args.timeout)
         _show(out, args, result, _render_eval_run)
         return EXIT_GO if result.get("status") == "passed" else EXIT_NO_GO
+
+
+# ---------------------------------------------------------------------------
+# audit: clause map, evaluations, pack and link for one framework in one go
+# ---------------------------------------------------------------------------
+
+def _framework(client: httpx.Client, system: str, key: str) -> Dict[str, Any]:
+    cmap = _call(client, "GET", f"{GOV}/systems/{system}/clause-map")
+    found = next((f for f in cmap["frameworks"] if f["key"].upper() == key), None)
+    if not found:
+        raise CliError(f"The clause map has no framework {key}; it has {', '.join(f['key'] for f in cmap['frameworks']) or 'none'}")
+    return found
+
+
+def _waits_on(clause: Dict[str, Any]) -> str:
+    return ", ".join(c.get("label") or c["check"] for c in clause.get("checks", [])) or "no gate check"
+
+
+def _plan_step(spec: Dict[str, Any], given: Dict[str, Any], base: Path) -> Dict[str, Any]:
+    """How one evaluation would run with the inputs given: which engine, and what is still missing."""
+    files = {slot: base / path for slot, path in (given.get("files") or {}).items()}
+    params = dict(given.get("params") or {})
+    connection = bool(given.get("connection"))
+    alt = spec.get("alternate")
+    live = bool(spec.get("live")) or bool(alt and alt.get("live") and not files and not connection)
+    engine = alt if live and not spec.get("live") else spec  # a file engine with a behaviour test runs that test when no file is given
+    missing = [] if connection else [f"file {s['name']}" for s in engine["slots"] if s["required"] and s["name"] not in files]
+    missing += [f"param {p['name']}" for p in engine["params"] if p["required"] and p["name"] not in params]
+    missing += [f"file {slot} ({path}) not found" for slot, path in files.items() if not path.is_file()]
+    return {"live": live, "files": files, "params": params, "connection": connection, "missing": missing}
+
+
+def _hint(eval_id: str, system: str, step: Dict[str, Any], local: bool) -> str:
+    parts = [f"fairmind eval run {eval_id} --system {system}"]
+    parts += [f"--file {m.split()[1]}=<path>" for m in step["missing"] if m.startswith("file ") and "not found" not in m]
+    parts += [f"--param {m.split()[1]}=<value>" for m in step["missing"] if m.startswith("param ")]
+    if step["live"]:
+        parts.append("--local" if local else "--live")
+    return " ".join(parts)
+
+
+def _counts(fw: Dict[str, Any]) -> str:
+    n = fw["counts"]
+    return f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n['attested']} attested, {n['open']} open of {n['total']} clauses"
+
+
+def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    key = args.framework.upper()
+    inputs: Dict[str, Any] = {}
+    if args.inputs:
+        try:
+            inputs = json.loads(Path(args.inputs).read_text(encoding="utf-8"))
+            assert isinstance(inputs, dict)
+        except (OSError, ValueError, AssertionError):
+            raise CliError(f"--inputs expects a JSON object of evaluation id -> {{files, params}}: {args.inputs}")
+    base = Path(args.inputs).parent if args.inputs else Path(".")
+    report: Dict[str, Any] = {"framework": key, "system": args.system, "evaluations": [], "runs": [], "pack": None, "share": None}
+    lines: List[str] = []
+    with _client(args, factory) as client:
+        fw = _framework(client, args.system, key)
+        open_clauses = [c for c in fw["clauses"] if c["state"] == "open"]
+        packs = _packs(client)
+        lines += [_counts(fw)]
+        evals = [e for e in packs("/evaluations") if any(t["key"] in {c["key"] for c in open_clauses} for t in e["tests"])]
+        steps: Dict[str, Dict[str, Any]] = {}
+        for e in evals:
+            latest = next((s for s in (e.get("results") or {}).get("systems", []) if s["systemId"] == args.system), None)
+            row = {"id": e["id"], "name": e["name"], "clauses": [t["key"] for t in e["tests"] if t["framework"].upper() == key],
+                   "latest": latest["status"] if latest else None, "runnable": bool(e.get("runnable")), "needs": None}
+            if row["runnable"] and row["latest"] != "passed":
+                steps[e["id"]] = _plan_step(packs(f"/evaluations/{e['id']}/engine"), inputs.get(e["id"]) or {}, base)
+                row["needs"] = steps[e["id"]]["missing"]
+            report["evaluations"].append(row)
+        if open_clauses:
+            lines.append("")
+            lines.append("Open clauses")
+        for clause in open_clauses:
+            lines.append(f"  {clause['control']:<10} {clause['title']}  (waits on {_waits_on(clause)})")
+            for row in (r for r in report["evaluations"] if clause["key"] in r["clauses"]):
+                state = row["latest"] or "not run"
+                how = "" if row["latest"] == "passed" else ("ready to run" if not row["needs"] else "needs " + ", ".join(row["needs"])) if row["runnable"] else "evidence only, FairMind does not run it"
+                lines.append(f"    {row['id']:<10} {state:<12} {how}".rstrip())
+        if args.run:
+            lines += ["", "Runs"]
+            for row in report["evaluations"]:
+                step = steps.get(row["id"])
+                if row["latest"] == "passed" or not step:
+                    continue
+                if step["missing"]:
+                    run = {"evaluationId": row["id"], "status": "skipped", "reason": ", ".join(step["missing"]), "command": _hint(row["id"], args.system, step, args.local)}
+                    lines.append(f"  {row['id']}: skipped, needs {run['reason']}\n    {run['command']}")
+                else:
+                    try:
+                        run = _run_eval(packs, factory, row["id"], args.system, step["files"], step["params"],
+                                        live=step["live"], local=args.local and step["live"], connection=step["connection"], timeout=args.timeout)
+                        lines.append("  " + _render_eval_run(run).replace("\n", "\n  "))
+                    except CliError as exc:
+                        run = {"evaluationId": row["id"], "status": "error", "reason": str(exc)}
+                        lines.append(f"  {row['id']}: error, {exc}")
+                report["runs"].append(run)
+            if not report["runs"]:
+                lines.append("  Nothing to run: every mapped evaluation has passed or is evidence only.")
+        if args.pack or args.share:
+            name = _call(client, "GET", f"{GOV}/systems/{args.system}").get("name", args.system)
+            title = args.title or f"{fw['name']} audit: {name} {time.strftime('%Y-%m-%d')}"
+            pack = report["pack"] = _call(client, "POST", f"{GOV}/packs", json={"title": title, "frameworks": [fw["key"]], "system_ids": [args.system]})
+            lines += ["", f"Pack {pack['id']}  {pack['title']}", f"  hash {pack['manifestHash']}"]
+            if args.share:
+                share = report["share"] = _call(client, "POST", f"{GOV}/packs/{pack['id']}/share")
+                lines += [f"  auditor token (shown once): {share['token']}", f"  expires {share['expiresAt']}", f"  link: <FairMind site>/verify/{share['packId']}?t={share['token']}"]
+        after = report["after"] = _framework(client, args.system, key) if args.run else fw
+    still = [c for c in after["clauses"] if c["state"] == "open"]
+    lines += ["", ("After the runs, " if args.run else "") + _counts(after)]
+    lines += [f"  still open: {c['control']} (waits on {_waits_on(c)})" for c in still]
+    if still and any(r["status"] == "passed" for r in report["runs"]):
+        lines.append("  A passing evaluation is hashed into the pack as evidence; its clause closes only when its gate check has evidence.")
+    out(json.dumps(report, indent=2, default=str) if args.json else "\n".join(lines))
+    return EXIT_NO_GO if still else EXIT_GO
 
 # ---------------------------------------------------------------------------
 # entry point
@@ -710,6 +843,18 @@ def build_parser() -> argparse.ArgumentParser:
                            "FairMind sends the prompts here, this machine calls the system and returns the answers (needs a runner connection)")
     ev["run"].add_argument("--use-connection", action="store_true", help="read the organisation's agent platform instead of files")
     ev["run"].add_argument("--timeout", type=float, default=900.0)
+
+    audit = sub.add_parser("audit", parents=[common], help="get one system ready for a framework audit: clause map, evaluations, pack, auditor link; exit 0 when no clause is open, 1 when any is")
+    audit.add_argument("framework", help="catalogue key, e.g. ISO42001, EUAIA, NISTRMF")
+    audit.add_argument("--system", required=True)
+    audit.add_argument("--run", action="store_true", help="run the mapped evaluations that have not passed for this system")
+    audit.add_argument("--inputs", help='JSON file of evaluation id -> {"files": {slot: path}, "params": {...}, "connection": true}; paths are relative to this file')
+    audit.add_argument("--local", action="store_true", help="run behaviour tests through this machine (the system's connection must be a runner)")
+    audit.add_argument("--pack", action="store_true", help="build the inspection pack for this framework and system, after any runs")
+    audit.add_argument("--share", action="store_true", help="also mint the auditor link (implies --pack)")
+    audit.add_argument("--title", help="pack title (default '<framework> audit: <system> <date>')")
+    audit.add_argument("--timeout", type=float, default=900.0, help="seconds to wait for each evaluation")
+    audit.set_defaults(func=cmd_audit)
 
     verify = sub.add_parser("verify", parents=[common], help="verify an inspection pack (a downloaded pack.json is checked with no network; a share link is fetched first); exit 0 intact, 1 not", description=CANONICAL_FORM)
     verify.add_argument("pack", help="pack JSON downloaded from FairMind, or an auditor share link (.../verify/<id>?t=<token>)")

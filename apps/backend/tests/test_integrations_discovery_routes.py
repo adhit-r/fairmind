@@ -221,7 +221,7 @@ def test_vllm_says_when_the_address_is_not_a_vllm_server(client, monkeypatch):  
 
 def test_a_described_chatgpt_workspace_becomes_the_workspace_and_its_gpts(client):  # noqa: F811
     config = {
-        "workspace_name": "SQ1", "plan": "business", "seats": "25", "owner": "it@example.com",
+        "workspace_name": "Acme", "plan": "business", "seats": "25", "owner": "it@example.com",
         "assistants": [{"name": "Policy helper", "purpose": "Answers policy questions", "audience": "workspace"}, {"name": ""}],
         "apps": ["Google Drive", "GitHub"], "memory": "on", "history": "until deleted", "review_days": 90,
     }
@@ -229,8 +229,20 @@ def test_a_described_chatgpt_workspace_becomes_the_workspace_and_its_gpts(client
     assert r.status_code == 201, r.text
     assert client.post(f"/api/v1/integrations/{r.json()['id']}/sync").json()["found"] == 2
     found = {a["name"]: a for a in client.get("/api/v1/integrations/discovered").json()}
-    ws = found["ChatGPT workspace: SQ1"]
+    ws = found["ChatGPT workspace: Acme"]
     assert ws["kind"] == "ai_service" and ws["metadata"]["seats"] == 25 and ws["metadata"]["apps"] == ["Google Drive", "GitHub"]
     assert found["Policy helper"]["kind"] == "llm_app" and found["Policy helper"]["metadata"]["kind_in_vendor"] == "custom GPT"
     bad = client.post("/api/v1/integrations/preview", json={"kind": "claude_team", "name": "x", "config": {"seats": 3}})
     assert bad.status_code == 400 and "Workspace name" in bad.json()["detail"]
+
+
+def test_github_refuses_a_personal_account(client, monkeypatch):  # noqa: F811
+    def gh(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/users/someone/repos":
+            return httpx.Response(200, json=[{"name": "x", "full_name": "someone/x"}])
+        return httpx.Response(404, json={})  # /orgs/someone/repos: not an organisation
+
+    monkeypatch.setattr(integrations.httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(gh)))
+    iid = _add(client, "github", owner="someone")
+    r = client.post(f"/api/v1/integrations/{iid}/sync")
+    assert r.status_code == 400 and "not a GitHub organisation" in r.json()["detail"]

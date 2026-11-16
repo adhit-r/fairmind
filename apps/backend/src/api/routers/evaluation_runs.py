@@ -65,7 +65,9 @@ PLATFORM = "claude_managed_agents"  # ponytail: the one connector; take it from 
 def _engine(evaluation_id: str, mode: str = ""):
     if evaluation_id not in EVALUATIONS:
         raise HTTPException(status_code=404, detail="Evaluation not found")
-    engine = ALTERNATES.get(evaluation_id) if mode == "live" else REGISTRY.get(evaluation_id)
+    engine = REGISTRY.get(evaluation_id)
+    if mode == "live" and not (engine and engine.live):  # live mode: the behaviour test, registered or as an alternate
+        engine = ALTERNATES.get(evaluation_id)
     if not engine:
         raise HTTPException(status_code=404, detail="FairMind cannot run this evaluation yet")
     return engine

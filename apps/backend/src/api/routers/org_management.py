@@ -1163,7 +1163,7 @@ async def add_domain(org_id: str, body: DomainBody, request: Request, current_us
     """Claim a domain. Proof for now: the owner or admin's own address is on it, or a platform admin adds it."""
     domain = normalize_domain(body.domain)
     if not domain:
-        raise HTTPException(status_code=400, detail="That is not a domain, for example sq1.security")
+        raise HTTPException(status_code=400, detail="That is not a domain, for example acme.com")
     if is_personal(domain):
         raise HTTPException(status_code=400, detail=f"{domain} is personal mail; it cannot belong to one organisation")
     platform_admin = getattr(current_user.role, "value", current_user.role) == "admin"
