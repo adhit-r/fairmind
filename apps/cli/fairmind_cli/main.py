@@ -16,9 +16,11 @@
     fairmind approval request|status|decide     release decisions
     fairmind report generate|list               audit report snapshots
     fairmind eval list|show|run|result          evaluation catalogue and runs
+    fairmind eval run <id> --system <id> --live --local   behaviour test on a model only your network can reach
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
 http://localhost:8010) and FAIRMIND_API_KEY, a key minted at POST /api/v1/auth/api-keys.
+With --local, FAIRMIND_TARGET_AUTH is the model's own key; it is sent only to the model.
 Exit code 3 means the command itself failed (network, auth, bad input).
 """
 
@@ -31,6 +33,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 from urllib.parse import parse_qs, urlparse
@@ -459,6 +462,67 @@ def _render_eval_run(run: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+RUNNER_THREADS = 4  # the engines send four probes at a time
+MODEL_TIMEOUT_S = 60.0  # as the server's own call to a system under test
+
+
+def _fill(template: Any, prompt: str) -> Any:
+    if isinstance(template, str):
+        return template.replace("{{prompt}}", prompt)
+    if isinstance(template, list):
+        return [_fill(v, prompt) for v in template]
+    if isinstance(template, dict):
+        return {k: _fill(v, prompt) for k, v in template.items()}
+    return template
+
+
+def _ask_model(model: httpx.Client, target: Dict[str, Any], auth: str, prompt: str) -> str:
+    """One prompt to the system under test, sent the way the FairMind server sends it to a public endpoint."""
+    headers: Dict[str, str] = {}
+    if target["kind"] == "openai":
+        if auth:
+            headers["Authorization"] = f"Bearer {auth}"
+        messages = [{"role": "system", "content": target["systemPrompt"]}] if target.get("systemPrompt") else []
+        url, body = f"{target['url']}/chat/completions", {"model": target.get("model", ""), "messages": messages + [{"role": "user", "content": prompt}]}
+    else:
+        if auth:
+            headers[target.get("authHeader") or "Authorization"] = auth
+        url, body = target["url"], _fill(json.loads(target["requestTemplate"]), prompt)
+    try:
+        resp = model.post(url, json=body, headers=headers, timeout=MODEL_TIMEOUT_S)
+    except httpx.TimeoutException:
+        raise CliError(f"the system did not answer within {MODEL_TIMEOUT_S:.0f} seconds")
+    except httpx.HTTPError:
+        raise CliError("could not reach the system from this machine")
+    if resp.status_code >= 400:
+        raise CliError(f"the system responded {resp.status_code}")
+    try:
+        data = resp.json()
+    except ValueError:
+        if target["kind"] == "http" and not target.get("responsePath"):
+            return resp.text
+        raise CliError("the system did not answer with JSON")
+    try:
+        if target["kind"] == "openai":
+            data = data["choices"][0]["message"]["content"]
+        for part in [p for p in (target.get("responsePath") or "").split(".") if p and target["kind"] == "http"]:
+            data = data[int(part)] if isinstance(data, list) else data[part]
+    except (KeyError, IndexError, TypeError, ValueError):
+        raise CliError("the system's answer could not be read; check the answer path")
+    return data if isinstance(data, str) else json.dumps(data)
+
+
+def _answer_prompts(model: httpx.Client, target: Dict[str, Any], auth: str, prompts: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def one(p: Dict[str, str]) -> Dict[str, str]:
+        try:
+            return {"id": p["id"], "answer": _ask_model(model, target, auth, p["prompt"])}
+        except CliError as exc:
+            return {"id": p["id"], "error": str(exc)}
+
+    with ThreadPoolExecutor(RUNNER_THREADS) as pool:
+        return list(pool.map(one, prompts))
+
+
 def cmd_eval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
     with _client(args, factory) as client:
         packs = lambda path, **kw: _call(client, kw.pop("method", "GET"), f"/api/v1/packs{path}", **{**kw, "params": {**kw.get("params", {}), "org_id": _org(client)}})  # noqa: E731
@@ -482,7 +546,13 @@ def cmd_eval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
             except ValueError:
                 params[key] = value
         data = {"system_id": args.system, "params": json.dumps(params), "source": "connection" if args.use_connection else "upload"}
-        if args.live:
+        target = None
+        if args.local:
+            target = packs(f"/ai-systems/{args.system}/target").get("target")
+            if not target or target.get("via") != "runner":
+                raise CliError("This system's connection is not set to a runner; on the system's page choose 'A runner inside your network', or drop --local")
+            data["runner"] = "1"
+        if args.live or args.local:
             data["mode"] = "live"
         handles = {slot: (p.name, p.open("rb")) for slot, p in files.items()}
         try:
@@ -493,11 +563,26 @@ def cmd_eval(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
         job = result.get("job") if isinstance(result, dict) else None
         if job:
             deadline = time.monotonic() + args.timeout
-            while job["status"] not in ("done", "failed"):
-                if time.monotonic() > deadline:
-                    raise CliError(f"Evaluation job {job['id']} is still running after {args.timeout:.0f}s; check it later")
-                time.sleep(3)
-                job = packs(f"/evaluation-jobs/{job['id']}")
+            model = factory("", {"User-Agent": f"fairmind-cli/{__version__}"}) if target else None
+            auth = os.environ.get("FAIRMIND_TARGET_AUTH", "")
+            try:
+                while job["status"] not in ("done", "failed"):
+                    if time.monotonic() > deadline:
+                        raise CliError(f"Evaluation job {job['id']} is still running after {args.timeout:.0f}s; check it later")
+                    if not model:
+                        time.sleep(3)
+                        job = packs(f"/evaluation-jobs/{job['id']}")
+                        continue
+                    waiting = packs(f"/evaluation-jobs/{job['id']}/prompts")
+                    job = waiting["job"]
+                    if waiting["prompts"]:
+                        answers = _answer_prompts(model, target, auth, waiting["prompts"])
+                        packs(f"/evaluation-jobs/{job['id']}/answers", method="POST", json={"answers": answers})
+                    else:
+                        time.sleep(1)
+            finally:
+                if model:
+                    model.close()
             if job["status"] == "failed":
                 raise CliError(f"Evaluation {args.id} failed: {job.get('error') or 'no reason given'}")
             result = packs(f"/evaluation-runs/{job['evidenceId']}")
@@ -621,6 +706,8 @@ def build_parser() -> argparse.ArgumentParser:
     ev["run"].add_argument("--file", action="append", help="slot=path, repeatable")
     ev["run"].add_argument("--param", action="append", help="name=value, repeatable")
     ev["run"].add_argument("--live", action="store_true", help="behaviour test against the system's connected endpoint")
+    ev["run"].add_argument("--local", action="store_true", help="behaviour test on a system only this machine's network reaches: "
+                           "FairMind sends the prompts here, this machine calls the system and returns the answers (needs a runner connection)")
     ev["run"].add_argument("--use-connection", action="store_true", help="read the organisation's agent platform instead of files")
     ev["run"].add_argument("--timeout", type=float, default=900.0)
 
