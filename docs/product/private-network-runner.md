@@ -6,8 +6,8 @@ Status: approved 2026-11-17
 
 Behaviour tests (prompt injection, jailbreak, leakage, over-refusal, output bias and the other
 `live="target"` engines) call the AI system under test from the FairMind server. The endpoint must be
-public https (`llm._public_https`, checked on save and on every call). SQ1 Security, the first pilot,
-runs its models on private addresses, so none of these tests can run, and EV-SEC-01, EV-SEC-03,
+public https (`llm._public_https`, checked on save and on every call). A customer that runs its models on
+private addresses cannot run any of these tests, and EV-SEC-01, EV-SEC-03,
 EV-SEC-04 and EV-OFF-08 have no file-upload alternative at all.
 
 ## Decision
@@ -82,7 +82,7 @@ Running the test from the app shows the same command (the 409 message).
 ## Not in this change
 
 - MLflow discovery through the runner (`fairmind runner mlflow`, posting registry pages to the
-  connector's upload endpoint). Same pattern; follow-up unless SQ1 needs it for the pilot.
+  connector's upload endpoint). Same pattern; follow-up until a customer needs it.
 - A long-lived runner daemon that picks up runs started from the app. Add when a customer wants to
   start private runs from the browser.
 - SDK support (`run_evaluation(local=True)`).
