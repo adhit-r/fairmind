@@ -216,7 +216,7 @@ async def _log_org_audit(
                 """
                 INSERT INTO org_audit_logs
                 (id, org_id, user_id, action, resource_type, resource_id, changes, status, error_message, ip_address, user_agent, created_at)
-                VALUES (:id, :org_id, :user_id, :action, :resource_type, :resource_id, :changes, :status, :error_message, :ip_address, :user_agent, :created_at)
+                VALUES (:id, :org_id, :user_id, :action, :resource_type, :resource_id, CAST(:changes AS jsonb), :status, :error_message, :ip_address, :user_agent, :created_at)
                 """,
                 {
                     "id": str(uuid.uuid4()),
@@ -225,7 +225,7 @@ async def _log_org_audit(
                     "action": action,
                     "resource_type": resource_type,
                     "resource_id": resource_id,
-                    "changes": changes or {},
+                    "changes": json.dumps(changes or {}, default=str),
                     "status": status,
                     "error_message": error_message,
                     "ip_address": ip_address,
