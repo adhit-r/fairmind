@@ -391,6 +391,7 @@ _INVITATION_PREVIEW = re.compile(r"/api/v1/organizations/invitations/[^/]+")
 _OWNER_CHECK = re.compile(r"/api/v1/public/owner-check/[^/]+")
 _LAPTOP_REPORT = "/api/v1/public/laptop-report"
 _OSQUERY = ("/api/v1/public/osquery/enroll", "/api/v1/public/osquery/config", "/api/v1/public/osquery/log")
+_NOTIFIER = ("/api/v1/public/notifier/enroll", "/api/v1/public/notifier/messages", "/api/v1/public/notifier/ack")
 
 
 def _is_public_path(path: str) -> bool:
@@ -483,6 +484,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # osquery enrols with the organisation's secret and then uses its own node key; the routes check both.
         if request.method == "POST" and request.url.path in _OSQUERY:
+            return await call_next(request)
+
+        # The notifier enrols with the organisation's notifier secret and then uses its own key; the routes check both.
+        if request.method in ("GET", "POST") and request.url.path in _NOTIFIER:
             return await call_next(request)
 
         # An invitee previews an invitation before they have an account; accepting needs one.

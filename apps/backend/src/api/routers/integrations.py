@@ -74,6 +74,7 @@ def _ensure_tables() -> None:
             conn.execute(text("ALTER TABLE governance_approved_ai_tools ADD COLUMN IF NOT EXISTS tenant_ids_json TEXT"))
             conn.execute(text("ALTER TABLE governance_agent_nodes ADD COLUMN IF NOT EXISTS models_json TEXT"))
             conn.execute(text("ALTER TABLE governance_agent_nodes ADD COLUMN IF NOT EXISTS accounts_json TEXT"))
+            conn.execute(text("ALTER TABLE governance_agent_events ADD COLUMN IF NOT EXISTS delivered_at TEXT"))
     _tables_ready = True
 
 

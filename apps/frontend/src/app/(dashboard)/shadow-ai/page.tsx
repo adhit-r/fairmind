@@ -27,6 +27,7 @@ import {
   downloadScript,
   getAgent,
   newAgentSecret,
+  newNotifierSecret,
   setAgentRules,
   getReading,
   getScriptStatus,
@@ -1000,6 +1001,7 @@ function eventText(e: AgentEvent): string {
 function AgentCard() {
   const [st, setSt] = useState<AgentStatus | null>(null)
   const [secret, setSecret] = useState<string | null>(null)
+  const [notifier, setNotifier] = useState<{ secret: string; config: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -1098,8 +1100,30 @@ function AgentCard() {
                 {st.domains.length
                   ? `The account check compares with your company domains (${st.domains.join(', ')}), on the laptop.`
                   : 'Set your company domains in the laptop script card to turn on the account check.'}{' '}
-                Messages to the person wait until the FairMind notifier is installed. The agent never blocks.
+                Messages to the person are shown by the FairMind notifier where it is installed. The agent never blocks.
               </Text>
+            </VStack>
+            <VStack gap={2}>
+              <HStack hAlign="between" vAlign="center" wrap="wrap" gap={2}>
+                <Text size="sm" weight="semibold">
+                  FairMind notifier
+                </Text>
+                <span className="dv-chip">{st.notifiers ? `On ${st.notifiers} ${st.notifiers === 1 ? 'laptop' : 'laptops'}` : 'Not installed yet'}</span>
+              </HStack>
+              <Text size="sm" color="secondary">
+                A small app in the person&apos;s session that shows these messages and, on request, what the agent checks and every message it showed. Install it with its settings file from your device management. Release builds will be signed; until then it is for testing.
+              </Text>
+              {notifier && (
+                <Banner
+                  status="success"
+                  title="Notifier settings, shown once"
+                  description="Download notifier.json now and install it with the notifier. Any earlier notifier secret has stopped working for new laptops."
+                  endContent={<Button size="sm" variant="secondary" label="Download notifier.json" onClick={() => saveFile('notifier.json', notifier.config)} />}
+                />
+              )}
+              <HStack>
+                <Button variant="secondary" label={st.hasNotifierSecret ? 'Create new notifier settings' : 'Create notifier settings'} isDisabled={busy} onClick={() => void act(async () => setNotifier(await newNotifierSecret()))} />
+              </HStack>
             </VStack>
             {st.events.length > 0 && (
               <VStack gap={1}>
@@ -1116,6 +1140,7 @@ function AgentCard() {
                         {eventText(e)}
                         {e.user ? ` (${e.user})` : ''}, {ago(e.at)}
                         {e.action && e.action !== 'log' ? ` · ${ACTION_DONE[e.action]}` : ''}
+                        {e.shownAt ? ` · shown to the person ${ago(e.shownAt)}` : ''}
                       </span>
                     </li>
                   ))}

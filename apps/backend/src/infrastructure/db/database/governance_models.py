@@ -4301,6 +4301,21 @@ class GovernanceAgentEvent(Base):
     service = Column(String, nullable=True)
     detail_json = Column(Text, nullable=False)
     at = Column(String, nullable=False, index=True)
+    delivered_at = Column(String, nullable=True)  # when the notifier showed the person its message
+
+
+class GovernanceNotifierClient(Base):
+    """The FairMind notifier on one laptop, in the person's session: its key (hashed) and which laptop it is."""
+
+    __tablename__ = "governance_notifier_clients"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    key_hash = Column(String, nullable=False, unique=True)
+    serial = Column(String, nullable=True)
+    person = Column(String, nullable=True)  # the account the notifier runs as
+    created_at = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
 
 
 class PackInstall(Base):
