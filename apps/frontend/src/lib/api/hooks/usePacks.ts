@@ -341,7 +341,7 @@ function useResource<T>(path: string | null): Resource<T> {
   return { ...viewResource(state, path), reload }
 }
 
-const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`
+export const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`
 
 /** A GET scoped to the organisation picked in the org switcher; waits while organisations load. */
 export function useOrgResource<T>(path: string | null): Resource<T> {

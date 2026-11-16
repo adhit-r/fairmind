@@ -631,6 +631,7 @@ else:
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.tasks", prefix="/api/v1", tags=["tasks"], required=True)
 _include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)

@@ -1,0 +1,44 @@
+/* Tasks: a list grouped by due date beside the open task, and the team's load per person. */
+.tk-cols { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .tk-cols { grid-template-columns: minmax(0, 1fr); } }
+.tk-grp { display: flex; justify-content: space-between; padding: 14px 20px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-secondary); border-top: 1px solid var(--color-border); }
+.tk-grp:first-child { border-top: 0; }
+.tk-grp.late { color: #b42318; }
+.tk-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 110px 80px 32px; gap: 14px; align-items: center; padding: 10px 20px; border-top: 1px solid var(--color-border); width: 100%; background: transparent; border-left: 0; border-right: 0; border-bottom: 0; font: inherit; color: inherit; text-align: start; cursor: pointer; }
+.tk-row:hover { background: var(--color-overlay-hover, rgba(21,23,26,.03)); }
+.tk-row[aria-current='true'] { background: var(--color-background-muted); }
+.tk-row .t { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-row .s { display: block; margin-top: 2px; font-size: 12px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tk-row .s b { color: var(--color-text-primary); font-weight: 600; }
+.tk-due { font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tk-due.late { color: #b42318; font-weight: 600; }
+.tk-st { width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid #9aa1ad; display: inline-block; flex: none; }
+.tk-st.in_progress { border: 2px solid #1d4f91; box-shadow: inset 0 0 0 3px var(--color-background-card), inset 0 0 0 9px #1d4f91; }
+.tk-st.blocked { border: 1.5px dashed #b42318; }
+.tk-st.done { border-color: #00704e; background: #00704e; }
+.tk-pri { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.tk-pri.high { background: #fde8e8; color: #b42318; }
+.tk-pri.medium { background: #fff4d6; color: #8a5a00; }
+.tk-pri.low { background: var(--color-background-muted); color: var(--color-text-secondary); }
+.tk-av { width: 28px; height: 28px; border-radius: 50%; background: #2b2e3a; color: #fff; font-size: 10.5px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.tk-av.agent { background: var(--color-background-card); color: var(--color-text-primary); box-shadow: inset 0 0 0 1.5px var(--color-text-primary); border-radius: 8px; }
+.tk-av.none { background: transparent; color: var(--color-text-secondary); box-shadow: inset 0 0 0 1.5px #b7bcc4; }
+.tk-panel { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.tk-kv { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px 12px; align-items: center; margin: 0; font-size: 13px; }
+.tk-kv dt { color: var(--color-text-secondary); }
+.tk-kv dd { margin: 0; }
+.tk-in { height: 36px; border-radius: 10px; border: 1px solid var(--color-border); background: var(--color-background-card); font: inherit; font-size: 13px; padding: 0 10px; color: var(--color-text-primary); width: 100%; box-sizing: border-box; }
+textarea.tk-in { height: auto; min-height: 72px; padding: 8px 10px; resize: vertical; }
+.tk-about { display: block; border: 1px solid var(--color-border); border-radius: 10px; padding: 10px 12px; color: inherit; text-decoration: none; }
+.tk-lab { display: block; font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-secondary); margin-bottom: 4px; }
+.tk-cm { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; }
+.tk-cm p { margin: 2px 0 0; white-space: pre-wrap; }
+.tk-act { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
+.tk-load { display: flex; gap: 2px; width: 180px; height: 10px; }
+.tk-load i { display: block; height: 10px; border-radius: 2px; }
+.tk-load .late { background: #b42318; }
+.tk-load .week { background: var(--color-text-primary); }
+.tk-load .later { background: #9aa1ad; }
+.tk-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tk-form .wide { grid-column: 1 / -1; }
+.tk-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }

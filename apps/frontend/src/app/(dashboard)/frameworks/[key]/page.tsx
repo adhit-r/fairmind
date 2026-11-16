@@ -1,6 +1,7 @@
 'use client'
 
 import '@/astryx/pages/frameworks.css'
+import '@/astryx/pages/tasks.css'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useMemo, useState } from 'react'
@@ -18,6 +19,8 @@ import { useEvidencePacks } from '@/lib/api/hooks/useEvidencePacks'
 import { useJourney } from '@/lib/api/hooks/usePacks'
 import { Glyph, Legend, NEEDS_WORK, STATE_LABEL, WEAKEST_FIRST, cellIndex, requirementHref, stateFor, type ReqState } from '../parts'
 import { MatrixView } from './MatrixView'
+import { TaskForm, initials, personName, useAssignees } from '@/components/tasks/TaskForm'
+import { useTasks } from '@/lib/api/hooks/useTasks'
 
 /** Why a requirement is on the work queue, from the checks behind its cell. */
 function reason(state: ReqState, checks: Array<{ label: string; stale?: true; fails?: true }>): string {
@@ -33,6 +36,17 @@ function ClauseView() {
   const { selectedOrg } = useOrg()
   const journey = useJourney(key)
   const fw = useFrameworkSystems(key)
+  const tasks = useTasks({ subject_type: 'requirement', status: 'open' })
+  const [assigning, setAssigning] = useState<string | null>(null)
+  const assignees = useAssignees()
+  const whoHas = (t: { assigneeAgent: string | null; assigneeUserId: string | null }) =>
+    t.assigneeAgent
+      ? assignees.agents.find((a) => a.key === t.assigneeAgent)?.name ?? 'An agent'
+      : t.assigneeUserId
+        ? (() => { const m = assignees.members.find((x) => x.user_id === t.assigneeUserId); return m ? personName(m) : 'A member' })()
+        : 'Nobody yet'
+  // An open task on a requirement for a system: the queue shows who has it instead of an Assign button.
+  const taskFor = useMemo(() => new Map((tasks.data?.tasks ?? []).map((t) => [`${t.subject.id}@${t.systemId}`, t])), [tasks.data])
   const { create } = useEvidencePacks()
   const [system, setSystem] = useState<number | 'all'>('all')
   const [groupPick, setGroupPick] = useState<string | null>(null)
@@ -286,7 +300,31 @@ function ClauseView() {
                     {r.title}
                     <small>{why}</small>
                   </span>
-                  <Button variant="secondary" size="sm" label="Open" href={requirementHref(key, r.control, q.system.id)} />
+                  {(() => {
+                    const task = taskFor.get(`${r.key}@${q.system.id}`)
+                    if (task) {
+                      const who = whoHas(task)
+                      return (
+                        <Link className="fx-chip" href={`/tasks?view=team&task=${encodeURIComponent(task.id)}`} aria-label={`Task for ${who}; open it`}>
+                          <span className={`tk-av${task.assigneeAgent ? ' agent' : task.assigneeUserId ? '' : ' none'}`} aria-hidden="true" style={{ width: 22, height: 22, fontSize: 9 }}>
+                            {task.assigneeAgent ? 'AI' : task.assigneeUserId ? initials(who) : '?'}
+                          </span>
+                          {task.dueDate ? `Due ${new Date(`${task.dueDate}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : 'Task'}
+                        </Link>
+                      )
+                    }
+                    return <Button variant="secondary" size="sm" label="Assign" onClick={() => setAssigning(assigning === `${r.key}@${q.system.id}` ? null : `${r.key}@${q.system.id}`)} />
+                  })()}
+                  {assigning === `${r.key}@${q.system.id}` && (
+                    <div style={{ gridColumn: '1 / -1', paddingTop: 8 }}>
+                      <TaskForm
+                        about={{ subject_type: 'requirement', subject_id: r.key, subject_label: `${short} ${r.control} ${r.title} · ${q.system.name}`, system_id: q.system.id }}
+                        defaultTitle={`${r.control} ${r.title}: ${why}`}
+                        onDone={() => { setAssigning(null); tasks.reload() }}
+                        onCancel={() => setAssigning(null)}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
               {q.items.length > 8 && (
