@@ -31,6 +31,7 @@ from api.routes.discovery_sources import (
     aws,
     azure,
     claude_enterprise,
+    devices,
     entra,
     gcp,
     litellm,
@@ -39,6 +40,7 @@ from api.routes.discovery_sources import (
     okta,
     openai_admin,
     proxy_logs,
+    seats,
 )
 from api.routes.discovery_sources import steps as read_steps
 from api.routes.org_scope import org_member, org_mutator
@@ -426,6 +428,24 @@ _CONNECTORS = {
 }
 # Sign-in sources also read directory facts (team, left or not) for Shadow AI, as the "people" step.
 _FACTS = {"okta": okta.facts, "entra": entra.facts}
+# Seat lists and device inventories: one read gives both the discovered tools and the facts Shadow AI compares.
+_READERS = {
+    "cursor": seats.cursor,
+    "github_copilot": seats.github_copilot,
+    "chatgpt_enterprise": seats.chatgpt_enterprise,
+    "jamf": devices.jamf,
+    "intune": devices.intune,
+}
+
+
+def _tools_only(read: Any) -> Any:
+    async def sync(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
+        return (await read(config, token))[0]
+
+    return sync
+
+
+_CONNECTORS.update({k: _tools_only(r) for k, r in _READERS.items()})
 MAX_LOG_BYTES = 20 * 1024 * 1024
 
 
@@ -703,9 +723,9 @@ def _record(
     db.commit()
 
 
-async def _fetch(kind: str, config: Dict[str, Any], token: Optional[str], label: str) -> List[Dict[str, Any]]:
+async def _fetch(kind: str, config: Dict[str, Any], token: Optional[str], label: str, *, with_facts: bool = False) -> Any:
     try:
-        return await _CONNECTORS[kind](config, token)
+        return await (_READERS[kind] if with_facts else _CONNECTORS[kind])(config, token)
     except HTTPException:
         raise
     except Exception as exc:  # a vendor response shaped differently than documented; never echoes the token
@@ -718,8 +738,12 @@ async def _run(db: Session, org: str, row: Any, trigger: str) -> Dict[str, Any]:
     # A value that is not valid ciphertext is a plaintext token stored before encryption; it is used as is.
     kind, config, token = row[2], _load_json_value(row[4], {}), (decrypt(row[5]) or row[5])
     started = _now()
+    facts: Optional[Dict[str, Any]] = None
     try:
-        found = await _fetch(kind, config, token, row[0])
+        if kind in _READERS:
+            found, facts = await _fetch(kind, config, token, row[0], with_facts=True)
+        else:
+            found = await _fetch(kind, config, token, row[0])
     except HTTPException as exc:
         _record(db, org, row, trigger, started, {"error": str(exc.detail), "at": _now()}, [])
         raise
@@ -727,29 +751,35 @@ async def _run(db: Session, org: str, row: Any, trigger: str) -> Dict[str, Any]:
         db.execute(text("UPDATE governance_integrations SET token = :t WHERE id = :id"), {"t": encrypt(token), "id": row[0]})
     # Connectors skip turned-off steps; this also drops anything a connector returned for one anyway.
     found = [i for i in found if not read_steps.disabled(config, read_steps.step_of(kind, i))]
-    counts = await _read_facts(db, org, row, config, token)
+    counts = await _read_facts(db, org, row, config, token, facts)
     return _finish(db, org, row, trigger, started, found, config, counts)
 
 
-async def _read_facts(db: Session, org: str, row: Any, config: Dict[str, Any], token: Optional[str]) -> Dict[str, int]:
-    """Read and keep a sign-in source's directory facts. Turning the step off deletes what was kept."""
+async def _read_facts(db: Session, org: str, row: Any, config: Dict[str, Any], token: Optional[str], facts: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
+    """Keep what Shadow AI compares: a sign-in source's directory facts (its "people" step, read here; turning it
+    off deletes what was kept), or the seats or laptops a reader already returned."""
     kind = row[2]
-    if kind not in _FACTS:
-        return {}
-    if read_steps.disabled(config, "people"):
-        db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
-        return {}
-    try:
-        facts = await _FACTS[kind](config, token)
-    except Exception:  # enrichment only: the apps were read; keep the facts from the last good read
-        logger.warning("Directory facts could not be read for %s (%s)", kind, row[0], exc_info=True)
-        return {}
+    if facts is None:
+        if kind not in _FACTS:
+            return {}
+        if read_steps.disabled(config, "people"):
+            db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
+            return {}
+        try:
+            facts = await _FACTS[kind](config, token)
+        except Exception:  # enrichment only: the apps were read; keep the facts from the last good read
+            logger.warning("Directory facts could not be read for %s (%s)", kind, row[0], exc_info=True)
+            return {}
     db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": row[0]})
     db.execute(
         text("INSERT INTO governance_source_facts (integration_id, org_id, source, facts_json, read_at) VALUES (:id, :org, :src, :facts, :now)"),
         {"id": row[0], "org": org, "src": kind, "facts": json.dumps(facts), "now": _now()},
     )
-    return {"people": len(facts.get("people") or {})}
+    return {
+        "people": len(facts.get("people") or {}),
+        "seats": sum(len(v) for v in (facts.get("seats") or {}).values()),
+        "devices": len(facts.get("devices") or []),
+    }
 
 
 def _finish(
