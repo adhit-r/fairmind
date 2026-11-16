@@ -5,6 +5,9 @@
 //! notifier secret. On first run it enrols with this laptop's serial number and keeps its own key in the
 //! person's config folder. It reads nothing on the laptop beyond the serial number and the account name.
 
+#[cfg(target_os = "linux")]
+compile_error!("The FairMind notifier is built for macOS and Windows only.");
+
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;
