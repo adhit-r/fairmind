@@ -161,3 +161,12 @@ def test_scope_validation(client):  # noqa: F811
     assert client.patch(f"/api/v1/integrations/{iid}", json={"disabled_steps": ["nope"]}).status_code == 422
     one = _add(client, "litellm", base_url="https://gw.example.com")
     assert client.patch(f"/api/v1/integrations/{one}", json={"disabled_steps": ["keys"]}).status_code == 400
+
+
+def test_removing_an_integration_also_removes_assets_already_reviewed(client):  # noqa: F811
+    iid = _add(client, "proxy_logs")
+    client.post(f"/api/v1/integrations/{iid}/upload", json={"text": LOG})
+    asset = client.get("/api/v1/integrations/discovered").json()[0]
+    assert client.post(f"/api/v1/integrations/discovered/{asset['id']}/ignore").status_code == 200
+    assert client.delete(f"/api/v1/integrations/{iid}").status_code == 204
+    assert client.get("/api/v1/integrations/discovered").json() == []
