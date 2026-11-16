@@ -559,7 +559,7 @@ def test_agent_enrols_configures_and_logs(env):
     node_key = c.post("/api/v1/public/osquery/enroll", json={"enroll_secret": secret, "host_identifier": "uuid-1", "host_details": details}).json()["node_key"]
     assert c.post("/api/v1/public/osquery/config", json={"node_key": "fmnk_not_a_real_node_key_123"}).json() == {"node_invalid": True}
     cfg = c.post("/api/v1/public/osquery/config", json={"node_key": node_key}).json()
-    assert set(cfg["schedule"]) == {"fm_ai_started", "fm_models"} and "es_process_events" in cfg["schedule"]["fm_ai_started"]["query"] and cfg["decorators"]["load"]
+    assert set(cfg["schedule"]) == {"fm_ai_started", "fm_models", "fm_mcp_started"} and not cfg["auto_table_construction"] and "es_process_events" in cfg["schedule"]["fm_ai_started"]["query"] and cfg["decorators"]["load"]
 
     deco = {"serial": "C02X", "computer": "LT-ENG-0231", "console_user": "arjun"}
     lines = [
@@ -580,3 +580,59 @@ def test_agent_enrols_configures_and_logs(env):
     assert grid["models"][0]["name"] == "llama3:latest" and grid["models"][0]["source"] == "FairMind agent"
     rows = {r["service"]: r for r in grid["rows"]}
     assert rows["cursor"]["onLaptop"]["kinds"] == ["used"]
+
+
+def test_agent_rules_accounts_mcp_and_models(env):
+    c, factory, sent = env
+    okta = _integration(c, "okta", domain="acme.okta.com")
+    reg = _integration(c, "mcp_registry", base_url="https://registry.example.com")
+    _facts(factory, okta, "okta", {"arjun@acme.com": {"team": "Engineering", "status": "active"}}, [])
+    _asset(factory, reg, "mcp_registry", "mcp:github", "github-mcp-server", "mcp_server", {"server_name": "io.github/github-mcp-server"})
+    assert c.put("/api/v1/shadow-ai/tools/cursor", json={"status": "approved"}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/deepseek", json={"status": "not_allowed"}).status_code == 200
+    c.put("/api/v1/shadow-ai/laptop-script", json={"domains": "acme.com"})
+    c.put("/api/v1/shadow-ai/agent")
+    secret = c.post("/api/v1/shadow-ai/agent/secret").json()["secret"]
+    details = {"system_info": {"hardware_serial": "C02X", "computer_name": "LT-ENG-0231"}, "os_version": {"platform": "darwin"}}
+    node_key = c.post("/api/v1/public/osquery/enroll", json={"enroll_secret": secret, "host_details": details}).json()["node_key"]
+
+    cfg = c.post("/api/v1/public/osquery/config", json={"node_key": node_key}).json()
+    atc = cfg["auto_table_construction"]["fm_cursor_account"]
+    assert "'acme.com'" in atc["query"] and "cursorAuth/cachedEmail" in atc["query"] and "accessToken" not in atc["query"]
+    assert {"fm_accounts", "fm_mcp_started"} <= set(cfg["schedule"]) and "regex_match(lower(cmdline)" in cfg["schedule"]["fm_mcp_started"]["query"]
+
+    deco = {"serial": "C02X", "computer": "LT-ENG-0231", "console_user": "arjun"}
+
+    def send(*lines):
+        assert c.post("/api/v1/public/osquery/log", json={"node_key": node_key, "log_type": "result", "data": [{"decorations": deco, **x} for x in lines]}).json() == {"node_invalid": False}
+
+    model = lambda name: {"path": f"/Users/arjun/.ollama/models/manifests/registry.ollama.ai/library/{name}/latest"}  # noqa: E731
+    send({"name": "fm_models", "action": "snapshot", "snapshot": [model("llama3")]})  # baseline: no event
+    send(
+        {"name": "fm_accounts", "action": "snapshot", "snapshot": [{"path": "/Users/arjun/Library/Application Support/Cursor/User/globalStorage/state.vscdb", "class": "personal"}]},
+        {"name": "fm_ai_started", "action": "added", "columns": {"path": "/Applications/DeepSeek.app/Contents/MacOS/DeepSeek", "username": "arjun"}},
+        {"name": "fm_mcp_started", "action": "added", "columns": {"path": "/opt/homebrew/bin/npx", "server": "@modelcontextprotocol/server-postgres", "username": "arjun"}},
+        {"name": "fm_mcp_started", "action": "added", "columns": {"path": "/usr/local/bin/docker", "server": "github-mcp-server"}},
+        {"name": "fm_models", "action": "snapshot", "snapshot": [model("llama3"), model("qwen2.5")]},
+    )
+    send({"name": "fm_ai_started", "action": "added", "columns": {"path": "/Applications/DeepSeek.app/Contents/MacOS/DeepSeek", "username": "arjun"}})
+
+    st = c.get("/api/v1/shadow-ai/agent").json()
+    by = {}
+    for e in st["events"]:
+        by.setdefault(e["kind"], []).append(e)
+    account = by["account"][0]
+    assert account["rule"] == "personal_account" and account["action"] == "tell_person" and "work account" in account["forPerson"]
+    deepseek = by["app_started"]
+    assert all(e["rule"] == "not_allowed_app" and e["action"] == "tell_both" for e in deepseek) and sum(1 for e in deepseek if e.get("toldKey")) == 1  # told once a day
+    mcp = {e["server"]: e for e in by["mcp_started"]}
+    assert mcp["@modelcontextprotocol/server-postgres"]["rule"] == "unregistered_mcp" and mcp["github-mcp-server"]["rule"] is None
+    assert [e["name"] for e in by["model_added"]] == ["qwen2.5:latest"] and by["model_added"][0]["action"] == "log"
+    assert st["domains"] == ["acme.com"] and st["rules"]["model_added"] == "log"
+
+    assert c.put("/api/v1/shadow-ai/agent/rules", json={"rules": {"nope": "log"}}).status_code == 422
+    assert c.put("/api/v1/shadow-ai/agent/rules", json={"rules": {"model_added": "tell_you"}}).json()["rules"]["model_added"] == "tell_you"
+
+    findings = {f["key"]: f for f in c.get("/api/v1/shadow-ai").json()["findings"]}
+    assert findings["personal:cursor:arjun@acme.com"]["confidence"] == "confirmed"
+    assert "mcp_laptop:modelcontextprotocolserverpostgres" in findings and "mcp_laptop:githubmcpserver" not in findings

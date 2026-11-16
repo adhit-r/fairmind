@@ -4284,6 +4284,7 @@ class GovernanceAgentNode(Base):
     console_user = Column(String, nullable=True)
     problem = Column(Text, nullable=True)  # the last error the agent reported, such as Endpoint Security not allowed
     models_json = Column(Text, nullable=True)  # the latest list of AI models downloaded on the laptop (edge models)
+    accounts_json = Column(Text, nullable=True)  # per app and person: work or personal, as the laptop computed it
     enrolled_at = Column(String, nullable=False)
     last_seen = Column(String, nullable=False)
 

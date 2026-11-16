@@ -387,7 +387,30 @@ export interface AgentStatus {
   laptops: number
   quiet: { name: string; lastSeen: string }[]
   problems: { name: string; problem: string }[]
-  events: { laptop: string; kind: string; service: string | null; user?: string | null; app?: string; at: string }[]
+  events: AgentEvent[]
+  rules: Record<AgentRule, AgentAction>
+  domains: string[]
+}
+
+export type AgentRule = 'personal_account' | 'not_allowed_app' | 'unregistered_mcp' | 'model_added'
+export type AgentAction = 'log' | 'tell_you' | 'tell_person' | 'tell_both'
+
+export interface AgentEvent {
+  laptop: string
+  kind: 'app_started' | 'account' | 'mcp_started' | 'model_added'
+  service: string | null
+  user?: string | null
+  app?: string
+  server?: string
+  name?: string
+  rule?: AgentRule | null
+  action?: AgentAction
+  forPerson?: string
+  at: string
+}
+
+export async function setAgentRules(rules: Partial<Record<AgentRule, AgentAction>>) {
+  return unwrap(await apiClient.put<AgentStatus>(`${S}/agent/rules`, { rules }))
 }
 
 export async function getAgent() {
