@@ -2837,24 +2837,6 @@ def update_remediation_task(
 # Audit Report Generation & History
 # ---------------------------------------------------------------------------
 
-def _ensure_audit_report_table(db: Session) -> None:
-    """Create governance_audit_reports table if it does not exist."""
-    db.execute(text("""
-        CREATE TABLE IF NOT EXISTS governance_audit_reports (
-            id TEXT PRIMARY KEY,
-            workspace_id TEXT,
-            system_id TEXT,
-            report_type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            generated_by TEXT,
-            config_json TEXT,
-            data_json TEXT,
-            created_at TEXT NOT NULL
-        )
-    """))
-    db.commit()
-
-
 def _serialize_audit_report_row(row: Any) -> Dict[str, Any]:
     config = {}
     data = {}
@@ -2897,7 +2879,6 @@ def generate_audit_report(
 ):
     """Generate and persist a governance audit report snapshot."""
     _ensure_tables(db)
-    _ensure_audit_report_table(db)
 
     system_id = request.system_id
     _require_system_access(db, system_id, current_user, mutate=True)
@@ -3069,7 +3050,6 @@ def list_audit_reports(
 ):
     """List previously generated audit reports."""
     _ensure_tables(db)
-    _ensure_audit_report_table(db)
     _require_system_access(db, system_id, current_user)
 
     conditions = ["system_id = :system_id"]
@@ -3097,7 +3077,6 @@ def get_audit_report(
 ):
     """Get a specific audit report with full data snapshot."""
     _ensure_tables(db)
-    _ensure_audit_report_table(db)
 
     row = _require_report_access(db, report_id, current_user)
     return _serialize_audit_report_row(row)
