@@ -50,6 +50,14 @@ export interface SourceSpec {
   token: string | null
   tokenOptional?: boolean
   tokenDescription?: string
+  /** Sources from one vendor share a card in the catalogue, each shown as one of its connections. */
+  vendor?: 'OpenAI' | 'Anthropic'
+  /** The connection's name on its vendor's card, e.g. "ChatGPT workspace" or "OpenAI API". */
+  connection?: string
+  /** The plan this kind stands for on a workspace connection, e.g. "Business or Team". */
+  plan?: string
+  /** Described by the workspace admin in a form, because the plan has no admin API to read. */
+  described?: boolean
 }
 
 const SECRET_NOTE = 'Stored encrypted on the server and never shown again.'
@@ -101,10 +109,23 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
     tokenOptional: true,
     tokenDescription: `Not needed for public models. ${SECRET_NOTE}`,
   },
+  vllm: {
+    label: 'vLLM server',
+    mark: 'vL',
+    lane: 'code',
+    permissions: ['GET /v1/models', 'GET /metrics', 'GET /version'],
+    reads: 'The models your own vLLM server serves, what each is built on, and the requests and tokens it has handled.',
+    fields: [{ key: 'base_url', label: 'Server address', description: 'The public https address your apps call. A server only on your network needs a gateway or an allowlist for FairMind.' }],
+    token: 'API key',
+    tokenOptional: true,
+    tokenDescription: `Only if the server was started with --api-key. ${SECRET_NOTE}`,
+  },
   anthropic: {
     label: 'Anthropic API',
     mark: 'An',
     lane: 'vendor',
+    vendor: 'Anthropic',
+    connection: 'Claude API',
     permissions: ['Admin API key (read calls only)'],
     reads: 'Every API key in the organisation, the models and tokens each used in 30 days, and Claude Code use.',
     fields: [],
@@ -115,6 +136,9 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
     label: 'Claude Enterprise',
     mark: 'CE',
     lane: 'vendor',
+    vendor: 'Anthropic',
+    connection: 'Claude workspace',
+    plan: 'Enterprise',
     permissions: ['read:compliance_org_data', 'read:compliance_user_data'],
     reads: 'Claude organisations, how many people use them, and shared projects.',
     fields: [],
@@ -125,11 +149,39 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
     label: 'OpenAI API',
     mark: 'OA',
     lane: 'vendor',
+    vendor: 'OpenAI',
+    connection: 'OpenAI API',
     permissions: ['Admin API key (read calls only)'],
     reads: 'Every project API key, its owner, and the models and requests it made in 30 days.',
     fields: [],
     token: 'Admin API key',
     tokenDescription: SECRET_NOTE,
+  },
+  chatgpt_workspace: {
+    label: 'ChatGPT workspace',
+    mark: 'GPT',
+    lane: 'vendor',
+    vendor: 'OpenAI',
+    connection: 'ChatGPT workspace',
+    plan: 'Business or Team',
+    described: true,
+    permissions: ['None: OpenAI offers no admin API for Business or Team workspaces'],
+    reads: 'Seats, custom GPTs, the apps it can reach and its data settings, as the workspace admin describes them.',
+    fields: [],
+    token: null,
+  },
+  claude_team: {
+    label: 'Claude Team',
+    mark: 'CT',
+    lane: 'vendor',
+    vendor: 'Anthropic',
+    connection: 'Claude workspace',
+    plan: 'Team',
+    described: true,
+    permissions: ['None: the Claude Team plan has no admin API to read'],
+    reads: 'Seats, shared projects, the connectors it can reach and its data settings, as the workspace admin describes them.',
+    fields: [],
+    token: null,
   },
   aws: {
     label: 'AWS',

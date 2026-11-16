@@ -28,6 +28,9 @@ STEPS: Dict[str, List[tuple]] = {
     "litellm": [("keys", "Virtual keys", "GET /key/list + /v1/models")],
     "proxy_logs": [("traffic", "AI traffic in the log", "Uploaded export")],
     "mcp_registry": [("servers", "Approved MCP servers", "GET /v0.1/servers")],
+    "vllm": [("models", "Served models and traffic", "GET /v1/models + /metrics + /version")],
+    "chatgpt_workspace": [("workspace", "The workspace, as described", "Entered by the workspace admin")],
+    "claude_team": [("workspace", "The workspace, as described", "Entered by the workspace admin")],
 }
 
 SAMPLES = 3

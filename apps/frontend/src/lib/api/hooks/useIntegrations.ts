@@ -21,6 +21,9 @@ export type IntegrationKind =
   | 'litellm'
   | 'proxy_logs'
   | 'mcp_registry'
+  | 'vllm'
+  | 'chatgpt_workspace'
+  | 'claude_team'
 
 export interface Integration {
   id: string
