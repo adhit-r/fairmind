@@ -110,6 +110,17 @@ def by_app_name(name: str) -> Optional[Service]:
     return None
 
 
+# Editor extensions by marketplace ID (VS Code, Cursor, Windsurf share them), for the laptop script and Fleet.
+EXTENSIONS: Dict[str, str] = {
+    "github.copilot": "github_copilot",
+    "github.copilot-chat": "github_copilot",
+    "anthropic.claude-code": "claude",
+    "openai.chatgpt": "chatgpt",
+    "google.geminicodeassist": "gemini",
+    "codeium.codeium": "windsurf",
+    "tabnine.tabnine-vscode": "tabnine",
+}
+
 _BY_KEY: Dict[str, Service] = {s.key: s for s in SERVICES}
 _APP_NAMES: Dict[str, Service] = {n: _BY_KEY[k] for k, (names, _) in APPS.items() for n in names}
 _BUNDLES: Dict[str, Service] = {b: _BY_KEY[k] for k, (_, bundles) in APPS.items() for b in bundles}
@@ -128,6 +139,13 @@ def _app_name(name: str) -> str:
 def by_installed(name: str, bundle_id: Optional[str] = None) -> Optional[Service]:
     """The service an installed app belongs to, by bundle ID first, then by exact app name."""
     return _BUNDLES.get((bundle_id or "").strip().lower()) or _APP_NAMES.get(_app_name(name))
+
+
+def by_extension_id(ext_id: str) -> Optional[Service]:
+    """The service an editor extension belongs to; an ID may carry a version suffix (github.copilot-1.250.0)."""
+    i = (ext_id or "").strip().lower()
+    i = re.sub(r"-\d+(\.\d+)*(-[a-z0-9-]+)?$", "", i)
+    return _BY_KEY.get(EXTENSIONS.get(i, ""))
 
 
 def asset_kind(s: Service) -> str:

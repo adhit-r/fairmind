@@ -26,6 +26,8 @@ export type IntegrationKind =
   | 'defender'
   | 'crowdstrike'
   | 'chrome'
+  | 'fleet'
+  | 'laptop_script'
   | 'litellm'
   | 'proxy_logs'
   | 'mcp_registry'

@@ -35,6 +35,8 @@ STEPS: Dict[str, List[tuple]] = {
     "intune": [("devices", "AI apps on managed devices, for Shadow AI", "GET /deviceManagement/detectedApps")],
     "defender": [("devices", "AI apps run, AI traffic and AI extensions per laptop, for Shadow AI", "POST /security/runHuntingQuery")],
     "crowdstrike": [("devices", "AI apps per host, for Shadow AI", "GET /discover/combined/applications/v1 + /devices/entities/devices/v2")],
+    "fleet": [("devices", "AI apps and extensions per host, for Shadow AI", "GET /api/v1/fleet/hosts?populate_software")],
+    "laptop_script": [("reports", "Laptop reports, for Shadow AI", "POST /api/v1/public/laptop-report, from each laptop")],
     "chrome": [("devices", "AI extensions per managed browser, for Shadow AI", "reports:countInstalledApps + findInstalledAppDevices")],
     "vllm": [("models", "Served models and traffic", "GET /v1/models + /metrics + /version")],
     "chatgpt_workspace": [("workspace", "The workspace, as described", "Entered by the workspace admin")],

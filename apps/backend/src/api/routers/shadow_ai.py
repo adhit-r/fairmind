@@ -191,6 +191,23 @@ class Fleet:
             traffic += [{**t, "source": source} for t in facts.get("traffic") or []]
         self.laptops = merge_laptops(raw)
         by_key = {k: lt for lt in self.laptops for k in lt["keys"]}
+        # From the laptop script: which account each AI app is signed in with, and MCP servers in app settings.
+        self.accounts: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)  # service -> person -> class, laptops
+        self.mcp: Dict[str, Dict[str, Any]] = {}  # server name -> laptops, clients, commands
+        for d in raw:
+            lt = next((by_key[k] for k in _laptop_keys(d) if k in by_key), None)
+            where = lt["name"] if lt else d.get("name") or "a laptop"
+            for acc in d.get("accounts") or []:
+                if d.get("user"):
+                    e = self.accounts[acc["service"]].setdefault(d["user"].lower(), {"class": acc["class"], "laptops": set()})
+                    e["class"] = "personal" if "personal" in (e["class"], acc["class"]) else e["class"]
+                    e["laptops"].add(where)
+            for m in d.get("mcp") or []:
+                e = self.mcp.setdefault(m["name"], {"laptops": set(), "clients": set(), "commands": set()})
+                e["laptops"].add(where)
+                e["clients"].add(m["client"])
+                if m.get("command"):
+                    e["commands"].add(m["command"])
         # service -> person as the source names them -> requests, laptops, sources
         self.traffic: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
         for t in traffic:
@@ -236,7 +253,7 @@ def _laptop_traffic(s: Any, t: Dict[str, Any]) -> Dict[str, str]:
 
 
 _RANK = {"possible": 0, "likely": 1, "confirmed": 2}
-LAPTOP_SOURCES = ("jamf", "intune", "defender", "crowdstrike", "chrome")
+LAPTOP_SOURCES = ("jamf", "intune", "defender", "crowdstrike", "chrome", "fleet", "laptop_script")
 
 
 def _finding(key: str, kind: str, title: str, severity: str, confidence: str, subject: str, evidence: List[Dict[str, str]], verdict: str, **extra: Any) -> Dict[str, Any]:
@@ -257,7 +274,11 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
     # Personal accounts. One candidate per tool and person, whichever checks raise it; the strongest certainty wins.
     cands: Dict[tuple, Dict[str, Any]] = {}
 
+    work = {(svc, people.resolve(who) or who) for svc, by_who in fleet.accounts.items() for who, a in by_who.items() if a["class"] == "work"}
+
     def candidate(svc: str, who: str, email: Optional[str], conf: str, evidence: List[Dict[str, str]]) -> None:
+        if conf != "confirmed" and (svc, email or who.lower()) in work:
+            return  # the laptop shows this app signed in with a company account
         c = cands.setdefault((svc, email or who.lower()), {"who": who, "email": email, "conf": conf, "evidence": []})
         if _RANK[conf] > _RANK[c["conf"]]:
             c["conf"] = conf
@@ -308,6 +329,16 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
             email = people.resolve(who)
             if svc in by_svc and email and not fleet.holds(svc, email):
                 candidate(svc, who, email, "likely", [{"source": "devices", "title": "Laptops", "detail": _laptops_detail(by_svc[svc], svc)}, no_seat])
+
+    # Signed in with an account outside the company's domains, as the laptop script reports.
+    for svc, by_who in fleet.accounts.items():
+        s = _BY_KEY.get(svc)
+        if not s or (stance.get(svc) or {}).get("status") not in ("approved", "limited"):
+            continue
+        for who, a in sorted(by_who.items()):
+            if a["class"] == "personal":
+                where = ", ".join(sorted(a["laptops"])[:3])
+                candidate(svc, who, people.resolve(who), "confirmed", [{"source": "devices", "title": "Signed in", "detail": f"{s.label} on {where} is signed in with an account outside your company domains, seen by the laptop script"}])
 
     for (svc, _), c in sorted(cands.items()):
         s = _BY_KEY[svc]
@@ -450,6 +481,23 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
                         "Agents in that repo can call a server nobody approved. Add it to the registry or remove it from the config.",
                     )
                 )
+        for name, m in sorted(fleet.mcp.items()):
+            if _norm(name) in registry:
+                continue
+            where = sorted(m["laptops"])
+            shown = ", ".join(where[:3]) + (f" and {len(where) - 3} more" if len(where) > 3 else "")
+            how = f" ({', '.join(sorted(m['commands']))})" if m["commands"] else ""
+            out.append(
+                _finding(
+                    f"mcp_laptop:{_norm(name)}", "unregistered_mcp", "MCP server on laptops, not in your registry", "medium", "confirmed", name,
+                    [
+                        {"source": "devices", "title": "Laptop script", "detail": f"{name}{how} is set up in {', '.join(sorted(m['clients']))} on {shown}"},
+                        {"source": "mcp_registry", "title": "MCP registry", "detail": "Your registry has no server by that name"},
+                    ],
+                    "AI apps on these laptops can call a server nobody approved. Add it to the registry, or remove it from the app's settings.",
+                    laptops=len(where),
+                )
+            )
     out.sort(key=lambda f: (_SEVERITY.get(f["severity"], 9), f["type"], f["key"]))
     return out
 
@@ -550,7 +598,7 @@ def evidence(
 
     def row(svc: str) -> Dict[str, Any]:
         s = _BY_KEY[svc]
-        return rows.setdefault(svc, {"service": svc, "label": s.label, "vendor": s.vendor, "stance": _stance_of(stance, svc), "onLaptop": None, "traffic": None, "seat": None})
+        return rows.setdefault(svc, {"service": svc, "label": s.label, "vendor": s.vendor, "stance": _stance_of(stance, svc), "onLaptop": None, "traffic": None, "seat": None, "signedIn": None})
 
     for lt in laptops:
         for svc, a in lt["apps"].items():
@@ -569,6 +617,12 @@ def evidence(
                 tr["requests"] += t["requests"]
                 tr["sources"] |= {hub_label(x) for x in t["sources"]}
                 rows[svc]["traffic"] = tr
+    for svc, by_who in fleet.accounts.items():
+        for who, a in by_who.items():
+            if svc in _BY_KEY and mine(who):
+                prev = row(svc)["signedIn"]
+                cls = "personal" if a["class"] == "personal" or (prev and prev["class"] == "personal") else "work"
+                rows[svc]["signedIn"] = {"class": cls, "laptops": sorted(set((prev or {}).get("laptops", [])) | a["laptops"])}
     for a in assets:
         s = _service_of(a)
         if a["source"] != "proxy_logs" or not s:
@@ -661,15 +715,20 @@ def _now() -> str:
 
 def _stance(db: Session, org: str) -> Dict[str, Dict[str, Any]]:
     rows = db.execute(
-        text("SELECT service_key, status, teams_json, sso_required, note, updated_at FROM governance_approved_ai_tools WHERE org_id = :org"), {"org": org}
+        text("SELECT service_key, status, teams_json, sso_required, note, updated_at, tenant_ids_json FROM governance_approved_ai_tools WHERE org_id = :org"), {"org": org}
     ).fetchall()
-    return {r[0]: {"status": r[1], "teams": json.loads(r[2] or "[]"), "sso_required": bool(r[3]), "note": r[4], "updatedAt": r[5]} for r in rows}
+    return {
+        r[0]: {"status": r[1], "teams": json.loads(r[2] or "[]"), "sso_required": bool(r[3]), "note": r[4], "updatedAt": r[5], "tenantIds": json.loads(r[6] or "[]")}
+        for r in rows
+    }
 
 
 def _current(db: Session, org: str) -> Dict[str, Any]:
     hub._ensure_tables()
     assets = [hub._asset_out(r) for r in db.execute(text(f"SELECT {hub._ASSET_COLS} FROM governance_discovered_assets WHERE org_id = :org"), {"org": org}).fetchall()]
-    facts = db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall()
+    from api.routes.laptop_reports import reports_as_facts
+
+    facts = list(db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall()) + reports_as_facts(db, org)
     people, fleet = People(facts), Fleet(facts)
     stance = _stance(db, org)
     kinds = {r[0] for r in db.execute(text("SELECT DISTINCT kind FROM governance_integrations WHERE org_id = :org"), {"org": org}).fetchall()}
@@ -725,6 +784,7 @@ def shadow_ai(http: Request, db: Session = Depends(get_db)):
             "ssoTools": sum(1 for s in cur["stance"].values() if s["sso_required"]),
             "seatLists": sorted(k for k in cur["fleet"].seats if cur["fleet"].compared(k)),
             "sourceKinds": sorted(k),
+            "laptopScript": "laptop_script" in k,
             "laptops": len(cur["fleet"].laptops),
         },
     }
@@ -761,6 +821,15 @@ class StanceBody(BaseModel):
     teams: List[str] = Field(default_factory=list, max_length=100)
     sso_required: bool = False
     note: Optional[str] = Field(default=None, max_length=1000)
+    tenant_ids: List[str] = Field(default_factory=list, max_length=50)  # company workspace or organisation IDs
+
+
+_TENANT_ID = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
+# Vendors that document a header limiting sign-in to listed company workspaces, when a proxy adds it.
+TENANT_HEADERS = {
+    "chatgpt": ("ChatGPT-Allowed-Workspace-Id", ("chatgpt.com", "chat.openai.com"), "Workspace ID, in the ChatGPT admin console under workspace settings"),
+    "claude": ("anthropic-allowed-org-ids", ("claude.ai", "api.anthropic.com", "console.anthropic.com"), "Organisation ID, in Claude settings under Organisation"),
+}
 
 
 @router.put("/tools/{service_key}")
@@ -771,20 +840,46 @@ def set_tool(service_key: str, body: StanceBody, http: Request, db: Session = De
         raise HTTPException(status_code=404, detail="Unknown AI service")
     if body.status == "limited" and not [t for t in body.teams if t.strip()]:
         raise HTTPException(status_code=422, detail="Name the teams it is approved for")
+    tenant_ids = [t.strip() for t in body.tenant_ids if t.strip()]
+    if tenant_ids and service_key not in TENANT_HEADERS:
+        raise HTTPException(status_code=422, detail="Only ChatGPT and Claude take company workspace IDs")
+    if any(not _TENANT_ID.match(t) for t in tenant_ids):
+        raise HTTPException(status_code=422, detail="A workspace ID is letters, digits and dashes only")
     db.execute(text("DELETE FROM governance_approved_ai_tools WHERE org_id = :org AND service_key = :k"), {"org": org, "k": service_key})
     if body.status:
         db.execute(
             text(
-                "INSERT INTO governance_approved_ai_tools (id, org_id, service_key, status, teams_json, sso_required, note, updated_by, updated_at) "
-                "VALUES (:id, :org, :k, :st, :teams, :sso, :note, :by, :now)"
+                "INSERT INTO governance_approved_ai_tools (id, org_id, service_key, status, teams_json, sso_required, note, updated_by, updated_at, tenant_ids_json) "
+                "VALUES (:id, :org, :k, :st, :teams, :sso, :note, :by, :now, :tenants)"
             ),
             {
                 "id": str(uuid.uuid4()), "org": org, "k": service_key, "st": body.status, "teams": json.dumps([t.strip() for t in body.teams if t.strip()]),
                 "sso": body.sso_required and body.status != "not_allowed", "note": body.note, "by": getattr(who, "user_id", None), "now": _now(),
+                "tenants": json.dumps(tenant_ids if body.status in ("approved", "limited") else []),
             },
         )
     db.commit()
     return {"key": service_key, "stance": _stance(db, org).get(service_key)}
+
+
+def tenant_rules(stance: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Proxy rules that let people sign in only to the company's own ChatGPT and Claude workspaces."""
+    rules, missing = [], []
+    for svc, (header, hosts, where) in TENANT_HEADERS.items():
+        st = stance.get(svc) or {}
+        if st.get("status") not in ("approved", "limited"):
+            continue
+        if st.get("tenantIds"):
+            rules.append({"service": svc, "label": _BY_KEY[svc].label, "header": header, "value": ",".join(st["tenantIds"]), "hosts": list(hosts)})
+        else:
+            missing.append({"service": svc, "label": _BY_KEY[svc].label, "where": where})
+    return {"rules": rules, "missing": missing}
+
+
+@router.get("/tenant-rules")
+def get_tenant_rules(http: Request, db: Session = Depends(get_db)):
+    hub._ensure_tables()
+    return tenant_rules(_stance(db, _caller_org(http)))
 
 
 class FindingAction(BaseModel):

@@ -362,7 +362,14 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
           </VStack>
         </HStack>
         {spec.vendor && <VendorTiles kind={kind} onSwitch={onSwitch} connected={connected} />}
-        {spec.described ? (
+        {spec.managedIn ? (
+          <VStack gap={2}>
+            <Text size="sm">{spec.managedIn.text}</Text>
+            <HStack>
+              <Button variant="primary" label="Set it up" href={spec.managedIn.href} />
+            </HStack>
+          </VStack>
+        ) : spec.described ? (
           <WorkspaceForm kind={kind} onDone={onDone} onSwitch={onSwitch} />
         ) : (
         <>

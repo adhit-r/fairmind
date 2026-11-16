@@ -63,3 +63,6 @@
 .sh-ref { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; margin-left: 2px; border-radius: 5px; background: var(--color-overlay-hover); font-size: 11px; font-weight: 600; vertical-align: 1px; cursor: default; }
 .sh-cites { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }
 .sh-cites li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; align-items: start; }
+.sh-proxy { border-top: 1px solid var(--color-border); padding-top: 16px; margin-top: 4px; }
+.sh-rule { display: flex; flex-direction: column; gap: 6px; }
+.sh-code { display: block; padding: 10px 12px; border-radius: 8px; background: var(--color-overlay-hover); font-family: var(--font-family-mono, ui-monospace, monospace); font-size: 12px; overflow-wrap: anywhere; }

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from api.routes import discovery_review, integrations, org_scope, shadow_ai, shadow_reading
+from api.routes import discovery_review, integrations, laptop_reports, org_scope, shadow_ai, shadow_reading
 from database.connection import get_db
 from src.application.services import reviewer_notify
 from src.application.services.governance_assurance_service import OrgMembership
@@ -34,9 +34,10 @@ def env(monkeypatch):
             db.close()
 
     app = FastAPI()
-    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router):
+    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router, laptop_reports.router):
         app.include_router(r, prefix="/api/v1")
     app.include_router(discovery_review.public_router, prefix="/api/v1/public")
+    app.include_router(laptop_reports.public_router, prefix="/api/v1/public")
     app.dependency_overrides[get_db] = override_db
     owner = OrgMembership(ORG, "review-test-owner", "owner", ())
     app.dependency_overrides[org_scope.org_member] = lambda: owner
@@ -457,3 +458,65 @@ def test_reading_route_with_the_org_model(env, monkeypatch):
     _raw_facts(factory, _integration(c, "intune", tenant_id="t", client_id="c"), "intune", {"devices": [{"serial": "C02X", "name": "LT-ENG-0231", "user": "arjun@acme.com", "apps": [{"service": "claude"}]}]})
     assert c.get("/api/v1/shadow-ai/reading", params={"key": key}).json()["reading"]["stale"] is True
     assert c.get("/api/v1/shadow-ai/reading", params={"key": "story:nope:x"}).status_code == 404
+
+
+def test_laptop_script_end_to_end(env):
+    c, factory, sent = env
+    okta = _integration(c, "okta", domain="acme.okta.com")
+    reg = _integration(c, "mcp_registry", base_url="https://registry.example.com")
+    _facts(factory, okta, "okta", {"arjun@acme.com": {"team": "Engineering", "status": "active"}}, [])
+    _asset(factory, reg, "mcp_registry", "mcp:github", "github", "mcp_server", {"server_name": "io.github/github"})
+    assert c.put("/api/v1/shadow-ai/tools/cursor", json={"status": "approved"}).status_code == 200
+
+    assert c.get("/api/v1/shadow-ai/laptop-script").json()["connected"] is False
+    assert c.post("/api/v1/shadow-ai/laptop-script/token").status_code == 409
+    assert c.put("/api/v1/shadow-ai/laptop-script", json={"domains": "not a domain"}).status_code == 422
+    st = c.put("/api/v1/shadow-ai/laptop-script", json={"domains": "Acme.com, @acme.in"}).json()
+    assert st["domains"] == ["acme.com", "acme.in"] and st["hasToken"] is False
+    token = c.post("/api/v1/shadow-ai/laptop-script/token").json()["token"]
+
+    got = c.get("/api/v1/shadow-ai/laptop-script/download", params={"os": "macos"}).json()
+    script = got["script"]
+    assert got["filename"] == "fairmind-laptop-check.sh" and "Invoke-RestMethod" in c.get("/api/v1/shadow-ai/laptop-script/download", params={"os": "windows"}).json()["script"]
+    assert '"domains":["acme.com","acme.in"]' in script and token not in script and "/api/v1/public/laptop-report" in script
+
+    report = {
+        "serial": "C02X", "name": "Arjuns-MacBook-Pro", "user": "arjun", "os": "macOS 15.1",
+        "apps": [{"name": "Cursor", "bundle_id": "com.todesktop.230313mzl4w4u92", "version": "0.45"}, {"name": "Slack", "bundle_id": "com.tinyspeck.slackmacgap"}],
+        "extensions": [{"id": "github.copilot-1.250.0", "editor": "VS Code"}, {"id": "ms-python.python"}],
+        "mcp_servers": [{"name": "postgres", "client": "Claude Desktop", "command": "/usr/local/bin/npx"}, {"name": "github", "client": "Cursor", "command": "docker"}],
+        "accounts": [{"app": "cursor", "domain": "personal"}, {"app": "nope", "domain": "work"}],
+    }
+    assert c.post("/api/v1/public/laptop-report", json=report).status_code == 401
+    assert c.post("/api/v1/public/laptop-report", json=report, headers={"Authorization": "Bearer fmls_wrong_token_value_123"}).status_code == 401
+    r = c.post("/api/v1/public/laptop-report", json=report, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200 and r.json() == {"received": True, "apps": 2, "accounts": 1, "mcpServers": 2}
+    assert c.post("/api/v1/public/laptop-report", json=report, headers={"Authorization": f"Bearer {token}"}).status_code == 200  # replaces, not adds
+    assert c.get("/api/v1/shadow-ai/laptop-script").json()["laptops"] == 1
+
+    body = c.get("/api/v1/shadow-ai").json()
+    by_key = {f["key"]: f for f in body["findings"]}
+    cursor = by_key["personal:cursor:arjun@acme.com"]
+    assert cursor["confidence"] == "confirmed" and cursor["evidence"][0]["title"] == "Signed in"
+    mcp = by_key["mcp_laptop:postgres"]
+    assert "npx" in mcp["evidence"][0]["detail"] and "/usr/local" not in mcp["evidence"][0]["detail"] and "mcp_laptop:github" not in by_key
+    assert body["coverage"]["laptopScript"] is True
+    grid = c.get("/api/v1/shadow-ai/evidence", params={"person": "arjun@acme.com"}).json()
+    rows = {x["service"]: x for x in grid["rows"]}
+    assert rows["cursor"]["signedIn"]["class"] == "personal" and rows["github_copilot"]["onLaptop"]["kinds"] == ["extension"]
+
+    old = token
+    token = c.post("/api/v1/shadow-ai/laptop-script/token").json()["token"]
+    assert c.post("/api/v1/public/laptop-report", json=report, headers={"Authorization": f"Bearer {old}"}).status_code == 401
+
+
+def test_tenant_rules_for_proxies(env):
+    c, factory, sent = env
+    assert c.put("/api/v1/shadow-ai/tools/chatgpt", json={"status": "approved", "tenant_ids": ["ws-1234567"]}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/claude", json={"status": "approved"}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/cursor", json={"status": "approved", "tenant_ids": ["abcdefgh"]}).status_code == 422
+    assert c.put("/api/v1/shadow-ai/tools/claude", json={"status": "approved", "tenant_ids": ["bad id!"]}).status_code == 422
+    rules = c.get("/api/v1/shadow-ai/tenant-rules").json()
+    assert rules["rules"] == [{"service": "chatgpt", "label": "ChatGPT", "header": "ChatGPT-Allowed-Workspace-Id", "value": "ws-1234567", "hosts": ["chatgpt.com", "chat.openai.com"]}]
+    assert [m["service"] for m in rules["missing"]] == ["claude"]
+    assert c.get("/api/v1/shadow-ai/tools").json()[1]["stance"]["tenantIds"] == ["ws-1234567"]

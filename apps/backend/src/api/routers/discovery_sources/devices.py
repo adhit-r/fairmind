@@ -15,6 +15,8 @@ Shadow AI merges laptops reported by several sources on serial number or Microso
   (application permission ThreatHunting.Read.All).
 - crowdstrike: CrowdStrike Falcon Discover applications, with host serials. config: base_url (the cloud's API
   address), client_id. token: the API client secret (scopes Assets: Read, Hosts: Read).
+- fleet: Fleet (osquery) hosts with their software inventory and end users. config: url. token: an API
+  token (an API-only user with the observer role is enough to read hosts and software).
 - chrome: Chrome Enterprise reports: AI extensions and apps per managed browser, with serials from the
   directory. config: admin_email (an admin the service account acts as). token: the service account key
   JSON, with domain-wide delegation for the two read-only scopes.
@@ -30,7 +32,7 @@ import httpx
 from fastapi import HTTPException
 
 from . import TIMEOUT_S, asset, get_json, microsoft_token, need, need_token, odata_pages, post_form, post_json, public_url
-from .catalog import APPS, SERVICES, asset_kind, by_app_name, by_host, by_installed
+from .catalog import APPS, SERVICES, asset_kind, by_app_name, by_extension_id, by_host, by_installed
 from .gcp import _access_token as google_token
 
 _BY_KEY = {s.key: s for s in SERVICES}
@@ -344,3 +346,40 @@ async def chrome(config: Dict[str, Any], token: Optional[str]) -> Tuple[List[Dic
             if not page:
                 break
     return _result(list(by_device.values()))
+
+
+# ---------------------------------------------------------------------------
+# Fleet (osquery)
+# ---------------------------------------------------------------------------
+
+_FLEET_EXTENSIONS = ("chrome_extensions", "vscode_extensions", "firefox_addons", "safari_extensions")
+FLEET_PAGE = 50  # Fleet's docs warn that software on large pages strains the server
+
+
+async def fleet(config: Dict[str, Any], token: Optional[str]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    base = public_url(need(config, "url", "Fleet address"), "Fleet address")
+    key = need_token(token, "API token")
+    devices: List[Dict[str, Any]] = []
+    params = {"populate_software": "without_vulnerability_details", "populate_end_users": "true", "per_page": FLEET_PAGE}
+    async with httpx.AsyncClient(base_url=base, headers={"Authorization": f"Bearer {key}"}, timeout=60) as client:
+        page = 0
+        while len(devices) < MAX_DEVICES:
+            data = await get_json(client, "/api/v1/fleet/hosts", "Fleet", params={**params, "page": page}) or {}
+            hosts = data.get("hosts") or []
+            for h in hosts:
+                rec = {"serial": _clean(h.get("hardware_serial")), "name": _clean(h.get("computer_name") or h.get("hostname")), "device_id": None, "user": None, "apps": []}
+                for sw in h.get("software") or []:
+                    name = sw.get("name")
+                    if sw.get("source") in _FLEET_EXTENSIONS:
+                        s = by_extension_id(str(name or "")) or by_app_name(str(name or ""))
+                        _add(rec, {"service": s.key, "name": str(name), "version": _clean(sw.get("version")), "kind": "extension"} if s else None)
+                    else:
+                        _add(rec, _app(name, sw.get("bundle_identifier"), sw.get("version")))
+                users = h.get("end_users") or []
+                emails = [u.get("idp_username") for u in users] + [e.get("email") for u in users for e in (u.get("other_emails") or [])]
+                rec["user"] = next((str(e).strip().lower() for e in emails if e and "@" in str(e)), None)
+                devices.append(rec)
+            if len(hosts) < FLEET_PAGE:
+                break
+            page += 1
+    return _result(devices)
