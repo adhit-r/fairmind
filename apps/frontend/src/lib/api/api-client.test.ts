@@ -322,3 +322,24 @@ test('retries only idempotent methods unless a POST or PATCH opts in', async () 
     }
   }
 })
+
+test('a 204 with no body succeeds once and is not retried', async () => {
+  installBrowser()
+  const client = new ApiClient('https://fairmind.test')
+  let calls = 0
+  globalThis.fetch = (async () => {
+    calls += 1
+    return {
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input')
+      },
+    } as unknown as Response
+  }) as typeof fetch
+
+  const result = await client.delete('/api/v1/organizations/org-1/invitations/inv-1', { retryDelay: 0 })
+
+  assert.equal(result.success, true)
+  assert.equal(calls, 1)
+})

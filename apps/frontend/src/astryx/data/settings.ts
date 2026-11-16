@@ -65,6 +65,17 @@ const EMPTY_KEYS = [] as ApiKeyRow[]
 
 export const useMembers = (orgId?: string) => useGet<OrgMember[]>(orgPath(orgId, 'members'), (r) => r.members ?? [], EMPTY_MEMBERS)
 export const useRoles = (orgId?: string) => useGet<OrgRole[]>(orgPath(orgId, 'roles'), (r) => r.roles ?? [], EMPTY_ROLES)
+export interface PendingInvitation {
+  id: string
+  email: string
+  role: string
+  expires_at: string | null
+  created_at: string | null
+}
+const EMPTY_INVITES = [] as PendingInvitation[]
+/** Pending invitations; owners and admins only, so pass `enabled` false for anyone else. */
+export const useInvitations = (orgId: string | undefined, enabled: boolean) =>
+  useGet<PendingInvitation[]>(enabled ? orgPath(orgId, 'invitations') : null, (r) => r.invitations ?? [], EMPTY_INVITES)
 export const useApiKeys = () => useGet<ApiKeyRow[]>('/api/v1/auth/api-keys', (r) => r.api_keys ?? [], EMPTY_KEYS)
 
 /** Pending access requests; platform admins only (the endpoint answers 403 to anyone else). */
@@ -86,6 +97,13 @@ export const changeMemberRole = (orgId: string, memberId: string, role: string) 
   apiClient.put(`/api/v1/organizations/${orgId}/members/${memberId}`, { role })
 export const removeMember = (orgId: string, memberId: string) =>
   apiClient.delete(`/api/v1/organizations/${orgId}/members/${memberId}`)
+export const setMemberStatus = (orgId: string, memberId: string, status: 'active' | 'suspended') =>
+  apiClient.put(`/api/v1/organizations/${orgId}/members/${memberId}`, { status })
+export const transferOwnership = (orgId: string, memberId: string) =>
+  apiClient.post(`/api/v1/organizations/${orgId}/transfer-ownership`, { member_id: memberId })
+export const leaveOrganisation = (orgId: string) => apiClient.post(`/api/v1/organizations/${orgId}/leave`, {})
+export const revokeInvitation = (orgId: string, invitationId: string) =>
+  apiClient.delete(`/api/v1/organizations/${orgId}/invitations/${invitationId}`)
 export const createApiKey = (name: string, description: string) =>
   apiClient.post<{ api_key: string; name: string; expires_at: string | null }>('/api/v1/auth/api-keys', {
     name,

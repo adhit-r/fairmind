@@ -1173,7 +1173,7 @@ def _already_created(db: Session, table: str, row_id: str, org_id: str) -> bool:
     return True
 
 
-@router.post("/workspaces")
+@router.post("/workspaces", dependencies=[Depends(org_mutator)])
 def create_workspace(request: WorkspaceCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
@@ -1222,7 +1222,7 @@ def list_workspaces(http: Request, db: Session = Depends(get_db)):
     return [_serialize_workspace_row(row) for row in rows]
 
 
-@router.post("/systems")
+@router.post("/systems", dependencies=[Depends(org_mutator)])
 def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
