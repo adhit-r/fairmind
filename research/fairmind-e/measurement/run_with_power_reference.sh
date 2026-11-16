@@ -16,9 +16,11 @@ BASELINE_W="${1:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 RESULTS="${REPO_ROOT}/research/fairmind-e/results/measurement"
 POWER_LOG="${POWER_LOG:-${HOME}/fairmind-power.txt}"
-RUNS_CSV="${RESULTS}/m1_runs_ref.csv"
-REF_CSV="${RESULTS}/m1_power_reference.csv"
-CALIB_JSON="${RESULTS}/m1_calibration.json"
+HOST_TAG="${HOST_TAG:-m1}"
+OVERRIDES="${OVERRIDES:-overrides_m1.json}"
+RUNS_CSV="${RESULTS}/${HOST_TAG}_runs_ref.csv"
+REF_CSV="${RESULTS}/${HOST_TAG}_power_reference.csv"
+CALIB_JSON="${RESULTS}/${HOST_TAG}_calibration.json"
 
 mkdir -p "${RESULTS}"
 
@@ -92,7 +94,7 @@ uv run python ../../research/fairmind-e/measurement/harness.py \
     --iterations 5 \
     --region IND \
     --seed 1337 \
-    --config-overrides ../../research/fairmind-e/measurement/overrides_m1.json \
+    --config-overrides ../../research/fairmind-e/measurement/${OVERRIDES} \
     --gap-seconds "${GAP_SECONDS:-20}" \
     --mitigations \
     --mitigation-iterations "${MITIGATION_ITERATIONS:-5}" \

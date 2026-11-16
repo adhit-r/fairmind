@@ -54,8 +54,8 @@ them within a factor of 4.7 on every workload. The study also caught our own
 gate passing a weak number: the tracker had fallen back to a CPU-load model,
 yet the gate, which keyed provenance on tool identity, gave it high confidence
 and an unconditional \emph{go} on all 20 runs. Finally, casting a fine-tune to
-\texttt{bfloat16} on a host with no optimised kernel made it 46 times slower,
-so a gate that accepts declared mitigations would have logged a reduction that
+\texttt{bfloat16} made it 46 times slower, and 44 times on a second host
+that has hardware \texttt{bfloat16}, so a gate that accepts declared mitigations would have logged a reduction that
 never happened. Both failures argue for deriving provenance from how a number
 was produced, and for re-measuring mitigations before crediting them.
 \end{abstract}
@@ -225,14 +225,17 @@ self-reported number.
 \end{figure}
 
 \paragraph{Mitigations} Only three mitigations were physical reruns
-(Fig.~\ref{fig:mitigations}), each a single execution. Batching cut intensity
-22.8 percent and a reduced-precision cast on RAG 17.5 percent. The third
-inverted: casting the fine-tune to \texttt{bfloat16} made it 46 times slower on
-a CPU with no native \texttt{bfloat16} kernel, so the cast ran in software
-emulation, and the tracker estimated roughly 41 times the energy. The runtime
-regression is measured directly; the energy figure largely follows from it,
-since a load-based power model multiplies utilisation by time. On accelerators
-with native \texttt{bfloat16} the same cast would likely have saved energy. The
+(Fig.~\ref{fig:mitigations}), each a single execution here; we repeated them
+five times on a second host (Apple M4). A reduced-precision cast on RAG cut
+intensity 17.5 percent (15.9 on the M4). Batching cut 22.8 percent, but only 1.3
+on the M4, so that saving is host-dependent, not a property of batching. The
+third inverted: casting the fine-tune to \texttt{bfloat16} made it 46 times
+slower, and the tracker estimated roughly 41 times the energy. It was 44 times
+slower on the M4 as well, although that chip implements the Arm
+\texttt{bfloat16} extension and the M1 does not, so the cause is the
+framework's CPU code path, not missing hardware. The runtime regression is
+measured directly; the energy figure largely follows from it, since a
+load-based power model multiplies utilisation by time. The
 point is not that the intervention is bad, but that ``we reduced precision,
 therefore we cut carbon'' is routine, plausible, and here false in the harmful
 direction. This is why ENV-6 requires a mitigation to be re-measured rather
@@ -262,21 +265,26 @@ evidence is \emph{manual} and \emph{conditional\_go} becomes the default. Should
 low-impact releases be exempt on materiality grounds, given that our benchmark
 runs sit six orders of magnitude below the low-tier ceiling? Should a cloud
 provider's figure (\emph{vendor\_reported}) outrank a locally run tracker in
-fallback, as it does now? And how should the hierarchy be calibrated against an
-independent power reference?
+fallback, as it does now? And how should the upper classes be calibrated, when a
+quiet laptop-class host can only exercise the lowest?
 
 \paragraph{Limitations} The host exposes no accessible hardware energy
 counters, so the study compares an estimate with an estimate and never claims
 the \emph{measured} class. Benchmark workloads exercise only the low-impact
-row, the FLOP model uses placeholder constants, the mitigation reruns are
-single executions, and confidence is not yet calibrated against an independent
-power reference. A first calibration attempt with \texttt{powermetrics} was
-discarded because background load contaminated 19 of 20 runs; a rerun on a
-quiet host, and a 15-reviewer expert panel already designed, are the next
-steps. Code, run data, and analysis scripts are public in the FairMind
+row, and the FLOP model uses placeholder constants. A first calibration
+against \texttt{powermetrics} was discarded because background load
+contaminated 19 of 20 runs. A rerun on a quiet Apple M4 (200\,ms sampling, 19
+clean runs) supports the ordering: the tracker's median error against the
+reference was 106 percent, the FLOP model's 203 percent, and the tracker again
+implied a flat 12\,W on every workload. Two caveats bound this. The reference
+is Apple's SoC power model, which omits memory and power-supply losses, so
+absolute errors partly reflect scope; and both methods are \emph{manual} on
+this hardware, so the upper classes remain uncalibrated. A host with hardware
+counters and a 15-reviewer expert panel already designed are the next steps. Code, run data, and analysis scripts are public in the FairMind
 repository (\url{https://github.com/adhit-r/fairmind}); the study runs are
-archived as release v0.3.0-alpha (doi:10.5281/zenodo.24043235), and the
-corrected policy as release v0.4.1-alpha (doi:10.5281/zenodo.24274724).
+archived as release v0.3.0-alpha (doi:10.5281/zenodo.24043235), the
+corrected policy as release v0.4.1-alpha (doi:10.5281/zenodo.24274724), and
+the M4 calibration in the repository's measurement results.
 
 \section*{Acknowledgment}
 FairMind is developed at Axonome, where the authors work; the work received no
