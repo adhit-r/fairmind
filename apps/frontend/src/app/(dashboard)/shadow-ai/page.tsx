@@ -34,6 +34,7 @@ import {
 const TYPE_LABEL: Record<FindingType, string> = {
   personal_account: 'people on personal accounts',
   leaver_key: "leavers' keys still active",
+  leaver_seat: "leavers' seats still held",
   gateway_bypass: 'calls skipping the gateway',
   not_allowed: "tools you don't allow",
   self_consent: 'apps people let in on their own',
@@ -46,10 +47,15 @@ const STANCE_LABEL: Record<Stance, string> = { approved: 'Approved', limited: 'A
 
 /** What each check needs, for the coverage list. */
 const CHECKS: { type: FindingType; needs: string; on: (c: ShadowAI['coverage']) => boolean }[] = [
-  { type: 'personal_account', needs: 'Proxy logs with a user column, Okta, and an approved tool marked "company accounts sign in through Okta"', on: (c) => c.proxyLogs && c.okta && c.ssoTools > 0 },
+  {
+    type: 'personal_account',
+    needs: 'a seat list (Cursor, Copilot or ChatGPT Enterprise) with proxy logs or Jamf or Intune; or proxy logs with a user column, Okta, and an approved tool marked "company accounts sign in through Okta"',
+    on: (c) => (c.proxyLogs && c.okta && c.ssoTools > 0) || (c.seatLists.length > 0 && (c.proxyLogs || c.laptops > 0)),
+  },
   { type: 'leaver_key', needs: 'OpenAI Admin API or LiteLLM, and Okta or Entra ID with the people step on', on: (c) => c.people > 0 },
-  { type: 'gateway_bypass', needs: 'Proxy logs and a LiteLLM gateway', on: (c) => c.proxyLogs && c.gateway },
-  { type: 'not_allowed', needs: 'Any sign-in or traffic source, and a tool marked not allowed', on: (c) => (c.proxyLogs || c.okta || c.entra) && c.approvedTools > 0 },
+  { type: 'leaver_seat', needs: 'a seat list, and Okta or Entra ID with the people step on', on: (c) => c.seatLists.length > 0 && c.people > 0 },
+  { type: 'gateway_bypass', needs: 'proxy logs and a LiteLLM gateway', on: (c) => c.proxyLogs && c.gateway },
+  { type: 'not_allowed', needs: 'any sign-in, traffic or laptop source, and a tool marked not allowed', on: (c) => (c.proxyLogs || c.okta || c.entra || c.laptops > 0) && c.approvedTools > 0 },
   { type: 'self_consent', needs: 'Entra ID', on: (c) => c.entra },
   { type: 'unregistered_mcp', needs: 'GitHub and an MCP registry', on: (c) => c.mcpRegistry },
 ]
@@ -394,7 +400,7 @@ function ToolsTab({ onSaved }: { onSaved: () => void }) {
             return (
               <div key={t.key} className="sh-tool">
                 <span style={{ minWidth: 0 }}>
-                  <span className="nm">{t.label}</span>
+                  <span className="nm" id={`sh-tool-${t.key}`}>{t.label}</span>
                   <span className="k">{t.vendor}</span>
                 </span>
                 <Selector
@@ -415,6 +421,7 @@ function ToolsTab({ onSaved }: { onSaved: () => void }) {
                 )}
                 <Switch
                   label="Company accounts sign in through Okta"
+                  aria-describedby={`sh-tool-${t.key}`}
                   value={sso}
                   isDisabled={busy === t.key || status === 'not_reviewed' || status === 'not_allowed'}
                   onChange={(on: boolean) => void save(t, status, on)}
@@ -441,7 +448,7 @@ function ReadsTab({ coverage }: { coverage: ShadowAI['coverage'] }) {
                 <i className={`dv-dot ${on ? 'live' : ''}`} aria-hidden="true" />
                 <span>
                   <span className="t">{TYPE_LABEL[c.type][0].toUpperCase() + TYPE_LABEL[c.type].slice(1)}</span>
-                  <span className="s">{on ? 'Running. ' : 'Not running: needs '}{on ? '' : c.needs.charAt(0).toLowerCase() + c.needs.slice(1)}</span>
+                  <span className="s">{on ? 'Running. ' : 'Not running: needs '}{on ? '' : c.needs}</span>
                 </span>
               </div>
             )
@@ -461,6 +468,8 @@ function ReadsTab({ coverage }: { coverage: ShadowAI['coverage'] }) {
             <li>Web domains and request counts per person, from log exports you upload</li>
             <li>Sign-ins to company apps, people&apos;s teams and who has left</li>
             <li>Vendor and gateway keys: owner and when last used</li>
+            <li>Company seat lists and when each seat was last used</li>
+            <li>AI apps installed on company laptops; other apps are not stored</li>
             <li>MCP servers in code and in your registry</li>
           </ul>
           <Text size="sm" weight="semibold" color="secondary">

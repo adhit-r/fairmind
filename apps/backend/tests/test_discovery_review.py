@@ -280,3 +280,82 @@ def test_people_step_kept_and_deleted_when_turned_off(env, monkeypatch):
     c.post(f"/api/v1/integrations/{iid}/sync")
     with factory() as db:
         assert db.execute(text("SELECT count(*) FROM governance_source_facts")).scalar() == 0
+
+
+def _raw_facts(factory, iid, source, facts):
+    with factory() as db:
+        db.execute(
+            text("INSERT INTO governance_source_facts (integration_id, org_id, source, facts_json, read_at) VALUES (:i, :o, :s, :f, :n)"),
+            {"i": iid, "o": ORG, "s": source, "f": json.dumps(facts), "n": datetime.now(timezone.utc).isoformat()},
+        )
+        db.commit()
+
+
+def test_laptops_merge_on_serial_not_name():
+    from api.routes.shadow_ai import merge_laptops
+
+    raw = [
+        {"source": "jamf", "serial": "c02x ", "name": "Arjuns-MacBook-Pro", "user": "arjun@acme.com", "apps": [{"service": "cursor", "version": "0.44"}]},
+        {"source": "intune", "serial": "C02X", "device_id": "AAD-1", "name": "LT-ENG-0231", "user": "arjun@acme.com", "apps": [{"service": "cursor", "version": "0.45"}]},
+        {"source": "defender", "device_id": "aad-1", "name": "lt-eng-0231", "apps": []},
+        {"source": "jamf", "name": "Reception", "apps": []},
+        {"source": "intune", "name": "Reception", "apps": []},
+    ]
+    laptops = merge_laptops(raw)
+    arjun = next(lt for lt in laptops if lt["serial"] == "C02X")
+    assert len(laptops) == 3 and arjun["sources"] == ["defender", "intune", "jamf"] and arjun["names"] == ["Arjuns-MacBook-Pro", "LT-ENG-0231", "lt-eng-0231"]
+    assert arjun["apps"]["cursor"] == {"versions": ["0.44", "0.45"], "sources": ["intune", "jamf"]}
+
+
+def test_shadow_ai_seats_and_laptops(env):
+    c, factory, sent = env
+    okta = _integration(c, "okta", domain="acme.okta.com")
+    logs = _integration(c, "proxy_logs")
+    cur = _integration(c, "cursor")
+    jamf = _integration(c, "jamf", url="https://acme.jamfcloud.com", client_id="c")
+    _asset(factory, logs, "proxy_logs", "service:cursor", "Cursor", "ai_assisted_dev", {"hosts": ["cursor.sh"], "users": ["arjun", "priya"], "requests_by_user": {"arjun": 214, "priya": 30}})
+    _facts(factory, okta, "okta", {
+        "arjun@acme.com": {"team": "Engineering", "status": "active"}, "priya@acme.com": {"team": "Engineering", "status": "active"},
+        "dev@acme.com": {"team": "Engineering", "status": "active"}, "carol@acme.com": {"team": "Data", "status": "deprovisioned", "status_changed": "2026-11-01T00:00:00+00:00"},
+    }, ["deprovisioned"])
+    _raw_facts(factory, cur, "cursor", {"seats": {"cursor": {"priya@acme.com": {"last_active": None}, "carol@acme.com": {"last_active": "2026-11-12T00:00:00+00:00"}}}, "complete": {"cursor": True}})
+    _raw_facts(factory, jamf, "jamf", {"devices": [
+        {"serial": "C02X", "name": "LT-ENG-0231", "user": "arjun@acme.com", "apps": [{"service": "cursor", "version": "0.45"}]},
+        {"serial": "C09Z", "name": "LT-ENG-0400", "user": "dev@acme.com", "apps": [{"service": "cursor"}, {"service": "deepseek"}]},
+    ]})
+    assert c.put("/api/v1/shadow-ai/tools/cursor", json={"status": "approved"}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/deepseek", json={"status": "not_allowed"}).status_code == 200
+
+    body = c.get("/api/v1/shadow-ai").json()
+    by_key = {f["key"]: f for f in body["findings"]}
+    arjun = by_key["personal:cursor:arjun@acme.com"]
+    assert arjun["confidence"] == "confirmed" and arjun["confirm"] is None  # traffic, and no seat
+    assert [e["title"] for e in arjun["evidence"]] == ["Proxy logs", "Cursor Business", "Laptops"]
+    assert by_key["personal:cursor:dev@acme.com"]["confidence"] == "likely"  # installed only
+    assert "personal:cursor:priya@acme.com" not in by_key  # holds a seat
+    leaver = by_key["leaver_seat:cursor:carol@acme.com"]
+    assert leaver["severity"] == "critical" and "after its owner left" in leaver["verdict"]
+    assert "LT-ENG-0400" in by_key["not_allowed:deepseek"]["evidence"][-1]["detail"]
+    assert body["coverage"]["seatLists"] == ["cursor"] and body["coverage"]["laptops"] == 2
+    assert body["map"]["cells"]["Engineering"]["cursor"]["company"] == 1  # priya: a seat and traffic
+
+
+def test_seat_source_sync_keeps_facts(env, monkeypatch):
+    from api.routes import integrations
+
+    c, factory, sent = env
+
+    async def fake(config, token):
+        return [{"external_id": "service:cursor", "name": "Cursor", "kind": "ai_assisted_dev", "metadata": {"service": "Cursor", "seats": 2}, "suggested_tier": "medium", "suggested_stage": "onboard"}], {
+            "seats": {"cursor": {"a@acme.com": {"last_active": None}, "b@acme.com": {"last_active": None}}}, "complete": {"cursor": True}}
+
+    monkeypatch.setitem(integrations._READERS, "cursor", fake)
+    cur = _integration(c, "cursor")
+    r = c.post(f"/api/v1/integrations/{cur}/sync")
+    assert r.status_code == 200, r.text
+    with factory() as db:
+        kept = json.loads(db.execute(text("SELECT facts_json FROM governance_source_facts WHERE integration_id = :i"), {"i": cur}).scalar())
+    assert set(kept["seats"]["cursor"]) == {"a@acme.com", "b@acme.com"}
+    steps = c.get("/api/v1/integrations").json()
+    step = next(i for i in (steps if isinstance(steps, list) else steps.get("integrations", [])) if i["id"] == cur)["recentRuns"][0]["steps"][0]
+    assert step["key"] == "seats" and step["found"] == 2

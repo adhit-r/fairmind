@@ -11,10 +11,13 @@ POST /shadow-ai/findings/nudge      email the person a finding is about
 
 Checks, each from sources that already exist:
 - personal account: traffic to an approved tool whose company accounts sign in through Okta,
-  by someone with no Okta sign-in to it in 30 days (proxy logs + Okta)
+  by someone with no Okta sign-in to it in 30 days (proxy logs + Okta); or use of a tool, seen in
+  traffic or installed on the person's laptop, by someone with no company seat (seat list + proxy
+  logs or a device inventory). Traffic plus no seat is confirmed.
+- leaver's seat: a company seat still held by someone who has left (seat list + Okta or Entra)
 - leaver's key: a vendor or gateway key owned by someone who has left (OpenAI or LiteLLM + Okta or Entra)
 - skips the gateway: direct calls to a model API while a LiteLLM gateway is in use (proxy logs + LiteLLM)
-- not allowed: any sighting of a service the organisation does not allow
+- not allowed: any sighting of a service the organisation does not allow, installs included
 - self-consent: people consented to an unapproved AI app without an admin (Entra)
 - MCP server not in the registry: an MCP config in code naming a server the registry lacks (GitHub + MCP registry)
 """
@@ -108,13 +111,106 @@ class People:
         return (self.by_email.get(email or "") or {}).get("team") or NO_TEAM
 
 
+def merge_laptops(raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One record per laptop from every device source. Serial number and Microsoft device ID are strong keys;
+    a record with neither merges on name plus person. A name alone never merges."""
+    parent = list(range(len(raw)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    first: Dict[str, int] = {}
+    for i, d in enumerate(raw):
+        keys = [f"s:{d['serial'].strip().upper()}"] if d.get("serial") else []
+        keys += [f"d:{d['device_id'].strip().lower()}"] if d.get("device_id") else []
+        if not keys and d.get("name") and d.get("user"):
+            keys = [f"n:{_norm(d['name'])}|{d['user']}"]
+        for k in keys:
+            if k in first:
+                parent[find(i)] = find(first[k])
+            else:
+                first[k] = i
+    groups: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    for i, d in enumerate(raw):
+        groups[find(i)].append(d)
+    out = []
+    for members in groups.values():
+        names = sorted({m["name"] for m in members if m.get("name")})
+        serial = next((m["serial"].strip().upper() for m in members if m.get("serial")), None)
+        apps: Dict[str, Dict[str, Any]] = {}
+        for m in members:
+            for a in m.get("apps") or []:
+                e = apps.setdefault(a["service"], {"versions": set(), "sources": set()})
+                if a.get("version"):
+                    e["versions"].add(a["version"])
+                e["sources"].add(m["source"])
+        out.append(
+            {
+                "name": names[0] if names else serial or "Unnamed laptop",
+                "names": names,
+                "serial": serial,
+                "users": sorted({m["user"] for m in members if m.get("user")}),
+                "sources": sorted({m["source"] for m in members}),
+                "apps": {k: {"versions": sorted(v["versions"]), "sources": sorted(v["sources"])} for k, v in apps.items()},
+            }
+        )
+    out.sort(key=lambda l: l["name"])
+    return out
+
+
+class Fleet:
+    """Seat lists and laptops from every seat and device source."""
+
+    def __init__(self, rows: List[Any]):
+        self.seats: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+        self.complete: Dict[str, bool] = {}
+        raw: List[Dict[str, Any]] = []
+        for source, facts_json in rows:
+            facts = json.loads(facts_json or "{}")
+            for svc, held in (facts.get("seats") or {}).items():
+                for email, v in held.items():
+                    self.seats[svc][email] = {**v, "source": source}
+                # Two lists for one tool (two Cursor teams) are compared only if both carry emails.
+                self.complete[svc] = self.complete.get(svc, True) and bool((facts.get("complete") or {}).get(svc))
+            raw += [{**d, "source": source} for d in facts.get("devices") or []]
+        self.laptops = merge_laptops(raw)
+        self.installs: Dict[str, Dict[str, List[Dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
+        for lt in self.laptops:
+            for u in lt["users"]:
+                for svc in lt["apps"]:
+                    self.installs[u][svc].append(lt)
+        self._local = {svc: {e.split("@")[0] for e in held} for svc, held in self.seats.items()}
+
+    def compared(self, svc: str) -> bool:
+        """Whether a seat list for the service can be compared with who uses it."""
+        return bool(self.seats.get(svc)) and self.complete.get(svc, False)
+
+    def holds(self, svc: str, email: str) -> bool:
+        """A seat for this person; the name before the @ also counts, since a sign-in name and a seat email can differ in domain."""
+        return email in self.seats.get(svc, {}) or email.split("@")[0] in self._local.get(svc, set())
+
+
+def _laptops_detail(laptops: List[Dict[str, Any]], svc: str) -> str:
+    names = [lt["name"] for lt in laptops]
+    sources = sorted({hub_label(x) for lt in laptops for x in lt["apps"][svc]["sources"]})
+    shown = ", ".join(names[:3]) + (f" and {len(names) - 3} more" if len(names) > 3 else "")
+    return f"Installed on {shown}, seen by {', '.join(sources)}"
+
+
+_RANK = {"possible": 0, "likely": 1, "confirmed": 2}
+
+
 def _finding(key: str, kind: str, title: str, severity: str, confidence: str, subject: str, evidence: List[Dict[str, str]], verdict: str, **extra: Any) -> Dict[str, Any]:
     return {"key": key, "type": kind, "title": title, "severity": severity, "confidence": confidence, "subject": subject, "evidence": evidence, "verdict": verdict, **extra}
 
 
-def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[str, Any]], now: datetime) -> List[Dict[str, Any]]:
+def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[str, Any]], now: datetime, fleet: Optional[Fleet] = None) -> List[Dict[str, Any]]:
     """Every current finding. Pure: the inputs are what the sources stored and the organisation's stance."""
     out: List[Dict[str, Any]] = []
+    fleet = fleet or Fleet([])
     proxy = [a for a in assets if a["source"] == "proxy_logs"]
     okta_by_service: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for a in assets:
@@ -122,7 +218,20 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
         if a["source"] == "okta" and s:
             okta_by_service[s.key].append(a)
 
-    # Personal account on an approved tool that company accounts reach through Okta.
+    # Personal accounts. One candidate per tool and person, whichever checks raise it; the strongest certainty wins.
+    cands: Dict[tuple, Dict[str, Any]] = {}
+
+    def candidate(svc: str, who: str, email: Optional[str], conf: str, evidence: List[Dict[str, str]]) -> None:
+        c = cands.setdefault((svc, email or who.lower()), {"who": who, "email": email, "conf": conf, "evidence": []})
+        if _RANK[conf] > _RANK[c["conf"]]:
+            c["conf"] = conf
+        titles = {e["title"] for e in c["evidence"]}
+        c["evidence"] += [e for e in evidence if e["title"] not in titles]
+
+    def traffic(a: Dict[str, Any], s: Any, who: str, n: int) -> Dict[str, str]:
+        return {"source": "proxy_logs", "title": "Proxy logs", "detail": f"{n} request{'s' if n != 1 else ''} to {', '.join(a['metadata'].get('hosts') or [s.label])} by {who}"}
+
+    # Traffic to an approved tool whose company accounts sign in through Okta, with no Okta sign-in.
     for a in proxy:
         s = _service_of(a)
         st = stance.get(s.key) if s else None
@@ -134,18 +243,69 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
             if _IP.match(who.strip()):
                 continue  # an address, not a person
             email = people.resolve(who)
-            if email in sso or who.lower() in sso:
+            if email in sso or who.lower() in sso or (email and fleet.compared(s.key) and fleet.holds(s.key, email)):
                 continue
+            candidate(
+                s.key, who, email, "possible" if capped else "likely",
+                [traffic(a, s, who, n), {"source": "okta", "title": "Okta", "detail": f"No sign-in to the company {s.label} app for this person in 30 days. Company accounts sign in through Okta."}],
+            )
+
+    # Use of a tool by someone with no company seat: traffic confirms it, an install alone makes it likely.
+    for svc in [k for k in fleet.seats if fleet.compared(k) and (stance.get(k) or {}).get("status") != "not_allowed"]:
+        s = _BY_KEY.get(svc)
+        if not s:
+            continue
+        seat_source = hub_label(next(iter(fleet.seats[svc].values()))["source"])
+        no_seat = {"source": "seats", "title": seat_source, "detail": f"No company {s.label} seat for this person"}
+        for a in proxy:
+            if _service_of(a) is not s:
+                continue
+            for who, n in sorted((a["metadata"].get("requests_by_user") or {}).items()):
+                email = None if _IP.match(who.strip()) else people.resolve(who)
+                if email and not fleet.holds(svc, email):
+                    candidate(svc, who, email, "confirmed", [traffic(a, s, who, n), no_seat])
+        for email, by_svc in fleet.installs.items():
+            if svc in by_svc and not fleet.holds(svc, email):
+                candidate(svc, email, email, "likely", [{"source": "devices", "title": "Laptops", "detail": _laptops_detail(by_svc[svc], svc)}, no_seat])
+
+    for (svc, _), c in sorted(cands.items()):
+        s = _BY_KEY[svc]
+        if c["conf"] == "confirmed":
+            verdict = f"A personal account: {s.label} is in use by someone with no company seat. Work sent there is outside your agreement with {s.vendor}."
+            confirm = None
+        else:
+            verdict = f"Likely a personal account: {s.label} is in use, but not through your company account. Work sent there is outside your agreement with {s.vendor}."
+            confirm = (
+                f"Traffic from this person to {s.label} would confirm it." if fleet.compared(svc)
+                else f"A {s.label} seat list, or a web gateway that reports the account's domain, would confirm it."
+            )
+        email = c["email"]
+        out.append(
+            _finding(
+                f"personal:{svc}:{(email or c['who']).lower()}", "personal_account", f"Personal {s.label} account", "high", c["conf"], c["who"], c["evidence"], verdict,
+                confirm=confirm, service=svc, person=email, team=people.team(email),
+            )
+        )
+
+    # A company seat still held by someone who has left.
+    for svc, held in fleet.seats.items():
+        s = _BY_KEY.get(svc)
+        for email, v in held.items():
+            p = people.by_email.get(email)
+            if not s or not p or not p["left"]:
+                continue
+            left_at, used = _when(p.get("status_changed")), _when(v.get("last_active"))
+            where = hub_label(v["source"])
+            evidence = [
+                {"source": p["source"], "title": "Okta" if p["source"] == "okta" else "Entra ID", "detail": f"{email} left on {_day(left_at)}" if left_at else f"{email}'s account is turned off"},
+                {"source": "seats", "title": where, "detail": f"Still holds a {s.label} seat" + (f", last used {_day(used)}" if used else "")},
+            ]
+            after = bool(used and left_at and used > left_at)
             out.append(
                 _finding(
-                    f"personal:{s.key}:{who.lower()}", "personal_account", f"Personal {s.label} account", "high", "possible" if capped else "likely", who,
-                    [
-                        {"source": "proxy_logs", "title": "Proxy logs", "detail": f"{n} request{'s' if n != 1 else ''} to {', '.join(a['metadata'].get('hosts') or [s.label])} by {who}"},
-                        {"source": "okta", "title": "Okta", "detail": f"No sign-in to the company {s.label} app for this person in 30 days. Company accounts sign in through Okta."},
-                    ],
-                    f"Likely a personal account: {s.label} is in use, but not through your company account. Work sent there is outside your agreement with {s.vendor}.",
-                    confirm=f"A {s.label} seat list, or a web gateway that reports the account's domain, would confirm it.",
-                    service=s.key, person=email, team=people.team(email),
+                    f"leaver_seat:{svc}:{email}", "leaver_seat", f"A leaver still holds a {s.label} seat", "critical" if after else "high", "confirmed", email, evidence,
+                    (f"The seat was used after its owner left. Remove it in {where} now." if after else f"Remove the seat in {where}. It keeps access open and costs money."),
+                    service=svc, person=email, team=people.team(email),
                 )
             )
 
@@ -199,9 +359,16 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
         s = _service_of(a)
         if s and (stance.get(s.key) or {}).get("status") == "not_allowed":
             seen[s.key].append(a)
-    for key, hits in seen.items():
+    installed: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for lt in fleet.laptops:
+        for svc in lt["apps"]:
+            if (stance.get(svc) or {}).get("status") == "not_allowed":
+                installed[svc].append(lt)
+    for key in sorted(set(seen) | set(installed)):
         s = _BY_KEY[key]
-        evidence = [{"source": a["source"], "title": hub_label(a["source"]), "detail": _seen_detail(a)} for a in hits]
+        evidence = [{"source": a["source"], "title": hub_label(a["source"]), "detail": _seen_detail(a)} for a in seen[key] if a["source"] not in ("jamf", "intune")]
+        if installed[key]:
+            evidence.append({"source": "devices", "title": "Laptops", "detail": _laptops_detail(installed[key], key)})
         out.append(_finding(f"not_allowed:{key}", "not_allowed", f"{s.label} is in use, and you do not allow it", "high", "confirmed", s.label, evidence, f"Ask the people using {s.label} to stop, and block it at your gateway.", service=key))
 
     # People consenting to an AI app on their own, for an app the organisation has not approved.
@@ -250,6 +417,8 @@ def _seen_detail(a: Dict[str, Any]) -> str:
         return f"{m.get('distinct_users_30_days', 0)} people signed in through Okta in 30 days"
     if a["source"] == "entra":
         return f"{m.get('users_who_consented', 0)} people consented"
+    if "seats" in m:
+        return f"{m['seats']} company seats, {m.get('active_30_days', 0)} used in 30 days"
     return a["name"]
 
 
@@ -259,7 +428,7 @@ def hub_label(kind: str) -> str:
     return hub_source_label(kind)
 
 
-def usage_map(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[str, Any]], findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+def usage_map(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[str, Any]], findings: List[Dict[str, Any]], fleet: Optional[Fleet] = None) -> Dict[str, Any]:
     """People per team and tool: company accounts, personal accounts, and use of tools that are not approved."""
     company: Dict[str, Set[str]] = defaultdict(set)
     users: Dict[str, Set[str]] = defaultdict(set)
@@ -275,6 +444,17 @@ def usage_map(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Di
             for u in a["metadata"].get("users") or []:
                 if not _IP.match(u.strip()):
                     users[s.key].add(people.resolve(u) or u.lower())
+    fleet = fleet or Fleet([])
+    for email, by_svc in fleet.installs.items():
+        for svc in by_svc:
+            users[svc].add(email)
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    for svc, held in fleet.seats.items():
+        for email, v in held.items():
+            used = _when(v.get("last_active"))
+            if (used and used >= since) or email in users[svc]:
+                company[svc].add(email)
+                users[svc].add(email)
     personal: Dict[str, Set[str]] = defaultdict(set)
     for f in findings:
         if f["type"] == "personal_account" and f.get("status") != "expected":
@@ -320,10 +500,12 @@ def _stance(db: Session, org: str) -> Dict[str, Dict[str, Any]]:
 def _current(db: Session, org: str) -> Dict[str, Any]:
     hub._ensure_tables()
     assets = [hub._asset_out(r) for r in db.execute(text(f"SELECT {hub._ASSET_COLS} FROM governance_discovered_assets WHERE org_id = :org"), {"org": org}).fetchall()]
-    people = People(db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall())
+    facts = db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall()
+    people, fleet = People(facts), Fleet(facts)
     stance = _stance(db, org)
     kinds = {r[0] for r in db.execute(text("SELECT DISTINCT kind FROM governance_integrations WHERE org_id = :org"), {"org": org}).fetchall()}
-    return {"assets": assets, "people": people, "stance": stance, "kinds": kinds, "findings": detect(assets, people, stance, datetime.now(timezone.utc))}
+    findings = detect(assets, people, stance, datetime.now(timezone.utc), fleet)
+    return {"assets": assets, "people": people, "fleet": fleet, "stance": stance, "kinds": kinds, "findings": findings}
 
 
 @router.get("")
@@ -361,7 +543,7 @@ def shadow_ai(http: Request, db: Session = Depends(get_db)):
     return {
         "findings": cur["findings"],
         "resolved": resolved[:100],
-        "map": usage_map(cur["assets"], cur["people"], cur["stance"], cur["findings"]),
+        "map": usage_map(cur["assets"], cur["people"], cur["stance"], cur["findings"], cur["fleet"]),
         "coverage": {
             "proxyLogs": "proxy_logs" in k,
             "okta": "okta" in k,
@@ -371,6 +553,8 @@ def shadow_ai(http: Request, db: Session = Depends(get_db)):
             "people": len(cur["people"].by_email),
             "approvedTools": len(cur["stance"]),
             "ssoTools": sum(1 for s in cur["stance"].values() if s["sso_required"]),
+            "seatLists": sorted(k for k in cur["fleet"].seats if cur["fleet"].compared(k)),
+            "laptops": len(cur["fleet"].laptops),
         },
     }
 

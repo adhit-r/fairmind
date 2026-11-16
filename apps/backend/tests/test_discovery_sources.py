@@ -14,6 +14,7 @@ from api.routes.discovery_sources import (
     anthropic_admin,
     azure,
     claude_enterprise,
+    devices,
     entra,
     gcp,
     litellm,
@@ -22,8 +23,9 @@ from api.routes.discovery_sources import (
     okta,
     openai_admin,
     proxy_logs,
+    seats,
 )
-from api.routes.discovery_sources.catalog import asset_kind, by_app_name, by_host
+from api.routes.discovery_sources.catalog import asset_kind, by_app_name, by_host, by_installed
 from api.routes.integrations import mcp_servers_in
 
 
@@ -334,3 +336,87 @@ def test_anthropic_skips_claude_code_when_off(fake_http):
     calls = fake_http(lambda r: (200, {"data": [], "has_more": False}))
     run(anthropic_admin.sync({"disabled_steps": ["claude_code"]}, "k"))
     assert not any(c.url.path.endswith("/claude_code") for c in calls)
+
+
+def test_installed_apps_match_exactly():
+    assert by_installed("Cursor (User)").key == "cursor" and by_installed("Ollama version 0.5.7").key == "ollama"
+    assert by_installed("Anything", "com.anthropic.claudefordesktop").key == "claude"
+    assert by_installed("Gemini 2") is None and by_installed("Claude Code") is None  # same words, other apps
+
+
+def test_cursor_seats_with_daily_use(fake_http):
+    def handler(r):
+        assert r.headers["authorization"].startswith("Basic ")
+        if r.url.path == "/teams/members":
+            return (200, {"teamMembers": [{"email": "Arjun@acme.com", "role": "member"}, {"email": "gone@acme.com", "isRemoved": True}, {"email": "priya@acme.com"}]})
+        if r.url.path == "/teams/daily-usage-data":
+            return (200, {"data": [{"email": "arjun@acme.com", "date": 1794700000000, "isActive": True}, {"email": "priya@acme.com", "date": 1794700000000, "isActive": False}]})
+        return (404, {})
+
+    fake_http(handler)
+    tools, facts = run(seats.cursor({}, "key"))
+    held = facts["seats"]["cursor"]
+    assert set(held) == {"arjun@acme.com", "priya@acme.com"} and held["arjun@acme.com"]["last_active"] and held["priya@acme.com"]["last_active"] is None
+    assert facts["complete"]["cursor"] and tools[0]["external_id"] == "service:cursor" and tools[0]["metadata"]["seats"] == 2
+
+
+def test_copilot_seats_without_emails_are_not_compared(fake_http):
+    def handler(r):
+        page = int(q(r)["page"][0])
+        rows = [{"assignee": {"login": f"u{page}{i}", "email": "a@acme.com" if page == 1 and i == 0 else None}, "last_activity_at": "2026-11-10T00:00:00Z"} for i in range(100 if page == 1 else 5)]
+        return (200, {"total_seats": 105, "seats": rows})
+
+    calls = fake_http(handler)
+    tools, facts = run(seats.github_copilot({"org": "acme"}, "tok"))
+    assert len(calls) == 2 and tools[0]["metadata"]["seats"] == 105
+    assert list(facts["seats"]["github_copilot"]) == ["a@acme.com"] and facts["complete"]["github_copilot"] is False
+
+
+def test_chatgpt_enterprise_scim_members(fake_http):
+    def handler(r):
+        start = int(q(r)["startIndex"][0])
+        if start == 1:
+            return (200, {"totalResults": 3, "Resources": [{"userName": "x", "emails": [{"value": "A@acme.com", "primary": True}], "active": True}, {"userName": "b@acme.com", "active": True}]})
+        return (200, {"totalResults": 3, "Resources": [{"userName": "c@acme.com", "active": False}]})
+
+    fake_http(handler)
+    tools, facts = run(seats.chatgpt_enterprise({"scim_url": "https://scim.example.com/v2"}, "tok"))
+    assert set(facts["seats"]["chatgpt"]) == {"a@acme.com", "b@acme.com"} and tools[0]["metadata"]["seats"] == 2
+
+
+def test_jamf_keeps_only_ai_apps(fake_http):
+    def handler(r):
+        if r.url.path == "/api/oauth/token":
+            return (200, {"access_token": "t"})
+        if r.url.path == "/api/v4/computers-inventory":
+            return (404, {})
+        if r.url.path == "/api/v3/computers-inventory":
+            assert r.headers["authorization"] == "Bearer t"
+            return (200, {"totalCount": 2, "results": [
+                {"general": {"name": "Arjuns-MacBook-Pro"}, "hardware": {"serialNumber": "C02X"}, "userAndLocation": {"email": "Arjun@acme.com"},
+                 "applications": [{"name": "Cursor.app", "bundleId": "com.todesktop.230313mzl4w4u92", "version": "0.45"}, {"name": "Slack.app", "bundleId": "com.tinyspeck.slackmacgap"}]},
+                {"general": {"name": "Reception"}, "hardware": {"serialNumber": "C03Y"}, "userAndLocation": {}, "applications": [{"name": "Safari.app"}]},
+            ]})
+        return (404, {})
+
+    fake_http(handler)
+    tools, facts = run(devices.jamf({"url": "https://acme.jamfcloud.com", "client_id": "c"}, "s"))
+    assert facts["devices"] == [{"serial": "C02X", "name": "Arjuns-MacBook-Pro", "device_id": None, "user": "arjun@acme.com", "apps": [{"service": "cursor", "name": "Cursor.app", "version": "0.45"}]}]
+    assert [t["name"] for t in tools] == ["Cursor"] and tools[0]["metadata"]["devices"] == 1
+
+
+def test_intune_reads_devices_per_ai_app(fake_http):
+    def handler(r):
+        if t := ms_token(r):
+            return t
+        p = r.url.path
+        if p.endswith("/deviceManagement/detectedApps"):
+            return (200, {"value": [{"id": "a1", "displayName": "ChatGPT", "version": "1.2"}, {"id": "a2", "displayName": "Microsoft Teams"}]})
+        if p.endswith("/detectedApps/a1/managedDevices"):
+            return (200, {"value": [{"id": "d1", "deviceName": "LT-ENG-0231", "serialNumber": "C02X", "userPrincipalName": "Arjun@acme.com", "azureADDeviceId": "AAD-1"}]})
+        return (404, {})
+
+    calls = fake_http(handler)
+    tools, facts = run(devices.intune({"tenant_id": "t", "client_id": "c"}, "s"))
+    assert not any("/a2/" in str(c.url) for c in calls)  # apps that are not AI are never followed
+    assert facts["devices"][0]["user"] == "arjun@acme.com" and facts["devices"][0]["apps"][0]["service"] == "chatgpt"

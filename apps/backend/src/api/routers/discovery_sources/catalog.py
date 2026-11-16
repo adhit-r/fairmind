@@ -1,7 +1,7 @@
 """Known third-party AI services: how they show up as a hostname in proxy logs and as an
 application name in a sign-in provider. Static reference data, extended as vendors appear.
 
-category: chat | api | dev | media | meeting | writing | platform
+category: chat | api | dev | media | meeting | writing | platform | local (runs models on the laptop)
 """
 
 from __future__ import annotations
@@ -66,7 +66,23 @@ SERVICES: List[Service] = [
     Service("runway", "Runway", "Runway", "media", ("runwayml.com",), r"\brunway(ml)?\b"),
     Service("elevenlabs", "ElevenLabs", "ElevenLabs", "media", ("elevenlabs.io",), r"\beleven\s?labs\b"),
     Service("synthesia", "Synthesia", "Synthesia", "media", ("synthesia.io",), r"\bsynthesia\b"),
+    Service("ollama", "Ollama", "Ollama", "local", ("ollama.com",), r"\bollama\b"),
+    Service("lm_studio", "LM Studio", "Element Labs", "local", ("lmstudio.ai",), r"\blm\s?studio\b"),
 ]
+
+# How a service shows up as an installed app: exact app names (compared after _app_name) and bundle IDs.
+# Exact on purpose: a regex like "gemini" would also match unrelated apps of that name.
+APPS: Dict[str, tuple] = {
+    "chatgpt": (("chatgpt",), ("com.openai.chat", "com.openai.codex")),
+    "claude": (("claude",), ("com.anthropic.claudefordesktop",)),
+    "cursor": (("cursor",), ("com.todesktop.230313mzl4w4u92",)),
+    "windsurf": (("windsurf",), ("com.exafunction.windsurf",)),
+    "perplexity": (("perplexity",), ()),
+    "microsoft_copilot": (("microsoft copilot", "copilot"), ()),
+    "deepseek": (("deepseek",), ()),
+    "ollama": (("ollama",), ("com.electron.ollama",)),
+    "lm_studio": (("lm studio",), ("ai.elementlabs.lmstudio",)),
+}
 
 _BY_DOMAIN: Dict[str, Service] = {d: s for s in SERVICES for d in s.domains}
 _NAME_RES = [(re.compile(s.app_name, re.I), s) for s in SERVICES]
@@ -92,6 +108,26 @@ def by_app_name(name: str) -> Optional[Service]:
         if rx.search(name):
             return s
     return None
+
+
+_BY_KEY: Dict[str, Service] = {s.key: s for s in SERVICES}
+_APP_NAMES: Dict[str, Service] = {n: _BY_KEY[k] for k, (names, _) in APPS.items() for n in names}
+_BUNDLES: Dict[str, Service] = {b: _BY_KEY[k] for k, (_, bundles) in APPS.items() for b in bundles}
+_APP_NOISE = re.compile(r"\.(app|exe)$|\s*\((user|machine|x64|x86|arm64)\)$|\s+(version\s+)?v?\d+(\.\d+)*$")
+
+
+def _app_name(name: str) -> str:
+    """An installed app's display name without .app/.exe, an installer suffix or a trailing version."""
+    n = (name or "").strip().lower()
+    prev = None
+    while n != prev:
+        prev, n = n, _APP_NOISE.sub("", n).strip()
+    return n
+
+
+def by_installed(name: str, bundle_id: Optional[str] = None) -> Optional[Service]:
+    """The service an installed app belongs to, by bundle ID first, then by exact app name."""
+    return _BUNDLES.get((bundle_id or "").strip().lower()) or _APP_NAMES.get(_app_name(name))
 
 
 def asset_kind(s: Service) -> str:

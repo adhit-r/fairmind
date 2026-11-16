@@ -46,7 +46,7 @@ _INDIA_REGIONS = {"ap-south-1", "ap-south-2", "centralindia", "southindia", "wes
 _INDIAN_VENDORS = {"Sarvam AI", "Ola"}
 _SOURCE_VENDOR = {"openai": "OpenAI", "anthropic": "Anthropic", "claude_enterprise": "Anthropic", "m365_copilot": "Microsoft"}
 # Which sighting names the system, best first. A repo or model registry knows its real name; a key or a log line does not.
-_NAME_ORDER = ["github", "mlflow", "huggingface", "aws", "azure", "gcp", "m365_copilot", "claude_enterprise", "litellm", "openai", "anthropic", "mcp_registry", "okta", "entra", "proxy_logs"]
+_NAME_ORDER = ["github", "mlflow", "huggingface", "aws", "azure", "gcp", "m365_copilot", "claude_enterprise", "litellm", "openai", "anthropic", "mcp_registry", "cursor", "github_copilot", "chatgpt_enterprise", "jamf", "intune", "okta", "entra", "proxy_logs"]
 _KIND_ORDER = ["agent", "llm_app", "ml_model", "ai_service", "ai_assisted_dev", "mcp_server"]
 _OWNER_REASON = {
     "openai": "Owns the OpenAI key {name}",
@@ -273,6 +273,7 @@ def hub_source_label(kind: str) -> str:
         "github": "GitHub", "mlflow": "MLflow", "huggingface": "Hugging Face", "anthropic": "Anthropic API", "claude_enterprise": "Claude Enterprise",
         "openai": "OpenAI Admin API", "aws": "AWS", "azure": "Azure", "gcp": "Google Cloud", "okta": "Okta", "entra": "Entra ID",
         "m365_copilot": "Microsoft 365 Copilot", "litellm": "LiteLLM gateway", "proxy_logs": "proxy logs", "mcp_registry": "MCP registry",
+        "cursor": "Cursor Business", "github_copilot": "GitHub Copilot seats", "chatgpt_enterprise": "ChatGPT Enterprise", "jamf": "Jamf Pro", "intune": "Microsoft Intune",
     }.get(kind, kind)
 
 

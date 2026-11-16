@@ -142,7 +142,7 @@ export async function splitSighting(assetId: string) {
 
 /* ------------------------------------------------------------------ Shadow AI */
 
-export type FindingType = 'personal_account' | 'leaver_key' | 'gateway_bypass' | 'not_allowed' | 'self_consent' | 'unregistered_mcp'
+export type FindingType = 'personal_account' | 'leaver_key' | 'leaver_seat' | 'gateway_bypass' | 'not_allowed' | 'self_consent' | 'unregistered_mcp'
 export type Confidence = 'possible' | 'likely' | 'confirmed'
 
 export interface Finding {
@@ -175,7 +175,7 @@ export interface ShadowAI {
     teams: string[]
     cells: Record<string, Record<string, { company: number; personal: number; unapproved: number }>>
   }
-  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number }
+  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number }
 }
 
 export interface ToolStance {
