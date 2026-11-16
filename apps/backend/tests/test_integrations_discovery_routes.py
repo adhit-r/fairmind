@@ -234,3 +234,15 @@ def test_a_described_chatgpt_workspace_becomes_the_workspace_and_its_gpts(client
     assert found["Policy helper"]["kind"] == "llm_app" and found["Policy helper"]["metadata"]["kind_in_vendor"] == "custom GPT"
     bad = client.post("/api/v1/integrations/preview", json={"kind": "claude_team", "name": "x", "config": {"seats": 3}})
     assert bad.status_code == 400 and "Workspace name" in bad.json()["detail"]
+
+
+def test_github_refuses_a_personal_account(client, monkeypatch):  # noqa: F811
+    def gh(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/users/someone/repos":
+            return httpx.Response(200, json=[{"name": "x", "full_name": "someone/x"}])
+        return httpx.Response(404, json={})  # /orgs/someone/repos: not an organisation
+
+    monkeypatch.setattr(integrations.httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(gh)))
+    iid = _add(client, "github", owner="someone")
+    r = client.post(f"/api/v1/integrations/{iid}/sync")
+    assert r.status_code == 400 and "not a GitHub organisation" in r.json()["detail"]
