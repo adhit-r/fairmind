@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSession } from '@/context/SessionContext'
 import { resolveAuthGuardState } from '@/lib/auth-guard-state'
@@ -21,8 +22,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (guardState === 'loading') {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="space-y-4 w-full max-w-md p-6">
+      <div role="status" aria-live="polite" className="flex min-h-[60vh] items-center justify-center">
+        <span className="sr-only">Checking your session</span>
+        <div className="w-full max-w-md space-y-4 p-6">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -40,24 +42,20 @@ export function AuthGuard({ children }: AuthGuardProps) {
     const message = isDenied ? fallbackMessage : error?.message || fallbackMessage
 
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F7F4EC] p-6">
+      <div className="flex min-h-[60vh] items-center justify-center p-4">
         <section
           aria-labelledby="auth-guard-state-heading"
-          className="w-full max-w-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0_#111111]"
+          className="w-full max-w-xl rounded-lg border border-border bg-card p-6"
           role="alert"
         >
-          <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#0B6E69]">Session status</p>
-          <h1 id="auth-guard-state-heading" className="text-2xl font-black tracking-tight text-black">{heading}</h1>
-          <p className="mt-3 text-sm font-semibold leading-6 text-[#34312D]">{message}</p>
-          <button
-            className="mt-6 border-2 border-black bg-[#F47B20] px-4 py-2 text-sm font-black text-black shadow-[3px_3px_0_#111111] transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0B6E69]"
-            onClick={() => { void refreshSession() }}
-            type="button"
-          >
+          <p className="eyebrow mb-2">Session status</p>
+          <h1 id="auth-guard-state-heading" className="text-xl font-semibold tracking-tight text-foreground">{heading}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+          <Button className="mt-5" variant="action" onClick={() => { void refreshSession() }} type="button">
             Retry session check
-          </button>
+          </Button>
         </section>
-      </main>
+      </div>
     )
   }
 

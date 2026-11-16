@@ -386,7 +386,7 @@ function RunsTable({ runs, plans }: { runs: EvaluationRun[]; plans: EvaluationPl
 export default function EvaluationRunsPage() {
   const { selectedOrg, isLoading: orgLoading } = useOrg()
   const { selectedSystem, loading: systemLoading } = useSystemContext()
-  const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
+  const realSystem = selectedSystem.id ? selectedSystem : undefined
   const evaluations = useEvaluationRuns(selectedOrg?.id, realSystem?.id)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
   const [showCreatePlan, setShowCreatePlan] = useState(false)

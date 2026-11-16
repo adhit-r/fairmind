@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { chartTheme, seriesColor } from '@/lib/chart-theme'
 
 interface ChartData {
   name: string
@@ -29,61 +30,43 @@ interface SimpleChartProps {
   className?: string
 }
 
-export function SimpleChart({ 
-  title, 
-  data, 
+export function SimpleChart({
+  title,
+  data,
   type = 'line',
   dataKey = 'value',
-  className 
+  className,
 }: SimpleChartProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal', className)}>
-      <h3 className="text-lg font-bold mb-4">{title}</h3>
+    <Card className={cn('p-4 sm:p-5', className)}>
+      <h3 className="mb-4 text-base font-semibold">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         {type === 'line' ? (
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#000" />
-            <XAxis dataKey="name" stroke="#000" />
-            <YAxis stroke="#000" />
-            <Tooltip 
-              contentStyle={{
-                border: '2px solid #000',
-                borderRadius: '0',
-                backgroundColor: '#fff',
-              }}
-            />
-            <Legend />
-            <Line 
-              type="monotone" 
-              dataKey={dataKey} 
-              stroke="#FF6B35" 
-              strokeWidth={3}
-              dot={{ fill: '#000', strokeWidth: 2, r: 4 }}
+            <CartesianGrid {...chartTheme.gridProps} />
+            <XAxis dataKey="name" {...chartTheme.axisProps} />
+            <YAxis {...chartTheme.axisProps} />
+            <Tooltip {...chartTheme.tooltipProps} />
+            <Legend {...chartTheme.legendProps} />
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke={seriesColor(0)}
+              strokeWidth={2}
+              dot={{ fill: seriesColor(0), r: 3 }}
             />
           </LineChart>
         ) : (
           <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#000" />
-            <XAxis dataKey="name" stroke="#000" />
-            <YAxis stroke="#000" />
-            <Tooltip 
-              contentStyle={{
-                border: '2px solid #000',
-                borderRadius: '0',
-                backgroundColor: '#fff',
-              }}
-            />
-            <Legend />
-            <Bar 
-              dataKey={dataKey} 
-              fill="#FF6B35"
-              stroke="#000"
-              strokeWidth={2}
-            />
+            <CartesianGrid {...chartTheme.gridProps} />
+            <XAxis dataKey="name" {...chartTheme.axisProps} />
+            <YAxis {...chartTheme.axisProps} />
+            <Tooltip {...chartTheme.tooltipProps} />
+            <Legend {...chartTheme.legendProps} />
+            <Bar dataKey={dataKey} fill={seriesColor(0)} radius={[4, 4, 0, 0]} />
           </BarChart>
         )}
       </ResponsiveContainer>
     </Card>
   )
 }
-

@@ -22,6 +22,10 @@ function initialsFor(name: string) {
   return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join('')
 }
 
+/**
+ * Account identity control using the self-hosted illustrated portrait, with a
+ * labelled two-letter initials fallback when the image fails to load.
+ */
 export const FramedIdentity = React.forwardRef<HTMLButtonElement, FramedIdentityProps>(
   function FramedIdentity(
     {
@@ -57,15 +61,19 @@ export const FramedIdentity = React.forwardRef<HTMLButtonElement, FramedIdentity
         aria-label={label}
         data-framed-identity="true"
         className={cn(
-          'group/identity inline-flex min-h-11 items-center border-2 border-[#0F1412] bg-[#FCFDF8] text-left text-[#0F1412]',
-          'shadow-[3px_3px_0_0_#0F1412] outline outline-0 outline-offset-2 focus:outline-2 focus:outline-[#0F1412]',
-          'transition-[transform,box-shadow,background-color] duration-150 ease-out hover:translate-x-[2px] hover:translate-y-[2px] hover:bg-[#FF6B35] hover:shadow-none',
-          'active:translate-x-[3px] active:translate-y-[3px] active:shadow-none motion-reduce:transition-none motion-reduce:transform-none',
+          'group/identity inline-flex min-h-11 items-center rounded-md text-left text-foreground',
+          'transition-colors hover:bg-accent motion-reduce:transition-none',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           collapsed ? 'h-11 w-11 justify-center p-0' : 'w-full gap-3 p-2',
           className,
         )}
       >
-        <span className={cn('relative flex shrink-0 items-center justify-center overflow-hidden bg-[#FF6B35]', collapsed ? 'h-10 w-10' : 'h-11 w-11 border-2 border-[#0F1412]')}>
+        <span
+          className={cn(
+            'relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-accent-action',
+            collapsed ? 'h-9 w-9' : 'h-10 w-10',
+          )}
+        >
           {imageAvailable ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -79,7 +87,7 @@ export const FramedIdentity = React.forwardRef<HTMLButtonElement, FramedIdentity
             <span
               role="img"
               aria-label={`${name} profile image unavailable; showing initials ${initials}`}
-              className="flex h-full w-full items-center justify-center bg-[#FF6B35] text-xs font-black"
+              className="flex h-full w-full items-center justify-center bg-accent-action text-xs font-semibold text-accent-action-foreground"
             >
               {initials}
             </span>
@@ -87,9 +95,9 @@ export const FramedIdentity = React.forwardRef<HTMLButtonElement, FramedIdentity
         </span>
         {!collapsed && (
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-black uppercase">{name}</span>
-            {email && <span className="block truncate text-xs font-bold text-[#3F4944]">{email}</span>}
-            {status && <span className="block truncate text-xs font-bold text-[#3F4944]">{status}</span>}
+            <span className="block truncate text-sm font-semibold">{name}</span>
+            {email && <span className="block truncate text-xs text-muted-foreground">{email}</span>}
+            {status && <span className="block truncate text-xs text-muted-foreground">{status}</span>}
           </span>
         )}
       </button>

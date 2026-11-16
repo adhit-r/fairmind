@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { chartTheme, seriesColor } from '@/lib/chart-theme'
 
 interface ChartData {
   name: string
@@ -33,38 +34,25 @@ export function AreaChart({
   className,
 }: AreaChartProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal', className)}>
-      <h3 className="text-lg font-bold mb-4">{title}</h3>
+    <Card className={cn('p-4 sm:p-5', className)}>
+      <h3 className="mb-4 text-base font-semibold">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <RechartsAreaChart data={data}>
-          <defs>
-            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#FF6B35" stopOpacity={0.8} />
-              <stop offset="95%" stopColor="#FF6B35" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#000" />
-          <XAxis dataKey="name" stroke="#000" />
-          <YAxis stroke="#000" />
-          <Tooltip
-            contentStyle={{
-              border: '2px solid #000',
-              borderRadius: '0',
-              backgroundColor: '#fff',
-            }}
-          />
-          <Legend />
+          <CartesianGrid {...chartTheme.gridProps} />
+          <XAxis dataKey="name" {...chartTheme.axisProps} />
+          <YAxis {...chartTheme.axisProps} />
+          <Tooltip {...chartTheme.tooltipProps} />
+          <Legend {...chartTheme.legendProps} />
           <Area
             type="monotone"
             dataKey={dataKey}
-            stroke="#000"
-            strokeWidth={3}
-            fillOpacity={1}
-            fill="url(#colorValue)"
+            stroke={seriesColor(0)}
+            strokeWidth={2}
+            fill={seriesColor(0)}
+            fillOpacity={0.12}
           />
         </RechartsAreaChart>
       </ResponsiveContainer>
     </Card>
   )
 }
-

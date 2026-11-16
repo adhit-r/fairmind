@@ -10,10 +10,12 @@ import {
   Tooltip,
 } from 'recharts'
 import { cn } from '@/lib/utils'
+import { chartTheme, seriesColor } from '@/lib/chart-theme'
 
 interface PieChartData {
   name: string
   value: number
+  /** Optional explicit colour (use a token such as CHART_TONES.critical). */
   color?: string
 }
 
@@ -23,12 +25,10 @@ interface PieChartProps {
   className?: string
 }
 
-const COLORS = ['#FF6B35', '#000000', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6']
-
 export function PieChart({ title, data, className }: PieChartProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal', className)}>
-      <h3 className="text-lg font-bold mb-4">{title}</h3>
+    <Card className={cn('p-4 sm:p-5', className)}>
+      <h3 className="mb-4 text-base font-semibold">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <RechartsPieChart>
           <Pie
@@ -38,31 +38,23 @@ export function PieChart({ title, data, className }: PieChartProps) {
             labelLine={false}
             label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
             outerRadius={100}
-            fill="#8884d8"
             dataKey="value"
-            stroke="#000"
+            stroke="var(--card)"
             strokeWidth={2}
           >
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.color || COLORS[index % COLORS.length]}
-                stroke="#000"
+                fill={entry.color || seriesColor(index)}
+                stroke="var(--card)"
                 strokeWidth={2}
               />
             ))}
           </Pie>
-          <Tooltip
-            contentStyle={{
-              border: '2px solid #000',
-              borderRadius: '0',
-              backgroundColor: '#fff',
-            }}
-          />
-          <Legend />
+          <Tooltip {...chartTheme.tooltipProps} />
+          <Legend {...chartTheme.legendProps} />
         </RechartsPieChart>
       </ResponsiveContainer>
     </Card>
   )
 }
-

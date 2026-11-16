@@ -105,12 +105,6 @@ export const API_ENDPOINTS = {
     health: '/api/v1/advanced-bias-detection/health',
   },
 
-  // Provenance
-  provenance: {
-    root: '/api/v1/provenance/',
-    getProvenance: (modelId: string) => `/api/v1/provenance/${modelId}`,
-  },
-
   // AI Governance
   aiGovernance: {
     policies: '/api/v1/ai-governance/policies',
@@ -342,14 +336,6 @@ export const API_ENDPOINTS = {
     logTest: '/api/v1/mlops/log-test',
     runUrl: (provider: string, runId: string) => `/api/v1/mlops/run-url/${provider}/${runId}`,
   },
-  // Marketplace
-  marketplace: {
-    models: '/api/v1/marketplace/models',
-    model: (modelId: string) => `/api/v1/marketplace/models/${modelId}`,
-    publish: '/api/v1/marketplace/models',
-    reviews: (modelId: string) => `/api/v1/marketplace/models/${modelId}/reviews`,
-  },
-
   // Organizations (Multi-org support)
   organizations: {
     list: '/api/v1/organizations',

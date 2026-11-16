@@ -182,7 +182,7 @@ export default function DashboardPage() {
     })
   }
 
-  const isFallbackSystem = selectedSystem.metadata?.source === 'fallback'
+  const isFallbackSystem = !selectedSystem.id
 
   if (loading || logsLoading) {
     return (

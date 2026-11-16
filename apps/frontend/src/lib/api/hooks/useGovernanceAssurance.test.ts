@@ -220,18 +220,15 @@ test('the evaluation-list consumer renders the backward-compatible GET DTO', asy
   assert.match(markup, /Content hash/)
 })
 
-test('keeps Govern & Prove to the six assurance destinations', () => {
-  const governance = NAVIGATION_ITEMS.find((category) => category.id === 'compliance')
+test('keeps Govern to the AI systems, frameworks and policies destinations', () => {
+  const governance = NAVIGATION_ITEMS.find((category) => category.id === 'govern')
 
   assert.deepEqual(
     governance?.items?.map(({ title, href }) => [title, href]),
     [
-      ['Overview', '/ai-governance'],
-      ['AI Systems', '/model-inventory'],
-      ['Frameworks & Controls', '/compliance-dashboard'],
-      ['Evidence & Evaluations', '/evidence'],
-      ['Findings', '/risks'],
-      ['Reports & Assurance', '/reports'],
+      ['AI Systems', '/systems'],
+      ['Frameworks & Controls', '/frameworks'],
+      ['Policies', '/policies'],
     ],
   )
 })

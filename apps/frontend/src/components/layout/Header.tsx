@@ -1,6 +1,9 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
+import { IconBell, IconLogout, IconMenu2, IconSettings } from '@tabler/icons-react'
+
 import { OrangeLogo } from '@/components/OrangeLogo'
 import {
   DropdownMenu,
@@ -11,30 +14,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useSidebar } from '@/components/ui/sidebar'
-import { Input } from '@/components/ui/input'
 import { FramedIcon } from '@/components/ui/FramedIcon'
 import { FramedIdentity } from '@/components/ui/FramedIdentity'
+import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { useSession } from '@/context/SessionContext'
-import {
-  IconSearch,
-  IconBell,
-  IconSettings,
-  IconUser,
-  IconLogout,
-  IconMoon,
-  IconSun,
-  IconMenu2,
-} from '@tabler/icons-react'
+import { QuickJump } from './QuickJump'
 
 interface HeaderProps {
   onMenuToggle?: () => void
 }
 
-const brutalInputClass = "h-11 border-2 border-black bg-white text-black placeholder:text-gray-500 placeholder:font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus-visible:ring-0 focus-visible:translate-x-[2px] focus-visible:translate-y-[2px] focus-visible:shadow-none transition-all rounded-none text-sm font-bold"
-
 export function Header({ onMenuToggle }: HeaderProps) {
-  const [isDark, setIsDark] = React.useState(false)
-  const [isSearchFocused, setIsSearchFocused] = React.useState(false)
   const { toggleSidebar } = useSidebar()
   const { user, loading: sessionLoading, logout } = useSession()
 
@@ -44,69 +34,30 @@ export function Header({ onMenuToggle }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white border-b-4 border-black w-full py-2 sm:py-3">
-      <div className="container mx-auto px-3 sm:px-4 md:px-6 flex items-center justify-between gap-2 sm:gap-4 md:gap-6">
-        {/* Left: Sidebar Toggle + Logo */}
-        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-          <FramedIcon
-            icon={IconMenu2}
-            label="Toggle navigation"
-            onClick={handleNavigationToggle}
-            title="Toggle navigation"
-          />
-          <div className="hidden sm:block">
-            <OrangeLogo size="md" showText={true} />
-          </div>
-          <div className="block sm:hidden">
-            <OrangeLogo size="sm" showText={false} />
-          </div>
+    <header className="sticky top-0 z-30 flex h-[var(--header-height)] w-full items-center border-b border-border bg-background">
+      <div className="flex w-full items-center justify-between gap-2 px-3 sm:gap-4 sm:px-4">
+        <div className="flex flex-shrink-0 items-center gap-1 sm:gap-3">
+          <FramedIcon icon={IconMenu2} label="Toggle navigation" onClick={handleNavigationToggle} />
+          <Link
+            href="/dashboard"
+            aria-label="FairMind home"
+            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <OrangeLogo size="sm" showText />
+          </Link>
         </div>
 
-        {/* Center: Search */}
-        <div className="hidden lg:flex items-center flex-1 max-w-2xl mx-auto">
-          <div className="relative w-full group">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-              <IconSearch className="h-5 w-5 text-black" />
-            </div>
-            <Input
-              type="search"
-              placeholder="SEARCH..."
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setIsSearchFocused(false)}
-              style={isSearchFocused ? { outline: '2px solid #0F1412', outlineOffset: 2 } : undefined}
-              className={`${brutalInputClass} pl-10 w-full uppercase tracking-wider`}
-            />
-          </div>
-        </div>
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+          <QuickJump />
+          <ThemeToggle />
+          <Link
+            href="/monitoring?tab=alerts"
+            aria-label="Alerts"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <IconBell className="h-5 w-5" aria-hidden="true" />
+          </Link>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
-          {/* Mobile Search */}
-          <FramedIcon
-            icon={IconSearch}
-            label="Search"
-            className="hidden sm:inline-flex lg:hidden"
-            title="Search"
-          />
-
-          {/* Theme Toggle */}
-          <FramedIcon
-            icon={isDark ? IconSun : IconMoon}
-            label={isDark ? 'Use light theme' : 'Use dark theme'}
-            onClick={() => setIsDark(!isDark)}
-            aria-pressed={isDark}
-            className="hidden md:inline-flex"
-          />
-
-          {/* Notifications */}
-          <FramedIcon
-            icon={IconBell}
-            label="Notifications"
-            className="hidden sm:inline-flex"
-            title="Notifications"
-          />
-
-          {/* User Menu */}
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -116,36 +67,27 @@ export function Header({ onMenuToggle }: HeaderProps) {
                   label={`Open user menu for ${user.username}`}
                 />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none p-0 mt-2">
-                <div className="px-5 py-4 bg-orange border-b-2 border-black">
-                  <p className="text-base font-black text-black uppercase tracking-tight">{user.username}</p>
-                  <p className="text-xs text-black font-bold opacity-80">{user.email}</p>
-                </div>
-                <div className="p-2 space-y-1">
-                  <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
-                    <IconUser className="mr-3 h-5 w-5" />
-                    PROFILE
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="min-h-11 px-4 border-2 border-transparent focus:border-black focus:bg-gray-100 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none">
-                    <IconSettings className="mr-3 h-5 w-5" />
-                    SETTINGS
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-black h-0.5 my-2" />
-                  <DropdownMenuItem
-                    onSelect={() => void logout()}
-                    className="min-h-11 px-4 border-2 border-transparent text-red-600 focus:text-red-600 focus:border-black focus:bg-red-50 focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer font-bold text-sm rounded-none"
-                  >
-                    <IconLogout className="mr-3 h-5 w-5" />
-                    LOGOUT
-                  </DropdownMenuItem>
-                </div>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="space-y-0.5 font-normal">
+                  <span className="block truncate text-sm font-semibold">{user.username}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/settings">
+                    <IconSettings aria-hidden="true" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => void logout()} className="text-destructive-strong focus:text-destructive-strong">
+                  <IconLogout aria-hidden="true" />
+                  Sign out
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <span
-              aria-live="polite"
-              className="hidden text-xs font-bold text-[#59615D] sm:inline"
-            >
+            <span aria-live="polite" className="hidden text-xs text-muted-foreground sm:inline">
               {sessionLoading ? 'Loading session' : 'Session unavailable'}
             </span>
           )}

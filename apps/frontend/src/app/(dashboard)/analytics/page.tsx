@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { useModels } from '@/lib/api/hooks/useModels';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import { IconBrain } from '@tabler/icons-react';
 
 export default function AnalyticsPage() {
@@ -19,6 +19,7 @@ export default function AnalyticsPage() {
   const [heatmap, setHeatmap] = useState<any>(null);
   const [selectedModel, setSelectedModel] = useState<string>('');
 
+  const { toast } = useToast();
   const { data: models, loading: modelsLoading } = useModels();
 
   // Set default model when models are loaded
@@ -55,7 +56,7 @@ export default function AnalyticsPage() {
 
       } catch (error) {
         console.error("Failed to fetch analytics:", error);
-        toast.error("Failed to load analytics data");
+        toast({ title: 'Failed to load analytics data', variant: 'destructive' });
       } finally {
         setLoading(false);
       }

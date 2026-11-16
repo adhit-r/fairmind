@@ -24,7 +24,7 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
   const { runId } = use(params)
   const { selectedOrg, isLoading: orgLoading } = useOrg()
   const { selectedSystem, loading: systemLoading } = useSystemContext()
-  const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
+  const realSystem = selectedSystem.id ? selectedSystem : undefined
   const workbench = useEvaluationWorkbenchV2(
     ASSURANCE_V2_UI_ENABLED ? selectedOrg?.id : undefined,
     ASSURANCE_V2_UI_ENABLED ? realSystem?.workspaceId : undefined,

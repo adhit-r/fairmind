@@ -9,6 +9,11 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { IconAlertTriangle } from "@tabler/icons-react";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthentik } from "@/lib/api/hooks/useAuthentik";
 
 export default function AuthCallbackPage() {
@@ -24,7 +29,6 @@ function AuthCallbackContent() {
   const searchParams = useSearchParams();
   const { handleCallback } = useAuthentik();
 
-  const [isProcessing, setIsProcessing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,7 +47,6 @@ function AuthCallbackContent() {
           }`;
           console.error(errorMessage);
           setError(errorMessage);
-          setIsProcessing(false);
           return;
         }
 
@@ -55,7 +58,6 @@ function AuthCallbackContent() {
           const errorMessage = `Missing required OAuth2 parameters: ${missingParams.join(", ")}`;
           console.error(errorMessage);
           setError(errorMessage);
-          setIsProcessing(false);
           return;
         }
 
@@ -67,82 +69,37 @@ function AuthCallbackContent() {
           err instanceof Error ? err.message : "Unknown error occurred";
         console.error("OAuth2 callback error:", err);
         setError(errorMessage);
-        setIsProcessing(false);
       }
     };
 
     processCallback();
   }, [searchParams, handleCallback]);
 
-  // Show error state
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
-          <h1 className="mb-4 text-2xl font-bold text-black">
-            Authentication Error
-          </h1>
-          <p className="mb-6 text-gray-700">{error}</p>
-          <button
-            onClick={() => router.push("/auth/login")}
-            className="w-full rounded-lg bg-black px-4 py-2 font-bold text-white transition-all hover:shadow-brutal-lg"
-          >
-            Back to Login
-          </button>
-        </div>
-      </div>
+      <AuthShell title="Sign-in could not be completed">
+        <Alert variant="destructive" className="mb-5">
+          <IconAlertTriangle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <Button className="w-full" onClick={() => router.push("/login")}>
+          Back to sign in
+        </Button>
+      </AuthShell>
     );
   }
 
-  // Show loading state while processing
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
-        <h1 className="mb-4 text-2xl font-bold text-black">
-          Completing Authentication
-        </h1>
-        <p className="mb-6 text-gray-700">
-          Please wait while we process your authentication...
-        </p>
-
-        {/* Loading spinner */}
-        <div className="flex justify-center">
-          <div
-            className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black"
-            role="status"
-            aria-label="Loading"
-          />
-        </div>
-
-        {isProcessing && (
-          <p className="mt-4 text-center text-sm text-gray-600">
-            Redirecting to dashboard...
-          </p>
-        )}
-      </div>
-    </div>
-  );
+  return <AuthCallbackLoading />;
 }
 
 function AuthCallbackLoading() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md rounded-lg border-4 border-black bg-white p-8 shadow-brutal-lg">
-        <h1 className="mb-4 text-2xl font-bold text-black">
-          Completing Authentication
-        </h1>
-        <p className="mb-6 text-gray-700">
-          Please wait while we process your authentication...
-        </p>
-
-        <div className="flex justify-center">
-          <div
-            className="h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-black"
-            role="status"
-            aria-label="Loading"
-          />
-        </div>
+    <AuthShell title="Completing sign-in" description="Please wait while we verify your account.">
+      <div role="status" aria-live="polite" className="space-y-3">
+        <span className="sr-only">Completing sign-in</span>
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
       </div>
-    </div>
+    </AuthShell>
   );
 }

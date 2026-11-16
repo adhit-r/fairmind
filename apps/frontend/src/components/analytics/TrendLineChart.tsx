@@ -2,6 +2,7 @@
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
+import { CHART_TONES, chartTheme, seriesColor } from '@/lib/chart-theme';
 
 interface TrendLineChartProps {
     data: any[];
@@ -9,30 +10,29 @@ interface TrendLineChartProps {
 
 export function TrendLineChart({ data }: TrendLineChartProps) {
     return (
-        <Card className="p-6 h-[400px] border-2 border-black shadow-brutal">
-            <h3 className="text-lg font-bold mb-4">Bias Score Trend (30 Days)</h3>
+        <Card className="h-[400px] p-4 sm:p-5">
+            <h3 className="mb-4 text-base font-semibold">Bias Score Trend (30 Days)</h3>
             <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis domain={[0, 1]} />
-                    <Tooltip
-                        contentStyle={{ border: '2px solid black', borderRadius: '0px' }}
-                    />
-                    <Legend />
+                    <CartesianGrid {...chartTheme.gridProps} />
+                    <XAxis dataKey="date" {...chartTheme.axisProps} />
+                    <YAxis domain={[0, 1]} {...chartTheme.axisProps} />
+                    <Tooltip {...chartTheme.tooltipProps} />
+                    <Legend {...chartTheme.legendProps} />
                     <Line
                         type="monotone"
                         dataKey="bias_score"
-                        stroke="#000000"
-                        strokeWidth={3}
-                        activeDot={{ r: 8 }}
+                        stroke={seriesColor(0)}
+                        strokeWidth={2}
+                        activeDot={{ r: 5 }}
                         name="Bias Score"
                     />
                     <Line
                         type="monotone"
                         dataKey="fairness_threshold"
-                        stroke="#ff0000"
+                        stroke={CHART_TONES.critical}
                         strokeDasharray="5 5"
+                        dot={false}
                         name="Threshold"
                     />
                 </LineChart>

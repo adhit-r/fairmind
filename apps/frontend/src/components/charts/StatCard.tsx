@@ -7,6 +7,7 @@ interface StatCardProps {
   title: string
   value: string | number
   icon?: React.ReactNode
+  /** Only pass a trend when it is computed from real data. */
   trend?: {
     value: number
     label: string
@@ -15,24 +16,27 @@ interface StatCardProps {
   className?: string
 }
 
+/** Legacy metric card. New pages should prefer StatTile from @/components/patterns. */
 export function StatCard({ title, value, icon, trend, className }: StatCardProps) {
   return (
-    <Card className={cn('p-6 border-2 border-black shadow-brutal hover:shadow-brutal-lg transition-all', className)}>
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-          <p className="text-3xl font-bold">{value}</p>
+    <Card className={cn('p-4 sm:p-5', className)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-xs font-medium text-muted-foreground">{title}</p>
+          <p className="text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
           {trend && (
-            <p className={cn(
-              'text-xs mt-2 font-medium',
-              trend.isPositive ? 'text-green-600' : 'text-red-600'
-            )}>
+            <p
+              className={cn(
+                'mt-2 text-xs font-medium',
+                trend.isPositive ? 'text-success-strong' : 'text-destructive-strong'
+              )}
+            >
               {trend.isPositive ? '+' : ''}{trend.value}% {trend.label}
             </p>
           )}
         </div>
         {icon && (
-          <div className="p-2 border-2 border-black bg-orange shadow-brutal">
+          <div className="rounded-md bg-muted p-2 text-muted-foreground" aria-hidden="true">
             {icon}
           </div>
         )}
@@ -40,4 +44,3 @@ export function StatCard({ title, value, icon, trend, className }: StatCardProps
     </Card>
   )
 }
-

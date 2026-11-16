@@ -3,7 +3,8 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { SessionProvider } from "@/context/SessionContext";
+import { OrgProvider } from "@/context/OrgContext";
+import { SessionProvider, useSession } from "@/context/SessionContext";
 import { Header } from "./Header";
 import { AppSidebar } from "./Sidebar";
 
@@ -11,28 +12,11 @@ interface ClientNavigationProps {
   children: React.ReactNode;
 }
 
-function MainContent({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      {/* Full width header at top - fixed position across entire viewport */}
-      <div className="fixed top-0 left-0 right-0 z-30 w-full">
-        <Header onMenuToggle={() => { }} />
-      </div>
-
-      {/* Main content with sidebar offset */}
-      <div
-        className="flex flex-col flex-1 min-w-0 transition-[margin-left] duration-200 ease-linear"
-        style={{
-          marginTop: "68px", // Header height (64px h-16 + 4px border-bottom)
-          paddingTop: 0,
-        }}
-      >
-        <main className="flex-1 min-h-0 w-full overflow-auto bg-[#F3F5F0] px-3 pb-6 pt-3 sm:px-6">
-          {children}
-        </main>
-      </div>
-    </>
-  );
+/** Organization data is only fetched once a session exists. */
+function AuthenticatedProviders({ children }: { children: React.ReactNode }) {
+  const { status } = useSession();
+  if (status !== "authenticated") return <>{children}</>;
+  return <OrgProvider>{children}</OrgProvider>;
 }
 
 export function ClientNavigation({ children }: ClientNavigationProps) {
@@ -45,23 +29,34 @@ export function ClientNavigation({ children }: ClientNavigationProps) {
     pathname?.startsWith("/invitations/") ||
     isLegacyTestRoute;
 
-
-  // Keep only the singular legacy /test route shell-less. /tests is product navigation.
+  // Auth screens render without the product shell. (/test, the singular legacy route, is shell-less too.)
   if (isAuthRoute) {
     return <>{children}</>;
   }
 
   return (
     <SessionProvider>
-      <SidebarProvider>
-        <div className="relative flex min-h-screen w-full overflow-x-clip">
-          {/* Sidebar - fixed position, full height from top */}
-          <AppSidebar />
-
-          {/* Main content area - accounts for sidebar width dynamically */}
-          <MainContent>{children}</MainContent>
-        </div>
-      </SidebarProvider>
+      <AuthenticatedProviders>
+        <SidebarProvider className="flex-col">
+          <a
+            href="#main-content"
+            className="sr-only z-50 rounded-md bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+          >
+            Skip to main content
+          </a>
+          <Header />
+          <div className="flex min-h-0 w-full min-w-0 flex-1">
+            <AppSidebar />
+            <main
+              id="main-content"
+              tabIndex={-1}
+              className="min-w-0 flex-1 bg-background px-4 pb-10 pt-5 outline-none sm:px-6 lg:px-8"
+            >
+              <div className="mx-auto w-full max-w-[1400px]">{children}</div>
+            </main>
+          </div>
+        </SidebarProvider>
+      </AuthenticatedProviders>
     </SessionProvider>
   );
 }

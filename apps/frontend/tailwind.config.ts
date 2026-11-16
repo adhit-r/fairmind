@@ -1,5 +1,20 @@
 import type { Config } from "tailwindcss"
 
+/**
+ * Colour tokens come from CSS variables in src/app/globals.css. The color-mix
+ * wrapper keeps Tailwind opacity modifiers (bg-primary/10) working with any
+ * colour format (hex or oklch) and in both light and dark mode.
+ */
+const token = (name: string) =>
+	`color-mix(in srgb, var(--${name}) calc(<alpha-value> * 100%), transparent)`
+
+const tone = (name: string) => ({
+	DEFAULT: token(name),
+	foreground: token(`${name}-foreground`),
+	subtle: token(`${name}-subtle`),
+	strong: token(`${name}-strong`),
+})
+
 const config: Config = {
 	darkMode: ["class"],
 	content: [
@@ -10,73 +25,92 @@ const config: Config = {
 	theme: {
 		extend: {
 			colors: {
-				border: 'var(--border)',
-				input: 'var(--input)',
-				ring: 'var(--ring)',
-				background: 'var(--background)',
-				foreground: 'var(--foreground)',
+				border: token('border'),
+				input: token('input'),
+				ring: token('ring'),
+				background: token('background'),
+				foreground: token('foreground'),
 				primary: {
-					DEFAULT: 'var(--primary)',
-					foreground: 'var(--primary-foreground)'
+					DEFAULT: token('primary'),
+					foreground: token('primary-foreground'),
+					strong: token('primary-strong'),
+					subtle: token('primary-subtle'),
 				},
 				secondary: {
-					DEFAULT: 'var(--secondary)',
-					foreground: 'var(--secondary-foreground)'
+					DEFAULT: token('secondary'),
+					foreground: token('secondary-foreground'),
 				},
-				destructive: {
-					DEFAULT: 'var(--destructive)',
-					foreground: 'var(--destructive-foreground)'
-				},
+				destructive: tone('destructive'),
+				success: tone('success'),
+				warning: tone('warning'),
+				info: tone('info'),
+				attention: tone('attention'),
 				muted: {
-					DEFAULT: 'var(--muted)',
-					foreground: 'var(--muted-foreground)'
+					DEFAULT: token('muted'),
+					foreground: token('muted-foreground'),
 				},
 				accent: {
-					DEFAULT: 'var(--accent)',
-					foreground: 'var(--accent-foreground)'
+					DEFAULT: token('accent'),
+					foreground: token('accent-foreground'),
+				},
+				'accent-action': {
+					DEFAULT: token('accent-action'),
+					foreground: token('accent-action-foreground'),
 				},
 				popover: {
-					DEFAULT: 'var(--popover)',
-					foreground: 'var(--popover-foreground)'
+					DEFAULT: token('popover'),
+					foreground: token('popover-foreground'),
 				},
 				card: {
-					DEFAULT: 'var(--card)',
-					foreground: 'var(--card-foreground)'
+					DEFAULT: token('card'),
+					foreground: token('card-foreground'),
 				},
-				main: 'var(--main)',
-				'main-foreground': 'var(--main-foreground)',
-				'secondary-background': 'var(--secondary-background)',
-				orange: {
-					DEFAULT: '#FF6B35',
-					dark: '#E55A2B'
-				},
-				black: {
-					DEFAULT: '#000000'
+				chart: {
+					1: token('chart-1'),
+					2: token('chart-2'),
+					3: token('chart-3'),
+					4: token('chart-4'),
+					5: token('chart-5'),
+					6: token('chart-6'),
 				},
 				sidebar: {
-					DEFAULT: 'var(--sidebar-background)',
-					foreground: 'var(--sidebar-foreground)',
-					primary: 'var(--sidebar-primary)',
-					'primary-foreground': 'var(--sidebar-primary-foreground)',
-					accent: 'var(--sidebar-accent)',
-					'accent-foreground': 'var(--sidebar-accent-foreground)',
-					border: 'var(--sidebar-border)',
-					ring: 'var(--sidebar-ring)'
-				}
+					DEFAULT: token('sidebar-background'),
+					foreground: token('sidebar-foreground'),
+					primary: token('sidebar-primary'),
+					'primary-foreground': token('sidebar-primary-foreground'),
+					accent: token('sidebar-accent'),
+					'accent-foreground': token('sidebar-accent-foreground'),
+					border: token('sidebar-border'),
+					ring: token('sidebar-ring'),
+				},
+				/* legacy - remove after migration */
+				main: token('main'),
+				'main-foreground': token('main-foreground'),
+				'secondary-background': token('secondary-background'),
+				orange: {
+					DEFAULT: token('accent-action'),
+					dark: token('attention-strong'),
+				},
+				black: {
+					DEFAULT: token('foreground'),
+				},
 			},
 			borderRadius: {
-				lg: 'var(--radius)',
-				md: 'calc(var(--radius) - 2px)',
-				sm: 'calc(var(--radius) - 4px)'
+				lg: 'calc(var(--radius) + 2px)',
+				md: 'var(--radius)',
+				sm: 'calc(var(--radius) - 2px)',
+				/* legacy - remove after migration */
+				base: 'var(--radius)',
 			},
 			fontFamily: {
-				sans: ['var(--font-raleway)', 'sans-serif'],
+				sans: ['var(--font-raleway)', 'system-ui', 'sans-serif'],
 			},
 			boxShadow: {
-				brutal: 'var(--shadow)',
-				shadow: 'var(--shadow)',
-				'brutal-lg': '8px 8px 0px 0px #000',
-				'brutal-xl': '12px 12px 0px 0px #000'
+				/* legacy - remove after migration: hard offset shadows are gone */
+				brutal: 'none',
+				shadow: 'none',
+				'brutal-lg': 'none',
+				'brutal-xl': 'none',
 			},
 			keyframes: {
 				'accordion-down': {
@@ -106,4 +140,3 @@ const config: Config = {
 }
 
 export default config
-

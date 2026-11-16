@@ -1,27 +1,36 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { OrangeLogo } from '@/components/OrangeLogo'
-import { Card } from '@/components/ui/card'
+import Link from 'next/link'
+import { AuthShell } from '@/components/auth/AuthShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useToast } from '@/hooks/use-toast'
+import { Textarea } from '@/components/ui/textarea'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { apiClient } from '@/lib/api/api-client'
-import { IconCheck } from '@tabler/icons-react'
+import { cn } from '@/lib/utils'
+import { IconAlertTriangle, IconCircleCheck } from '@tabler/icons-react'
 
 const ROLES = [
-  { value: 'analyst', label: 'Analyst', description: 'Run bias evaluations and generate reports' },
-  { value: 'viewer', label: 'Viewer', description: 'Read-only access to models and reports' },
+  { value: 'analyst', label: 'Analyst', description: 'Run evaluations and generate reports' },
+  { value: 'viewer', label: 'Viewer', description: 'Read-only access to systems and reports' },
 ]
 
+type FormState = {
+  name: string
+  email: string
+  org_name: string
+  org_domain: string
+  requested_role: string
+  message: string
+}
+
 export default function RegisterPage() {
-  const router = useRouter()
-  const { toast } = useToast()
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
     org_name: '',
@@ -30,20 +39,17 @@ export default function RegisterPage() {
     message: '',
   })
 
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+  const set = (key: keyof FormState, value: string) => setForm((current) => ({ ...current, [key]: value }))
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setLoading(true)
+    setSubmitError(null)
     try {
       await apiClient.post('/api/v1/register', form)
       setSubmitted(true)
     } catch (err: any) {
-      toast({
-        title: 'Request failed',
-        description: err?.message || 'Please try again.',
-        variant: 'destructive',
-      })
+      setSubmitError(err?.message || 'The request could not be submitted. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -51,109 +57,104 @@ export default function RegisterPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md p-8 border-4 border-black shadow-brutal-lg text-center">
-          <div className="flex justify-center mb-4">
-            <div className="h-16 w-16 rounded-full border-4 border-black bg-black flex items-center justify-center">
-              <IconCheck className="h-8 w-8 text-white" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold mb-2">Request Submitted</h1>
-          <p className="text-muted-foreground mb-6">
-            Your access request has been sent for admin review. You'll receive an email once it's approved.
+      <AuthShell title="Request submitted">
+        <div role="status" className="flex flex-col items-center text-center">
+          <IconCircleCheck className="mb-3 h-10 w-10 text-success-strong" aria-hidden="true" />
+          <p className="mb-6 text-sm text-muted-foreground">
+            Your access request has been sent for administrator review. You will receive an email once it is approved.
           </p>
-          <Button variant="neutral" className="border-2 border-black font-bold" onClick={() => router.push('/auth/login')}>
-            Back to Login
+          <Button asChild variant="outline">
+            <Link href="/login">Back to sign in</Link>
           </Button>
-        </Card>
-      </div>
+        </div>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-lg p-8 border-2 border-black shadow-brutal-lg">
-        <div className="flex flex-col items-center mb-8">
-          <OrangeLogo size="lg" />
-          <h1 className="text-3xl font-bold mt-4">Request Access</h1>
-          <p className="text-muted-foreground mt-2 text-center">
-            Fill in your details and an admin will review your request
-          </p>
+    <AuthShell
+      wide
+      title="Request access"
+      description="Tell us who you are and an administrator will review your request."
+      footer={
+        <>
+          Already have access?{' '}
+          <Link href="/login" className="font-medium text-primary-strong underline underline-offset-4">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      {submitError && (
+        <Alert variant="destructive" className="mb-5">
+          <IconAlertTriangle aria-hidden="true" />
+          <AlertDescription>{submitError}</AlertDescription>
+        </Alert>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="reg-name">Full name</Label>
+            <Input id="reg-name" required autoComplete="name" placeholder="Jane Smith" value={form.name} onChange={(e) => set('name', e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="reg-email">Work email</Label>
+            <Input id="reg-email" required type="email" autoComplete="email" placeholder="jane@company.com" value={form.email} onChange={(e) => set('email', e.target.value)} />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input required placeholder="Jane Smith" value={form.name}
-                onChange={e => set('name', e.target.value)} className="border-2 border-black" />
-            </div>
-            <div className="space-y-2">
-              <Label>Work Email</Label>
-              <Input required type="email" placeholder="jane@acme.com" value={form.email}
-                onChange={e => set('email', e.target.value)} className="border-2 border-black" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Organisation Name</Label>
-              <Input required placeholder="Acme Corp" value={form.org_name}
-                onChange={e => set('org_name', e.target.value)} className="border-2 border-black" />
-            </div>
-            <div className="space-y-2">
-              <Label>Organisation Domain <span className="text-muted-foreground text-xs">(optional)</span></Label>
-              <Input placeholder="acme.com" value={form.org_domain}
-                onChange={e => set('org_domain', e.target.value)} className="border-2 border-black" />
-            </div>
-          </div>
-
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label>Requested Role</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {ROLES.map(r => (
+            <Label htmlFor="reg-org">Organization name</Label>
+            <Input id="reg-org" required autoComplete="organization" placeholder="Company name" value={form.org_name} onChange={(e) => set('org_name', e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="reg-domain">Organization domain <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+            <Input id="reg-domain" placeholder="company.com" value={form.org_domain} onChange={(e) => set('org_domain', e.target.value)} />
+          </div>
+        </div>
+
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Requested role</legend>
+          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Requested role">
+            {ROLES.map((role) => {
+              const selected = form.requested_role === role.value
+              return (
                 <button
-                  key={r.value}
+                  key={role.value}
                   type="button"
-                  onClick={() => set('requested_role', r.value)}
-                  className={`p-3 border-2 text-left transition-all ${
-                    form.requested_role === r.value
-                      ? 'border-black bg-black text-white shadow-brutal'
-                      : 'border-black bg-white hover:shadow-brutal'
-                  }`}
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => set('requested_role', role.value)}
+                  className={cn(
+                    'min-h-11 rounded-md border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                    selected ? 'border-primary bg-primary-subtle' : 'border-input bg-card hover:bg-accent',
+                  )}
                 >
-                  <div className="font-bold text-sm">{r.label}</div>
-                  <div className={`text-xs mt-1 ${form.requested_role === r.value ? 'text-gray-300' : 'text-muted-foreground'}`}>
-                    {r.description}
-                  </div>
+                  <span className="block text-sm font-semibold">{role.label}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{role.description}</span>
                 </button>
-              ))}
-            </div>
+              )
+            })}
           </div>
+        </fieldset>
 
-          <div className="space-y-2">
-            <Label>Message to Admin <span className="text-muted-foreground text-xs">(optional)</span></Label>
-            <textarea
-              placeholder="Briefly describe your use case..."
-              value={form.message}
-              onChange={e => set('message', e.target.value)}
-              rows={3}
-              className="w-full border-2 border-black px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-black"
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Submitting...' : 'Submit Access Request'}
-          </Button>
-        </form>
-
-        <div className="mt-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            Already have access?{' '}
-            <a href="/auth/login" className="font-bold underline">Sign in</a>
-          </p>
+        <div className="space-y-2">
+          <Label htmlFor="reg-message">Message to administrator <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+          <Textarea
+            id="reg-message"
+            placeholder="Briefly describe how you will use FairMind"
+            value={form.message}
+            onChange={(e) => set('message', e.target.value)}
+            rows={3}
+          />
         </div>
-      </Card>
-    </div>
+
+        <Button type="submit" variant="action" className="w-full" disabled={loading} aria-busy={loading}>
+          {loading ? 'Submitting...' : 'Submit access request'}
+        </Button>
+      </form>
+    </AuthShell>
   )
 }

@@ -142,3 +142,11 @@ export function useOrg(): OrgContextType {
 
   return context;
 }
+
+/**
+ * Like useOrg, but returns undefined instead of throwing when no OrgProvider is
+ * mounted (e.g. auth routes). Useful for shell chrome that must not crash.
+ */
+export function useOptionalOrg(): OrgContextType | undefined {
+  return useContext(OrgContext);
+}

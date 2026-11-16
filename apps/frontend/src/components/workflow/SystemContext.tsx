@@ -1,16 +1,6 @@
 "use client"
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { IconBuildingSkyscraper, IconPlus, IconRouteAltLeft, IconShieldCheck } from "@tabler/icons-react"
 
 import { apiClient, type ApiResponse } from "@/lib/api/api-client"
 import { API_ENDPOINTS } from "@/lib/api/endpoints"
@@ -110,21 +100,37 @@ interface SelectedSystemStatus {
   activeRemediation: number
 }
 
-const FALLBACK_SYSTEMS: AISystemSummary[] = [
-  {
-    id: "acme-pricing-lab",
-    name: "Acme Pricing Lab",
-    owner: "ml-platform@acme.ai",
-    riskTier: "medium",
-    readiness: 18,
-    stage: "onboard",
-    workspaceId: "fallback-workspace",
-    metadata: { source: "fallback" },
-  },
-]
+/**
+ * Placeholder returned by the legacy `selectedSystem` field when no real AI
+ * system is available (not loaded yet, load failed, or the org has none).
+ * It carries an empty id so callers can detect it. It is NOT a real system and
+ * must never be rendered as scope. New code should use `activeSystem`
+ * (null when there is no real system) instead.
+ */
+export const NO_SYSTEM: AISystemSummary = {
+  id: "",
+  name: "No AI system selected",
+  owner: "",
+  riskTier: "low",
+  readiness: 0,
+  stage: "onboard",
+  metadata: { source: "none" },
+}
+
+export function isRealSystem(system: AISystemSummary | null | undefined): system is AISystemSummary {
+  return Boolean(system && system.id)
+}
 
 type SystemContextValue = {
   systems: AISystemSummary[]
+  /** The selected real AI system, or null when none is available. */
+  activeSystem: AISystemSummary | null
+  /** Why systems could not be loaded (null when the load succeeded). */
+  systemsError: string | null
+  /**
+   * Legacy: always defined. Equals NO_SYSTEM (empty id) when there is no real
+   * system. Prefer `activeSystem`.
+   */
   selectedSystem: AISystemSummary
   selectedSystemStatus: SelectedSystemStatus
   setSelectedSystemId: (systemId: string) => void
@@ -159,7 +165,7 @@ export function chooseSelectedSystemId(
 ) {
   if (storedId && systemIds.includes(storedId)) return storedId
   if (systemIds.includes(currentId)) return currentId
-  return systemIds[0]
+  return systemIds[0] ?? ""
 }
 
 function estimateReadiness(stage: AISystemSummary["stage"]) {
@@ -302,18 +308,20 @@ function normalizeSystem(record: AISystemRecord): AISystemSummary {
 }
 
 export function SystemContextProvider({ children }: { children: React.ReactNode }) {
-  const [systems, setSystems] = useState<AISystemSummary[]>(FALLBACK_SYSTEMS)
-  const [selectedSystemId, setSelectedSystemId] = useState<string>(FALLBACK_SYSTEMS[0].id)
+  const [systems, setSystems] = useState<AISystemSummary[]>([])
+  const [selectedSystemId, setSelectedSystemId] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [systemsError, setSystemsError] = useState<string | null>(null)
   const [selectedSystemStatus, setSelectedSystemStatus] = useState<SelectedSystemStatus>(
-    emptyDerivedStatus(FALLBACK_SYSTEMS[0])
+    emptyDerivedStatus(NO_SYSTEM)
   )
 
   const refreshSystems = async () => {
     setLoading(true)
     try {
       const response: ApiResponse<AISystemRecord[]> = await apiClient.get(API_ENDPOINTS.aiGovernance.systems)
-      if (response.success && response.data && response.data.length > 0) {
+      if (response.success && Array.isArray(response.data)) {
+        setSystemsError(null)
         const nextSystems = response.data.map(normalizeSystem)
         setSystems(nextSystems)
         setSelectedSystemId((currentId) => {
@@ -324,12 +332,14 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
           )
         })
       } else {
-        setSystems(FALLBACK_SYSTEMS)
-        setSelectedSystemId(getStoredSystemId() || FALLBACK_SYSTEMS[0].id)
+        setSystems([])
+        setSelectedSystemId("")
+        setSystemsError(response.error || "AI systems could not be loaded.")
       }
-    } catch {
-      setSystems(FALLBACK_SYSTEMS)
-      setSelectedSystemId(getStoredSystemId() || FALLBACK_SYSTEMS[0].id)
+    } catch (error) {
+      setSystems([])
+      setSelectedSystemId("")
+      setSystemsError(error instanceof Error ? error.message : "AI systems could not be loaded.")
     } finally {
       setLoading(false)
     }
@@ -396,17 +406,18 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
       const next = [nextSystem, ...current.filter((item) => item.id !== nextSystem.id)]
       return next
     })
+    setSystemsError(null)
     setAndPersist(nextSystem.id)
     return nextSystem
   }
 
   const selectedSystem = useMemo(() => {
-    return systems.find((system) => system.id === selectedSystemId) || systems[0] || FALLBACK_SYSTEMS[0]
+    return systems.find((system) => system.id === selectedSystemId) || systems[0] || NO_SYSTEM
   }, [selectedSystemId, systems])
 
   useEffect(() => {
-    if (!selectedSystem || selectedSystem.metadata?.source === "fallback") {
-      setSelectedSystemStatus(emptyDerivedStatus(selectedSystem || FALLBACK_SYSTEMS[0]))
+    if (!isRealSystem(selectedSystem)) {
+      setSelectedSystemStatus(emptyDerivedStatus(NO_SYSTEM))
       return
     }
 
@@ -435,6 +446,8 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     <SystemContext.Provider
       value={{
         systems,
+        activeSystem: isRealSystem(selectedSystem) ? selectedSystemWithStatus : null,
+        systemsError,
         selectedSystem: selectedSystemWithStatus,
         selectedSystemStatus,
         setSelectedSystemId: setAndPersist,
@@ -454,89 +467,4 @@ export function useSystemContext() {
     throw new Error("useSystemContext must be used within SystemContextProvider")
   }
   return context
-}
-
-function riskTierClassName(riskTier: AISystemSummary["riskTier"]) {
-  if (riskTier === "critical" || riskTier === "high") return "bg-red-100 text-red-800 border-red-500"
-  if (riskTier === "medium") return "bg-amber-100 text-amber-800 border-amber-500"
-  return "bg-emerald-100 text-emerald-800 border-emerald-500"
-}
-
-export function SystemContextBar() {
-  const { systems, selectedSystem, selectedSystemStatus, setSelectedSystemId, loading } = useSystemContext()
-
-  if (selectedSystem.metadata?.source === "fallback") {
-    return null
-  }
-
-  const realSystems = systems.filter((system) => system.metadata?.source !== "fallback")
-
-  return (
-    <section aria-label="Selected AI system context" className="mb-6 border-4 border-[#0F1412] bg-[#FCFDF8] p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="border-2 border-black bg-black p-3 text-white shadow-[4px_4px_0px_0px_#FF6B35]">
-            <IconBuildingSkyscraper className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
-              Current AI System
-            </p>
-            <h2 className="text-xl font-black uppercase">{selectedSystem.name}</h2>
-            <p className="text-sm text-muted-foreground">{selectedSystem.owner}</p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-4 lg:min-w-[720px]">
-          <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">System Scope</p>
-            {realSystems.length > 0 ? (
-              <Select onValueChange={setSelectedSystemId} value={selectedSystem.id}>
-                <SelectTrigger aria-label="System scope" className="border-2 border-black bg-white font-bold">
-                  <SelectValue placeholder={loading ? "Loading systems..." : "Select system"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {realSystems.map((system) => (
-                    <SelectItem key={system.id} value={system.id}>
-                      {system.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Button asChild variant="neutral" className="w-full border-2 border-black font-bold">
-                <a href="/onboard">
-                  <IconPlus className="mr-2 h-4 w-4" />
-                  Create system
-                </a>
-              </Button>
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Risk Tier</p>
-            <Badge className={`border-2 px-3 py-2 font-black uppercase ${riskTierClassName(selectedSystem.riskTier)}`}>
-              <IconShieldCheck className="mr-2 h-4 w-4" />
-              {selectedSystem.riskTier}
-            </Badge>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Readiness</p>
-            <div className="border-2 border-black bg-white px-3 py-2 font-black">
-              {selectedSystemStatus.readiness}%
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-bold uppercase text-muted-foreground">Lifecycle Stage</p>
-            <Badge className="border-2 border-black bg-black px-3 py-2 font-black uppercase text-white">
-              <IconRouteAltLeft className="mr-2 h-4 w-4 text-orange" />
-              {selectedSystemStatus.stage}
-            </Badge>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
 }

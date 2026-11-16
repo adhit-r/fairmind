@@ -2,79 +2,181 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * FairMind "Calm Assurance Workbench" design tokens.
+ * See /DESIGN.md. Never hardcode hex colours in components; use the semantic
+ * Tailwind classes backed by these variables (bg-background, bg-card, bg-muted,
+ * text-foreground, text-muted-foreground, border-border, bg-primary,
+ * bg-accent-action, bg-success-subtle text-success-strong, ...).
+ */
 @layer base {
   :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.147 0.004 49.25);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.147 0.004 49.25);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.147 0.004 49.25);
-    --primary: oklch(0.60 0.13 163);
-    --primary-foreground: oklch(0.98 0.02 166);
-    --secondary: oklch(0.967 0.001 286.375);
-    --secondary-foreground: oklch(0.21 0.006 285.885);
-    --muted: oklch(0.97 0.001 106.424);
-    --muted-foreground: oklch(0.553 0.013 58.071);
-    --accent: oklch(0.60 0.13 163);
-    --accent-foreground: oklch(0.98 0.02 166);
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.577 0.245 27.325);
-    --border: oklch(0.923 0.003 48.717);
-    --input: oklch(0.923 0.003 48.717);
-    --ring: oklch(0.709 0.01 56.259);
-    --radius: 0;
+    color-scheme: light;
 
-    --sidebar-background: oklch(0.985 0.001 106.423);
-    --sidebar-foreground: oklch(0.147 0.004 49.25);
-    --sidebar-primary: oklch(0.60 0.13 163);
-    --sidebar-primary-foreground: oklch(0.98 0.02 166);
-    --sidebar-accent: oklch(0.60 0.13 163);
-    --sidebar-accent-foreground: oklch(0.98 0.02 166);
-    --sidebar-border: oklch(0.923 0.003 48.717);
-    --sidebar-ring: oklch(0.709 0.01 56.259);
-    
-    /* Neobrutalism variables */
-    --main: #FF6B35;
-    --main-foreground: #000000;
-    --secondary-background: #FFFFFF;
-    /* Redefine border for neobrutalism if used there, but keeping var(--border) standard for shadcn components */
-    --shadow: 6px 6px 0px 0px #000;
-    --boxShadowX: 6px;
-    --boxShadowY: 6px;
-    --reverseBoxShadowX: -6px;
-    --reverseBoxShadowY: -6px;
+    /* Surfaces */
+    --background: #fcfdf8; /* Warm Canvas */
+    --foreground: #0f1412; /* Deep Ink */
+    --card: #ffffff;
+    --card-foreground: #0f1412;
+    --popover: #ffffff;
+    --popover-foreground: #0f1412;
+    --muted: #f3f5f0; /* Quiet Surface */
+    --muted-foreground: #59615d;
+    --secondary: #ebeee6;
+    --secondary-foreground: #0f1412;
+    --accent: #eef1e9; /* hover surface */
+    --accent-foreground: #0f1412;
+
+    /* Lines and focus */
+    --border: #dde2d8;
+    --input: #8b948f;
+    --ring: oklch(0.52 0.12 163);
+
+    /* Brand: Assurance Teal. Use bg-primary for fills, text-primary-strong for text. */
+    --primary: oklch(0.6 0.13 163);
+    --primary-foreground: #0f1412;
+    --primary-strong: oklch(0.45 0.1 165);
+    --primary-subtle: oklch(0.95 0.03 165);
+
+    /* Action Orange: the single primary CTA per view and key attention markers. */
+    --accent-action: #ff6b35;
+    --accent-action-foreground: #0f1412;
+
+    /* Semantic status tones: solid / foreground / subtle background / strong text. */
+    --destructive: #d83a2e;
+    --destructive-foreground: #ffffff;
+    --destructive-subtle: #fce9e7;
+    --destructive-strong: #a52a20;
+
+    --success: #0b7659;
+    --success-foreground: #ffffff;
+    --success-subtle: #e2f3ec;
+    --success-strong: #0a5f49;
+
+    --warning: #b26a00;
+    --warning-foreground: #ffffff;
+    --warning-subtle: #fdf1dc;
+    --warning-strong: #7a4800;
+
+    --info: #2a6a9e;
+    --info-foreground: #ffffff;
+    --info-subtle: #e4eef6;
+    --info-strong: #1d4f78;
+
+    --attention: #ff6b35;
+    --attention-foreground: #0f1412;
+    --attention-subtle: #ffeee6;
+    --attention-strong: #9a3a10;
+
+    /* Charts (never use recharts defaults) */
+    --chart-1: oklch(0.55 0.12 163);
+    --chart-2: #e5622d;
+    --chart-3: #2a6a9e;
+    --chart-4: #b26a00;
+    --chart-5: #59615d;
+    --chart-6: oklch(0.6 0.12 125);
+    --chart-grid: #dde2d8;
+    --chart-axis: #59615d;
+
+    --radius: 6px;
+    --header-height: 3.5rem;
+
+    /* Sidebar */
+    --sidebar-background: #f7f9f3;
+    --sidebar-foreground: #0f1412;
+    --sidebar-primary: oklch(0.6 0.13 163);
+    --sidebar-primary-foreground: #0f1412;
+    --sidebar-accent: #e8ece1;
+    --sidebar-accent-foreground: #0f1412;
+    --sidebar-border: #dde2d8;
+    --sidebar-ring: oklch(0.52 0.12 163);
+
+    /* legacy - remove after migration */
+    --main: #ff6b35;
+    --main-foreground: #0f1412;
+    --secondary-background: #ffffff;
+    --shadow: none;
+    --boxShadowX: 0px;
+    --boxShadowY: 0px;
+    --reverseBoxShadowX: 0px;
+    --reverseBoxShadowY: 0px;
   }
 
   .dark {
-    --background: oklch(0.147 0.004 49.25);
-    --foreground: oklch(0.985 0.001 106.423);
-    --card: oklch(0.216 0.006 56.043);
-    --card-foreground: oklch(0.985 0.001 106.423);
-    --popover: oklch(0.216 0.006 56.043);
-    --popover-foreground: oklch(0.985 0.001 106.423);
-    --primary: oklch(0.70 0.15 162);
-    --primary-foreground: oklch(0.26 0.05 173);
-    --secondary: oklch(0.274 0.006 286.033);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.268 0.007 34.298);
-    --muted-foreground: oklch(0.709 0.01 56.259);
-    --accent: oklch(0.70 0.15 162);
-    --accent-foreground: oklch(0.26 0.05 173);
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.553 0.013 58.071);
+    color-scheme: dark;
 
-    --sidebar-background: oklch(0.216 0.006 56.043);
-    --sidebar-foreground: oklch(0.985 0.001 106.423);
-    --sidebar-primary: oklch(0.77 0.15 163);
-    --sidebar-primary-foreground: oklch(0.26 0.05 173);
-    --sidebar-accent: oklch(0.70 0.15 162);
-    --sidebar-accent-foreground: oklch(0.26 0.05 173);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.553 0.013 58.071);
+    --background: #0f1412;
+    --foreground: #f1f4ee;
+    --card: #161c19;
+    --card-foreground: #f1f4ee;
+    --popover: #1a211e;
+    --popover-foreground: #f1f4ee;
+    --muted: #1c2420;
+    --muted-foreground: #a3ada6;
+    --secondary: #232c27;
+    --secondary-foreground: #f1f4ee;
+    --accent: #232c27;
+    --accent-foreground: #f1f4ee;
+
+    --border: #2b3530;
+    --input: #5d6963;
+    --ring: oklch(0.75 0.13 163);
+
+    --primary: oklch(0.72 0.14 163);
+    --primary-foreground: #0f1412;
+    --primary-strong: oklch(0.8 0.13 163);
+    --primary-subtle: oklch(0.28 0.05 165);
+
+    --accent-action: #ff7a4a;
+    --accent-action-foreground: #0f1412;
+
+    --destructive: #e5483c;
+    --destructive-foreground: #0f1412;
+    --destructive-subtle: #3a1815;
+    --destructive-strong: #ff8f85;
+
+    --success: #34c795;
+    --success-foreground: #0f1412;
+    --success-subtle: #12302a;
+    --success-strong: #62dcb3;
+
+    --warning: #e8a33d;
+    --warning-foreground: #0f1412;
+    --warning-subtle: #34270f;
+    --warning-strong: #f3c274;
+
+    --info: #5aa6e0;
+    --info-foreground: #0f1412;
+    --info-subtle: #13283a;
+    --info-strong: #8fc5ee;
+
+    --attention: #ff7a4a;
+    --attention-foreground: #0f1412;
+    --attention-subtle: #3a2014;
+    --attention-strong: #ffa683;
+
+    --chart-1: oklch(0.72 0.14 163);
+    --chart-2: #ff8a5c;
+    --chart-3: #5aa6e0;
+    --chart-4: #e8a33d;
+    --chart-5: #a3ada6;
+    --chart-6: oklch(0.76 0.12 125);
+    --chart-grid: #2b3530;
+    --chart-axis: #a3ada6;
+
+    --sidebar-background: #121816;
+    --sidebar-foreground: #f1f4ee;
+    --sidebar-primary: oklch(0.72 0.14 163);
+    --sidebar-primary-foreground: #0f1412;
+    --sidebar-accent: #1f2824;
+    --sidebar-accent-foreground: #f1f4ee;
+    --sidebar-border: #2b3530;
+    --sidebar-ring: oklch(0.75 0.13 163);
+
+    /* legacy - remove after migration */
+    --main: #ff7a4a;
+    --main-foreground: #0f1412;
+    --secondary-background: #161c19;
   }
 }
 
@@ -82,38 +184,28 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    -moz-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "tnum" 0;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  img {
+    max-width: 100%;
+    height: auto;
   }
 }
 
-/* Neobrutalism styles */
 @layer utilities {
-  .brutal-shadow {
-    box-shadow: 6px 6px 0px 0px #000 !important;
-  }
-  
-  .brutal-shadow-lg {
-    box-shadow: 8px 8px 0px 0px #000 !important;
-  }
-  
-  .brutal-shadow-xl {
-    box-shadow: 12px 12px 0px 0px #000 !important;
-  }
-  
-  .brutal-border {
-    border: 4px solid #000 !important;
-  }
-  
-  .bg-orange {
-    background-color: #FF6B35 !important;
-  }
-  
-  .text-orange {
-    color: #FF6B35 !important;
-  }
-
-  /* Mobile-specific utilities */
+  /* Mobile-specific utilities (kept from the mobile pass, 44px targets) */
   .touch-target {
     min-height: 44px;
     min-width: 44px;
@@ -124,30 +216,70 @@
     overflow-x: auto;
     overflow-y: hidden;
   }
+
+  /* Eyebrow label: small uppercase, use sparingly */
+  .eyebrow {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* legacy - remove after migration */
+  .brutal-shadow,
+  .brutal-shadow-lg,
+  .brutal-shadow-xl {
+    box-shadow: none !important;
+  }
+
+  /* legacy - remove after migration */
+  .brutal-border {
+    border: 1px solid var(--border) !important;
+  }
+
+  /* legacy - remove after migration */
+  .bg-orange {
+    background-color: var(--accent-action) !important;
+    color: var(--accent-action-foreground);
+  }
+
+  /* legacy - remove after migration */
+  .text-orange {
+    color: var(--attention-strong) !important;
+  }
+
+  /* legacy - remove after migration: neutralise hard black borders on unmigrated pages */
+  .border-black,
+  .border-\[\#0F1412\] {
+    border-color: var(--border) !important;
+  }
 }
 
-/* Prevent text size adjustment on mobile */
-html {
-  -webkit-text-size-adjust: 100%;
-  -moz-text-size-adjust: 100%;
-  -ms-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
-
-/* Smooth scrolling for all devices */
+/* Smooth scrolling only when motion is welcome */
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
   }
 }
 
-/* Mobile-friendly tap highlight */
-* {
-  -webkit-tap-highlight-color: rgba(255, 107, 53, 0.2);
+/* Respect reduced motion: remove animation, transitions and transforms */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-pulse {
+    animation: none !important;
+  }
 }
 
-/* Ensure responsive images */
-img {
-  max-width: 100%;
-  height: auto;
+/* Mobile-friendly tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
 }

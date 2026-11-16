@@ -1,238 +1,153 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { IconChevronRight, IconLogout, IconSettings } from '@tabler/icons-react'
+import { IconLogout } from '@tabler/icons-react'
 
-import {
-  Sidebar,
-  SidebarContent,
-  useSidebar,
-} from '@/components/ui/sidebar'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { FramedIcon } from '@/components/ui/FramedIcon'
+import { Sidebar, SidebarContent, useSidebar } from '@/components/ui/sidebar'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FramedIdentity } from '@/components/ui/FramedIdentity'
 import { useSession } from '@/context/SessionContext'
-import { NAVIGATION_ITEMS as navigationCategories } from '@/lib/constants/navigation'
+import { useOptionalOrg } from '@/context/OrgContext'
+import {
+  NAVIGATION_ITEMS,
+  SETTINGS_NAV_ITEM,
+  isNavigationItemActive,
+  resolveAdminAccess,
+  type NavigationItem,
+} from '@/lib/constants/navigation'
 import { cn } from '@/lib/utils'
 
 interface AppSidebarProps {
   className?: string
 }
 
-const isNavigationItemActive = (pathname: string, href: string) => (
-  pathname === href || pathname.startsWith(`${href}/`)
-)
+function NavLink({
+  item,
+  pathname,
+  collapsed,
+  onNavigate,
+}: {
+  item: NavigationItem
+  pathname: string
+  collapsed: boolean
+  onNavigate?: () => void
+}) {
+  const Icon = item.icon
+  const active = isNavigationItemActive(pathname, item)
+  const link = (
+    <Link
+      href={item.href}
+      aria-current={active ? 'page' : undefined}
+      aria-label={collapsed ? item.title : undefined}
+      onClick={onNavigate}
+      className={cn(
+        'flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground transition-colors motion-reduce:transition-none',
+        'hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+        active && 'bg-sidebar-accent font-semibold',
+        collapsed && 'justify-center px-0',
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn('h-5 w-5 shrink-0', active ? 'text-primary-strong' : 'text-muted-foreground')}
+      />
+      {!collapsed && <span className="min-w-0 flex-1 truncate">{item.title}</span>}
+    </Link>
+  )
 
-function FramedTooltip({ label, children }: { label: string; children: React.ReactNode }) {
+  if (!collapsed) return link
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>{children}</TooltipTrigger>
-        <TooltipContent
-          side="right"
-          className="rounded-none border-2 border-[#0F1412] bg-[#FCFDF8] shadow-[4px_4px_0_0_#0F1412]"
-        >
-          <p className="text-xs font-black uppercase">{label}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right">{item.title}</TooltipContent>
+    </Tooltip>
   )
 }
 
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname()
-  const { state } = useSidebar()
+  const { state, isMobile, setOpenMobile } = useSidebar()
   const { user, logout } = useSession()
-  const [expandedCategories, setExpandedCategories] = useState<string[]>([])
-  const isCollapsed = state === 'collapsed'
+  const org = useOptionalOrg()
+  const collapsed = state === 'collapsed' && !isMobile
 
-  useEffect(() => {
-    const activeCategoryIds = navigationCategories
-      .filter((category) => category.items?.some((item) => isNavigationItemActive(pathname, item.href)))
-      .map((category) => category.id)
-    if (activeCategoryIds.length === 0) return
-    setExpandedCategories((current) => [...new Set([...current, ...activeCategoryIds])])
-  }, [pathname])
+  // Administration is shown to admins/owners. When role information is not
+  // available at all, the group stays visible (server-side authorisation is the
+  // real gate); once a role is known and is not an admin role it is hidden.
+  const adminAccess = resolveAdminAccess(user?.role, org?.selectedOrg?.role)
+  const showAdmin = adminAccess !== false
+
+  const closeMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
 
   return (
     <Sidebar
       aria-label="Primary navigation"
       variant="sidebar"
       collapsible="icon"
-      className={cn('!border-r-[4px] border-[#0F1412] bg-[#FCFDF8]', className)}
+      className={cn('border-sidebar-border bg-sidebar', className)}
     >
-      <SidebarContent className="flex h-full flex-col overflow-visible bg-[#FCFDF8] p-0">
-        <nav
-          aria-label="Product navigation"
-          className={cn(
-            'flex-1 space-y-3 overflow-y-auto overflow-x-visible p-3',
-            isCollapsed && 'space-y-2 p-0.5',
-          )}
-        >
-          {navigationCategories.map((category) => {
-            const CategoryIcon = category.icon!
-            const hasActiveItem = category.items?.some((item) => isNavigationItemActive(pathname, item.href)) ?? false
-
-            if (isCollapsed) {
-              if (category.href && !category.items) {
-                const isActive = isNavigationItemActive(pathname, category.href)
-                return (
-                  <FramedTooltip key={category.id} label={category.title}>
-                    <FramedIcon
-                      href={category.href}
-                      icon={CategoryIcon}
-                      label={category.title}
-                      active={isActive}
-                    />
-                  </FramedTooltip>
-                )
-              }
-
-              if (!category.items) return null
-              return (
-                <div key={category.id} className="space-y-2">
-                  {category.items.map((item) => {
-                    const ItemIcon = item.icon!
-                    return (
-                      <FramedTooltip key={item.href} label={item.title}>
-                        <FramedIcon
-                          href={item.href}
-                          icon={ItemIcon}
-                          label={item.title}
-                          active={isNavigationItemActive(pathname, item.href)}
-                        />
-                      </FramedTooltip>
-                    )
-                  })}
-                </div>
-              )
-            }
-
-            if (category.href && !category.items) {
-              return (
-                <FramedIcon
-                  key={category.id}
-                  href={category.href}
-                  icon={CategoryIcon}
-                  label={category.title}
-                  text={category.title}
-                  active={isNavigationItemActive(pathname, category.href)}
-                />
-              )
-            }
-
-            const isOpen = expandedCategories.includes(category.id) || hasActiveItem
+      <SidebarContent className="flex h-full flex-col overflow-visible bg-sidebar p-0">
+        <nav aria-label="Product navigation" className={cn('flex-1 space-y-5 overflow-y-auto overflow-x-hidden p-3', collapsed && 'space-y-3 px-2')}>
+          {NAVIGATION_ITEMS.filter((group) => showAdmin || !group.requiresAdmin).map((group) => {
+            const headingId = `nav-group-${group.id}`
             return (
-              <Collapsible
-                key={category.id}
-                open={isOpen}
-                onOpenChange={(open) => {
-                  if (hasActiveItem && !open) return
-                  setExpandedCategories((current) => open
-                    ? [...new Set([...current, category.id])]
-                    : current.filter((id) => id !== category.id))
-                }}
-              >
-                <CollapsibleTrigger asChild>
-                  <FramedIcon
-                    icon={CategoryIcon}
-                    label={`Toggle ${category.title}`}
-                    text={category.title}
-                    active={hasActiveItem}
-                    trailing={(
-                      <IconChevronRight
-                        aria-hidden="true"
-                        className={cn(
-                          'h-4 w-4 shrink-0 transition-transform duration-150 motion-reduce:transition-none',
-                          isOpen && 'rotate-90',
-                        )}
-                      />
-                    )}
-                  />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="ml-4 space-y-1 py-1 pl-2">
-                  {category.items?.map((item) => {
-                    const ItemIcon = item.icon!
-                    return (
-                      <FramedIcon
-                        key={item.href}
-                        href={item.href}
-                        icon={ItemIcon}
-                        label={item.title}
-                        text={item.title}
-                        active={isNavigationItemActive(pathname, item.href)}
-                      />
-                    )
-                  })}
-                </CollapsibleContent>
-              </Collapsible>
+              <div key={group.id} role="group" aria-labelledby={headingId} className="space-y-1">
+                <p
+                  id={headingId}
+                  className={cn('eyebrow px-3 pb-1', collapsed && 'sr-only')}
+                >
+                  {group.title}
+                </p>
+                {group.items.map((item) => (
+                  <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={closeMobile} />
+                ))}
+              </div>
             )
           })}
         </nav>
 
-        <div className={cn('border-t-4 border-[#0F1412] bg-[#FCFDF8] p-3', isCollapsed && 'p-0.5')}>
-          {isCollapsed ? (
-            <div className="space-y-2">
-              <FramedTooltip label="Settings">
-                <FramedIcon href="/settings" icon={IconSettings} label="Settings" />
-              </FramedTooltip>
-              {user && (
-                <FramedTooltip label={user.username}>
-                  <FramedIdentity
-                    name={user.username}
-                    collapsed
-                    label={`${user.username} profile`}
-                  />
-                </FramedTooltip>
-              )}
-              {user && (
-                <FramedTooltip label="Logout">
-                  <FramedIcon
-                    icon={IconLogout}
-                    label="Logout"
-                    onClick={() => void logout()}
-                    className="hover:border-[#D83A2E] hover:bg-[#D83A2E] hover:text-white"
-                  />
-                </FramedTooltip>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <FramedIcon
-                href="/settings"
-                icon={IconSettings}
-                label="Settings"
-                text="Settings"
-                active={isNavigationItemActive(pathname, '/settings')}
-              />
-              {user && (
-                <FramedIdentity
-                  name={user.username}
-                  email={user.email}
-                  label={`${user.username} profile`}
-                />
-              )}
-              {user && (
-                <FramedIcon
-                  icon={IconLogout}
-                  label="Logout"
-                  text="Logout"
+        <div className={cn('space-y-1 border-t border-sidebar-border p-3', collapsed && 'px-2')}>
+          <NavLink item={SETTINGS_NAV_ITEM} pathname={pathname} collapsed={collapsed} onNavigate={closeMobile} />
+          {user && (
+            collapsed ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <FramedIdentity name={user.username} collapsed label={`${user.username} profile`} className="w-full" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{user.username}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Sign out"
+                      onClick={() => void logout()}
+                      className="flex min-h-11 w-full items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                    >
+                      <IconLogout className="h-5 w-5" aria-hidden="true" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Sign out</TooltipContent>
+                </Tooltip>
+              </>
+            ) : (
+              <>
+                <FramedIdentity name={user.username} email={user.email} label={`${user.username} profile`} />
+                <button
+                  type="button"
                   onClick={() => void logout()}
-                  className="hover:border-[#D83A2E] hover:bg-[#D83A2E] hover:text-white"
-                />
-              )}
-            </div>
+                  className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                >
+                  <IconLogout className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  Sign out
+                </button>
+              </>
+            )
           )}
         </div>
       </SidebarContent>

@@ -110,7 +110,7 @@ export default function EvaluationRunDetailPage({ params }: PageProps) {
   const { testId } = use(params)
   const { selectedOrg, isLoading: orgLoading } = useOrg()
   const { selectedSystem, loading: systemLoading } = useSystemContext()
-  const realSystem = selectedSystem.metadata?.source === 'fallback' ? undefined : selectedSystem
+  const realSystem = selectedSystem.id ? selectedSystem : undefined
   const evaluations = useEvaluationRuns(selectedOrg?.id, realSystem?.id)
   const scopeKey = [selectedOrg?.id ?? '', realSystem?.id ?? '', testId].join(':')
   const [runState, setRunState] = useState<{ scopeKey: string; run: EvaluationRun | null }>({

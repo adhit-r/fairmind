@@ -1,11 +1,10 @@
 import type { Metadata } from "next"
 import { Raleway } from "next/font/google"
-import { MantineProvider } from '@mantine/core';
 import "./globals.css"
-import "@mantine/core/styles.css";
 import { ClientNavigation } from "@/components/layout/ClientNavigation"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
+import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme/ThemeProvider"
 
 const raleway = Raleway({
   subsets: ["latin"],
@@ -59,14 +58,18 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Applies the saved theme before first paint to avoid a flash */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className={`${raleway.variable} font-sans`}>
-        <MantineProvider>
+        <ThemeProvider>
           <ErrorBoundary>
             <ClientNavigation>{children}</ClientNavigation>
             <Toaster />
           </ErrorBoundary>
-        </MantineProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
