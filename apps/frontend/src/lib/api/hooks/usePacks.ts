@@ -378,8 +378,23 @@ export function useEvaluations(filters: { pillar?: string; engine?: string; q?: 
   const q = qs.toString()
   return useOrgResource<EvaluationRow[]>(q ? `${API_ENDPOINTS.packs.evaluations}?${q}` : API_ENDPOINTS.packs.evaluations)
 }
+/** One published or draft version of a workflow, as listed by the versions endpoint. */
+export interface WorkflowVersion {
+  version: number
+  label: string
+  status: string
+  basedOn: string | null
+  createdBy: string | null
+  publishedBy: string | null
+  createdAt: string | null
+  publishedAt: string | null
+}
+
 export const useWorkflow = (workflowId: string | undefined) =>
   useOrgResource<Workflow>(workflowId ? API_ENDPOINTS.packs.workflow(workflowId) : null)
+/** Every version of a workflow, newest first. */
+export const useWorkflowVersions = (workflowId: string | undefined) =>
+  useOrgResource<WorkflowVersion[]>(workflowId ? API_ENDPOINTS.packs.workflowVersions(workflowId) : null)
 export const useDraft = (workflowId: string | undefined) =>
   useOrgResource<Draft>(workflowId ? API_ENDPOINTS.packs.draft(workflowId) : null)
 export const useRun = (runId: string | undefined) =>
