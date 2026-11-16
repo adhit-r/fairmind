@@ -779,6 +779,15 @@ async def accept_invitation(
                 }
             )
 
+            # A pending access request from the same person is answered by this
+            # membership; close it so it leaves the admin queue without a denial email.
+            await db.execute(
+                "UPDATE registration_requests SET status = 'approved', org_id = :org_id, "
+                "reviewed_at = :now, review_notes = 'Joined through an organisation invitation' "
+                "WHERE lower(email) = lower(:email) AND status = 'pending'",
+                {"org_id": org_id, "email": current_user.email, "now": datetime.utcnow()},
+            )
+
             # 7. Log audit event
             await _log_org_audit(
                 org_id=org_id,
