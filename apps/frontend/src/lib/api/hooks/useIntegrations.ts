@@ -32,7 +32,7 @@ export interface Integration {
   config: Record<string, unknown>
   hasToken: boolean
   lastSyncedAt: string | null
-  lastSync: { found?: number; created?: number; updated?: number; error?: string; at: string } | null
+  lastSync: { found?: number; created?: number; updated?: number; error?: string; at: string; scanned?: { read: number; listed: number; token: boolean } } | null
   createdAt: string
   /** 0 = only when someone presses Sync now. Optional for the legacy page, which predates monitoring. */
   scheduleMinutes?: number
@@ -123,7 +123,9 @@ export function useIntegrations() {
     await refresh()
   }
   const remove = async (id: string) => {
-    unwrap(await apiClient.delete<null>(`${BASE}/${id}`))
+    // 204 has no body, so data is undefined on success: check success, not data.
+    const res = await apiClient.delete<null>(`${BASE}/${id}`)
+    if (!res.success) throw new Error(res.error || 'The source could not be removed')
     await refresh()
   }
   const sync = async (id: string) => {

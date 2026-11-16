@@ -60,6 +60,9 @@ def test_github_finds_mcp_servers(client, monkeypatch):  # noqa: F811
     iid = _add(client, "github", owner="acme")
     r = client.post(f"/api/v1/integrations/{iid}/sync")
     assert r.status_code == 200 and r.json()["found"] == 3
+    # The run says how much of the account was read, not only what had AI in it.
+    assert r.json()["scanned"] == {"read": 1, "listed": 1, "token": False}
+    assert client.get("/api/v1/integrations").json()[0]["lastSync"]["scanned"]["read"] == 1
     found = {a["externalId"]: a for a in client.get("/api/v1/integrations/discovered").json()}
     assert found["acme/ops"]["kind"] == "ai_assisted_dev"
     assert found["acme/ops"]["metadata"]["signals"]["mcp_servers"] == ["linear", "postgres"]
