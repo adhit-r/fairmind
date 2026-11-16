@@ -910,6 +910,58 @@ class PolicyService:
             "results": results,
         }
 
+    def latest_gate(self, org_id: str, system_id: str) -> dict | None:
+        """The latest stored evaluation for one system; reading it records nothing.
+
+        Page views use this instead of gate(), so loading a page never persists a run.
+        Returns None when no evaluation has been recorded for the system yet.
+        """
+        e = OrgPolicyEvaluation.__table__
+        rows = [
+            dict(r)
+            for r in self.db.execute(
+                select(e)
+                .where(e.c.org_id == org_id, e.c.system_id == system_id)
+                .order_by(e.c.evaluated_at.desc(), e.c.run_id.desc())
+            ).mappings()
+        ]
+        if not rows:
+            return None
+        run_id, evaluated_at = rows[0]["run_id"], rows[0]["evaluated_at"]
+        run_rows = [r for r in rows if r["run_id"] == run_id]
+        v = OrgPolicyVersion.__table__
+        versions = {
+            (row["policy_id"], row["version"]): dict(row)
+            for row in self.db.execute(
+                select(v).where(
+                    v.c.org_id == org_id,
+                    v.c.policy_id.in_(sorted({r["policy_id"] for r in run_rows})),
+                )
+            ).mappings()
+        }
+
+        def failure(row: dict) -> dict:
+            snapshot = versions.get((row["policy_id"], row["policy_version"]))
+            rules = json.loads(snapshot["rules_json"]) if snapshot else []
+            title = next((rule["title"] for rule in rules if rule["id"] == row["rule_id"]), row["rule_id"])
+            return {
+                "policyId": row["policy_id"],
+                "policyName": snapshot["name"] if snapshot else row["policy_id"],
+                "ruleId": row["rule_id"],
+                "ruleTitle": title,
+                "detail": row["detail"],
+            }
+
+        failed = [r for r in run_rows if r["outcome"] == "fail"]
+        return {
+            "systemId": system_id,
+            "allowed": not any(r["enforcement"] == "block" for r in failed),
+            "blocking": [failure(r) for r in failed if r["enforcement"] == "block"],
+            "warnings": [failure(r) for r in failed if r["enforcement"] == "warn"],
+            "runId": run_id,
+            "evaluatedAt": evaluated_at,
+        }
+
     def gate(self, org_id: str, system_id: str) -> dict | None:
         """Evaluate one system now; it may proceed only if no blocking rule fails."""
         run = self.enforce(org_id, system_id=system_id)

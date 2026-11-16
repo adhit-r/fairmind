@@ -89,7 +89,8 @@ export const API_ENDPOINTS = {
   // AI Governance
   aiGovernance: {
     policies: (orgId: string) => `/api/v1/ai-governance/organizations/${orgId}/policies`,
-    policyGate: (systemId: string) => `/api/v1/ai-governance/gate/${encodeURIComponent(systemId)}`,
+    policyGate: (orgId: string, systemId: string) =>
+      `${API_ENDPOINTS.aiGovernance.policies(orgId)}/gate/${encodeURIComponent(systemId)}/latest`,
     complianceFrameworks: '/api/v1/ai-governance/compliance/frameworks',
     lifecycleSummary: (systemId: string) => `/api/v1/ai-governance/lifecycle/${systemId}/summary`,
     evidenceCollectV2: '/api/v1/ai-governance/evidence/collect-v2',

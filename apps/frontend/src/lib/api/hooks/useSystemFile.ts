@@ -9,7 +9,7 @@ import type { CellState } from '@/components/ui/matrix'
 
 const GOV = '/api/v1/ai-governance'
 
-export type StageKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'operate'
+export type StageKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'operate' | 'retired'
 
 export interface LifecycleSummary {
   stage: StageKey
@@ -97,6 +97,8 @@ export interface GateCheck {
   stale?: true
   /** A measured or tool-estimated record that fails its own thresholds. */
   fails?: true
+  /** The number of the recorded change that reopened this check; its older evidence no longer counts. */
+  reopenedBy?: number
 }
 
 export interface ReleaseGate {
@@ -174,7 +176,7 @@ export interface PolicyRuleFailure {
   detail: string
 }
 
-/** The live policy gate for a system: allowed is false while a blocking rule fails. */
+/** The latest stored policy gate for a system: allowed is false while a blocking rule fails. Reading it records no evaluation run. */
 export interface PolicyGate {
   systemId: string
   allowed: boolean
@@ -384,7 +386,7 @@ export interface SystemFile {
   risks: RiskStatus | null
   reports: AuditReport[]
   gate: ReleaseGate | null
-  /** The live policy gate, evaluated when the file loads. */
+  /** The latest stored policy gate; null before any evaluation run. */
   policyGate: PolicyGate | null
   fairnessRuns: FairnessRunSummary[]
   monitoringRuns: MonitoringRunSummary[]
@@ -424,7 +426,13 @@ export const systemFileAwaitsOrg = (orgsLoading: boolean, organizationId: string
 type Get = <T>(path: string) => Promise<ApiResponse<T>>
 
 /** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope. */
-export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void) {
+export async function loadSystemFile(
+  get: Get,
+  systemId: string,
+  organizationId: string | null | undefined,
+  scopeKey: string,
+  update: (next: (s: SystemFileState) => SystemFileState) => void,
+) {
   const write = (next: (v: SystemFileView) => SystemFileView) => update((s) => writeEvaluationScopeState(s, scopeKey, next(s.value)))
   write((v) => ({ ...v, loading: true }))
   const sys = await get<SystemRecord>(`${GOV}/systems/${systemId}`)
@@ -433,6 +441,10 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     return
   }
   const q = `system_id=${encodeURIComponent(systemId)}`
+  // The policy gate is a read of the latest stored evaluation: no run is recorded.
+  const policyGateRequest = organizationId
+    ? get<PolicyGate>(API_ENDPOINTS.aiGovernance.policyGate(organizationId, systemId))
+    : Promise.resolve({ success: false, error: 'no organization' } as ApiResponse<PolicyGate>)
   const [evidence, approval, remediation, risks, reports, gate, policyGate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
     get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
     get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
@@ -440,7 +452,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     get<RiskStatus>(`${GOV}/dashboard/risk?${q}`),
     get<AuditReport[]>(`${GOV}/reports?${q}`),
     get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
-    get<PolicyGate>(API_ENDPOINTS.aiGovernance.policyGate(systemId)),
+    policyGateRequest,
     get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
     get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
     get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
@@ -475,8 +487,8 @@ export function useSystemFile(systemId: string | undefined) {
 
   const refresh = useCallback(async () => {
     if (!systemId || awaitsOrg) return
-    await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState)
-  }, [awaitsOrg, scopeKey, systemId])
+    await loadSystemFile((path) => apiClient.get(path), systemId, selectedOrg?.id, scopeKey, setState)
+  }, [awaitsOrg, scopeKey, selectedOrg?.id, systemId])
 
   useEffect(() => {
     setState((s) => enterSystemFileScope(s, scopeKey))

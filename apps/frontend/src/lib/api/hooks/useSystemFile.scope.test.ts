@@ -27,6 +27,7 @@ const SYSTEM_A_OTHER_ORG = systemFileScopeKey('org-2', 'system-a')
 function harness(initialKey: string) {
   let state: SystemFileState = enterSystemFileScope({ scopeKey: '', value: null as never }, initialKey)
   const systems = new Map<string, ReturnType<typeof deferred<ApiResponse<unknown>>>>()
+  let gatePath = ''
   const get = <T,>(path: string): Promise<ApiResponse<T>> => {
     const match = path.match(/\/systems\/([^/?]+)$/)
     if (match) {
@@ -34,8 +35,9 @@ function harness(initialKey: string) {
       systems.set(match[1], d)
       return d.promise as Promise<ApiResponse<T>>
     }
-    const gate = path.match(/\/gate\/([^/?]+)$/)
+    const gate = path.match(/\/gate\/([^/]+)\/latest$/)
     if (gate) {
+      gatePath = path
       return Promise.resolve({
         success: true,
         data: {
@@ -57,8 +59,11 @@ function harness(initialKey: string) {
     get state() {
       return state
     },
+    get gatePath() {
+      return gatePath
+    },
     enter: (key: string) => update((s) => enterSystemFileScope(s, key)),
-    load: (systemId: string, key: string) => loadSystemFile(get, systemId, key, update),
+    load: (systemId: string, orgId: string, key: string) => loadSystemFile(get, systemId, orgId, key, update),
     release: (systemId: string) =>
       systems.get(systemId)!.resolve({ success: true, data: { id: systemId, name: `System ${systemId}` } }),
   }
@@ -67,7 +72,7 @@ function harness(initialKey: string) {
 describe('system file scope', () => {
   test('masks the previous system in the same render once the organisation or system changes', async () => {
     const h = harness(SYSTEM_A)
-    const loading = h.load('system-a', SYSTEM_A)
+    const loading = h.load('system-a', 'org-1', SYSTEM_A)
     h.release('system-a')
     await loading
     assert.equal(viewSystemFile(h.state, SYSTEM_A).file.system?.id, 'system-a')
@@ -82,10 +87,10 @@ describe('system file scope', () => {
 
   test('drops a late response for a system the page has left', async () => {
     const h = harness(SYSTEM_A)
-    const first = h.load('system-a', SYSTEM_A)
+    const first = h.load('system-a', 'org-1', SYSTEM_A)
 
     h.enter(SYSTEM_B)
-    const second = h.load('system-b', SYSTEM_B)
+    const second = h.load('system-b', 'org-1', SYSTEM_B)
 
     h.release('system-a')
     await first
@@ -103,22 +108,23 @@ describe('system file scope', () => {
   test('a refresh from a left system cannot pull the state back to it', async () => {
     const h = harness(SYSTEM_A)
     h.enter(SYSTEM_B)
-    const stale = h.load('system-a', SYSTEM_A)
+    const stale = h.load('system-a', 'org-1', SYSTEM_A)
     h.release('system-a')
     await stale
     assert.equal(h.state.scopeKey, SYSTEM_B)
     assert.equal(viewSystemFile(h.state, SYSTEM_B).file.system, null)
   })
 
-  test('loads the live policy gate with the system file', async () => {
+  test('loads the latest stored policy gate with the system file', async () => {
     const h = harness(SYSTEM_A)
-    const loading = h.load('system-a', SYSTEM_A)
+    const loading = h.load('system-a', 'org-1', SYSTEM_A)
     h.release('system-a')
     await loading
     const view = viewSystemFile(h.state, SYSTEM_A)
     assert.equal(view.file.policyGate?.allowed, false)
     assert.equal(view.file.policyGate?.blocking.length, 1)
     assert.equal(view.file.policyGate?.blocking[0].ruleTitle, 'MFA required')
+    assert.equal(h.gatePath, '/api/v1/ai-governance/organizations/org-1/policies/gate/system-a/latest')
     assert.equal(view.loading, false)
   })
 
