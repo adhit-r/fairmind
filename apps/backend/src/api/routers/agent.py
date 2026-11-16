@@ -226,9 +226,20 @@ def config(body: NodeRequest, db: Session = Depends(get_db)):
     return {"schedule": schedule("darwin" if node[2] == "darwin" else "windows"), "decorators": DECORATORS, "node_invalid": False}
 
 
+_APP_MARK = ".app/Contents/MacOS/"
+
+
+def _bundle_name(path: str) -> str:
+    """The app's name in /Applications/Cursor.app/Contents/MacOS/Cursor, or the file name. String search, no regex,
+    because the path comes from the laptop."""
+    path = path[:1024]
+    i = path.find(_APP_MARK)
+    return (path[:i] if i >= 0 else path).rsplit("/", 1)[-1]
+
+
 def _service(r: Dict[str, Any]) -> Optional[str]:
     path = str(r.get("path") or "")
-    name = str(r.get("name") or "") or re.sub(r"\.app/Contents/MacOS/.*$", "", path).split("/")[-1]
+    name = str(r.get("name") or "") or _bundle_name(path)
     s = by_installed(name, str(r.get("signing_id") or "") or None)
     return s.key if s else None
 
@@ -277,8 +288,7 @@ def log(body: LogRequest, db: Session = Depends(get_db)):
 def _app_name(cols: Dict[str, Any]) -> str:
     if cols.get("name"):
         return str(cols["name"])
-    m = re.search(r"([^/]+)\.app/Contents/MacOS/", str(cols.get("path") or ""))
-    return m.group(1) if m else str(cols.get("path") or "").split("/")[-1]
+    return _bundle_name(str(cols.get("path") or ""))
 
 
 # ---------------------------------------------------------------------------
