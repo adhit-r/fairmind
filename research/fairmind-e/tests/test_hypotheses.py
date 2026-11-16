@@ -258,6 +258,11 @@ class AccuracyTest(unittest.TestCase):
         self.assertAlmostEqual(result["loa95_low"], 0.5 - 1.96 * expected_sd, places=12)
         self.assertAlmostEqual(result["loa95_high"], 0.5 + 1.96 * expected_sd, places=12)
 
+    def test_best_rescale_factor_hand_case(self):
+        # Ratios 0.25 and 4: best constant 1, both still off by 4.
+        self.assertAlmostEqual(HYP.best_rescale_factor([0.25, 4.0, 1.0]), 4.0, places=12)
+        self.assertIsNone(HYP.best_rescale_factor([2.0]))
+
     def test_accuracy_driver_on_fixture(self):
         rows = HYP.load_measurement_runs(RUNS_FIXTURE)
         result = HYP.measurement_accuracy(rows, metric="energy_kwh")
