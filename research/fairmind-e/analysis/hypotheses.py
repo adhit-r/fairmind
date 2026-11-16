@@ -727,6 +727,21 @@ def bland_altman(a: Sequence[float], b: Sequence[float]) -> dict[str, Any]:
     }
 
 
+def best_rescale_factor(ratios: Sequence[float]) -> float | None:
+    """Worst-case disagreement left after rescaling one method by the best constant.
+
+    ``ratios`` are per-workload method_b / method_a ratios. Multiplying method_b
+    by any constant k leaves a worst-case factor max(max*k, 1/(min*k)), minimised
+    at k = 1/sqrt(min*max), giving sqrt(max/min). The figure does not depend on
+    a free constant inside either method (for example a placeholder GFLOP/s per
+    watt), unlike MAPE.
+    """
+
+    if len(ratios) < 2 or any(r <= 0.0 for r in ratios):
+        return None
+    return math.sqrt(max(ratios) / min(ratios))
+
+
 def percent_reduction(pre: float, post: float) -> float:
     if pre <= 0.0:
         raise ValueError("percent reduction undefined for non-positive pre value")
@@ -1750,12 +1765,28 @@ def measurement_accuracy(
                 [values[method_b][key] for key in workload_keys],
             )
             per_workload.append({"workload_id": workload_id, **workload_stats})
+        # Geometric-mean method_b / method_a ratio per workload.
+        ratio_by_workload = {}
+        for workload_id in sorted({key[0] for key in keys}):
+            logs = [
+                math.log(values[method_b][key] / values[method_a][key])
+                for key in keys
+                if key[0] == workload_id
+                and values[method_a][key] > 0.0
+                and values[method_b][key] > 0.0
+            ]
+            if logs:
+                ratio_by_workload[workload_id] = math.exp(_mean(logs))
         bland_altman_rows.append(
             {
                 "method_a": method_a,
                 "method_b": method_b,
                 **pooled,
                 "per_workload": per_workload,
+                "ratio_b_over_a_by_workload": ratio_by_workload,
+                "factor_after_best_rescale": best_rescale_factor(
+                    list(ratio_by_workload.values())
+                ),
             }
         )
 
@@ -1931,7 +1962,9 @@ def render_text(results: Mapping[str, Any]) -> str:
                 f"Bland-Altman {row['method_a']} vs {row['method_b']}: "
                 f"bias={_format_number(row['mean_bias'])} "
                 f"loa95=[{_format_number(row['loa95_low'])}, "
-                f"{_format_number(row['loa95_high'])}] (n={row['n']})"
+                f"{_format_number(row['loa95_high'])}] (n={row['n']}) "
+                f"factor_after_best_rescale="
+                f"{_format_number(row['factor_after_best_rescale'])}"
             )
     return "\n".join(lines) + "\n"
 
