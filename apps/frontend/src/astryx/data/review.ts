@@ -390,6 +390,8 @@ export interface AgentStatus {
   events: AgentEvent[]
   rules: Record<AgentRule, AgentAction>
   domains: string[]
+  notifiers: number
+  hasNotifierSecret: boolean
 }
 
 export type AgentRule = 'personal_account' | 'not_allowed_app' | 'unregistered_mcp' | 'model_added'
@@ -406,6 +408,7 @@ export interface AgentEvent {
   rule?: AgentRule | null
   action?: AgentAction
   forPerson?: string
+  shownAt?: string | null
   at: string
 }
 
@@ -427,4 +430,8 @@ export async function newAgentSecret() {
 
 export async function agentSettings(os: 'macos' | 'windows') {
   return unwrap(await apiClient.get<{ filename: string; flags: string }>(`${S}/agent/settings?os=${os}`))
+}
+
+export async function newNotifierSecret() {
+  return unwrap(await apiClient.post<{ secret: string; config: string }>(`${S}/agent/notifier-secret`, {}))
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Install in /Library/LaunchAgents so the notifier starts in every person's session at login. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.fairmind.notifier</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Library/Application Support/FairMind/fairmind-notifier</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

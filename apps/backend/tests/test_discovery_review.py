@@ -39,6 +39,7 @@ def env(monkeypatch):
     app.include_router(discovery_review.public_router, prefix="/api/v1/public")
     app.include_router(laptop_reports.public_router, prefix="/api/v1/public")
     app.include_router(agent.public_router, prefix="/api/v1/public")
+    app.include_router(agent.notifier_router, prefix="/api/v1/public")
     app.dependency_overrides[get_db] = override_db
     owner = OrgMembership(ORG, "review-test-owner", "owner", ())
     app.dependency_overrides[org_scope.org_member] = lambda: owner
@@ -636,3 +637,34 @@ def test_agent_rules_accounts_mcp_and_models(env):
     findings = {f["key"]: f for f in c.get("/api/v1/shadow-ai").json()["findings"]}
     assert findings["personal:cursor:arjun@acme.com"]["confidence"] == "confirmed"
     assert "mcp_laptop:modelcontextprotocolserverpostgres" in findings and "mcp_laptop:githubmcpserver" not in findings
+
+
+def test_notifier_shows_messages_for_its_laptop_once(env):
+    c, factory, sent = env
+    assert c.put("/api/v1/shadow-ai/tools/deepseek", json={"status": "not_allowed"}).status_code == 200
+    c.put("/api/v1/shadow-ai/agent")
+    assert c.post("/api/v1/shadow-ai/agent/notifier-secret").status_code == 200  # rotated below
+    secret = c.post("/api/v1/shadow-ai/agent/secret").json()["secret"]
+    made = c.post("/api/v1/shadow-ai/agent/notifier-secret").json()
+    assert json.loads(made["config"])["secret"] == made["secret"] and json.loads(made["config"])["url"].endswith("/api/v1/public/notifier")
+    nk = c.post("/api/v1/public/osquery/enroll", json={"enroll_secret": secret, "host_details": {"system_info": {"hardware_serial": "C02X"}, "os_version": {"platform": "darwin"}}}).json()["node_key"]
+    started = {"name": "fm_ai_started", "action": "added", "decorations": {"serial": "C02X", "computer": "LT-ENG-0231", "console_user": "arjun"},
+               "columns": {"path": "/Applications/DeepSeek.app/Contents/MacOS/DeepSeek", "username": "arjun"}}
+    c.post("/api/v1/public/osquery/log", json={"node_key": nk, "log_type": "result", "data": [started]})
+
+    assert c.post("/api/v1/public/notifier/enroll", json={"secret": "fmns_wrong_secret_value_1234", "serial": "C02X"}).status_code == 401
+    assert c.post("/api/v1/public/notifier/enroll", json={"secret": made["secret"], "serial": ""}).status_code == 401
+    key = c.post("/api/v1/public/notifier/enroll", json={"secret": made["secret"], "serial": "C02X", "user": "arjun"}).json()["key"]
+    other = c.post("/api/v1/public/notifier/enroll", json={"secret": made["secret"], "serial": "C09Z", "user": "meera"}).json()["key"]
+    assert c.get("/api/v1/public/notifier/messages").status_code == 401
+
+    got = c.get("/api/v1/public/notifier/messages", headers={"Authorization": f"Bearer {key}"}).json()
+    assert len(got["messages"]) == 1 and "not allowed" in got["messages"][0]["text"] and got["history"] == [] and got["never"]
+    assert c.get("/api/v1/public/notifier/messages", headers={"Authorization": f"Bearer {other}"}).json()["messages"] == []
+    assert c.post("/api/v1/public/notifier/ack", json={"ids": [got["messages"][0]["id"]]}, headers={"Authorization": f"Bearer {other}"}).status_code == 200
+    assert len(c.get("/api/v1/public/notifier/messages", headers={"Authorization": f"Bearer {key}"}).json()["messages"]) == 1  # another laptop cannot acknowledge it
+    c.post("/api/v1/public/notifier/ack", json={"ids": [got["messages"][0]["id"]]}, headers={"Authorization": f"Bearer {key}"})
+    again = c.get("/api/v1/public/notifier/messages", headers={"Authorization": f"Bearer {key}"}).json()
+    assert again["messages"] == [] and again["history"][0]["shownAt"]
+    st = c.get("/api/v1/shadow-ai/agent").json()
+    assert st["notifiers"] == 2 and st["hasNotifierSecret"] and st["events"][0]["shownAt"]

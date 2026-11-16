@@ -477,13 +477,14 @@ def agent_status(http: Request, db: Session = Depends(get_db)):
     org = _caller_org(http)
     row = _row(db, org)
     if not row:
-        return {"connected": False, "hasSecret": False, "laptops": 0, "quiet": [], "problems": [], "events": [], "rules": RULES, "domains": []}
+        return {"connected": False, "hasSecret": False, "laptops": 0, "quiet": [], "problems": [], "events": [], "rules": RULES, "domains": [], "notifiers": 0, "hasNotifierSecret": False}
     quiet_cut = (_now() - timedelta(days=QUIET_DAYS)).isoformat()
     nodes = db.execute(text("SELECT id, name, serial, platform, osquery_version, last_seen, problem FROM governance_agent_nodes WHERE org_id = :org"), {"org": org}).fetchall()
     names = {n[0]: n[1] or n[2] or "A laptop" for n in nodes}
     events = db.execute(
-        text("SELECT node_id, kind, service, detail_json, at FROM governance_agent_events WHERE org_id = :org ORDER BY at DESC LIMIT 50"), {"org": org}
+        text("SELECT node_id, kind, service, detail_json, at, delivered_at FROM governance_agent_events WHERE org_id = :org ORDER BY at DESC LIMIT 50"), {"org": org}
     ).fetchall()
+    notifiers = db.execute(text("SELECT COUNT(*) FROM governance_notifier_clients WHERE org_id = :org"), {"org": org}).scalar()
     config = hub._load_json_value(row[4], {})
     return {
         "connected": True,
@@ -491,7 +492,9 @@ def agent_status(http: Request, db: Session = Depends(get_db)):
         "laptops": len(nodes),
         "quiet": [{"name": names[n[0]], "lastSeen": n[5]} for n in nodes if n[5] < quiet_cut],
         "problems": [{"name": names[n[0]], "problem": n[6]} for n in nodes if n[6]],
-        "events": [{"laptop": names.get(e[0], "A laptop"), "kind": e[1], "service": e[2], **json.loads(e[3]), "at": e[4]} for e in events],
+        "events": [{"laptop": names.get(e[0], "A laptop"), "kind": e[1], "service": e[2], **json.loads(e[3]), "at": e[4], "shownAt": e[5]} for e in events],
+        "notifiers": notifiers,
+        "hasNotifierSecret": bool(config.get("notifier_secret_hash")),
         "rules": {**RULES, **(config.get("rules") or {})},
         "domains": org_domains(db, org),
     }
@@ -577,3 +580,130 @@ def settings_file(os: Literal["macos", "windows"], http: Request, db: Session = 
     if not _row(db, _caller_org(http)):
         raise HTTPException(status_code=409, detail="Set up the agent first")
     return {"filename": "osquery.flags", "flags": flags_file(settings.frontend_url, os)}
+
+
+# ---------------------------------------------------------------------------
+# The notifier: a small app in the person's session that shows the agent's messages (phase 5c).
+# It has its own secret, so osquery's enrol secret stays readable by root only.
+# ---------------------------------------------------------------------------
+
+notifier_router = APIRouter(prefix="/notifier", tags=["shadow-ai"])
+MESSAGE_DAYS = 7
+CHECKS = [
+    "Which AI apps start, and when",
+    "Whether an AI app is signed in with a company account or another one",
+    "The names of MCP servers your AI apps start",
+    "AI models downloaded by local runtimes, by name",
+]
+NEVER = ["Read your prompts, replies, files or screen", "Record keystrokes", "Send your personal email address anywhere", "Block anything you do"]
+
+
+@router.post("/notifier-secret")
+def new_notifier_secret(http: Request, db: Session = Depends(get_db), who: Any = Depends(org_mutator)):
+    from config.settings import settings
+
+    hub._ensure_tables()
+    org = _caller_org(http)
+    row = _row(db, org)
+    if not row:
+        raise HTTPException(status_code=409, detail="Set up the agent first")
+    secret = "fmns_" + secrets.token_urlsafe(32)
+    config = {**hub._load_json_value(row[4], {}), "notifier_secret_hash": _hash(secret)}
+    db.execute(text("UPDATE governance_integrations SET config_json = :c WHERE id = :id"), {"c": json.dumps(config), "id": row[0]})
+    db.commit()
+    url = f"{settings.frontend_url.rstrip('/')}/api/proxy/api/v1/public/notifier"
+    return {"secret": secret, "config": json.dumps({"url": url, "secret": secret}, indent=2)}
+
+
+class NotifierEnroll(BaseModel):
+    secret: str = Field(default="", max_length=200)
+    serial: str = Field(default="", max_length=64)
+    user: str = Field(default="", max_length=120)
+
+
+class NotifierAck(BaseModel):
+    ids: List[str] = Field(default_factory=list, max_length=200)
+
+
+def _client(db: Session, http: Request) -> Any:
+    auth = http.headers.get("authorization") or ""
+    key = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    row = db.execute(text("SELECT id, org_id, serial, person FROM governance_notifier_clients WHERE key_hash = :h"), {"h": _hash(key)}).fetchone() if len(key) >= 20 else None
+    if not row:
+        raise HTTPException(status_code=401, detail="This notifier is not enrolled; it enrols again on its own")
+    db.execute(text("UPDATE governance_notifier_clients SET last_seen = :now WHERE id = :id"), {"now": _now().isoformat(), "id": row[0]})
+    return row
+
+
+@notifier_router.post("/enroll")
+def notifier_enroll(body: NotifierEnroll, db: Session = Depends(get_db)):
+    hub._ensure_tables()
+    secret = body.secret.strip()
+    row = None
+    if len(secret) >= 20:
+        row = db.execute(
+            text("SELECT id, org_id FROM governance_integrations WHERE kind = :k AND config_json LIKE :h"), {"k": KIND, "h": f'%"notifier_secret_hash": "{_hash(secret)}"%'}
+        ).fetchone()
+    if not row or not body.serial.strip():
+        raise HTTPException(status_code=401, detail="This notifier secret is not valid, or the laptop sent no serial number")
+    key = "fmnc_" + secrets.token_urlsafe(32)
+    now = _now().isoformat()
+    db.execute(
+        text("INSERT INTO governance_notifier_clients (id, org_id, key_hash, serial, person, created_at, last_seen) VALUES (:id, :org, :h, :s, :u, :now, :now)"),
+        {"id": str(uuid.uuid4()), "org": row[1], "h": _hash(key), "s": body.serial.strip(), "u": body.user.strip().lower() or None, "now": now},
+    )
+    db.commit()
+    return {"key": key}
+
+
+def _for_this_laptop(db: Session, client: Any, delivered: bool, limit: int) -> List[Dict[str, Any]]:
+    """Messages for the person on this laptop: events with a message, from the agent on the same serial number."""
+    cut = (_now() - timedelta(days=MESSAGE_DAYS if not delivered else KEEP_DAYS)).isoformat()
+    rows = db.execute(
+        text(
+            "SELECT e.id, e.detail_json, e.at, e.delivered_at FROM governance_agent_events e JOIN governance_agent_nodes n ON n.id = e.node_id "
+            "WHERE e.org_id = :org AND n.serial = :serial AND e.at >= :cut AND e.detail_json LIKE '%\"forPerson\"%' "
+            f"AND e.delivered_at IS {'NOT ' if delivered else ''}NULL ORDER BY e.at DESC LIMIT :n"
+        ),
+        {"org": client[1], "serial": client[2], "cut": cut, "n": limit},
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = json.loads(r[1])
+        who = (d.get("user") or "").lower()
+        if client[3] and who and who != client[3] and who.split("@")[0] != client[3]:
+            continue  # someone else's account on a shared laptop
+        out.append({"id": r[0], "text": d["forPerson"], "at": r[2], "shownAt": r[3]})
+    return out
+
+
+@notifier_router.get("/messages")
+def notifier_messages(http: Request, db: Session = Depends(get_db)):
+    hub._ensure_tables()
+    client = _client(db, http)
+    org = db.execute(text("SELECT name FROM organizations WHERE id::text = :org"), {"org": str(client[1])}).fetchone()
+    out = {
+        "organisation": org[0] if org else None,
+        "messages": _for_this_laptop(db, client, delivered=False, limit=20),
+        "history": _for_this_laptop(db, client, delivered=True, limit=20),
+        "checks": CHECKS,
+        "never": NEVER,
+    }
+    db.commit()
+    return out
+
+
+@notifier_router.post("/ack")
+def notifier_ack(body: NotifierAck, http: Request, db: Session = Depends(get_db)):
+    hub._ensure_tables()
+    client = _client(db, http)
+    if body.ids:
+        db.execute(
+            text(
+                "UPDATE governance_agent_events SET delivered_at = :now WHERE org_id = :org AND delivered_at IS NULL AND id = ANY(:ids) "
+                "AND node_id IN (SELECT id FROM governance_agent_nodes WHERE org_id = :org AND serial = :serial)"
+            ),
+            {"now": _now().isoformat(), "org": client[1], "ids": list(body.ids), "serial": client[2]},
+        )
+    db.commit()
+    return {"acknowledged": len(body.ids)}

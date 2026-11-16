@@ -1,0 +1,22 @@
+[package]
+name = "fairmind-notifier"
+version = "0.1.0"
+edition = "2021"
+description = "Shows the FairMind agent's messages to the person on this laptop, and what the agent checks."
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+dirs = "5"
+notify-rust = "4"
+open = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tao = "0.30"
+tray-icon = "0.19"
+ureq = { version = "2", features = ["json"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
