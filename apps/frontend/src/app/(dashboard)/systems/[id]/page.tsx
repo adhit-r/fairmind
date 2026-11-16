@@ -71,7 +71,7 @@ const PANEL_TITLE: Record<Panel['kind'], string> = {
   fairness: 'Run a fairness test',
   monitoring: 'Record a monitoring snapshot',
   watch: 'Monitoring cadence',
-  target: 'Fairness target',
+  target: 'Model connection',
   analyses: 'Stored analyses',
   explain: 'How the verdict was reached',
   tier: 'Tier and rules',
@@ -104,6 +104,11 @@ function SystemFileBody({ id }: { id: string }) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [railOpen, setRailOpen] = useState(false)
   const isNarrow = useMediaQuery('(max-width: 1024px)')
+
+  // An evaluation page links here with #target when the model is not connected yet.
+  useEffect(() => {
+    if (window.location.hash === '#target') setPanel({ kind: 'target' })
+  }, [])
 
   // The legacy pages read the system from the URL or the context.
   useEffect(() => {
@@ -467,10 +472,10 @@ function SystemFileBody({ id }: { id: string }) {
             <Button label="Run a fairness test" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'fairness' })} />
             <Button label="Record a monitoring snapshot" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'monitoring' })} />
             <Button label="Monitoring cadence" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'watch' })} />
-            <Button label="Fairness target" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'target' })} />
+            <Button label="Model connection" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'target' })} />
             <Button label="Stored analyses" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'analyses' })} />
             <Button label="Open plan" variant="secondary" size="sm" href={`/systems/${encodeURIComponent(id)}/plan`} />
-            <Button label="Run an evaluation" variant="secondary" size="sm" onClick={() => open('/tests')} />
+            <Button label="Run an evaluation" variant="secondary" size="sm" onClick={() => open('/evaluations')} />
             <Button label="Frameworks" variant="secondary" size="sm" href="/frameworks" />
             <Button label="Workflow runs" variant="secondary" size="sm" href="/runs" />
             <Button label="Monitoring" variant="secondary" size="sm" onClick={() => open('/monitoring')} />
