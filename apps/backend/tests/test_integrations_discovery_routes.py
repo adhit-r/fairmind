@@ -60,6 +60,9 @@ def test_github_finds_mcp_servers(client, monkeypatch):  # noqa: F811
     iid = _add(client, "github", owner="acme")
     r = client.post(f"/api/v1/integrations/{iid}/sync")
     assert r.status_code == 200 and r.json()["found"] == 3
+    # The run says how much of the account was read, not only what had AI in it.
+    assert r.json()["scanned"] == {"read": 1, "listed": 1, "token": False}
+    assert client.get("/api/v1/integrations").json()[0]["lastSync"]["scanned"]["read"] == 1
     found = {a["externalId"]: a for a in client.get("/api/v1/integrations/discovered").json()}
     assert found["acme/ops"]["kind"] == "ai_assisted_dev"
     assert found["acme/ops"]["metadata"]["signals"]["mcp_servers"] == ["linear", "postgres"]
@@ -170,3 +173,64 @@ def test_removing_an_integration_also_removes_assets_already_reviewed(client):  
     assert client.post(f"/api/v1/integrations/discovered/{asset['id']}/ignore").status_code == 200
     assert client.delete(f"/api/v1/integrations/{iid}").status_code == 204
     assert client.get("/api/v1/integrations/discovered").json() == []
+
+
+METRICS = """# HELP vllm:request_success_total Count of successfully processed requests.
+vllm:request_success_total{finished_reason="stop",model_name="tinyllama-ft"} 40.0
+vllm:request_success_total{finished_reason="length",model_name="tinyllama-ft"} 2.0
+vllm:prompt_tokens_total{model_name="tinyllama-ft"} 9000.0
+vllm:generation_tokens_total{model_name="tinyllama-ft"} 3100.0
+"""
+
+
+def test_vllm_reads_served_models_base_models_and_traffic(client, monkeypatch):  # noqa: F811
+    seen = []
+
+    def server(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [
+                {"id": "tinyllama-ft", "root": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "parent": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "max_model_len": 2048},
+                {"id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "root": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "max_model_len": 2048},
+            ]})
+        if request.url.path == "/metrics":
+            return httpx.Response(200, text=METRICS)
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.11.0"})
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(server)))
+    monkeypatch.setattr("api.routes.discovery_sources._public_https", lambda url, label: url)
+    r = client.post("/api/v1/integrations", json={"kind": "vllm", "name": "vLLM", "config": {"base_url": "https://llm.example.com"}, "token": "srv-key"})
+    assert r.status_code == 201, r.text
+    assert client.post(f"/api/v1/integrations/{r.json()['id']}/sync").json()["found"] == 2
+    found = {a["name"]: a for a in client.get("/api/v1/integrations/discovered").json()}
+    ft = found["tinyllama-ft"]["metadata"]
+    assert (ft["base_model"], ft["context_length"], ft["requests"], ft["prompt_tokens"], ft["vllm_version"]) == ("TinyLlama/TinyLlama-1.1B-Chat-v1.0", 2048, 42, 9000, "0.11.0")
+    assert found["tinyllama-ft"]["suggestedStage"] == "operate"
+    assert found["TinyLlama/TinyLlama-1.1B-Chat-v1.0"]["metadata"]["base_model"] is None  # the base model itself has no parent
+    assert set(seen) == {"Bearer srv-key"}
+
+
+def test_vllm_says_when_the_address_is_not_a_vllm_server(client, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True}))))
+    monkeypatch.setattr("api.routes.discovery_sources._public_https", lambda url, label: url)
+    r = client.post("/api/v1/integrations/preview", json={"kind": "vllm", "name": "x", "config": {"base_url": "https://not-vllm.example.com"}})
+    assert r.status_code == 502 and "vLLM" in r.json()["detail"]
+
+
+def test_a_described_chatgpt_workspace_becomes_the_workspace_and_its_gpts(client):  # noqa: F811
+    config = {
+        "workspace_name": "SQ1", "plan": "business", "seats": "25", "owner": "it@example.com",
+        "assistants": [{"name": "Policy helper", "purpose": "Answers policy questions", "audience": "workspace"}, {"name": ""}],
+        "apps": ["Google Drive", "GitHub"], "memory": "on", "history": "until deleted", "review_days": 90,
+    }
+    r = client.post("/api/v1/integrations", json={"kind": "chatgpt_workspace", "name": "ChatGPT workspace", "config": config})
+    assert r.status_code == 201, r.text
+    assert client.post(f"/api/v1/integrations/{r.json()['id']}/sync").json()["found"] == 2
+    found = {a["name"]: a for a in client.get("/api/v1/integrations/discovered").json()}
+    ws = found["ChatGPT workspace: SQ1"]
+    assert ws["kind"] == "ai_service" and ws["metadata"]["seats"] == 25 and ws["metadata"]["apps"] == ["Google Drive", "GitHub"]
+    assert found["Policy helper"]["kind"] == "llm_app" and found["Policy helper"]["metadata"]["kind_in_vendor"] == "custom GPT"
+    bad = client.post("/api/v1/integrations/preview", json={"kind": "claude_team", "name": "x", "config": {"seats": 3}})
+    assert bad.status_code == 400 and "Workspace name" in bad.json()["detail"]

@@ -1,8 +1,8 @@
-import { Route, ScrollText } from 'lucide-react'
+import { Route, ScrollText, Server } from 'lucide-react'
 import { SOURCE_LOGO } from '@/astryx/sourceLogos'
 import { SOURCES, type DiscoveredAsset, type Integration, type IntegrationKind } from '@/astryx/data/discovery'
 
-const GENERIC = { proxy_logs: ScrollText, litellm: Route } as const
+const GENERIC = { proxy_logs: ScrollText, litellm: Route, vllm: Server } as const
 
 /** A source's tile: the vendor's mark in ink where one is available, otherwise its letters. Dashed when not connected. */
 export function SourceMark({ kind, ghost, size }: { kind: IntegrationKind; ghost?: boolean; size?: 'sm' }) {
@@ -32,6 +32,11 @@ export function where(i: Integration): string {
       return c.tracking_uri ?? ''
     case 'github':
       return `github.com/${c.owner ?? ''}`
+    case 'vllm':
+      return c.base_url ?? ''
+    case 'chatgpt_workspace':
+    case 'claude_team':
+      return `${c.workspace_name ?? ''}, described by its admin`
     case 'huggingface':
       return `huggingface.co/${c.owner ?? ''}`
     case 'aws':

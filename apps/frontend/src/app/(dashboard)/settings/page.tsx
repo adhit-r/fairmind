@@ -1,6 +1,7 @@
 'use client'
 
 import '@/astryx/pages/settings.css'
+import '@/astryx/pages/tasks.css'
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -34,8 +35,19 @@ import {
   createApiKey,
   deleteApiKey,
   inviteMember,
+  leaveOrganisation,
+  addDomain,
+  removeDomain,
+  approveJoin,
+  denyJoin,
   removeMember,
+  revokeInvitation,
+  setMemberStatus,
+  transferOwnership,
   useApiKeys,
+  useInvitations,
+  useDomains,
+  useJoinRequests,
   useMembers,
   useOrgAuditLog,
   usePendingAccessRequests,
@@ -146,8 +158,60 @@ function OrganisationSection() {
         {selectedOrg.domain && <MetadataListItem label="Domain">{selectedOrg.domain}</MetadataListItem>}
         <MetadataListItem label="Created">{day(selectedOrg.created_at)}</MetadataListItem>
       </MetadataList>
+      <DomainsSetting orgId={selectedOrg.id} canChange={['owner', 'admin'].includes(String(selectedOrg.role).toLowerCase())} />
       <ReleaseGateSetting canChange={['owner', 'admin'].includes(String(selectedOrg.role).toLowerCase())} orgId={selectedOrg.id} />
-      <Banner status="info" title="Name and domain are read-only for now" description="There is no way to rename an organisation from the app yet." />
+      <Banner status="info" title="The name is read-only for now" description="There is no way to rename an organisation from the app yet." />
+    </VStack>
+  )
+}
+
+/** Email domains this org owns: anyone who signs up from one asks to join here instead of making a new org. */
+function DomainsSetting({ orgId, canChange }: { orgId: string; canChange: boolean }) {
+  const domains = useDomains(orgId)
+  const me = useSession().user
+  const [value, setValue] = useState('')
+  const [failure, setFailure] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const mine = me?.email?.split('@')[1] ?? ''
+  async function run(call: () => Promise<{ success: boolean; error?: string }>) {
+    setBusy(true)
+    setFailure(null)
+    const res = await call()
+    setBusy(false)
+    if (res.success) {
+      setValue('')
+      domains.reload()
+    } else setFailure(res.error || 'That did not work')
+  }
+  return (
+    <VStack gap={2}>
+      <Heading level={3}>Email domains</Heading>
+      <Text color="secondary">
+        People who sign up with an address on these domains ask to join this organisation, and an owner or admin approves them under Team. Nobody can start a second organisation on them.
+      </Text>
+      {failure && <Banner status="error" title={failure} isDismissable onDismiss={() => setFailure(null)} />}
+      {domains.loading ? (
+        <Skeleton height={40} />
+      ) : domains.data.length === 0 ? (
+        <Text color="secondary">No domains yet.</Text>
+      ) : (
+        <List>
+          {domains.data.map((d) => (
+            <ListItem
+              key={d.id}
+              label={d.domain}
+              description={d.verified_via === 'owner_email' ? 'Proved by an owner or admin address on it' : 'Added by the FairMind team'}
+              endContent={canChange ? <Button label="Remove" size="sm" variant="ghost" isDisabled={busy} onClick={() => void run(() => removeDomain(orgId, d.id))} /> : undefined}
+            />
+          ))}
+        </List>
+      )}
+      {canChange && (
+        <HStack gap={2} vAlign="end" wrap="wrap">
+          <TextInput label="Add a domain" description={mine ? `You can add ${mine}, the domain of your own address.` : undefined} value={value} onChange={setValue} />
+          <Button label="Add" variant="secondary" isDisabled={!value.trim() || busy} onClick={() => void run(() => addDomain(orgId, value.trim()))} />
+        </HStack>
+      )}
     </VStack>
   )
 }
@@ -222,22 +286,40 @@ function ConnectionsSection() {
 
 type MemberRow = OrgMember & Record<string, unknown>
 
+/** Built-in roles, as the server enforces them (org_management.BUILT_IN_ROLES and may_mutate). */
+const BUILT_IN_ROLES = [
+  { value: 'owner', label: 'Owner', what: 'Everything an admin can do, and the only role that can grant, change or remove owners' },
+  { value: 'admin', label: 'Admin', what: 'Invites people, changes roles below owner, and manages settings' },
+  { value: 'editor', label: 'Editor', what: 'Adds and changes AI systems, evidence and policies' },
+  { value: 'viewer', label: 'Viewer', what: 'Reads everything, changes nothing' },
+]
+const roleLabel = (role: string) => BUILT_IN_ROLES.find((r) => r.value === role)?.label ?? role
+
 function TeamSection() {
   const { selectedOrg } = useOrg()
+  const me = useSession().user
   const orgId = selectedOrg?.id
   const members = useMembers(orgId)
   const roles = useRoles(orgId)
+  const myRole = selectedOrg?.role
+  // Owners and admins manage people; only an owner touches the owner role.
+  const canManage = myRole === 'owner' || myRole === 'admin'
+  const isOwner = myRole === 'owner'
+  const invitations = useInvitations(orgId, canManage)
+  const joins = useJoinRequests(orgId, canManage)
+  const [joinRole, setJoinRole] = useState<Record<string, string>>({})
   const [inviting, setInviting] = useState(false)
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState('')
+  const [role, setRole] = useState('editor')
+  const [transferTo, setTransferTo] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<string | null>(null)
 
-  // Owners and admins manage people; everyone else sees the list and who to ask.
-  const canManage = selectedOrg?.role === 'owner' || selectedOrg?.role === 'admin'
-  const roleOptions = roles.data.map((r) => ({ value: r.name, label: r.name }))
-  const inviteRole = role || roleOptions.find((o) => o.value === 'analyst')?.value || roleOptions[0]?.value || ''
+  const custom = roles.data.filter((r) => !BUILT_IN_ROLES.some((b) => b.value === r.name)).map((r) => ({ value: r.name, label: r.name }))
+  const roleOptions = [...BUILT_IN_ROLES.filter((r) => isOwner || r.value !== 'owner').map(({ value, label }) => ({ value, label })), ...custom]
+  const mine = members.data.find((m) => m.user_id === me?.id)
+  const others = members.data.filter((m) => m.user_id !== me?.id && m.status === 'active')
 
   async function run(key: string, call: () => Promise<{ success: boolean; error?: string; message?: string }>, after?: () => void) {
     setBusy(key)
@@ -247,8 +329,12 @@ function TeamSection() {
     if (res.success) {
       after?.()
       members.reload()
+      invitations.reload()
     } else setFailure(res.error || res.message || 'That did not work')
   }
+
+  // An admin can't change or remove an owner; nobody manages their own row here (Leave does that).
+  const editable = (m: OrgMember) => canManage && m.user_id !== me?.id && (isOwner || m.role !== 'owner')
 
   const columns: TableColumn<MemberRow>[] = [
     {
@@ -257,7 +343,10 @@ function TeamSection() {
       width: proportional(3),
       renderCell: (m) => (
         <VStack gap={0}>
-          <Text maxLines={1}>{m.name || m.email || m.user_id}</Text>
+          <Text maxLines={1}>
+            {m.name || m.email || m.user_id}
+            {m.user_id === me?.id ? ' (you)' : ''}
+          </Text>
           {m.name && m.email && <Text color="secondary" size="sm" maxLines={1}>{m.email}</Text>}
         </VStack>
       ),
@@ -265,8 +354,8 @@ function TeamSection() {
     {
       key: 'role',
       header: 'Role',
-      width: pixel(200),
-      renderCell: (m) => !canManage ? <Text>{m.role}</Text> : (
+      width: pixel(180),
+      renderCell: (m) => !editable(m) ? <Text>{roleLabel(m.role)}</Text> : (
         <Selector
           label={`Role for ${m.name || m.email || 'member'}`}
           isLabelHidden
@@ -277,17 +366,28 @@ function TeamSection() {
         />
       ),
     },
-    { key: 'status', header: 'Status', width: pixel(100), renderCell: (m) => <Token size="sm" color={m.status === 'active' ? 'green' : 'gray'} label={m.status} /> },
+    { key: 'status', header: 'Status', width: pixel(110), renderCell: (m) => <Token size="sm" color={m.status === 'active' ? 'green' : 'gray'} label={m.status === 'active' ? 'Active' : 'Suspended'} /> },
     ...(!canManage ? [] : [{
-      key: 'remove',
+      key: 'actions',
       header: '',
-      width: pixel(150),
-      renderCell: (m) =>
-        confirming === m.id ? (
+      width: pixel(230),
+      renderCell: (m) => !editable(m) ? null : confirming === m.id ? (
+        <HStack gap={1}>
           <Button label="Confirm remove" size="sm" variant="destructive" isLoading={busy === `rm-${m.id}`} onClick={() => void run(`rm-${m.id}`, () => removeMember(orgId!, m.id), () => setConfirming(null))} />
-        ) : (
+          <Button label="Keep" size="sm" variant="ghost" onClick={() => setConfirming(null)} />
+        </HStack>
+      ) : (
+        <HStack gap={1}>
+          <Button
+            label={m.status === 'active' ? 'Suspend' : 'Reactivate'}
+            size="sm"
+            variant="ghost"
+            isLoading={busy === `st-${m.id}`}
+            onClick={() => void run(`st-${m.id}`, () => setMemberStatus(orgId!, m.id, m.status === 'active' ? 'suspended' : 'active'))}
+          />
           <Button label="Remove" size="sm" variant="ghost" onClick={() => setConfirming(m.id)} />
-        ),
+        </HStack>
+      ),
     } satisfies TableColumn<MemberRow>]),
   ]
 
@@ -300,9 +400,7 @@ function TeamSection() {
           <Heading level={3}>People</Heading>
           {canManage && <Button label="Invite a person" variant="secondary" onClick={() => setInviting(true)} />}
         </HStack>
-        {!canManage && (
-          <Text color="secondary">Only owners and admins can invite people or change roles. Ask one of them.</Text>
-        )}
+        {!canManage && <Text color="secondary">Only owners and admins can invite people or change roles. Ask one of them.</Text>}
         {members.loading ? (
           <Skeleton height={120} />
         ) : members.error ? (
@@ -313,44 +411,125 @@ function TeamSection() {
           <Table<MemberRow> data={members.data as MemberRow[]} columns={columns} idKey="id" density="balanced" />
         )}
       </VStack>
+
+      {canManage && joins.data.length > 0 && (
+        <VStack gap={2}>
+          <Heading level={3}>Asking to join</Heading>
+          <Text color="secondary">They signed up with an address on one of this organisation&rsquo;s domains.</Text>
+          <List>
+            {joins.data.map((j) => (
+              <ListItem
+                key={j.id}
+                label={`${j.name} · ${j.email}`}
+                description={j.message ?? undefined}
+                endContent={
+                  <HStack gap={1} vAlign="center">
+                    <select className="tk-in" aria-label={`Role for ${j.name}`} value={joinRole[j.id] ?? 'editor'} onChange={(e) => setJoinRole((p) => ({ ...p, [j.id]: e.target.value }))} style={{ width: 120, height: 36 }}>
+                      {roleOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <Button label="Approve" size="sm" variant="primary" isLoading={busy === `join-${j.id}`} onClick={() => void run(`join-${j.id}`, () => approveJoin(orgId, j.id, joinRole[j.id] ?? 'editor'), () => joins.reload())} />
+                    <Button label="Deny" size="sm" variant="ghost" isDisabled={busy !== null} onClick={() => void run(`deny-${j.id}`, () => denyJoin(orgId, j.id), () => joins.reload())} />
+                  </HStack>
+                }
+              />
+            ))}
+          </List>
+        </VStack>
+      )}
+
+      {canManage && invitations.data.length > 0 && (
+        <VStack gap={2}>
+          <Heading level={3}>Waiting to join</Heading>
+          <List>
+            {invitations.data.map((i) => (
+              <ListItem
+                key={i.id}
+                label={i.email}
+                description={`${roleLabel(i.role)}${i.expires_at ? ` · link works until ${new Date(i.expires_at).toLocaleDateString()}` : ''}`}
+                endContent={(isOwner || i.role !== 'owner') ? (
+                  <Button label="Revoke" size="sm" variant="ghost" isLoading={busy === `inv-${i.id}`} onClick={() => void run(`inv-${i.id}`, () => revokeInvitation(orgId, i.id))} />
+                ) : undefined}
+              />
+            ))}
+          </List>
+        </VStack>
+      )}
+
       <VStack gap={2}>
         <Heading level={3}>Roles</Heading>
-        {roles.loading ? (
-          <Skeleton height={80} />
-        ) : roles.error ? (
-          <Problem message={roles.error} retry={roles.reload} />
-        ) : roles.data.length === 0 ? (
-          <Text color="secondary">No custom roles. Members use the built-in owner, admin and member roles.</Text>
-        ) : (
-          <ul className="fm-st-roles">
-            {roles.data.map((r) => (
-              <li key={r.id}>
-                <HStack gap={2} vAlign="center">
-                  <Text weight="semibold">{r.name}</Text>
-                  {r.is_system_role && <Token size="sm" label="Built in" />}
-                  <Text color="secondary" size="sm">{r.permissions.length} permission{r.permissions.length === 1 ? '' : 's'}</Text>
-                </HStack>
-                {r.description && <Text color="secondary" size="sm">{r.description}</Text>}
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="fm-st-roles">
+          {BUILT_IN_ROLES.map((r) => (
+            <li key={r.value}>
+              <HStack gap={2} vAlign="center">
+                <Text weight="semibold">{r.label}</Text>
+                <Token size="sm" label="Built in" />
+              </HStack>
+              <Text color="secondary" size="sm">{r.what}</Text>
+            </li>
+          ))}
+          {roles.data.filter((r) => custom.some((c) => c.value === r.name)).map((r) => (
+            <li key={r.id}>
+              <HStack gap={2} vAlign="center">
+                <Text weight="semibold">{r.name}</Text>
+                <Text color="secondary" size="sm">{r.permissions.length} permission{r.permissions.length === 1 ? '' : 's'}</Text>
+              </HStack>
+              {r.description && <Text color="secondary" size="sm">{r.description}</Text>}
+            </li>
+          ))}
+        </ul>
       </VStack>
+
+      {isOwner && others.length > 0 && (
+        <VStack gap={2}>
+          <Heading level={3}>Ownership</Heading>
+          <Text color="secondary">Make another member the owner of record. You stay on as an admin.</Text>
+          <HStack gap={2} vAlign="end" wrap="wrap">
+            <Selector label="New owner" value={transferTo} onChange={setTransferTo} options={others.map((m) => ({ value: m.id, label: m.name || m.email || m.user_id }))} />
+            <Button
+              label="Transfer ownership"
+              variant="secondary"
+              isDisabled={!transferTo}
+              isLoading={busy === 'transfer'}
+              onClick={() => void run('transfer', () => transferOwnership(orgId, transferTo), () => window.location.reload())}
+            />
+          </HStack>
+        </VStack>
+      )}
+
+      {mine && (
+        <VStack gap={2}>
+          <Heading level={3}>Leave {selectedOrg?.name}</Heading>
+          <Text color="secondary">
+            You lose access straight away. {isOwner ? 'If you are the only owner, transfer ownership first.' : 'An admin can invite you back.'}
+          </Text>
+          <HStack>
+            {confirming === 'leave' ? (
+              <HStack gap={1}>
+                <Button label="Confirm leave" variant="destructive" isLoading={busy === 'leave'} onClick={() => void run('leave', () => leaveOrganisation(orgId), () => window.location.assign('/dashboard'))} />
+                <Button label="Stay" variant="ghost" onClick={() => setConfirming(null)} />
+              </HStack>
+            ) : (
+              <Button label="Leave the organisation" variant="secondary" onClick={() => setConfirming('leave')} />
+            )}
+          </HStack>
+        </VStack>
+      )}
 
       <Dialog isOpen={inviting} onOpenChange={setInviting} width={460}>
         <DialogHeader title="Invite a person" onOpenChange={setInviting} />
         <div className="fm-st-pad">
           <VStack gap={4}>
             <TextInput label="Email" type="email" value={email} onChange={setEmail} />
-            <Selector label="Role" value={inviteRole} onChange={setRole} options={roleOptions} />
+            <Selector label="Role" value={role} onChange={setRole} options={roleOptions} />
+            <Text color="secondary" size="sm">{BUILT_IN_ROLES.find((r) => r.value === role)?.what ?? 'A custom role defined for this organisation'}</Text>
             <HStack gap={2} hAlign="end">
               <Button label="Cancel" variant="ghost" onClick={() => setInviting(false)} />
               <Button
                 label="Send invitation"
                 variant="primary"
-                isDisabled={!email.includes('@') || !inviteRole}
+                isDisabled={!email.includes('@') || !role}
                 isLoading={busy === 'invite'}
-                onClick={() => void run('invite', () => inviteMember(orgId, email.trim(), inviteRole), () => { setInviting(false); setEmail('') })}
+                onClick={() => void run('invite', () => inviteMember(orgId, email.trim(), role), () => { setInviting(false); setEmail('') })}
               />
             </HStack>
           </VStack>

@@ -41,6 +41,8 @@ from api.routes.discovery_sources import (
     openai_admin,
     proxy_logs,
     seats,
+    vllm,
+    workspace,
 )
 from api.routes.discovery_sources import steps as read_steps
 from api.routes.org_scope import org_member, org_mutator
@@ -210,6 +212,8 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
         if repos is None:
             raise HTTPException(status_code=404, detail=f"GitHub owner {owner} not found")
         wanted = [r for r in repos if not r.get("archived") and (not only or r["name"] in only or r["full_name"] in only)]
+        # ponytail: scan size rides back on the in-memory config (never saved); a typed result if a second connector needs it.
+        config["_scanned"] = {"read": min(len(wanted), max_repos), "listed": len(wanted), "token": bool(token)}
         for repo in wanted[:max_repos]:
             full = repo["full_name"]
             root = await _github_json(client, f"/repos/{full}/contents/") or []
@@ -425,6 +429,9 @@ _CONNECTORS = {
     "litellm": litellm.sync,
     "proxy_logs": _sync_upload_only,
     "mcp_registry": mcp_registry.sync,
+    "vllm": vllm.sync,
+    "chatgpt_workspace": workspace.chatgpt_sync,
+    "claude_team": workspace.claude_team_sync,
 }
 # Sign-in sources also read directory facts (team, left or not) for Shadow AI, as the "people" step.
 _FACTS = {"okta": okta.facts, "entra": entra.facts}
@@ -788,6 +795,8 @@ def _finish(
     now = _now()
     created, updated, new_items = _upsert(db, org, row[0], row[2], found, now)
     summary = {"found": len(found), "created": created, "updated": updated, "at": now}
+    if config.get("_scanned"):
+        summary["scanned"] = config.pop("_scanned")
     steps = read_steps.summarise(row[2], found, {i["external_id"] for i in new_items}, config, counts)
     _record(db, org, row, trigger, started, summary, new_items, steps)
     return summary

@@ -587,8 +587,8 @@ def _user_from_row(row) -> User:
     if role == UserRole.ADMIN and "*" not in permissions:
         permissions = [*permissions, "*"]
     org_role = _row_get(row, "resolved_org_role")
-    if org_role in ("owner", "admin") and "model:write" not in permissions:
-        # Org owners and admins may change governance records
+    if org_role in ("owner", "admin", "editor") and "model:write" not in permissions:
+        # Org owners, admins and editors may change governance records
         # (GovernanceAssuranceService.may_mutate); every token they mint carries it.
         permissions = [*permissions, "model:write"]
     return User(
