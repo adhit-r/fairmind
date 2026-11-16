@@ -71,6 +71,10 @@ export async function installGridFixtures(page: Page, fwSystems: unknown = frame
     if (path === '/api/v1/organizations') return json(route, { organizations: [{ id: 'org-1', name: 'Grid org', slug: 'grid-org', owner_id: 'user-1', created_at: '2026-01-01T00:00:00Z', role: 'admin' }] })
     if (path === '/api/v1/ai-governance/systems') return json(route, systems)
     if (path === '/api/v1/ai-governance/estate/gates') return json(route, gates)
+    if (path === '/api/v1/ai-governance/estate/frameworks') {
+      const fw = fwSystems as typeof frameworkSystems
+      return json(route, { unconfirmed: 0, frameworks: [{ key: FW, systems: fw.systems.length, tracked: fw.requirements.length, states: { proven: 1, open: fw.requirements.length - 1 } }] })
+    }
     if (path === `/api/v1/ai-governance/frameworks/${FW}/systems`) return json(route, fwSystems)
     if (path === `/api/v1/packs/journeys/${FW}`) return json(route, journey)
     if (path === '/api/v1/packs/journeys') return json(route, [{ key: FW, name: journey.name, pillar: 'governance', active: 3, coveredAll: 0, coveredInstalled: 0, contributingPacks: [], type: null, binding: null, workflows: [], waiting: 0 }])

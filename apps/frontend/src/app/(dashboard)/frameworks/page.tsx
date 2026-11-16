@@ -2,8 +2,6 @@
 
 import '@/astryx/pages/frameworks.css'
 import Link from 'next/link'
-import { Fragment, useEffect, useState } from 'react'
-import { Check, Clock, PenLine, X } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { EmptyState } from '@astryxdesign/core/EmptyState'
@@ -11,222 +9,186 @@ import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Token } from '@astryxdesign/core/Token'
-import { useFrameworkSystems } from '@/lib/api/hooks/useEstate'
-import { useInstaller, useJourney, useJourneys } from '@/lib/api/hooks/usePacks'
-import { KIND_LABEL, type CellState } from '@/components/ui/matrix'
+import { useEstateFrameworks } from '@/lib/api/hooks/useEstate'
+import { useInstaller, useJourneys, type JourneySummary } from '@/lib/api/hooks/usePacks'
+import { Legend, NEEDS_WORK, StateBar } from './parts'
 
-function Mark({ state }: { state: string }) {
-  if (state === 'proven') return <Check size={14} strokeWidth={2.6} aria-hidden />
-  if (state === 'attested') return <PenLine size={12} strokeWidth={2.4} aria-hidden />
-  if (state === 'fails') return <X size={14} strokeWidth={2.6} aria-hidden />
-  if (state === 'stale') return <Clock size={12} strokeWidth={2.4} aria-hidden />
-  if (state === 'estimated') return <span className="tilde" aria-hidden>~</span>
-  return null
-}
+const href = (key: string) => `/frameworks/${encodeURIComponent(key)}`
+const kind = (r: JourneySummary) => r.binding || r.type || ''
 
-const KEY: CellState[] = ['proven', 'attested', 'estimated', 'stale', 'fails', 'open']
-
-/** One framework's requirements against the systems that confirmed it, from the system-by-requirement coverage. */
-function Coverage({ fwKey }: { fwKey: string }) {
-  const journey = useJourney(fwKey)
-  const fw = useFrameworkSystems(fwKey)
-  if ((journey.loading && !journey.data) || (fw.loading && !fw.data)) {
-    return (
-      <VStack gap={2} aria-busy="true">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} height={26} />
-        ))}
-      </VStack>
-    )
-  }
-  const err = journey.error || fw.error
-  if (err || !journey.data || !fw.data) {
-    return <EmptyState title="Coverage could not load" description={err ?? 'No data came back.'} actions={<Button label="Try again" onClick={() => { journey.reload(); fw.reload() }} />} />
-  }
-  const j = journey.data
-  const f = fw.data
-  if (!f.systems.length) {
-    return (
-      <EmptyState
-        title="No system has confirmed this framework"
-        description={`${f.unconfirmed} registered system${f.unconfirmed === 1 ? '' : 's'} not confirmed yet, ${f.notInScope} not in scope. Confirm the frameworks that apply on a system's file and it appears here.`}
-        actions={<Button variant="secondary" label="Open AI systems" href="/systems" />}
-      />
-    )
-  }
-  const byKey = new Map(f.requirements.map((r) => [r.key, r.cells]))
+function Rows({ n }: { n: number }) {
   return (
-    <VStack gap={3}>
-      <div className="fw-cov">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col" className="req">Requirement</th>
-              {f.systems.map((s) => (
-                <th key={s.id} scope="col" title={`${s.name} (${s.riskTier} risk)`}>
-                  <Link href={`/systems/${encodeURIComponent(s.id)}`}>{s.name}</Link>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {j.groups.map((g) => (
-              <Fragment key={g.name}>
-                <tr className="grp">
-                  <th colSpan={f.systems.length + 1} scope="rowgroup">{g.name}</th>
-                </tr>
-                {g.requirements.map((r) => {
-                  const cells = byKey.get(r.key)
-                  return (
-                    <tr key={r.key}>
-                      <th scope="row" className="req">
-                        <code>{r.control}</code>
-                        {r.title}
-                      </th>
-                      {f.systems.map((s, i) => {
-                        const c = cells?.[i]
-                        const state = c?.state ?? 'none'
-                        const word = c ? KIND_LABEL[c.state] ?? c.state : 'Not tracked for this system'
-                        return (
-                          <td key={s.id}>
-                            <span className={`cell mini ${state}`} role="img" aria-label={`${r.control} on ${s.name}: ${word}`} title={word} style={{ cursor: 'default' }}>
-                              <Mark state={state} />
-                            </span>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  )
-                })}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="fw-key">
-        {KEY.map((k) => (
-          <span key={k}>
-            <i className={`cell ${k}`}>
-              <Mark state={k} />
-            </i>
-            {(KIND_LABEL[k] ?? k).replace(/^./, (c) => c.toUpperCase())}
-          </span>
-        ))}
-        <span>
-          <i className="cell none" />
-          Not tracked
-        </span>
-      </div>
-      {(f.unconfirmed > 0 || f.notInScope > 0) && (
-        <Text type="supporting">
-          {f.unconfirmed} registered system{f.unconfirmed === 1 ? ' has' : 's have'} not confirmed which frameworks apply; {f.notInScope} {f.notInScope === 1 ? 'is' : 'are'} not in scope.
-        </Text>
-      )}
+    <VStack gap={2} aria-busy="true">
+      {Array.from({ length: n }, (_, i) => (
+        <Skeleton key={i} height={44} />
+      ))}
     </VStack>
   )
 }
 
 export default function FrameworksPage() {
   const journeys = useJourneys()
+  const estate = useEstateFrameworks()
   const installer = useInstaller(() => journeys.reload())
-  const [sel, setSel] = useState<string | null>(null)
-  const rows = journeys.data ?? []
-
-  useEffect(() => {
-    if (!sel && rows.length) setSel(rows.find((r) => r.active > 0)?.key ?? rows[0].key)
-  }, [rows, sel])
-
-  const chosen = rows.find((r) => r.key === sel)
+  const all = journeys.data ?? []
+  const used = new Map((estate.data?.frameworks ?? []).map((f) => [f.key, f]))
+  const inUse = all.filter((j) => used.has(j.key))
+  const rest = all.filter((j) => !used.has(j.key))
+  const loading = (journeys.loading && !journeys.data) || (estate.loading && !estate.data)
+  const error = journeys.error || estate.error
 
   return (
     <div className="fm-page">
       <VStack gap={5}>
-        <VStack gap={1}>
-          <Heading level={1}>Frameworks</Heading>
-          <Text color="secondary">The rules and standards you answer to, how much of each the installed packs cover, and where each system stands.</Text>
-        </VStack>
+        <HStack gap={3} hAlign="between" vAlign="end" wrap="wrap">
+          <VStack gap={1}>
+            <Heading level={1}>Frameworks</Heading>
+            <Text color="secondary">
+              The rules and standards your AI systems answer to. Each one reads the same FairMind controls and evidence, so work done once counts everywhere it applies.
+            </Text>
+          </VStack>
+          <Button variant="secondary" label="Open AI systems" href="/systems" />
+        </HStack>
 
         {installer.failure && <Banner status="error" title="Install failed" description={installer.failure} />}
 
-        {journeys.loading && !journeys.data ? (
-          <VStack gap={2} aria-busy="true">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} height={36} />
-            ))}
-          </VStack>
-        ) : journeys.error ? (
-          <EmptyState title="Frameworks could not load" description={journeys.error} actions={<Button label="Try again" onClick={() => journeys.reload()} />} />
-        ) : rows.length === 0 ? (
-          <EmptyState title="No frameworks are loaded" description="This organisation has no frameworks yet." actions={<Button variant="secondary" label="Open the packs hub" href="/compliance" />} />
+        {loading ? (
+          <Rows n={5} />
+        ) : error ? (
+          <EmptyState title="Frameworks could not load" description={error} actions={<Button label="Try again" onClick={() => { journeys.reload(); estate.reload() }} />} />
         ) : (
-          <section className="fm-card" aria-label="Frameworks">
-            <div className="fw-scroll">
-              <table className="fw-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Framework</th>
-                    <th scope="col">Pillar</th>
-                    <th scope="col">Type</th>
-                    <th scope="col">Covered by installed packs</th>
-                    <th scope="col">Covered by all packs</th>
-                    <th scope="col">Packs</th>
-                    <th scope="col">Waiting</th>
-                    <th scope="col"><span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => {
-                    const missing = r.coveredAll > r.coveredInstalled
-                    return (
-                      <tr key={r.key} className={r.key === sel ? 'on' : undefined}>
-                        <td className="name">
-                          <Link href={`/frameworks/${encodeURIComponent(r.key)}`}>{r.name}</Link>
-                        </td>
-                        <td>{r.pillar}</td>
-                        <td>{[r.type, r.binding].filter(Boolean).join(' · ') || ''}</td>
-                        <td className="num">{r.coveredInstalled} of {r.active}</td>
-                        <td className="num">{r.coveredAll} of {r.active}</td>
-                        <td className="num">{r.contributingPacks.length}</td>
-                        <td>{r.waiting > 0 ? <Token size="sm" color="orange" label={`${r.waiting} waiting`} /> : ''}</td>
-                        <td className="act">
-                          <HStack gap={2} hAlign="end">
-                            {missing && (
-                              <Button
-                                label={installer.busy === r.key ? 'Installing' : 'Install all packs'}
-                                variant="secondary"
-                                size="sm"
-                                isDisabled={installer.busy !== null}
-                                onClick={() => installer.framework(r.key)}
-                              />
-                            )}
-                            <Button label="Show coverage" variant={r.key === sel ? 'primary' : 'ghost'} size="sm" onClick={() => setSel(r.key)} />
-                          </HStack>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
-
-        {chosen && (
-          <section className="fm-card" aria-labelledby="fw-cov-title">
-            <VStack gap={4}>
-              <HStack gap={3} hAlign="between" vAlign="center" wrap="wrap">
-                <VStack gap={1}>
-                  <Heading level={2} id="fw-cov-title">{chosen.name}</Heading>
-                  <Text color="secondary">Every requirement against every system that confirmed this framework.</Text>
-                </VStack>
-                <HStack gap={2}>
-                  <Button label="Open the framework" variant="secondary" href={`/frameworks/${encodeURIComponent(chosen.key)}`} />
-                  <Button label="Export an auditor pack" variant="primary" href={`/auditor-packs?framework=${encodeURIComponent(chosen.key)}`} />
+          <>
+            <section className="fm-card" aria-labelledby="fx-inuse">
+              <VStack gap={3}>
+                <HStack gap={3} hAlign="between" vAlign="center" wrap="wrap">
+                  <Heading level={2} id="fx-inuse">In use</Heading>
+                  {(estate.data?.unconfirmed ?? 0) > 0 && (
+                    <Text type="supporting">
+                      {estate.data?.unconfirmed} system{estate.data?.unconfirmed === 1 ? ' has' : 's have'} not confirmed which frameworks apply · <Link href="/systems">Confirm</Link>
+                    </Text>
+                  )}
                 </HStack>
-              </HStack>
-              <Coverage fwKey={chosen.key} />
-            </VStack>
-          </section>
+                {inUse.length === 0 ? (
+                  <EmptyState
+                    title="No system has confirmed a framework yet"
+                    description="Open an AI system and confirm the frameworks that apply to it. Each confirmed framework appears here with where every requirement stands."
+                    actions={<Button variant="secondary" label="Open AI systems" href="/systems" />}
+                  />
+                ) : (
+                  <>
+                    <Legend />
+                    <div className="fx-scroll">
+                      <table className="fx-table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Framework</th>
+                            <th scope="col">Kind</th>
+                            <th scope="col">Systems</th>
+                            <th scope="col">Where each tracked requirement stands</th>
+                            <th scope="col">Needs work</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inUse.map((r) => {
+                            const f = used.get(r.key)!
+                            const work = NEEDS_WORK.reduce((a, s) => a + (f.states[s as keyof typeof f.states] ?? 0), 0)
+                            const failing = f.states.fails ?? 0
+                            return (
+                              <tr key={r.key}>
+                                <td>
+                                  <span className="fx-name">
+                                    <span>
+                                      <Link href={href(r.key)}>{r.name}</Link>
+                                      <small>
+                                        {f.tracked} of {r.active} requirements checked per system
+                                      </small>
+                                    </span>
+                                  </span>
+                                </td>
+                                <td>{kind(r)}</td>
+                                <td className="num">{f.systems}</td>
+                                <td style={{ minWidth: 280 }}>
+                                  <StateBar states={f.states} />
+                                </td>
+                                <td className="num">
+                                  {work > 0 ? (
+                                    <Link href={href(r.key)}>
+                                      <b>{work}</b>
+                                      {failing > 0 ? ` · ${failing} failing` : ''}
+                                    </Link>
+                                  ) : (
+                                    'None'
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </VStack>
+            </section>
+
+            {rest.length > 0 && (
+              <section className="fm-card" aria-labelledby="fx-rest">
+                <VStack gap={3}>
+                  <VStack gap={1}>
+                    <Heading level={2} id="fx-rest">Not applied yet</Heading>
+                    <Text type="supporting">No system has confirmed these. Installed packs may already cover part of each.</Text>
+                  </VStack>
+                  <div className="fx-scroll">
+                    <table className="fx-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Framework</th>
+                          <th scope="col">Kind</th>
+                          <th scope="col">Covered by installed packs</th>
+                          <th scope="col"><span className="sr-only">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rest.map((r) => (
+                          <tr key={r.key}>
+                            <td>
+                              <span className="fx-name">
+                                <span>
+                                  <Link href={href(r.key)}>{r.name}</Link>
+                                  <small>{r.active} requirements</small>
+                                </span>
+                              </span>
+                            </td>
+                            <td>{kind(r)}</td>
+                            <td className="num">
+                              {r.coveredInstalled} of {r.active}
+                              {r.waiting > 0 && (
+                                <>
+                                  {' '}
+                                  <Token size="sm" color="orange" label={`${r.waiting} waiting`} />
+                                </>
+                              )}
+                            </td>
+                            <td className="act">
+                              {r.coveredAll > r.coveredInstalled && (
+                                <Button
+                                  label={installer.busy === r.key ? 'Installing' : 'Install its packs'}
+                                  variant="secondary"
+                                  size="sm"
+                                  isDisabled={installer.busy !== null}
+                                  onClick={() => installer.framework(r.key)}
+                                />
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </VStack>
+              </section>
+            )}
+          </>
         )}
       </VStack>
     </div>

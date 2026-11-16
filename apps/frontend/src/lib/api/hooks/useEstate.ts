@@ -49,6 +49,13 @@ export interface Controls {
   crosswalk: Array<{ commonControl: string; key: string; relation: string }>
 }
 
+/** Per framework some system confirmed: how many systems, and its tracked requirements counted by weakest state. */
+export interface EstateFrameworks {
+  unconfirmed: number
+  frameworks: Array<{ key: string; systems: number; tracked: number; states: Partial<Record<CellState, number>> }>
+}
+
+export const useEstateFrameworks = () => useOrgResource<EstateFrameworks>(API_ENDPOINTS.aiGovernance.estateFrameworks)
 export const useEstateGates = () => useOrgResource<EstateGate[]>(API_ENDPOINTS.aiGovernance.estateGates)
 export const useFrameworkSystems = (frameworkKey: string | undefined) =>
   useOrgResource<FrameworkSystems>(frameworkKey ? API_ENDPOINTS.aiGovernance.frameworkSystems(frameworkKey) : null)
