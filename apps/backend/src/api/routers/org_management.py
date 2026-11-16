@@ -27,6 +27,7 @@ from pydantic import BaseModel, EmailStr
 from config.database import get_db_connection, get_database
 from config.settings import settings
 from config.auth import get_current_active_user, TokenData
+from src.application.services.org_domains import email_domain, is_personal, normalize_domain
 from src.application.services.governance_assurance_service import (
     has_legacy_role_delegation_blocked_permission,
     normalize_org_role_permissions,
@@ -1140,6 +1141,154 @@ async def revoke_invitation(org_id: str, invitation_id: str, request: Request, c
         user_agent=request.headers.get("user-agent"),
     )
     return None
+
+
+class DomainBody(BaseModel):
+    domain: str
+
+
+@router.get("/{org_id}/domains")
+async def list_domains(org_id: str, current_user: TokenData = Depends(get_current_active_user)):
+    """Email domains this organisation owns; sign-ups from them become join requests here."""
+    async with get_db_connection() as db:
+        if not await _check_org_membership(org_id, current_user.user_id, db):
+            raise HTTPException(status_code=403, detail="You are not a member of this organization")
+        rows = await db.fetch_all("SELECT id, domain, verified_via, created_at FROM org_domains WHERE org_id = :org ORDER BY domain", {"org": org_id})
+    return {"domains": [{"id": str(r["id"]), "domain": r["domain"], "verified_via": r["verified_via"],
+                         "created_at": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]}
+
+
+@router.post("/{org_id}/domains", status_code=status.HTTP_201_CREATED)
+async def add_domain(org_id: str, body: DomainBody, request: Request, current_user: TokenData = Depends(get_current_active_user)):
+    """Claim a domain. Proof for now: the owner or admin's own address is on it, or a platform admin adds it."""
+    domain = normalize_domain(body.domain)
+    if not domain:
+        raise HTTPException(status_code=400, detail="That is not a domain, for example sq1.security")
+    if is_personal(domain):
+        raise HTTPException(status_code=400, detail=f"{domain} is personal mail; it cannot belong to one organisation")
+    platform_admin = getattr(current_user.role, "value", current_user.role) == "admin"
+    async with get_db_connection() as db:
+        if await _caller_role(org_id, current_user.user_id, db) not in MANAGER_ROLES and not platform_admin:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        if email_domain(current_user.email) != domain and not platform_admin:
+            raise HTTPException(status_code=403, detail=f"Add a domain your own address is on; yours is on {email_domain(current_user.email)}")
+        owner = await db.fetch_one("SELECT org_id FROM org_domains WHERE domain = :d", {"d": domain})
+        if owner and str(owner["org_id"]) != str(org_id):
+            raise HTTPException(status_code=409, detail=f"{domain} already belongs to another organisation")
+        if not owner:
+            await db.execute(
+                "INSERT INTO org_domains (id, org_id, domain, verified_via, added_by, created_at) VALUES (:id, :org, :d, :via, :by, :now)",
+                {"id": str(uuid.uuid4()), "org": org_id, "d": domain, "via": "owner_email" if email_domain(current_user.email) == domain else "platform_admin",
+                 "by": current_user.user_id, "now": datetime.utcnow()},
+            )
+    await _log_org_audit(org_id=org_id, user_id=current_user.user_id, action="add_domain", resource_type="domain", resource_id=domain,
+                         ip_address=request.client.host if request.client else None, user_agent=request.headers.get("user-agent"))
+    return {"domain": domain}
+
+
+@router.delete("/{org_id}/domains/{domain_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_domain(org_id: str, domain_id: str, request: Request, current_user: TokenData = Depends(get_current_active_user)):
+    async with get_db_connection() as db:
+        if await _caller_role(org_id, current_user.user_id, db) not in MANAGER_ROLES:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        row = await db.fetch_one("SELECT domain FROM org_domains WHERE id = :id AND org_id = :org", {"id": domain_id, "org": org_id})
+        if not row:
+            raise HTTPException(status_code=404, detail="Domain not found")
+        await db.execute("DELETE FROM org_domains WHERE id = :id", {"id": domain_id})
+    await _log_org_audit(org_id=org_id, user_id=current_user.user_id, action="remove_domain", resource_type="domain", resource_id=row["domain"],
+                         ip_address=request.client.host if request.client else None, user_agent=request.headers.get("user-agent"))
+    return None
+
+
+class JoinDecision(BaseModel):
+    role: str = "viewer"
+    notes: Optional[str] = None
+
+
+@router.get("/{org_id}/join-requests")
+async def list_join_requests(org_id: str, current_user: TokenData = Depends(get_current_active_user)):
+    """People who signed up with an address on this organisation's domains and wait for an owner or admin."""
+    async with get_db_connection() as db:
+        if await _caller_role(org_id, current_user.user_id, db) not in MANAGER_ROLES:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        rows = await db.fetch_all(
+            "SELECT id, email, name, requested_role, message, created_at FROM registration_requests "
+            "WHERE CAST(org_id AS TEXT) = :org AND is_join AND status = 'pending' ORDER BY created_at",
+            {"org": str(org_id)},
+        )
+    return {"requests": [{"id": str(r["id"]), "email": r["email"], "name": r["name"], "message": r["message"],
+                          "created_at": r["created_at"].isoformat() if r["created_at"] else None} for r in rows]}
+
+
+async def _pending_join(db, org_id: str, request_id: str):
+    req = await db.fetch_one(
+        "SELECT * FROM registration_requests WHERE id = :id AND CAST(org_id AS TEXT) = :org AND is_join AND status = 'pending'",
+        {"id": request_id, "org": str(org_id)},
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Pending join request not found")
+    return req
+
+
+@router.post("/{org_id}/join-requests/{request_id}/approve")
+async def approve_join_request(org_id: str, request_id: str, body: JoinDecision, request: Request, current_user: TokenData = Depends(get_current_active_user)):
+    """Let the requester in with a role; a new account gets an email to choose its password."""
+    from api.routes.registration import create_account, send_welcome
+
+    async with get_db_connection() as db:
+        caller = await _caller_role(org_id, current_user.user_id, db)
+        if caller not in MANAGER_ROLES:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        await _require_assignable_role(org_id, body.role, db)
+        _require_may_manage(caller, body.role)
+        req = await _pending_join(db, org_id, request_id)
+        org = await db.fetch_one("SELECT name FROM organizations WHERE id = :org", {"org": org_id})
+        user = await db.fetch_one("SELECT id FROM users WHERE lower(email) = lower(:e)", {"e": req["email"]})
+        welcome = None
+        if user:
+            user_id = str(user["id"])
+        else:
+            user_id, password_hash = await create_account(db, req["email"], req["name"])
+            welcome = password_hash
+        if not await db.fetch_one("SELECT 1 FROM org_members WHERE org_id = :org AND user_id = :uid", {"org": org_id, "uid": user_id}):
+            await db.execute(
+                "INSERT INTO org_members (id, org_id, user_id, role, status, invited_by, joined_at) VALUES (:id, :org, :uid, :role, 'active', :by, :now)",
+                {"id": str(uuid.uuid4()), "org": org_id, "uid": user_id, "role": body.role, "by": current_user.user_id, "now": datetime.utcnow()},
+            )
+        await db.execute("UPDATE users SET primary_org_id = COALESCE(primary_org_id, CAST(:org AS uuid)) WHERE id = :uid", {"org": str(org_id), "uid": user_id})
+        await db.execute(
+            "UPDATE registration_requests SET status = 'approved', reviewed_by = :by, reviewed_at = :now, review_notes = :notes WHERE id = :id",
+            {"by": current_user.user_id, "now": datetime.utcnow(), "notes": body.notes, "id": request_id},
+        )
+    if welcome:
+        send_welcome(user_id, welcome, req["email"], req["name"], org["name"])
+    await _log_org_audit(org_id=org_id, user_id=current_user.user_id, action="approve_join_request", resource_type="member", resource_id=request_id,
+                         changes={"email": req["email"], "role": body.role}, ip_address=request.client.host if request.client else None,
+                         user_agent=request.headers.get("user-agent"))
+    return {"status": "approved", "user_id": user_id, "new_account": bool(welcome)}
+
+
+@router.post("/{org_id}/join-requests/{request_id}/deny")
+async def deny_join_request(org_id: str, request_id: str, body: JoinDecision, request: Request, current_user: TokenData = Depends(get_current_active_user)):
+    async with get_db_connection() as db:
+        if await _caller_role(org_id, current_user.user_id, db) not in MANAGER_ROLES:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        req = await _pending_join(db, org_id, request_id)
+        org = await db.fetch_one("SELECT name FROM organizations WHERE id = :org", {"org": org_id})
+        await db.execute(
+            "UPDATE registration_requests SET status = 'denied', reviewed_by = :by, reviewed_at = :now, review_notes = :notes WHERE id = :id",
+            {"by": current_user.user_id, "now": datetime.utcnow(), "notes": body.notes, "id": request_id},
+        )
+    try:
+        import asyncio
+        from src.application.services.api_boundary_dependencies import email_service
+
+        asyncio.create_task(email_service.send_denial_email(req["email"], req["name"], org["name"], body.notes))
+    except Exception as exc:
+        logger.warning(f"Join denial email failed: {exc}")
+    await _log_org_audit(org_id=org_id, user_id=current_user.user_id, action="deny_join_request", resource_type="member", resource_id=request_id,
+                         ip_address=request.client.host if request.client else None, user_agent=request.headers.get("user-agent"))
+    return {"status": "denied"}
 
 
 # ── Role Management Endpoints ────────────────────────────────────────────────

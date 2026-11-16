@@ -380,6 +380,19 @@ class OrganizationMember(Base):
     inviter = relationship("User", foreign_keys=[invited_by])
 
 
+class OrganizationDomain(Base):
+    """An email domain an organisation owns: sign-ups from it are routed to the org's admins, not a new org."""
+
+    __tablename__ = "org_domains"
+
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain = Column(String(253), nullable=False, unique=True)  # lower case, no leading @
+    verified_via = Column(String(30), nullable=False)  # owner_email | platform_admin
+    added_by = Column(TextUUID, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
 class OrganizationInvitation(Base):
     """Organization invitation model for pending member invitations.
 
