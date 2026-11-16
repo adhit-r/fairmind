@@ -12,6 +12,7 @@ and need no rows.
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -80,7 +81,10 @@ def database_url() -> str:
     url = os.getenv("DATABASE_URL", "")
     if not url.startswith(("postgresql://", "postgres://")):
         sys.exit("DATABASE_URL must be a PostgreSQL URL (set it in apps/backend/.env)")
-    return url
+    # Neon's pooler shares server sessions between clients, so session settings the
+    # running backend made (search_path=pg_catalog first) leak into this script and
+    # unqualified DDL lands in pg_catalog. Migrations take the direct endpoint.
+    return re.sub(r"(@[^/:?]+)-pooler\.", r"\1.", url, count=1)
 
 
 def orm_tables() -> dict:
@@ -235,6 +239,8 @@ def main() -> None:
     engine = create_engine(url)
     with engine.connect() as conn:
         schema = conn.execute(text("SELECT current_schema()")).scalar()
+    if schema in (None, "pg_catalog", "pg_temp"):
+        sys.exit(f"setup_db: current schema is {schema!r}; check search_path for this role")
     if args.command == "setup":
         apply_chain(url, schema)
         add_orm_tables_and_columns(engine)
