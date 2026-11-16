@@ -94,3 +94,10 @@ Before the first customer signs in, apply the WAF, rate-limit, cache and Access 
 
 - 100 MB request body: larger dataset uploads fail at the edge.
 - 100 s response timeout: longer analyses return 524; run them as background jobs.
+
+## Maintenance page
+
+During a deploy the containers restart for up to a minute. A Cloudflare Worker on
+`app.fairmind.xyz/*` ([maintenance/](maintenance/)) passes every request through and, when the
+app answers 502-530 or not at all, shows browsers a "FairMind is updating" page that reloads
+itself once the app is back. Deploy it from `deploy/lightsail/maintenance` with `npx wrangler deploy`.

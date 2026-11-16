@@ -1,0 +1,6 @@
+# Shows a maintenance page while the Lightsail app restarts (see README.md).
+name = "fairmind-app-maintenance"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+workers_dev = false
+routes = [{ pattern = "app.fairmind.xyz/*", zone_name = "fairmind.xyz" }]
