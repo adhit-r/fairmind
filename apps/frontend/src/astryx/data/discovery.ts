@@ -259,7 +259,8 @@ export function healthOf(i: Integration, now = Date.now()): Health {
   const last = i.recentRuns?.[0]
   if (last?.status === 'failed') return 'failing'
   if (i.kind === 'proxy_logs') return 'upload'
-  if (!i.scheduleMinutes) return last ? 'manual' : 'waiting'
+  // Sources read before run history was kept have lastSyncedAt but no runs.
+  if (!i.scheduleMinutes) return last || i.lastSyncedAt ? 'manual' : 'waiting'
   if (!i.lastSyncedAt) return 'waiting'
   // The server checks for due schedules every few minutes; allow that much before calling it late.
   const late = i.nextSyncAt ? now - new Date(i.nextSyncAt).getTime() > 15 * 60 * 1000 : false
