@@ -4541,3 +4541,57 @@ class ServiceRecord(Base):
     payload_json = Column(Text, nullable=False)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class OrgTask(Base):
+    """A piece of work assigned to a person in an organisation, about a system, requirement or finding."""
+
+    __tablename__ = "org_tasks"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    number = Column(Integer, nullable=False)  # per organisation, shown as "Task 24"
+    title = Column(String(300), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    status = Column(String(20), nullable=False, default="open")  # open | in_progress | blocked | done
+    priority = Column(String(10), nullable=False, default="medium")  # high | medium | low
+    assignee_user_id = Column(String, nullable=True, index=True)
+    # An AI agent instead of a person: the agent key and the action it runs (tasks.AGENTS).
+    assignee_agent = Column(String(40), nullable=True)
+    agent_action = Column(String(60), nullable=True)
+    created_by = Column(String, nullable=False)
+    due_date = Column(String(10), nullable=True)  # YYYY-MM-DD
+    subject_type = Column(String(30), nullable=False, default="none")  # requirement | system | finding | source | none
+    subject_id = Column(String(300), nullable=True)
+    subject_label = Column(String(300), nullable=True)
+    system_id = Column(String, nullable=True, index=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    completed_at = Column(String, nullable=True)
+
+    __table_args__ = (UniqueConstraint("org_id", "number", name="uq_org_tasks_number"),)
+
+
+class OrgTaskComment(Base):
+    __tablename__ = "org_task_comments"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    task_id = Column(String, ForeignKey("org_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(String, nullable=False, index=True)
+    author_user_id = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class OrgTaskEvent(Base):
+    """What happened to a task: created, assigned, status, due date or priority changed."""
+
+    __tablename__ = "org_task_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    task_id = Column(String, ForeignKey("org_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(String, nullable=False, index=True)
+    actor_user_id = Column(String, nullable=False)
+    kind = Column(String(20), nullable=False)
+    detail_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())

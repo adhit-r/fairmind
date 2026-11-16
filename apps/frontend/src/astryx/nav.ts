@@ -7,6 +7,7 @@ import {
   Gauge,
   Home,
   Inbox,
+  ListTodo,
   Layers,
   Leaf,
   ListChecks,
@@ -38,6 +39,7 @@ export const NAV: Group[] = [
     places: [
       { href: '/dashboard', label: 'Home', icon: Gauge },
       { href: '/needs-you', label: 'Needs you', icon: Inbox, count: 'needs' },
+      { href: '/tasks', label: 'Tasks', icon: ListTodo },
     ],
   },
   {
