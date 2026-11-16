@@ -7,11 +7,18 @@ POST /evaluations/{id}/runs          multipart: system_id, params (JSON), source
 GET  /evaluations/{id}/runs          recent runs, optionally for one AI system
 GET  /evaluation-runs/{evidence_id}  one run in full
 GET  /evaluation-jobs/{job_id}       a behaviour test in progress
+GET  /evaluation-jobs/{job_id}/prompts   for a runner: the job and the prompts waiting for the system's answer
+POST /evaluation-jobs/{job_id}/answers   for a runner: the system's answers to those prompts
 
 A behaviour test (an engine with live set) calls the AI system under test and the organisation's
 model as judge, which takes longer than Cloudflare's 100-second request limit allows. Its POST answers
 202 with a job at once and the run continues in the background; the job reports progress and, when it
 is done, the evidence id of the stored run.
+
+A system whose connection is via=runner sits on the customer's private network. Its run is started by
+the CLI inside that network with runner=1 (`fairmind eval run --live --local`); the job runs here as
+usual, but each prompt to the system waits until the runner picks it up, calls the system and posts the
+answer. Only outbound https from the customer; the judge and the stored evidence stay here.
 
 Mounted under /api/v1/packs beside the packs router and sharing its organisation checks.
 """
@@ -19,14 +26,17 @@ Mounted under /api/v1/packs beside the packs router and sharing its organisation
 import asyncio
 import json
 import logging
+import time
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import anyio
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -34,7 +44,7 @@ from api.routes.ai_governance import _ensure_tables, _utc_now_iso
 from api.routes import llm, platform_connections
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS
-from api.routes.system_targets import Target, TargetError, ask, stored_target
+from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
 from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
 from src.application.services.eval_engines.behaviour import CallError, Live
@@ -47,6 +57,8 @@ router = APIRouter()
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 EVIDENCE_TYPE = "evaluation_run"
 STALE_AFTER = timedelta(minutes=5)  # a running job that has not reported for this long died with its worker
+RUNNER_GONE_S = 60  # a runner that has not asked for prompts for this long has stopped
+RUNNER_ANSWER_S = TIMEOUT_S + 30  # the runner's own call to the system, plus its round trips to FairMind
 PLATFORM = "claude_managed_agents"  # ponytail: the one connector; take it from the form when a second platform lands
 
 
@@ -152,7 +164,8 @@ async def create_run(
         if p.required and params.get(p.name) in (None, ""):
             raise HTTPException(status_code=422, detail=f"Set {p.label.lower()}")
     if engine.live:
-        return _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params)
+        runner = str(form.get("runner") or "") in ("1", "true")
+        return _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner)
     reads_platform = source == "connection" or engine.run is None
     judge = _judge(db, m.org_id) if engine.judge and reads_platform else None
     key = None
@@ -244,13 +257,18 @@ def _previous_metrics(db: Session, system_id: str, evaluation_id: str) -> Option
     return json.loads(row["content_json"] or "{}").get("metrics") if row else None
 
 
-def _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params):
+def _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner=False):
     """Check the judge and the target now, so a missing setting fails the request and not the job; then run in the background."""
     row = _ai_row(db, m.org_id)
     if not row or not row["enabled"]:
         raise HTTPException(status_code=409, detail="Behaviour tests use your organisation's AI provider as the judge; set one up in organisation settings")
     judge = _stored_connection(row)
     target = stored_target(db, m.org_id, system_id) if engine.live == "target" else None
+    if target and target.via_runner and not runner:
+        raise HTTPException(status_code=409, detail="This system is on your private network, so the runner calls it. Run this from a "
+                            f"machine that can reach it: {runner_command(evaluation_id, system_id)}")
+    if target and runner and not target.via_runner:
+        raise HTTPException(status_code=422, detail="FairMind calls this system directly; run it without --local, or set its connection to a runner")
     facts = {"name": system[1], "risk_tier": system[2], "lifecycle_stage": system[3]}
     previous = _previous_metrics(db, system_id, evaluation_id)
     now = _utc_now_iso()
@@ -283,6 +301,10 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
         except (TargetError, llm.LLMError) as e:
             raise CallError(f"System under test: {e}")
 
+    if target and target.via_runner:
+        relay = _RELAYS[job_id] = _Relay(asyncio.get_running_loop())
+        call_target = relay.ask
+
     async def call_judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         try:
             return (await llm.complete(judge, system, user, schema))[0]
@@ -311,7 +333,8 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
             "params": params,
             "files": names,
             "judge": {"provider": judge.provider.id, "model": judge.model},
-            "target": {"kind": target.kind, "url": target.url} if target else {"kind": "fairmind-agent"},
+            "target": ({"kind": target.kind, "url": target.url, **({"via": "runner"} if target.via_runner else {})}
+                       if target else {"kind": "fairmind-agent"}),
         })
         evidence_id = await run_in_threadpool(_store_run, db, org_id, user_id, system_id, evaluation_id, outcome)
         await run_in_threadpool(_update_job, db, job_id, status="done", phase="Done", evidence_id=evidence_id)
@@ -322,7 +345,88 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
         db.rollback()
         await run_in_threadpool(_update_job, db, job_id, status="failed", error="The run stopped on an unexpected error")
     finally:
+        _RELAYS.pop(job_id, None)
         db.close()
+
+
+# --- the runner: prompts out to the customer's network, answers back ------------------------------
+
+
+@dataclass
+class _Relay:
+    """A runner job's prompts waiting for an answer. Futures belong to the job's event loop."""
+
+    loop: asyncio.AbstractEventLoop
+    seen: float = field(default_factory=time.monotonic)  # the runner's last request for prompts
+    pending: Dict[str, Tuple[str, asyncio.Future]] = field(default_factory=dict)
+
+    async def ask(self, prompt: str) -> str:
+        if time.monotonic() - self.seen > RUNNER_GONE_S:
+            raise CallError("System under test: the runner stopped answering")
+        prompt_id, future = str(uuid.uuid4()), self.loop.create_future()
+        self.pending[prompt_id] = (prompt, future)
+        try:
+            return await asyncio.wait_for(future, RUNNER_ANSWER_S)
+        except asyncio.TimeoutError:
+            raise CallError("System under test: the runner did not answer in time")
+        finally:
+            self.pending.pop(prompt_id, None)
+
+
+# ponytail: in this process, like the background job itself; the API runs one worker (see the Dockerfile).
+# Move to a table if it ever runs more.
+_RELAYS: Dict[str, _Relay] = {}
+
+
+class RunnerAnswer(BaseModel):
+    id: str = Field(max_length=64)
+    answer: Optional[str] = Field(default=None, max_length=MAX_ANSWER_BYTES)
+    error: Optional[str] = Field(default=None, max_length=300)
+
+
+class RunnerAnswers(BaseModel):
+    answers: List[RunnerAnswer] = Field(max_length=50)
+
+
+def _runner_job(db: Session, m: OrgMembership, job_id: str):
+    _ensure_tables(db)
+    row = _job_row(db, job_id)
+    if not row or row["org_id"] != m.org_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return row, _RELAYS.get(job_id)
+
+
+@router.get("/evaluation-jobs/{job_id}/prompts")
+def runner_prompts(job_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    row, relay = _runner_job(db, m, job_id)
+    if relay is None:
+        return {"job": _job_json(row), "prompts": []}
+    relay.seen = time.monotonic()
+    waiting = [{"id": pid, "prompt": prompt} for pid, (prompt, future) in list(relay.pending.items()) if not future.done()]
+    return {"job": _job_json(row), "prompts": waiting}
+
+
+def _settle(future: asyncio.Future, answer: RunnerAnswer) -> None:
+    if future.done():
+        return
+    if answer.error is not None or answer.answer is None:
+        future.set_exception(CallError(f"System under test: {answer.error or 'the runner sent no answer'}"))
+    else:
+        future.set_result(answer.answer)
+
+
+@router.post("/evaluation-jobs/{job_id}/answers")
+def runner_answers(job_id: str, body: RunnerAnswers, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    _, relay = _runner_job(db, m, job_id)
+    accepted = 0
+    for answer in body.answers:
+        entry = relay.pending.get(answer.id) if relay else None
+        if entry:  # late or unknown ids are dropped: their prompt already failed or never existed
+            relay.loop.call_soon_threadsafe(_settle, entry[1], answer)
+            accepted += 1
+    if relay:
+        relay.seen = time.monotonic()
+    return {"accepted": accepted}
 
 
 @router.get("/evaluation-jobs/{job_id}")

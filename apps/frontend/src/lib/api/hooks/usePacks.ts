@@ -503,6 +503,7 @@ export interface EvaluationJob {
 /** How FairMind calls an AI system for behaviour tests. The auth value never comes back, only a hint. */
 export interface SystemTarget {
   kind: 'openai' | 'http'
+  via?: 'runner'
   url: string
   model?: string
   systemPrompt?: string
@@ -521,6 +522,7 @@ export interface SystemTarget {
 
 export interface SystemTargetBody {
   kind: 'openai' | 'http'
+  via: 'fairmind' | 'runner'
   url: string
   model: string
   systemPrompt: string

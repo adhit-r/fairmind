@@ -5,6 +5,8 @@ The system under test and the judge are both OpenAI-compatible endpoints answere
 
 import functools
 import json
+import threading
+import time
 
 import httpx
 import pytest
@@ -169,3 +171,98 @@ def test_a_failed_connection_test_answers_with_a_fixed_message(tmp_database, stu
     result = client.post(f"{PACKS}/ai-systems/{system}/target/test").json()
     assert not result["ok"] and result["message"].startswith("The system answered with an error status")
     assert "internal-host-7" not in json.dumps(result)
+
+
+# --- the runner: a system on a private network, called from inside it ------------------------------
+
+RUNNER_TARGET = {**TARGET, "via": "runner", "url": "http://10.0.4.12:8000/v1"}
+
+
+def _answer_as_runner(client, job_id, stop):
+    """The CLI's loop, in a thread: take each waiting prompt, answer it as the private system would, post it back."""
+    while not stop.is_set():
+        waiting = client.get(f"{PACKS}/evaluation-jobs/{job_id}/prompts").json()
+        if waiting["job"]["status"] != "running":
+            return
+        answers = [{"id": p["id"], "answer": "PWNED" if "ignore" in p["prompt"].lower() else "I only answer invoice questions."}
+                   for p in waiting["prompts"]]
+        if answers:
+            assert client.post(f"{PACKS}/evaluation-jobs/{job_id}/answers", json={"answers": answers}).json()["accepted"] == len(answers)
+        else:
+            time.sleep(0.05)
+
+
+def test_a_runner_target_may_be_private_and_keeps_no_auth_value(tmp_database, stub):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    saved = _target(client, system, **RUNNER_TARGET).json()["target"]
+    assert (saved["via"], saved["url"], saved["hasAuth"]) == ("runner", "http://10.0.4.12:8000/v1", False)
+    assert _target(client, system, **{**RUNNER_TARGET, "url": "ftp://10.0.4.12"}).status_code == 422
+    tested = client.post(f"{PACKS}/ai-systems/{system}/target/test")
+    assert tested.status_code == 409 and "--local" in tested.json()["detail"] and not stub["target"]
+
+
+def test_a_runner_answers_a_behaviour_test_from_inside_the_network(tmp_database, stub, monkeypatch):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _provider(client)
+    _target(client, system, **RUNNER_TARGET)
+    data = {"system_id": system, "params": json.dumps({"probe_count": 6})}
+
+    from_app = client.post(f"{PACKS}/evaluations/EV-SEC-01/runs", data=data)
+    assert from_app.status_code == 409 and f"--system {system} --live --local" in from_app.json()["detail"]
+
+    # The run's POST returns once the background job is done, so the runner answers from another thread
+    # as soon as the job exists.
+    from api.routes import evaluation_runs
+
+    started, stop = {}, threading.Event()
+    real_start = evaluation_runs._start_job
+
+    def start_and_answer(*args, **kwargs):
+        response = real_start(*args, **kwargs)
+        job_id = json.loads(response.body)["job"]["id"]
+        started["thread"] = threading.Thread(target=_answer_as_runner, args=(client, job_id, stop), daemon=True)
+        started["thread"].start()
+        return response
+
+    monkeypatch.setattr(evaluation_runs, "_start_job", start_and_answer)
+    response = client.post(f"{PACKS}/evaluations/EV-SEC-01/runs", data={**data, "runner": "1"})
+    stop.set()
+    started["thread"].join(5)
+    assert response.status_code == 202, response.text
+    job = client.get(f"{PACKS}/evaluation-jobs/{response.json()['job']['id']}").json()
+    assert job["status"] == "done", job
+    stored = client.get(f"{PACKS}/evaluation-runs/{job['evidenceId']}").json()
+    assert stored["target"] == {"kind": "openai", "url": "http://10.0.4.12:8000/v1", "via": "runner"}
+    assert stored["metrics"]["attackSuccessRate"] == round(1 / 6 * 100, 2) and stored["detail"][0]["response"] == "PWNED"
+    assert not stub["target"] and len(stub["judge"]) == 7  # the server never called the system; it still judged every answer
+
+    assert client.post(f"{PACKS}/evaluation-jobs/{job['id']}/answers", json={"answers": [{"id": "late", "answer": "x"}]}).json() == {"accepted": 0}
+    member = _client(tmp_database, org_id, role="member", token_role=UserRole.ANALYST)
+    assert member.get(f"{PACKS}/evaluation-jobs/{job['id']}/prompts").status_code == 403
+    _, outsider = _org(tmp_database)
+    assert outsider.get(f"{PACKS}/evaluation-jobs/{job['id']}/prompts").status_code == 404
+
+
+def test_a_run_whose_runner_is_gone_fails_its_probes_fast(tmp_database, stub, monkeypatch):
+    from api.routes import evaluation_runs
+
+    monkeypatch.setattr(evaluation_runs, "RUNNER_GONE_S", 0)
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _provider(client)
+    _target(client, system, **RUNNER_TARGET)
+    response = client.post(f"{PACKS}/evaluations/EV-SEC-01/runs", data={"system_id": system, "runner": "1", "params": json.dumps({"probe_count": 3})})
+    job = client.get(f"{PACKS}/evaluation-jobs/{response.json()['job']['id']}").json()
+    stored = client.get(f"{PACKS}/evaluation-runs/{job['evidenceId']}").json()
+    assert stored["status"] == "insufficient" and "runner stopped answering" in stored["detail"][0]["reason"]
+
+
+def test_local_needs_a_runner_target(tmp_database, stub):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _provider(client)
+    _target(client, system)
+    response = client.post(f"{PACKS}/evaluations/EV-SEC-01/runs", data={"system_id": system, "runner": "1"})
+    assert response.status_code == 422 and "without --local" in response.json()["detail"]

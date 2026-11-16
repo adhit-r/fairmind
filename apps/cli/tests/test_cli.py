@@ -201,3 +201,55 @@ def test_verify_catches_a_tampered_manifest_field(tmp_path):
 def test_verify_rejects_a_file_that_is_not_a_pack(tmp_path, capsys):
     code, _, _ = run_cli(["verify", _write(tmp_path, {"hello": 1})], _no_network)
     assert code == EXIT_ERROR and "Not an inspection pack" in capsys.readouterr().err
+
+
+def test_eval_run_local_answers_prompts_from_inside_the_network(monkeypatch):
+    """--local: FairMind holds the run; this machine calls the private model and returns its answers."""
+    target = {"via": "runner", "kind": "openai", "url": "http://10.0.4.12:8000/v1", "model": "guard-7b", "systemPrompt": "Be brief."}
+    job = {"id": "job-1", "status": "running", "evidenceId": None}
+    prompts = [{"id": "p1", "prompt": "hello"}, {"id": "p2", "prompt": "break"}]
+    seen_model, posted = [], []
+
+    def handler(request):
+        path = request.url.path
+        if request.url.host == "10.0.4.12":
+            body = json.loads(request.content)
+            seen_model.append((request.headers.get("authorization"), body))
+            if body["messages"][-1]["content"] == "break":
+                return httpx.Response(500)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "hi there"}}]})
+        assert request.headers["Authorization"] == "Bearer key-123"  # the FairMind key never goes to the model
+        if path == "/api/v1/organizations":
+            return httpx.Response(200, json={"organizations": [{"id": "org-1"}]})
+        if path == "/api/v1/packs/ai-systems/sys-1/target":
+            return httpx.Response(200, json={"target": target})
+        if path == "/api/v1/packs/evaluations/EV-SEC-01/runs":
+            form = request.content.decode()
+            assert "runner=1" in form and "mode=live" in form
+            return httpx.Response(202, json={"job": job})
+        if path == "/api/v1/packs/evaluation-jobs/job-1/prompts":
+            done = {**job, "status": "done", "evidenceId": "ev-1"}
+            return httpx.Response(200, json={"job": done if posted else job, "prompts": [] if posted else prompts})
+        if path == "/api/v1/packs/evaluation-jobs/job-1/answers":
+            posted.extend(json.loads(request.content)["answers"])
+            return httpx.Response(200, json={"accepted": 2})
+        if path == "/api/v1/packs/evaluation-runs/ev-1":
+            return httpx.Response(200, json={"id": "ev-1", "evaluationId": "EV-SEC-01", "status": "passed", "metrics": {"attackSuccessRate": 0.0}})
+        raise AssertionError(path)
+
+    code, text, _ = run_cli(["eval", "run", "EV-SEC-01", "--system", "sys-1", "--local"], handler,
+                            env={"FAIRMIND_API_KEY": "key-123", "FAIRMIND_TARGET_AUTH": "model-key"}, monkeypatch=monkeypatch)
+    assert code == EXIT_GO and "PASSED" in text
+    assert {a["id"]: a for a in posted} == {"p1": {"id": "p1", "answer": "hi there"}, "p2": {"id": "p2", "error": "the system responded 500"}}
+    assert seen_model[0][0] == "Bearer model-key"
+    assert seen_model[0][1]["messages"][0] == {"role": "system", "content": "Be brief."} and seen_model[0][1]["model"] == "guard-7b"
+
+
+def test_eval_run_local_refuses_a_system_fairmind_calls_directly(monkeypatch, capsys):
+    def handler(request):
+        if request.url.path == "/api/v1/organizations":
+            return httpx.Response(200, json={"organizations": [{"id": "org-1"}]})
+        return httpx.Response(200, json={"target": {"kind": "openai", "url": "https://api.example/v1"}})
+
+    code, _, _ = run_cli(["eval", "run", "EV-SEC-01", "--system", "sys-1", "--local"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_ERROR and "not set to a runner" in capsys.readouterr().err

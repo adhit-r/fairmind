@@ -25,6 +25,20 @@ fairmind test ... --gate                          # exit by the gate's verdict a
 
 Exit code 3 means the command itself failed: no network, no key, wrong system id, a column that is not in the file. Add `--json` to any command for the raw response.
 
+## Models on a private network
+
+Behaviour tests (prompt injection, jailbreak, leakage, over-refusal, output bias) normally have the FairMind server call the model, which needs a public https endpoint. When the model only answers inside your network, run the test from a machine that can reach it:
+
+```bash
+export FAIRMIND_API_KEY=...         # a FairMind key of a manager in the organisation
+export FAIRMIND_TARGET_AUTH=...     # the model's own key, if it needs one; sent only to the model
+fairmind eval run EV-SEC-01 --system <id> --local
+```
+
+First set the system's connection, on its page, to "A runner inside your network" with the model's URL as this machine sees it (for example `http://10.0.4.12:8000/v1`), the model name or request template, the system prompt and the intended use. FairMind never calls that URL and never stores the model's key.
+
+The run itself stays on FairMind: it writes the probes, judges the answers with your organisation's AI provider and stores the result as evidence like any behaviour test. The CLI picks up each prompt over https, sends it to the model (four at a time, 60 seconds each) and posts the answer back. Nothing connects in to your network. The stored run records that its answers came through your runner. If the CLI stops, the remaining probes fail within a minute and the run is stored as insufficient.
+
 ## In GitHub Actions
 
 ```yaml
