@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from api.routes import discovery_review, integrations, org_scope, shadow_ai
+from api.routes import discovery_review, integrations, org_scope, shadow_ai, shadow_reading
 from database.connection import get_db
 from src.application.services import reviewer_notify
 from src.application.services.governance_assurance_service import OrgMembership
@@ -34,7 +34,7 @@ def env(monkeypatch):
             db.close()
 
     app = FastAPI()
-    for r in (integrations.router, discovery_review.router, shadow_ai.router):
+    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router):
         app.include_router(r, prefix="/api/v1")
     app.include_router(discovery_review.public_router, prefix="/api/v1/public")
     app.dependency_overrides[get_db] = override_db
@@ -395,3 +395,65 @@ def test_laptop_traffic_confirms_and_evidence_grid(env):
     listed = c.get("/api/v1/shadow-ai/laptops", params={"q": "eng-0231"}).json()
     assert listed["total"] == 1 and listed["laptops"][0]["flagged"] == 1 and listed["laptops"][0]["people"] == ["arjun@acme.com"]
     assert c.get("/api/v1/shadow-ai/laptops", params={"q": "nothing"}).json()["total"] == 0
+
+
+def test_reading_masks_names_and_keeps_only_cited_text():
+    m = shadow_reading.Masks()
+    m.add("arjun.k@acme.com", "Person")
+    m.add("Arjuns-MacBook-Pro", "Laptop")
+    m.add("C02FK3ZXMD6R", "Serial")
+    sent = m.mask("arjun.k@acme.com and ARJUN.K on Arjuns-MacBook-Pro (C02FK3ZXMD6R); cc boss@acme.com")
+    assert sent == "Person A and Person A on Laptop 1 (Serial 1); cc an address"
+    kept = shadow_reading.keep(
+        {"paragraphs": [{"text": "Person A uses Cursor on Laptop 1.", "cites": [1, 9]}, {"text": "A guess with no evidence.", "cites": []}, {"text": "Mail x@y.com", "cites": [2]}],
+         "next_step": {"text": "Give Person A a seat.", "cites": [2]}, "nudge": "Hi Person A"},
+        {1, 2}, m, nudge_wanted=False,
+    )
+    assert kept["paragraphs"] == [{"text": "arjun.k@acme.com uses Cursor on Arjuns-MacBook-Pro.", "cites": [1]}, {"text": "Mail an address", "cites": [2]}]
+    assert kept["next_step"]["cites"] == [2] and kept["nudge"] == "" and kept["dropped"] == 1
+
+
+def test_stories_group_one_tool_in_one_team():
+    base = {"type": "personal_account", "service": "perplexity", "team": "Finance", "confidence": "likely", "status": "open"}
+    fs = [{**base, "key": f"k{i}", "subject": f"p{i}", "person": f"p{i}@acme.com", "title": "t", "evidence": [], "verdict": ""} for i in range(3)]
+    fs.append({**fs[0], "key": "k9", "status": "expected"})
+    fs.append({**fs[0], "key": "k8", "team": "Sales"})
+    out = shadow_ai.stories(fs)
+    assert [s["key"] for s in out] == ["story:perplexity:Finance"] and out[0]["findingKeys"] == ["k0", "k1", "k2"]
+    assert shadow_ai.stories(fs[:2]) == []
+
+
+def test_reading_route_with_the_org_model(env, monkeypatch):
+    from api.routes import llm
+
+    c, factory, sent = env
+    okta = _integration(c, "okta", domain="acme.okta.com")
+    cur = _integration(c, "cursor")
+    jamf = _integration(c, "jamf", url="https://acme.jamfcloud.com", client_id="c")
+    _facts(factory, okta, "okta", {"arjun@acme.com": {"team": "Engineering", "status": "active"}}, [])
+    _raw_facts(factory, cur, "cursor", {"seats": {"cursor": {"priya@acme.com": {"last_active": None}}}, "complete": {"cursor": True}})
+    _raw_facts(factory, jamf, "jamf", {"devices": [{"serial": "C02X", "name": "Arjuns-MacBook-Pro", "user": "arjun@acme.com", "apps": [{"service": "cursor"}]}]})
+    assert c.put("/api/v1/shadow-ai/tools/cursor", json={"status": "approved"}).status_code == 200
+    key = "personal:cursor:arjun@acme.com"
+
+    assert c.get("/api/v1/shadow-ai/reading", params={"key": key}).json() == {"reading": None, "modelConnected": False}
+    assert c.post("/api/v1/shadow-ai/reading", json={"key": key}).status_code == 409
+
+    seen = {}
+
+    async def fake_complete(conn, system, user, schema):
+        seen["user"] = user
+        return {"paragraphs": [{"text": "Person A runs Cursor on Laptop 1 with no company seat.", "cites": [1, 2]}], "next_step": {"text": "Give Person A a seat.", "cites": [2]}, "nudge": "Hi Person A, please use the company Cursor."}, {"model": "test-model"}
+
+    monkeypatch.setattr(shadow_reading, "_org_model", lambda db, org: object())
+    monkeypatch.setattr(llm, "complete", fake_complete)
+    r = c.post("/api/v1/shadow-ai/reading", json={"key": key})
+    assert r.status_code == 200, r.text
+    reading = r.json()["reading"]
+    assert "arjun" not in seen["user"].lower() and "macbook" not in seen["user"].lower() and "C02X" not in seen["user"]
+    assert reading["paragraphs"][0]["text"].startswith("arjun@acme.com runs Cursor on") and reading["nudge"].startswith("Hi arjun@acme.com")
+    assert reading["model"] == "test-model" and reading["stale"] is False and reading["evidence"][0]["id"] == 1
+    assert c.get("/api/v1/shadow-ai/reading", params={"key": key}).json()["reading"]["stale"] is False
+    _raw_facts(factory, _integration(c, "intune", tenant_id="t", client_id="c"), "intune", {"devices": [{"serial": "C02X", "name": "LT-ENG-0231", "user": "arjun@acme.com", "apps": [{"service": "claude"}]}]})
+    assert c.get("/api/v1/shadow-ai/reading", params={"key": key}).json()["reading"]["stale"] is True
+    assert c.get("/api/v1/shadow-ai/reading", params={"key": "story:nope:x"}).status_code == 404

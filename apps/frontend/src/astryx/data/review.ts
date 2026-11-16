@@ -170,6 +170,7 @@ export type Stance = 'approved' | 'limited' | 'not_allowed' | 'not_reviewed'
 export interface ShadowAI {
   findings: Finding[]
   resolved: { key: string; firstSeen: string; lastSeen: string }[]
+  stories: Story[]
   map: {
     tools: { key: string; label: string; status: Stance; teams: string[] }[]
     teams: string[]
@@ -301,4 +302,37 @@ export function useLaptops(query: string) {
     }
   }, [query])
   return { data, error }
+}
+
+export interface Story {
+  key: string
+  service: string
+  team: string
+  title: string
+  summary: string
+  findingKeys: string[]
+}
+
+export interface Cited {
+  text: string
+  cites: number[]
+}
+
+/** FairMind's reading of a finding or story: the organisation's model explains the evidence and cites it. */
+export interface Reading {
+  paragraphs: Cited[]
+  next_step: Cited | null
+  nudge: string
+  model: string | null
+  createdAt: string
+  stale: boolean
+  evidence: { id: number; title: string; detail: string; source: string }[]
+}
+
+export async function getReading(key: string) {
+  return unwrap(await apiClient.get<{ reading: Reading | null; modelConnected: boolean }>(`${S}/reading?key=${encodeURIComponent(key)}`))
+}
+
+export async function writeReading(key: string) {
+  return unwrap(await apiClient.post<{ reading: Reading; modelConnected: boolean }>(`${S}/reading`, { key }))
 }

@@ -22,13 +22,17 @@ import {
   markExpected,
   nudgePerson,
   reopenFinding,
+  getReading,
   setToolStance,
   useEvidence,
+  writeReading,
   useLaptops,
   useShadowAI,
   type Evidence,
   type EvidenceRow,
   type Finding,
+  type Reading,
+  type Story,
   type FindingType,
   type ShadowAI,
   type Stance,
@@ -303,6 +307,8 @@ function FindingPanel({ f, onChanged }: { f: Finding; onChanged: () => Promise<v
         </VStack>
       </section>
 
+      <ReadingCard subjectKey={f.key} onUseNudge={canNudge ? setMessage : undefined} />
+
       {f.person && <PersonTools person={f.person} />}
 
       {note && <Banner status={note.ok ? 'success' : 'error'} title={note.ok ? 'Done' : 'That did not work'} description={note.text} isDismissable onDismiss={() => setNote(null)} />}
@@ -495,6 +501,153 @@ function ReadsTab({ coverage }: { coverage: ShadowAI['coverage'] }) {
   )
 }
 
+function Refs({ cites, evidence }: { cites: number[]; evidence: Reading['evidence'] }) {
+  return (
+    <>
+      {cites.map((n) => {
+        const e = evidence.find((x) => x.id === n)
+        return (
+          <span key={n} className="sh-ref" title={e ? `${e.title}: ${e.detail}` : undefined} aria-label={e ? `Evidence ${n}: ${e.title}, ${e.detail}` : `Evidence ${n}`}>
+            {n}
+          </span>
+        )
+      })}
+    </>
+  )
+}
+
+/** FairMind's reading: written by the organisation's own model, kept until the evidence changes. */
+function ReadingCard({ subjectKey, onUseNudge }: { subjectKey: string; onUseNudge?: (text: string) => void }) {
+  const [state, setState] = useState<{ reading: Reading | null; modelConnected: boolean } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    getReading(subjectKey)
+      .then((r) => !cancelled && setState(r))
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the reading'))
+    return () => {
+      cancelled = true
+    }
+  }, [subjectKey])
+  async function write() {
+    setBusy(true)
+    setError(null)
+    try {
+      setState(await writeReading(subjectKey))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'FairMind could not read it')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const r = state?.reading
+  const cited = r ? [...new Set([...r.paragraphs.flatMap((p) => p.cites), ...(r.next_step?.cites ?? [])])].sort((a, b) => a - b) : []
+  return (
+    <section className="fm-card" aria-labelledby={`reading-${subjectKey}`}>
+      <VStack gap={3}>
+        <HStack hAlign="between" vAlign="center" wrap="wrap" gap={2}>
+          <Heading level={3} id={`reading-${subjectKey}`}>
+            FairMind&apos;s reading
+          </Heading>
+          {r && <span className="dv-chip">Written by your connected model</span>}
+        </HStack>
+        {error && <Banner status="error" title="Not read" description={error} />}
+        {!state && !error ? (
+          <Skeleton height={80} />
+        ) : r ? (
+          <>
+            {r.stale && (
+              <Banner
+                status="warning"
+                title="The evidence changed since this was written"
+                endContent={<Button size="sm" variant="secondary" label={busy ? 'Reading' : 'Read again'} isDisabled={busy} onClick={() => void write()} />}
+              />
+            )}
+            <div className="sh-reading">
+              {r.paragraphs.map((p, i) => (
+                <p key={i}>
+                  {p.text} <Refs cites={p.cites} evidence={r.evidence} />
+                </p>
+              ))}
+            </div>
+            {r.next_step && (
+              <div className="dv-miss">
+                <span className="dot" aria-hidden="true" />
+                <span>
+                  <b>Suggested next step.</b> {r.next_step.text} <Refs cites={r.next_step.cites} evidence={r.evidence} />
+                </span>
+              </div>
+            )}
+            {r.nudge && onUseNudge && (
+              <HStack>
+                <Button size="sm" variant="secondary" label="Use the drafted message" onClick={() => onUseNudge(r.nudge)} />
+              </HStack>
+            )}
+            <ol className="sh-cites">
+              {r.evidence
+                .filter((e) => cited.includes(e.id))
+                .map((e) => (
+                  <li key={e.id}>
+                    <span className="sh-ref" aria-hidden="true">
+                      {e.id}
+                    </span>
+                    <span>
+                      {e.title}: {e.detail}
+                    </span>
+                  </li>
+                ))}
+            </ol>
+            <Text size="sm" color="secondary">
+              {r.model ? `${r.model}, ` : ''}written {ago(r.createdAt)}. It explains and cites the evidence; it does not set how serious a finding is or how sure FairMind is. Names, laptops and serial numbers are replaced before anything is sent to the model.
+            </Text>
+          </>
+        ) : (
+          <VStack gap={2}>
+            <Text size="sm" color="secondary">
+              {state?.modelConnected
+                ? 'FairMind can explain this in plain words with your connected model, citing the evidence above. Names and laptops are replaced before anything is sent.'
+                : "Connect your organisation's AI model to have FairMind explain findings in plain words."}
+            </Text>
+            <HStack>
+              {state?.modelConnected ? (
+                <Button variant="secondary" label={busy ? 'Reading' : 'Read it with FairMind'} isDisabled={busy} onClick={() => void write()} />
+              ) : (
+                <Button variant="secondary" label="Connect a model" href="/settings" />
+              )}
+            </HStack>
+          </VStack>
+        )}
+      </VStack>
+    </section>
+  )
+}
+
+function StoryCards({ stories, showing, onShow }: { stories: Story[]; showing: string | null; onShow: (key: string | null) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
+  if (!stories.length) return null
+  return (
+    <VStack gap={3}>
+      {stories.map((s) => (
+        <section key={s.key} className="fm-card sh-story" aria-label={s.title}>
+          <VStack gap={2}>
+            <Text size="sm" weight="semibold" color="secondary">
+              {s.findingKeys.length} findings are one story
+            </Text>
+            <Heading level={3}>{s.title}</Heading>
+            <Text size="sm">{s.summary}</Text>
+            <HStack gap={2} wrap="wrap">
+              <Button size="sm" variant={showing === s.key ? 'primary' : 'secondary'} label={showing === s.key ? 'Show all findings' : 'Show these findings'} onClick={() => onShow(showing === s.key ? null : s.key)} />
+              <Button size="sm" variant="ghost" label={open === s.key ? 'Hide the reading' : "FairMind's reading"} onClick={() => setOpen(open === s.key ? null : s.key)} />
+            </HStack>
+            {open === s.key && <ReadingCard subjectKey={s.key} />}
+          </VStack>
+        </section>
+      ))}
+    </VStack>
+  )
+}
+
 /** Which places the connected sources watch, as a bar of segments, one per Discovery area. */
 function CoverageStrip({ kinds }: { kinds: string[] }) {
   const lanes = LANES.filter((l) => l.key !== 'code' && l.key !== 'cloud')
@@ -681,9 +834,11 @@ function ShadowView() {
   const view = v === 'expected' || v === 'resolved' || v === 'tools' || v === 'reads' || v === 'laptops' ? v : 'open'
   const { data, loading, error, refresh } = useShadowAI()
   const [type, setType] = useState<FindingType | null>(null)
+  const [story, setStory] = useState<string | null>(null)
   const open = useMemo(() => (data?.findings ?? []).filter((f) => f.status === 'open'), [data])
   const expected = useMemo(() => (data?.findings ?? []).filter((f) => f.status === 'expected'), [data])
-  const list = (view === 'expected' ? expected : open).filter((f) => !type || f.type === type)
+  const storyKeys = view === 'open' ? data?.stories?.find((s) => s.key === story)?.findingKeys : undefined
+  const list = (view === 'expected' ? expected : open).filter((f) => (!type || f.type === type) && (!storyKeys || storyKeys.includes(f.key)))
   const picked = params.get('f')
   const selected = list.find((f) => f.key === picked) ?? list[0] ?? null
   const go = (tab: string, f?: string) => router.replace(`/shadow-ai${tab === 'open' ? '' : `?view=${tab}`}${f ? `${tab === 'open' ? '?' : '&'}f=${encodeURIComponent(f)}` : ''}`)
@@ -696,7 +851,7 @@ function ShadowView() {
           <Heading level={1}>Shadow AI</Heading>
           <Text color="secondary">AI used outside what you approved, worked out by comparing your connected sources with each other. It never reads prompts or file contents.</Text>
         </VStack>
-        {data && <CoverageStrip kinds={data.coverage.sourceKinds} />}
+        {data && <CoverageStrip kinds={data.coverage.sourceKinds ?? []} />}
         <TabList value={view} onChange={(t) => go(t)} hasDivider aria-label="Shadow AI view">
           <Tab value="open" label={`Open${open.length ? ` ${open.length}` : ''}`} />
           <Tab value="expected" label={`Expected${expected.length ? ` ${expected.length}` : ''}`} />
@@ -747,6 +902,7 @@ function ShadowView() {
             )}
             {view === 'open' && <Tiles findings={open} type={type} onType={setType} />}
             {view === 'open' && <UsageMap map={data.map} />}
+            {view === 'open' && <StoryCards stories={data.stories ?? []} showing={story} onShow={setStory} />}
             {list.length === 0 ? (
               <EmptyState
                 title={view === 'expected' ? 'Nothing marked as expected' : 'No open findings'}
