@@ -1,6 +1,7 @@
 'use client'
 
 import '@/astryx/pages/settings.css'
+import '@/astryx/pages/tasks.css'
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -35,12 +36,18 @@ import {
   deleteApiKey,
   inviteMember,
   leaveOrganisation,
+  addDomain,
+  removeDomain,
+  approveJoin,
+  denyJoin,
   removeMember,
   revokeInvitation,
   setMemberStatus,
   transferOwnership,
   useApiKeys,
   useInvitations,
+  useDomains,
+  useJoinRequests,
   useMembers,
   useOrgAuditLog,
   usePendingAccessRequests,
@@ -151,8 +158,60 @@ function OrganisationSection() {
         {selectedOrg.domain && <MetadataListItem label="Domain">{selectedOrg.domain}</MetadataListItem>}
         <MetadataListItem label="Created">{day(selectedOrg.created_at)}</MetadataListItem>
       </MetadataList>
+      <DomainsSetting orgId={selectedOrg.id} canChange={['owner', 'admin'].includes(String(selectedOrg.role).toLowerCase())} />
       <ReleaseGateSetting canChange={['owner', 'admin'].includes(String(selectedOrg.role).toLowerCase())} orgId={selectedOrg.id} />
-      <Banner status="info" title="Name and domain are read-only for now" description="There is no way to rename an organisation from the app yet." />
+      <Banner status="info" title="The name is read-only for now" description="There is no way to rename an organisation from the app yet." />
+    </VStack>
+  )
+}
+
+/** Email domains this org owns: anyone who signs up from one asks to join here instead of making a new org. */
+function DomainsSetting({ orgId, canChange }: { orgId: string; canChange: boolean }) {
+  const domains = useDomains(orgId)
+  const me = useSession().user
+  const [value, setValue] = useState('')
+  const [failure, setFailure] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const mine = me?.email?.split('@')[1] ?? ''
+  async function run(call: () => Promise<{ success: boolean; error?: string }>) {
+    setBusy(true)
+    setFailure(null)
+    const res = await call()
+    setBusy(false)
+    if (res.success) {
+      setValue('')
+      domains.reload()
+    } else setFailure(res.error || 'That did not work')
+  }
+  return (
+    <VStack gap={2}>
+      <Heading level={3}>Email domains</Heading>
+      <Text color="secondary">
+        People who sign up with an address on these domains ask to join this organisation, and an owner or admin approves them under Team. Nobody can start a second organisation on them.
+      </Text>
+      {failure && <Banner status="error" title={failure} isDismissable onDismiss={() => setFailure(null)} />}
+      {domains.loading ? (
+        <Skeleton height={40} />
+      ) : domains.data.length === 0 ? (
+        <Text color="secondary">No domains yet.</Text>
+      ) : (
+        <List>
+          {domains.data.map((d) => (
+            <ListItem
+              key={d.id}
+              label={d.domain}
+              description={d.verified_via === 'owner_email' ? 'Proved by an owner or admin address on it' : 'Added by the FairMind team'}
+              endContent={canChange ? <Button label="Remove" size="sm" variant="ghost" isDisabled={busy} onClick={() => void run(() => removeDomain(orgId, d.id))} /> : undefined}
+            />
+          ))}
+        </List>
+      )}
+      {canChange && (
+        <HStack gap={2} vAlign="end" wrap="wrap">
+          <TextInput label="Add a domain" description={mine ? `You can add ${mine}, the domain of your own address.` : undefined} value={value} onChange={setValue} />
+          <Button label="Add" variant="secondary" isDisabled={!value.trim() || busy} onClick={() => void run(() => addDomain(orgId, value.trim()))} />
+        </HStack>
+      )}
     </VStack>
   )
 }
@@ -247,6 +306,8 @@ function TeamSection() {
   const canManage = myRole === 'owner' || myRole === 'admin'
   const isOwner = myRole === 'owner'
   const invitations = useInvitations(orgId, canManage)
+  const joins = useJoinRequests(orgId, canManage)
+  const [joinRole, setJoinRole] = useState<Record<string, string>>({})
   const [inviting, setInviting] = useState(false)
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('editor')
@@ -350,6 +411,31 @@ function TeamSection() {
           <Table<MemberRow> data={members.data as MemberRow[]} columns={columns} idKey="id" density="balanced" />
         )}
       </VStack>
+
+      {canManage && joins.data.length > 0 && (
+        <VStack gap={2}>
+          <Heading level={3}>Asking to join</Heading>
+          <Text color="secondary">They signed up with an address on one of this organisation&rsquo;s domains.</Text>
+          <List>
+            {joins.data.map((j) => (
+              <ListItem
+                key={j.id}
+                label={`${j.name} · ${j.email}`}
+                description={j.message ?? undefined}
+                endContent={
+                  <HStack gap={1} vAlign="center">
+                    <select className="tk-in" aria-label={`Role for ${j.name}`} value={joinRole[j.id] ?? 'editor'} onChange={(e) => setJoinRole((p) => ({ ...p, [j.id]: e.target.value }))} style={{ width: 120, height: 36 }}>
+                      {roleOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <Button label="Approve" size="sm" variant="primary" isLoading={busy === `join-${j.id}`} onClick={() => void run(`join-${j.id}`, () => approveJoin(orgId, j.id, joinRole[j.id] ?? 'editor'), () => joins.reload())} />
+                    <Button label="Deny" size="sm" variant="ghost" isDisabled={busy !== null} onClick={() => void run(`deny-${j.id}`, () => denyJoin(orgId, j.id), () => joins.reload())} />
+                  </HStack>
+                }
+              />
+            ))}
+          </List>
+        </VStack>
+      )}
 
       {canManage && invitations.data.length > 0 && (
         <VStack gap={2}>

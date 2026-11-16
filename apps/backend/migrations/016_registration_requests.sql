@@ -21,3 +21,8 @@ CREATE TABLE IF NOT EXISTS registration_requests (
 
 CREATE INDEX IF NOT EXISTS idx_registration_requests_status ON registration_requests(status);
 CREATE INDEX IF NOT EXISTS idx_registration_requests_email ON registration_requests(email);
+
+-- A request from an address on a domain an organisation owns (org_domains) is a join request: org_id names
+-- the organisation and its owners and admins decide it. Older rows carry org_id from other flows, so the
+-- flag, not org_id, marks a join request.
+ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS is_join BOOLEAN NOT NULL DEFAULT FALSE;

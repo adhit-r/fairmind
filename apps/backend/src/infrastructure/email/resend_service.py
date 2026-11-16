@@ -138,6 +138,19 @@ class ResendEmailService:
         """
         return await self._send(email, f"Task assigned: {title}", html)
 
+    async def send_join_request(self, to: str, requester_name: str, requester_email: str, org_name: str, url: str) -> bool:
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:20px;font-weight:600;padding-bottom:8px">Someone asked to join {escape(org_name)}</h1>
+          <p><strong>{escape(requester_name)}</strong> ({escape(requester_email)}) signed up with an address on your organisation's domain.</p>
+          <a href="{url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:12px">
+            Review the request
+          </a>
+        </div>
+        """
+        return await self._send(to, f"{requester_name} asked to join {org_name}", html)
+
     async def send_denial_email(self, user_email: str, user_name: str, org_name: str, notes: Optional[str] = None) -> bool:
         notes_block = f"<p><strong>Reason:</strong> {escape(notes)}</p>" if notes else ""
         user_name, org_name = escape(user_name), escape(org_name)
