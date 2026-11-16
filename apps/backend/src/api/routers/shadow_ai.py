@@ -2,7 +2,7 @@
 Shadow AI: AI used outside what the organisation approved, worked out by comparing what the
 connected sources already read. No source here reads prompts, replies or file contents.
 
-GET  /shadow-ai                     findings (open, expected, resolved), the approved-versus-used map, coverage
+GET  /shadow-ai                     findings (open, expected, resolved), stories, the approved-versus-used map, coverage
 GET  /shadow-ai/laptops             laptops with AI on them, merged across sources (search with q)
 GET  /shadow-ai/evidence            every AI tool for one person or laptop: on the laptop, traffic, company seat, stance
 GET  /shadow-ai/tools               every known AI service with the organisation's stance on it
@@ -32,7 +32,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from html import escape
-from typing import Any, Dict, List, Literal, Optional, Set
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -620,6 +620,36 @@ def laptop_list(people: People, fleet: Fleet, stance: Dict[str, Dict[str, Any]],
     return out
 
 
+STORY_MIN = 3
+STORY_TYPES = ("personal_account", "not_allowed")
+
+
+def stories(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Open findings about one tool in one team, when there are enough of them to be one story."""
+    groups: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    for f in findings:
+        if f.get("status", "open") == "open" and f["type"] in STORY_TYPES and f.get("service") and f.get("team") and f["team"] != NO_TEAM:
+            groups[(f["service"], f["team"])].append(f)
+    out = []
+    for (svc, team), fs in sorted(groups.items()):
+        if len(fs) < STORY_MIN:
+            continue
+        s = _BY_KEY[svc]
+        people = {f.get("person") or f["subject"] for f in fs}
+        sure = sum(1 for f in fs if f["confidence"] == "confirmed")
+        out.append(
+            {
+                "key": f"story:{svc}:{team}",
+                "service": svc,
+                "team": team,
+                "title": f"{team} uses {s.label}",
+                "summary": f"{len(people)} {'person' if len(people) == 1 else 'people'}, {len(fs)} findings, {sure} confirmed. Reviewing {s.label} once covers all of them.",
+                "findingKeys": [f["key"] for f in fs],
+            }
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Loading and routes
 # ---------------------------------------------------------------------------
@@ -682,6 +712,7 @@ def shadow_ai(http: Request, db: Session = Depends(get_db)):
     return {
         "findings": cur["findings"],
         "resolved": resolved[:100],
+        "stories": stories(cur["findings"]),
         "map": usage_map(cur["assets"], cur["people"], cur["stance"], cur["findings"], cur["fleet"]),
         "coverage": {
             "proxyLogs": "proxy_logs" in k,

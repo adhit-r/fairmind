@@ -4232,6 +4232,24 @@ class GovernanceShadowState(Base):
     )
 
 
+class GovernanceShadowReading(Base):
+    """FairMind's reading of one Shadow AI finding or story: what the organisation's model wrote, kept until the
+    evidence it read changes (evidence_hash), so the model is called once per change, not per view."""
+
+    __tablename__ = "governance_shadow_readings"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    subject_key = Column(String, nullable=False)  # a finding key, or story:<service>:<team>
+    evidence_hash = Column(String, nullable=False)
+    reading_json = Column(Text, nullable=False)
+    model = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("idx_governance_shadow_readings_org_subject", "org_id", "subject_key", unique=True),)
+
+
 class PackInstall(Base):
     """An agentic pack an organization has switched on."""
 

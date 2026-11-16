@@ -649,6 +649,7 @@ _include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations
 _include_router("api.routes.discovery_review", prefix="/api/v1", tags=["discovery-review"], required=False)
 _include_router("api.routes.discovery_review", prefix="/api/v1/public", tags=["owner-check-public"], attr="public_router", required=False)
 _include_router("api.routes.shadow_ai", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.shadow_reading", prefix="/api/v1", tags=["shadow-ai"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)

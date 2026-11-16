@@ -58,3 +58,8 @@
 .sh-seg i.f { background: var(--color-text-primary); }
 .sh-grid td { vertical-align: middle; }
 .sh-n { margin-left: 6px; font-size: 12px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.sh-reading p { margin: 0 0 10px; font-size: 14px; line-height: 1.55; max-width: 72ch; }
+.sh-reading p:last-child { margin-bottom: 0; }
+.sh-ref { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; margin-left: 2px; border-radius: 5px; background: var(--color-overlay-hover); font-size: 11px; font-weight: 600; vertical-align: 1px; cursor: default; }
+.sh-cites { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }
+.sh-cites li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; align-items: start; }
