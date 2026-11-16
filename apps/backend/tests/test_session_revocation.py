@@ -188,7 +188,7 @@ async def test_access_tokens_stop_on_the_next_request(db, monkeypatch):
     token = await fresh_token()
     admin = SimpleNamespace(user_id=owner)
     await org_management.update_member(
-        org, member_row, org_management.UpdateMemberRequest(role="member"), SimpleNamespace(client=None, headers={}), admin
+        org, member_row, org_management.UpdateMemberRequest(role="viewer"), SimpleNamespace(client=None, headers={}), admin
     )
     with pytest.raises(InvalidTokenException, match="signed out"):  # it carried the admin role's rights
         await auth_manager.verify_token(token)
