@@ -652,6 +652,8 @@ _include_router("api.routes.shadow_ai", prefix="/api/v1", tags=["shadow-ai"], re
 _include_router("api.routes.shadow_reading", prefix="/api/v1", tags=["shadow-ai"], required=False)
 _include_router("api.routes.laptop_reports", prefix="/api/v1", tags=["shadow-ai"], required=False)
 _include_router("api.routes.laptop_reports", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.agent", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.agent", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)

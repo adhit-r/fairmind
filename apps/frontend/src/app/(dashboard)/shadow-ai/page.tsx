@@ -22,7 +22,11 @@ import {
   markExpected,
   nudgePerson,
   reopenFinding,
+  agentSettings,
+  createAgent,
   downloadScript,
+  getAgent,
+  newAgentSecret,
   getReading,
   getScriptStatus,
   getTenantRules,
@@ -36,6 +40,8 @@ import {
   type Evidence,
   type EvidenceRow,
   type Finding,
+  type AgentStatus,
+  type EdgeModel,
   type Reading,
   type ScriptStatus,
   type TenantRules,
@@ -924,6 +930,160 @@ function LaptopScriptCard() {
   )
 }
 
+const RUNTIME: Record<EdgeModel['runtime'], string> = { ollama: 'Ollama', lm_studio: 'LM Studio', huggingface: 'Hugging Face cache' }
+
+function size(n: number): string {
+  return n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n >= 1e6 ? `${Math.round(n / 1e6)} MB` : 'Size not known'
+}
+
+function ModelsOnLaptop({ models }: { models: EdgeModel[] }) {
+  if (!models.length) return null
+  return (
+    <section className="fm-card" aria-labelledby="models-title">
+      <VStack gap={3}>
+        <div>
+          <Heading level={3} id="models-title">
+            Edge AI models on this laptop
+          </Heading>
+          <Text size="sm" color="secondary">
+            Models local runtimes downloaded, by name. They run without any vendor seeing the data, so review them like any other AI system.
+          </Text>
+        </div>
+        <div className="sh-mapwrap">
+          <table className="sh-map">
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col">Runtime</th>
+                <th scope="col">Size</th>
+                <th scope="col">Seen by</th>
+              </tr>
+            </thead>
+            <tbody>
+              {models.map((m) => (
+                <tr key={`${m.runtime}:${m.name}`}>
+                  <th scope="row">{m.name}</th>
+                  <td>{RUNTIME[m.runtime]}</td>
+                  <td>{size(m.size)}</td>
+                  <td>{m.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </VStack>
+    </section>
+  )
+}
+
+/** The FairMind agent: osquery reporting to FairMind. Setup, health and what it saw today. */
+function AgentCard() {
+  const [st, setSt] = useState<AgentStatus | null>(null)
+  const [secret, setSecret] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    getAgent()
+      .then(setSt)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the agent'))
+  }, [])
+  async function act(fn: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setBusy(false)
+    }
+  }
+  async function flags(os: 'macos' | 'windows') {
+    const d = await agentSettings(os)
+    saveFile(d.filename, d.flags)
+  }
+  if (!st) return error ? <Banner status="error" title="FairMind agent" description={error} /> : null
+  return (
+    <section className="fm-card" aria-labelledby="agent-title">
+      <VStack gap={3}>
+        <HStack hAlign="between" vAlign="start" wrap="wrap" gap={2}>
+          <div>
+            <Heading level={3} id="agent-title">
+              FairMind agent
+            </Heading>
+            <Text size="sm" color="secondary">
+              osquery&apos;s official package, reporting to FairMind. It sees AI apps start as it happens on macOS and every minute on Windows, and lists edge AI models. It never blocks and never reads content.
+            </Text>
+          </div>
+          {st.connected && <span className="dv-chip">{st.laptops ? `${st.laptops} ${st.laptops === 1 ? 'laptop' : 'laptops'} enrolled` : 'No laptop enrolled yet'}</span>}
+        </HStack>
+        {error && <Banner status="error" title="Not done" description={error} />}
+        {!st.connected ? (
+          <HStack>
+            <Button variant="secondary" label="Set up the agent" isDisabled={busy} onClick={() => void act(async () => setSt(await createAgent()))} />
+          </HStack>
+        ) : (
+          <>
+            {secret && (
+              <Banner
+                status="success"
+                title="Enrol secret, shown once"
+                description={`${secret}  Save it as fairmind.secret next to the flags file. Laptops already enrolled keep working when you create a new one.`}
+                endContent={<Button size="sm" variant="secondary" label="Copy" onClick={() => void navigator.clipboard.writeText(secret)} />}
+              />
+            )}
+            <Text size="sm" color="secondary">
+              Install osquery with your device management, put the flags file in osquery&apos;s folder and the secret beside it. On macOS, grant osqueryd Full Disk Access with a privacy profile, or it checks every minute instead of as it happens.
+            </Text>
+            <HStack gap={2} wrap="wrap">
+              <Button variant="secondary" label={st.hasSecret ? 'Create a new enrol secret' : 'Create the enrol secret'} isDisabled={busy} onClick={() => void act(async () => setSecret((await newAgentSecret()).secret))} />
+              <Button variant="ghost" label="osquery settings for macOS" isDisabled={busy} onClick={() => void act(() => flags('macos'))} />
+              <Button variant="ghost" label="osquery settings for Windows" isDisabled={busy} onClick={() => void act(() => flags('windows'))} />
+            </HStack>
+            {(st.quiet.length > 0 || st.problems.length > 0) && (
+              <VStack gap={1}>
+                <Text size="sm" weight="semibold">
+                  Needs attention
+                </Text>
+                {st.problems.map((p, i) => (
+                  <Text key={`p${i}`} size="sm" color="secondary">
+                    {p.name}: {p.problem}
+                  </Text>
+                ))}
+                {st.quiet.map((q, i) => (
+                  <Text key={`q${i}`} size="sm" color="secondary">
+                    {q.name} has not checked in since {ago(q.lastSeen)}
+                  </Text>
+                ))}
+              </VStack>
+            )}
+            {st.events.length > 0 && (
+              <VStack gap={1}>
+                <Text size="sm" weight="semibold">
+                  As it happens
+                </Text>
+                <ol className="sh-cites">
+                  {st.events.slice(0, 8).map((e, i) => (
+                    <li key={i}>
+                      <span className="sh-ref" aria-hidden="true">
+                        {(e.app ?? e.service ?? '?').slice(0, 2).toUpperCase()}
+                      </span>
+                      <span>
+                        {e.app ?? e.service} started on {e.laptop}
+                        {e.user ? ` (${e.user})` : ''}, {ago(e.at)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </VStack>
+            )}
+          </>
+        )}
+      </VStack>
+    </section>
+  )
+}
+
 function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: string) => void }) {
   const [q, setQ] = useState('')
   const { data, error } = useLaptops(q)
@@ -935,6 +1095,7 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
     return (
       <VStack gap={4}>
         <LaptopScriptCard />
+        <AgentCard />
         <EmptyState
           title="No laptops yet"
           description="Run the laptop script, or connect Jamf, Intune, Defender for Endpoint, CrowdStrike, Fleet or Chrome Enterprise, to see which AI tools are on each laptop."
@@ -945,6 +1106,7 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
   return (
     <VStack gap={4}>
       <LaptopScriptCard />
+      <AgentCard />
       <div className="dv-split">
       <section className="fm-card dv-wlist" aria-label="Laptops">
         <div className="dv-wlist-hd">
@@ -956,7 +1118,9 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
           <button key={l.id} type="button" className={`dv-witem${selected?.id === l.id ? ' on' : ''}`} aria-current={selected?.id === l.id} onClick={() => onPick(l.id)}>
             <span style={{ minWidth: 0 }}>
               <span className="nm">{l.name}</span>
-              <span className="k">{[l.people[0], l.team !== 'No team' ? l.team : null, `${l.tools.length} AI ${l.tools.length === 1 ? 'tool' : 'tools'}`].filter(Boolean).join(' · ')}</span>
+              <span className="k">
+                {[l.people[0], l.team !== 'No team' ? l.team : null, `${l.tools.length} AI ${l.tools.length === 1 ? 'tool' : 'tools'}`, l.models ? `${l.models} ${l.models === 1 ? 'model' : 'models'}` : null].filter(Boolean).join(' · ')}
+              </span>
             </span>
             {l.flagged > 0 ? <span className="dv-chip sev-high">{l.flagged} not approved</span> : <span />}
             <span />
@@ -987,6 +1151,7 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
               {ev.error ? <Text color="secondary">{ev.error}</Text> : ev.data ? <EvidenceGrid ev={ev.data} /> : <Skeleton height={140} />}
             </VStack>
           </section>
+          {ev.data?.models && <ModelsOnLaptop models={ev.data.models} />}
         </VStack>
       )}
       </div>

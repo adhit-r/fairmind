@@ -4267,6 +4267,41 @@ class GovernanceLaptopReport(Base):
     __table_args__ = (Index("idx_governance_laptop_reports_device", "integration_id", "device_key", unique=True),)
 
 
+class GovernanceAgentNode(Base):
+    """One laptop enrolled with FairMind through osquery: its node key (hashed), what it is, when it last checked in."""
+
+    __tablename__ = "governance_agent_nodes"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False)
+    node_key_hash = Column(String, nullable=False, unique=True)
+    host_identifier = Column(String, nullable=True)
+    serial = Column(String, nullable=True)
+    name = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    osquery_version = Column(String, nullable=True)
+    console_user = Column(String, nullable=True)
+    problem = Column(Text, nullable=True)  # the last error the agent reported, such as Endpoint Security not allowed
+    models_json = Column(Text, nullable=True)  # the latest list of AI models downloaded on the laptop (edge models)
+    enrolled_at = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
+
+
+class GovernanceAgentEvent(Base):
+    """Something the agent saw happen on a laptop: an AI app started. Kept for 30 days."""
+
+    __tablename__ = "governance_agent_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    node_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # app_started
+    service = Column(String, nullable=True)
+    detail_json = Column(Text, nullable=False)
+    at = Column(String, nullable=False, index=True)
+
+
 class PackInstall(Base):
     """An agentic pack an organization has switched on."""
 

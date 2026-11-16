@@ -350,6 +350,16 @@ export const SOURCES: Record<IntegrationKind, SourceSpec> = {
     token: null,
     managedIn: { href: '/shadow-ai?view=laptops', text: 'Set up the laptop script in Shadow AI: choose your company domains, create the token and download the script for macOS or Windows.' },
   },
+  osquery_agent: {
+    label: 'FairMind agent',
+    mark: 'FA',
+    lane: 'devices',
+    permissions: ["osquery's official package, pushed by your device management"],
+    reads: 'As it happens: AI apps starting on each laptop, and the edge AI models downloaded there. Built on osquery; never reads content.',
+    fields: [],
+    token: null,
+    managedIn: { href: '/shadow-ai?view=laptops', text: 'Set up the FairMind agent in Shadow AI: create the enrol secret and download the osquery settings for macOS or Windows.' },
+  },
   chrome: {
     label: 'Chrome Enterprise',
     mark: 'CH',

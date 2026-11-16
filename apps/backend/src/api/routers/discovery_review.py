@@ -274,7 +274,7 @@ def hub_source_label(kind: str) -> str:
         "openai": "OpenAI Admin API", "aws": "AWS", "azure": "Azure", "gcp": "Google Cloud", "okta": "Okta", "entra": "Entra ID",
         "m365_copilot": "Microsoft 365 Copilot", "litellm": "LiteLLM gateway", "proxy_logs": "proxy logs", "mcp_registry": "MCP registry",
         "cursor": "Cursor Business", "github_copilot": "GitHub Copilot seats", "chatgpt_enterprise": "ChatGPT Enterprise", "jamf": "Jamf Pro", "intune": "Microsoft Intune",
-        "defender": "Defender for Endpoint", "crowdstrike": "CrowdStrike Falcon", "chrome": "Chrome Enterprise", "laptop_script": "Laptop script", "fleet": "Fleet",
+        "defender": "Defender for Endpoint", "crowdstrike": "CrowdStrike Falcon", "chrome": "Chrome Enterprise", "laptop_script": "Laptop script", "osquery_agent": "FairMind agent", "fleet": "Fleet",
     }.get(kind, kind)
 
 

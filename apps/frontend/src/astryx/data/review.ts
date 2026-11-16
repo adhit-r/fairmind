@@ -246,6 +246,7 @@ export interface Evidence {
   laptops: { id: string; name: string; serial: string | null; sources: string[] }[]
   people: string[]
   rows: EvidenceRow[]
+  models?: EdgeModel[]
 }
 
 export interface LaptopSummary {
@@ -257,6 +258,7 @@ export interface LaptopSummary {
   sources: string[]
   tools: { service: string; label: string; stance: Stance }[]
   flagged: number
+  models?: number
 }
 
 /** Every AI tool for one person or one laptop, by kind of evidence. */
@@ -369,4 +371,37 @@ export interface TenantRules {
 
 export async function getTenantRules() {
   return unwrap(await apiClient.get<TenantRules>(`${S}/tenant-rules`))
+}
+
+export interface EdgeModel {
+  runtime: 'ollama' | 'lm_studio' | 'huggingface'
+  name: string
+  size: number
+  laptop: string
+  source: string
+}
+
+export interface AgentStatus {
+  connected: boolean
+  hasSecret: boolean
+  laptops: number
+  quiet: { name: string; lastSeen: string }[]
+  problems: { name: string; problem: string }[]
+  events: { laptop: string; kind: string; service: string | null; user?: string | null; app?: string; at: string }[]
+}
+
+export async function getAgent() {
+  return unwrap(await apiClient.get<AgentStatus>(`${S}/agent`))
+}
+
+export async function createAgent() {
+  return unwrap(await apiClient.put<AgentStatus>(`${S}/agent`, {}))
+}
+
+export async function newAgentSecret() {
+  return unwrap(await apiClient.post<{ secret: string }>(`${S}/agent/secret`, {}))
+}
+
+export async function agentSettings(os: 'macos' | 'windows') {
+  return unwrap(await apiClient.get<{ filename: string; flags: string }>(`${S}/agent/settings?os=${os}`))
 }

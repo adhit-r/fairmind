@@ -72,6 +72,7 @@ def _ensure_tables() -> None:
         with db_manager.engine.begin() as conn:
             conn.execute(text("ALTER TABLE governance_integration_runs ADD COLUMN IF NOT EXISTS steps_json TEXT"))
             conn.execute(text("ALTER TABLE governance_approved_ai_tools ADD COLUMN IF NOT EXISTS tenant_ids_json TEXT"))
+            conn.execute(text("ALTER TABLE governance_agent_nodes ADD COLUMN IF NOT EXISTS models_json TEXT"))
     _tables_ready = True
 
 
@@ -436,6 +437,7 @@ _CONNECTORS = {
     "litellm": litellm.sync,
     "proxy_logs": _sync_upload_only,
     "laptop_script": _sync_reports_only,
+    "osquery_agent": _sync_reports_only,
     "mcp_registry": mcp_registry.sync,
     "vllm": vllm.sync,
     "chatgpt_workspace": workspace.chatgpt_sync,
