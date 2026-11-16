@@ -608,7 +608,9 @@ def delete_integration(integration_id: str, http: Request, db: Session = Depends
     _ensure_tables()
     org = _caller_org(http)
     _get_integration(db, org, integration_id)
-    db.execute(text("DELETE FROM governance_discovered_assets WHERE integration_id = :id AND status = 'new'"), {"id": integration_id})
+    # All of them: integration_id is a NOT NULL foreign key, so a promoted or ignored
+    # asset left behind blocks the delete. A promoted system keeps its source in metadata.
+    db.execute(text("DELETE FROM governance_discovered_assets WHERE integration_id = :id"), {"id": integration_id})
     db.execute(text("DELETE FROM governance_integration_runs WHERE integration_id = :id"), {"id": integration_id})
     db.execute(text("DELETE FROM governance_source_facts WHERE integration_id = :id"), {"id": integration_id})
     db.execute(text("DELETE FROM governance_integrations WHERE id = :id AND org_id = :org"), {"id": integration_id, "org": org})
