@@ -173,6 +173,7 @@ export const API_ENDPOINTS = {
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
     estateGates: '/api/v1/ai-governance/estate/gates',
+    estateFrameworks: '/api/v1/ai-governance/estate/frameworks',
     frameworkSystems: (frameworkKey: string) => `/api/v1/ai-governance/frameworks/${encodeURIComponent(frameworkKey)}/systems`,
   },
 

@@ -90,3 +90,22 @@ def test_packs_controls_return_every_control_and_crosswalk_row():
     assert set(control) == {"id", "name", "objective", "workflows"}
     assert all(set(w) == {"id", "name", "approver", "scope"} for c in body["controls"] for w in c["workflows"])
     assert any(c["workflows"] for c in body["controls"])
+
+
+def test_estate_frameworks_count_each_confirmed_framework_once_per_system():
+    client, stranger = _client(), _client()
+    high = _system(client, "Underwriting", "high")
+    elsewhere = _system(client, "Chatbot", "medium")
+    _system(client, "Unconfirmed", "low")
+    _confirm(high, "EUAIA", "ISO42001")
+    _confirm(elsewhere, "ISO42001")
+    _confirm(_system(stranger, "Foreign", "high"), "NISTRMF")
+
+    body = client.get(f"{AIG}/estate/frameworks").json()
+    assert body["unconfirmed"] == 1
+    rows = {r["key"]: r for r in body["frameworks"]}
+    assert set(rows) == {"EUAIA", "ISO42001"}
+    assert (rows["EUAIA"]["systems"], rows["ISO42001"]["systems"]) == (1, 2)
+    for key, row in rows.items():
+        assert row["tracked"] == len(tracked_requirements(key))
+        assert row["states"] == {"open": row["tracked"]}  # nothing is evidenced yet, so every tracked one is open

@@ -7,12 +7,25 @@ test.describe('Frameworks grid', () => {
   test('/frameworks lists the frameworks and links to each grid', async ({ page }) => {
     await page.goto('/frameworks')
     await expect(page).toHaveURL(/\/frameworks$/)
-    const table = page.getByRole('region', { name: 'Frameworks' })
-    await expect(table.getByRole('link', { name: 'ISO/IEC 42001:2023' })).toHaveAttribute('href', `/frameworks/${GRID_FW}`, { timeout: 30_000 })
+    const inUse = page.getByRole('region', { name: 'In use' })
+    await expect(inUse.getByRole('link', { name: 'ISO/IEC 42001:2023' })).toHaveAttribute('href', `/frameworks/${GRID_FW}`, { timeout: 30_000 })
+    await expect(inUse.getByRole('img', { name: /1 proven/ })).toBeVisible()
+  })
+
+  test('the framework page maps every requirement and opens its trace', async ({ page }) => {
+    await page.goto(`/frameworks/${GRID_FW}?view=matrix`)
+    const map = page.getByRole('region', { name: 'Requirement map' })
+    const square = map.getByRole('link', { name: /^9\.1 .*: Open$/ })
+    await expect(square).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('complementary', { name: 'Needs work' }).getByText('9.1')).toBeVisible()
+    await square.click()
+    await expect(page).toHaveURL(new RegExp(`/frameworks/${GRID_FW}/9\\.1`))
+    await expect(page.getByRole('region', { name: /^Trace/ })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('FMC-MON-01 Monitoring')).toBeVisible()
   })
 
   test('by system renders one grid, one legend, at most three cards', async ({ page }) => {
-    await page.goto(`/frameworks/${GRID_FW}`)
+    await page.goto(`/frameworks/${GRID_FW}?view=matrix`)
     const grid = page.locator('[data-mx="fwsys"]')
     await expect(grid).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('heading', { level: 1 })).toContainText('requirement')
@@ -26,7 +39,7 @@ test.describe('Frameworks grid', () => {
   })
 
   test('a cell is focusable and Enter opens its drawer', async ({ page }) => {
-    await page.goto(`/frameworks/${GRID_FW}`)
+    await page.goto(`/frameworks/${GRID_FW}?view=matrix`)
     const cell = page.locator('[data-mx="fwsys"] button.fm-cel').first()
     await expect(cell).toBeVisible({ timeout: 30_000 })
     await cell.focus()
@@ -44,7 +57,7 @@ test.describe('Frameworks grid', () => {
   test('adjacent one-system tiers keep their group labels apart', async ({ page }) => {
     await page.unrouteAll({ behavior: 'ignoreErrors' })
     await installGridFixtures(page, ONE_PER_TIER)
-    await page.goto(`/frameworks/${GRID_FW}`)
+    await page.goto(`/frameworks/${GRID_FW}?view=matrix`)
     const grid = page.locator('[data-mx="fwsys"]')
     await expect(grid.getByRole('link', { name: 'Grid system D' })).toBeVisible({ timeout: 30_000 })
     const rects = await grid.locator('.mx-gl span').evaluateAll((els) =>
@@ -65,8 +78,13 @@ test.describe('Frameworks grid', () => {
 
   test('no page horizontal scroll at 375px', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto(`/frameworks/${GRID_FW}`)
+    await page.goto(`/frameworks/${GRID_FW}?view=matrix`)
     await expect(page.locator('[data-mx="fwsys"]')).toBeVisible({ timeout: 30_000 })
     expect((await layoutFacts(page)).overflow).toBeLessThanOrEqual(0)
+    for (const path of [`/frameworks/${GRID_FW}`, `/frameworks/${GRID_FW}/9.1`]) {
+      await page.goto(path)
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 30_000 })
+      expect((await layoutFacts(page)).overflow, path).toBeLessThanOrEqual(0)
+    }
   })
 })

@@ -518,6 +518,54 @@ def get_estate_gates(
     return out
 
 
+WEAKEST_FIRST = ("fails", "stale", "open", "planned", "estimated", "attested", "proven")
+
+
+def _weakness(state: str) -> int:
+    return WEAKEST_FIRST.index(state) if state in WEAKEST_FIRST else WEAKEST_FIRST.index("open")
+
+
+@router.get("/estate/frameworks")
+def get_estate_frameworks(
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Per framework some system confirmed: how many systems, and the weakest state of each tracked requirement.
+
+    One gate computation per confirmed system, shared by every framework it confirmed, so the Frameworks index
+    costs one gate per system rather than one per system per framework.
+    """
+    _ensure_tables(db)
+    catalogue = _catalogue()["frameworks"]
+    worst: Dict[str, Dict[str, str]] = {}
+    systems: Dict[str, int] = {}
+    unconfirmed = 0
+    for row in _org_systems(db, http):
+        applicability, _ = _system_applicability(db, row.id)
+        if applicability is None:
+            unconfirmed += 1
+            continue
+        keys = [f["key"] for f in applicability.get("frameworks") or [] if isinstance(f, dict) and f.get("key") in catalogue]
+        if not keys:
+            continue
+        payload = clause_map(_gate_payload(db, row.id, row.risk_tier), frameworks=keys)
+        cells = {fw["key"]: {c["key"]: c["cell"] for c in fw["clauses"]} for fw in payload["frameworks"]}
+        for key in keys:
+            systems[key] = systems.get(key, 0) + 1
+            fw_worst = worst.setdefault(key, {})
+            for req, state in cells.get(key, {}).items():
+                if req not in fw_worst or _weakness(state) < _weakness(fw_worst[req]):
+                    fw_worst[req] = state
+    out = []
+    for key, count in systems.items():
+        states: Dict[str, int] = {}
+        for state in worst[key].values():
+            states[state] = states.get(state, 0) + 1
+        out.append({"key": key, "systems": count, "tracked": len(tracked_requirements(key)), "states": states})
+    return {"unconfirmed": unconfirmed, "frameworks": out}
+
+
 @router.get("/frameworks/{framework_key}/systems")
 def get_framework_systems(
     framework_key: str,
