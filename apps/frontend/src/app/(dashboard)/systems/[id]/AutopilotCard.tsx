@@ -116,14 +116,16 @@ export function AutopilotCard({ systemId, reloadKey, onChanged, onPersonStep }: 
         {d.steps.map((s) => {
           const agent = s.by === 'agent'
           return (
-            <li key={`${s.check}-${s.action}`} className="flex items-center gap-3 border-t border-[var(--fm-line)] py-2.5 text-[13px]">
+            <li key={`${s.check}-${s.action}-${s.evaluationId ?? ''}`} className="flex items-center gap-3 border-t border-[var(--fm-line)] py-2.5 text-[13px]">
               <span className={cn('grid h-6 w-6 flex-none place-items-center rounded-full', agent ? 'bg-[var(--fm-bg)] text-[var(--fm-ink)]' : 'bg-[#fff1ea] text-[var(--fm-brand)]')} aria-hidden>
                 {agent ? <Database className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="font-medium">{ACTION_TEXT[s.action]?.(s.label) ?? s.label}</span>
                 <span className="block truncate text-[12px] text-[var(--fm-ink3)]">
-                  {agent ? (s.upkeep ? 'The agent keeps this fresh on its cadence' : 'The agent runs this from the data source') : s.needs ?? (d.owner ? `For ${d.owner}` : 'For the system owner')}
+                  {s.action === 'evaluation_run' && agent
+                    ? `${s.note}, on the saved connection with your AI provider as judge`
+                    : agent ? (s.upkeep ? 'The agent keeps this fresh on its cadence' : 'The agent runs this from the data source') : s.needs ?? (d.owner ? `For ${d.owner}` : 'For the system owner')}
                 </span>
               </span>
               {s.evidenceClass && <span className="hidden rounded-full border border-[var(--fm-line)] px-2 py-0.5 text-[11px] text-[var(--fm-ink2)] sm:inline">{CLASS_LABEL[s.evidenceClass]}</span>}
