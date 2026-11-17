@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Database, Loader2, Route, User, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAutopilot, type AutopilotMode, type AutopilotStep, type DataPurpose } from '@/lib/api/hooks/useAutopilot'
@@ -26,6 +26,9 @@ const PURPOSE_TEXT: Record<DataPurpose, string> = {
   monitoring: 'Monitoring data: recent production decisions',
 }
 
+const POLL_MS = 4000
+const MAX_POLLS = 225 // 15 minutes: give up waiting on a run that never reports back
+
 const pct = (v: number) => `${Math.max(0, Math.min(1, v)) * 100}%`
 const ago = (iso: string) => {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -43,20 +46,38 @@ export function AutopilotCard({ systemId, reloadKey, onChanged, onPersonStep }: 
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [urls, setUrls] = useState<Record<DataPurpose, string>>({ fairness: '', monitoring: '' })
+  // A run continues on the server after the call answers: reload until lastRunAt moves, then refresh the system file.
+  const [wait, setWait] = useState<{ from: string | null; polls: number } | null>(null)
   const d = ap.data
+  const { reload } = ap
+  useEffect(() => {
+    if (!wait) return
+    const t = setTimeout(async () => {
+      const now = await reload()
+      if ((now && now.lastRunAt !== wait.from) || wait.polls <= 1) {
+        setWait(null)
+        setBusy(null)
+        onChanged()
+      } else setWait({ ...wait, polls: wait.polls - 1 })
+    }, POLL_MS)
+    return () => clearTimeout(t)
+  }, [wait, reload, onChanged])
   if (!d) return ap.error ? <section className="fm-card p-5 text-[13px] text-[var(--fm-ink2)]">{ap.error}</section> : null
 
-  const act = async (key: string, fn: () => Promise<unknown>, changesEvidence = false) => {
+  const act = async (key: string, fn: () => Promise<unknown>, startsRun = false) => {
+    const from = d.lastRunAt
     setBusy(key)
     setFailure(null)
     try {
       await fn()
-      if (changesEvidence) onChanged()
+      if (startsRun) {
+        setWait({ from, polls: MAX_POLLS })
+        return // busy stays until the run reports back
+      }
     } catch (e) {
       setFailure(e instanceof Error ? e.message : 'Request failed')
-    } finally {
-      setBusy(null)
     }
+    setBusy(null)
   }
 
   const target = d.target

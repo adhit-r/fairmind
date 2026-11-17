@@ -411,7 +411,7 @@ function SystemFileBody({ id }: { id: string }) {
               <HStack gap={3} vAlign="center" wrap="wrap">
                 <Heading level={3}>Release gate</Heading>
                 <Badge variant={verdict.tone} label={verdict.label} />
-                <Text type="supporting" color="secondary">Confidence <span className="fm-sf-num">{gate.confidence.toFixed(2)}</span>, {gate.band}. {gate.proven} proven, {gate.attested} attested, {gate.open} open.</Text>
+                <Text type="supporting" color="secondary">Confidence <span className="fm-sf-num">{gate.confidence.toFixed(2)}</span>, {gate.band}. {gate.proven} proven, {gate.attested} attested, {gate.open} open{gate.failing ? `, ${gate.failing} failing` : ''}.</Text>
               </HStack>
               <VStack gap={3}>
                 {gate.checks.map((c) => {

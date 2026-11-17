@@ -48,7 +48,8 @@ def test_a_chat_model_gets_behaviour_tests_for_its_open_checks_once_target_and_j
     # the route's catalogue-evaluation step for fairness becomes the one behaviour test that counts for it, keeping its price
     assert (step["check"], step["evaluationId"], step["by"]) == ("fairness", "EV-FAI-05", "person") and step["gain"] > 0
     assert "AI provider" in step["needs"]
-    assert client.post(f"{base}/autopilot/run?action=evaluation_run").json()["ran"] == []  # not ready: nothing runs
+    client.post(f"{base}/autopilot/run?action=evaluation_run")
+    assert client.get(f"{base}/autopilot").json()["events"] == []  # not ready: nothing runs
 
     _provider(client)
     assert _target(client, system, via="runner").status_code == 200
@@ -59,7 +60,8 @@ def test_a_chat_model_gets_behaviour_tests_for_its_open_checks_once_target_and_j
     assert [s["by"] for s in view["steps"] if s.get("evaluationId")] == ["agent"]
     assert any(s["action"] == "evaluation_run" and not s.get("evaluationId") and s["by"] == "person" for s in view["steps"])  # no behaviour test for it
 
-    on = client.put(f"{base}/autopilot", json={"mode": "run"}).json()  # turning the schedule on runs it at once
+    assert client.put(f"{base}/autopilot", json={"mode": "run"}).json()["mode"] == "run"  # turning the schedule on runs it at once,
+    on = client.get(f"{base}/autopilot").json()  # after the response
     assert [(e["action"], e["actor"], e["status"]) for e in on["events"]] == [("evaluation_run", "autopilot", "done")], on["events"]
     assert on["events"][0]["detail"] == "Ran EV-FAI-05 LLM output bias on the saved connection; insufficient"  # the first run sets the baseline
     assert stub["target"] and stub["judge"]  # the system under test was asked and the judge decided
@@ -67,8 +69,44 @@ def test_a_chat_model_gets_behaviour_tests_for_its_open_checks_once_target_and_j
     assert run["evaluationId"] == "EV-FAI-05" and run["createdBy"] == "agent:autopilot" and run["judge"]["model"] == "judge-1"
     with tmp_database.connect() as conn:
         assert conn.execute(text("SELECT status FROM governance_evaluation_jobs WHERE system_id = :s"), {"s": system}).scalars().all() == ["done"]
-    assert client.put(f"{base}/autopilot", json={"mode": "run"}).json()["events"] == on["events"]  # not again inside the day
+    client.put(f"{base}/autopilot", json={"mode": "run"})
+    assert client.get(f"{base}/autopilot").json()["events"] == on["events"]  # not again inside the day
 
-    again = client.post(f"{base}/autopilot/run?action=evaluation_run").json()  # "Run now" is not limited; it compares with the first run
-    assert again["ran"][0]["detail"].endswith("; passed"), again["ran"]
+    client.post(f"{base}/autopilot/run?action=evaluation_run")  # "Run now" is not limited; it compares with the first run
+    again = client.get(f"{base}/autopilot").json()
+    assert again["events"][0]["detail"].endswith("; passed"), again["events"]
     assert not any(s.get("evaluationId") for s in again["steps"])  # the gate counts the passing run: fairness is proven and leaves the route
+
+
+def test_behaviour_tests_no_gate_check_counts_are_rerun_until_they_pass(tmp_database, stub):
+    from tests.test_packs_routes import _store
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    base = f"{ROOT}/systems/{system}"
+    # before a connection is saved, the route says why fairness reads as a CSV run
+    assert any("Model connection" in n for n in client.get(f"{base}/gate").json()["path"]["notes"])
+    assert _target(client, system).status_code == 200
+    assert not any("Model connection" in n for n in client.get(f"{base}/gate").json()["path"]["notes"])
+
+    _store(tmp_database, org_id, system, "evaluation_run", {"evaluationId": "EV-SEC-01", "status": "failed"}, "2026-11-01T10:00:00")
+    upkeep = [s for s in client.get(f"{base}/autopilot").json()["steps"] if s.get("evaluationId") == "EV-SEC-01"]
+    assert [(s["check"], s["action"], s.get("upkeep")) for s in upkeep] == [("behaviour", "evaluation_run", True)]
+    _store(tmp_database, org_id, system, "evaluation_run", {"evaluationId": "EV-SEC-01", "status": "passed"}, "2026-11-01T11:00:00")
+    assert not any(s.get("evaluationId") == "EV-SEC-01" for s in client.get(f"{base}/autopilot").json()["steps"])
+
+
+def test_autopilot_waits_for_an_intended_use_and_takes_it_from_classification(tmp_database, stub):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    base = f"{ROOT}/systems/{system}"
+    _provider(client)
+    assert _target(client, system, intendedUse="").status_code == 200
+    step = next(s for s in client.get(f"{base}/autopilot").json()["steps"] if s.get("evaluationId"))
+    assert step["by"] == "person" and "intended use" in step["needs"]  # the judge would have nothing to write probes from
+
+    with tmp_database.begin() as conn:
+        conn.execute(text("UPDATE governance_ai_systems SET metadata_json = :m WHERE id = :id"),
+                     {"m": json.dumps({"applicability": {"answers": {"intendedPurpose": "Answers invoice questions"}}}), "id": system})
+    step = next(s for s in client.get(f"{base}/autopilot").json()["steps"] if s.get("evaluationId"))
+    assert step["by"] == "agent" and step["needs"] is None

@@ -96,6 +96,52 @@ def test_a_failed_run_opens_one_finding_and_a_passing_run_resolves_it(tmp_databa
     assert [r.status for r in _findings(tmp_database, system)] == ["resolved"]
 
 
+def test_a_person_accepts_a_failed_runs_finding_with_a_reason_that_is_kept_as_a_record(tmp_database):
+    from sqlalchemy import text
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    with tmp_database.connect() as conn:
+        risk_id = conn.execute(text("SELECT id FROM governance_risks WHERE system_id = :id"), {"id": system}).scalar()
+    url = f"/api/v1/ai-governance/risks/{risk_id}"
+
+    assert client.patch(url, json={"status": "accepted", "rationale": "   "}).status_code == 422
+    accepted = client.patch(url, json={"status": "accepted", "rationale": "Drift is within the seasonal range", "owner": "risk-lead"})
+    assert accepted.status_code == 200, accepted.text
+    assert (accepted.json()["residualSeverity"], accepted.json()["owner"]) == ("high", "risk-lead")
+    assert client.patch(url, json={"status": "mitigated", "rationale": "again"}).status_code == 409
+    assert [r.status for r in _findings(tmp_database, system)] == ["accepted"]
+    with tmp_database.connect() as conn:
+        content = conn.execute(text("SELECT content_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'risk_acceptance'"), {"id": system}).scalar()
+    assert '"rationale": "Drift is within the seasonal range"' in content
+
+
+def test_accepting_a_risk_a_passing_run_resolved_meanwhile_is_refused(tmp_database, monkeypatch):
+    from sqlalchemy import text
+
+    from api.routes import ai_governance
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    with tmp_database.connect() as conn:
+        risk_id = conn.execute(text("SELECT id FROM governance_risks WHERE system_id = :id"), {"id": system}).scalar()
+    check_access = ai_governance._require_system_access
+
+    def resolved_meanwhile(*args, **kwargs):  # between treat_risk's status read and its update
+        membership = check_access(*args, **kwargs)
+        with tmp_database.begin() as conn:
+            conn.execute(text("UPDATE governance_risks SET status = 'resolved' WHERE id = :id"), {"id": risk_id})
+        return membership
+
+    monkeypatch.setattr(ai_governance, "_require_system_access", resolved_meanwhile)
+    assert client.patch(f"/api/v1/ai-governance/risks/{risk_id}", json={"status": "accepted", "rationale": "Within range"}).status_code == 409
+    assert [r.status for r in _findings(tmp_database, system)] == ["resolved"]
+    with tmp_database.connect() as conn:
+        assert not conn.execute(text("SELECT id FROM governance_evidence WHERE system_id = :id AND evidence_type = 'risk_acceptance'"), {"id": system}).fetchone()
+
+
 def test_a_material_change_makes_earlier_results_stale(tmp_database):
     from database.governance_models import GovernanceSystemChange
 
@@ -158,8 +204,8 @@ def _assigned_control(engine, client, org_id, system):
         return member.post(f"{gov}/evidence/{evidence_id}/control-mappings", json={"controlAssessmentId": control["id"]})
 
     def accept(evidence_id):
-        mapping = link(client, evidence_id)
-        assert mapping.status_code == 201 and mapping.json()["state"] == "candidate"
+        mapping = link(client, evidence_id)  # 200: a passed catalogue run already proposed this clause
+        assert mapping.status_code in (200, 201) and mapping.json()["state"] == "candidate"
         review = client.post(f"{gov}/evidence-mappings/{mapping.json()['id']}/review", json={"state": "accepted", "reviewVersion": 0})
         assert review.status_code == 200, review.text
 
@@ -192,6 +238,18 @@ def test_a_catalogue_run_supports_a_control_only_while_its_evaluation_still_pass
 
     assert _run(client, system, 0.0).json()["status"] == "passed"
     assert missing() == 0  # passing again restores the accepted mapping
+
+
+def test_a_passed_catalogue_run_proposes_the_iso_clauses_its_control_reaches(tmp_database):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, _, _, missing = _assigned_control(tmp_database, client, org_id, system)  # A.6.2.4, crosswalked from FMC-DAT-01
+
+    passed, failed = _run(client, system, 0.0).json(), _run(client, system, 1.0).json()
+    runs = {r["evidenceId"]: r for r in client.get(f"{gov}/systems/{system}/evidence-runs").json()}
+    assert [m["state"] for m in runs[passed["id"]]["candidateMappings"]] == ["candidate"]
+    assert runs[failed["id"]]["candidateMappings"] == []
+    assert missing() == 1  # a candidate supports nothing until a reviewer accepts it
 
 
 def test_a_material_change_takes_a_mapped_catalogue_run_off_its_control(tmp_database):
@@ -251,6 +309,7 @@ def test_the_backfill_gives_an_earlier_catalogue_run_its_run_row(tmp_database):
     passed = _run(client, system, 0.0).json()
     with tmp_database.begin() as conn:  # as a run stored before catalogue runs got a run row
         conn.execute(text("UPDATE governance_evidence SET source_run_id = NULL WHERE id = :id"), {"id": passed["id"]})
+        conn.execute(text("DELETE FROM governance_control_evidence WHERE artifact_evidence_id = :id"), {"id": passed["id"]})
         conn.execute(text("DELETE FROM governance_evidence_runs WHERE evidence_id = :id"), {"id": passed["id"]})
     assert client.get(f"{gov}/systems/{system}/evidence-runs").json() == []
     sql = (Path(__file__).resolve().parents[1] / "migrations" / "025_catalogue_run_backfill.sql").read_text()

@@ -147,3 +147,40 @@ def test_a_partial_clause_never_draws_a_proven_cell():
     partial = [c for c in iso["clauses"] if c["state"] == "partial"]
     assert partial and all(c["cell"] == "partial" for c in partial)
     assert iso["counts"]["proven"] == 0 == sum(1 for c in iso["clauses"] if c["cell"] == "proven")
+
+
+def test_a_failing_check_is_not_counted_proven():
+    gate = release_gate("medium", [_evaluation("EV-FAI-05", "failed")], now=NOW)
+    assert (gate["proven"], gate["failing"]) == (0, 1)
+    # a newer manual attestation is the selected record while the older failure stands: failing, not attested too
+    gate = release_gate("medium", [_evaluation("EV-FAI-05", "failed"), _record("fairness_test", 0.3, "manual", ts="2026-11-06T12:00:00+00:00")], now=NOW)
+    assert (gate["attested"], gate["failing"]) == (0, 1)
+    assert gate["proven"] + gate["attested"] + gate["failing"] + gate["open"] == len(gate["checks"])
+
+
+def test_a_failing_test_outweighs_an_attestation_of_the_same_control():
+    # EV-SEC-03 fails on FMC-AGT-02 while a done workflow attests that control: A.6.2.4 stays open
+    gate = {**release_gate("medium", [_evaluation("EV-SEC-03", "failed")], now=NOW, include_environmental=False),
+            "attestedControls": {"FMC-AGT-02": {"statement": "Red teaming: completed", "confidence": 0.3}}}
+    clause = next(c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"] if c["control"] == "A.6.2.4")
+    assert clause["state"] == "open" and {ch["check"] for ch in clause["checks"]} >= {"EV-SEC-03", "FMC-AGT-02"}
+
+
+def test_an_evaluation_proves_only_the_clauses_it_tests():
+    # EV-FAI-08 is an accessibility scan: its control satisfies impact-assessment clauses it does not test
+    gate = release_gate("medium", [_evaluation("EV-FAI-08", "passed")], now=NOW, include_environmental=False)
+    clauses = {c["control"]: c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"]}
+    assert clauses["6.1.4"]["state"] == "partial"
+    assert next(ch for ch in clauses["6.1.4"]["checks"] if ch["check"] == "EV-FAI-08")["relation"] == "Supports"
+    # a clause it does test keeps its link: EV-TST-01 tests A.6.2.4
+    gate = release_gate("medium", [_evaluation("EV-TST-01", "passed")], now=NOW, include_environmental=False)
+    clause = next(c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"] if c["control"] == "A.6.2.4")
+    assert next(ch for ch in clause["checks"] if ch["check"] == "EV-TST-01")["relation"] == "Satisfies"
+
+
+def test_attested_controls_reach_clauses_no_gate_check_does():
+    gate = {**release_gate("medium", [], now=NOW, include_environmental=False),
+            "attestedControls": {"FMC-GOV-02": {"statement": "AI policy approved", "confidence": 0.3}, "FMC-FAI-01": {"statement": "skipped: a gate control"}}}
+    clauses = {c["control"]: c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"]}
+    assert (clauses["5.2"]["state"], clauses["5.2"]["cell"]) == ("attested", "attested")
+    assert not any(ch["check"] == "FMC-FAI-01" for c in clauses.values() for ch in c["checks"])

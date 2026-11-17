@@ -233,3 +233,21 @@ def test_parse_principles_json_rejects_unknown_parent_and_duplicate_ids() -> Non
         parse_principles_json(json.dumps(orphan).encode())
     with pytest.raises(WorkbookValidationError, match="duplicate control id 1.1"):
         parse_principles_json(json.dumps(duplicate).encode())
+
+
+def test_iso_42001_imports_from_the_pack_catalogue_with_clause_map_clause_ids() -> None:
+    from src.application.services.clause_map_service import tracked_requirements
+
+    session = Session(pg.fresh_engine())
+    service = FrameworkCatalogService(session)
+
+    created = service.import_catalogue_framework("iso-42001", actor_id="actor-1")
+    repeated = service.import_catalogue_framework("iso-42001", actor_id="actor-2")
+
+    assert (created.created, repeated.created, repeated.version_id) == (True, False, created.version_id)
+    assert (created.framework_key, created.version_label) == ("iso-42001", "2023 edition")
+    controls = session.execute(select(GovernanceControlDefinition.__table__)).mappings().all()
+    assert sorted(c["source_cell"] for c in controls) == sorted(tracked_requirements("ISO42001"))
+    treatment = next(c for c in controls if c["external_id"] == "6.1.3")
+    assert treatment["title"] == "AI risk treatment and Statement of Applicability"
+    assert (treatment["parent_requirement_id"], treatment["parent_requirement_title"]) == ("Clause 6", "Planning")

@@ -305,7 +305,7 @@ def _iso(clauses):
 
 
 def _ev(eid, clause, runnable=True, results=None):
-    return {"id": eid, "name": f"{eid} name", "runnable": runnable, "results": results,
+    return {"id": eid, "name": f"{eid} name", "runnable": runnable, "results": results, "commonControl": f"CTL-{clause}",
             "tests": [{"key": f"ISO42001|{clause}", "framework": "ISO42001", "control": clause, "title": "t"}]}
 
 
@@ -318,6 +318,7 @@ def test_audit_runs_what_it_can_then_packs_shares_and_names_what_stays_open(tmp_
     engines = {
         "EV-DAT-04": {"live": "", "alternate": None, "slots": [{"name": "dataset", "required": True}], "params": [{"name": "rules", "required": True}]},
         "EV-TST-01": {"live": "", "alternate": None, "slots": [{"name": "predictions", "required": True}], "params": [{"name": "baseline", "required": True}]},
+        "EV-DAT-06": {"live": "", "alternate": None, "slots": [{"name": "dataset", "required": True}], "params": []},
     }
     evaluations = [
         _ev("EV-DAT-04", "A.7.4"),
@@ -325,6 +326,8 @@ def test_audit_runs_what_it_can_then_packs_shares_and_names_what_stays_open(tmp_
         _ev("EV-DAT-05", "A.7.4", results={"status": "passed", "systems": [{"systemId": "sys-1", "status": "passed"}]}),
         _ev("EV-DOC-01", "A.6.2.4", runnable=False),
         _ev("EV-DAT-06", "A.7.2"),  # its clause is proven, so the audit leaves it alone
+        {**_ev("EV-TST-04", "A.6.2.4", runnable=False), "tests": []},  # tests no ISO clause, but its control reaches A.6.2.4
+        {**_ev("EV-TST-05", "A.7.2", runnable=False), "tests": []},  # reaches A.7.2 only through its control: cannot close it once partial
     ]
     calls = []
 
@@ -338,6 +341,8 @@ def test_audit_runs_what_it_can_then_packs_shares_and_names_what_stays_open(tmp_
         if path == "/api/v1/packs/evaluations":
             assert request.url.params["org_id"] == "org-1"
             return httpx.Response(200, json=evaluations)
+        if path == "/api/v1/packs/controls":
+            return httpx.Response(200, json={"controls": [], "crosswalk": [{"commonControl": f"CTL-{c}", "key": f"ISO42001|{c}", "relation": "Satisfies"} for c in ("A.7.4", "A.6.2.4", "A.7.2")]})
         if path.startswith("/api/v1/packs/evaluations/") and path.endswith("/engine"):
             return httpx.Response(200, json=engines[path.split("/")[-2]])
         if path == "/api/v1/packs/evaluations/EV-DAT-04/runs":
@@ -361,16 +366,17 @@ def test_audit_runs_what_it_can_then_packs_shares_and_names_what_stays_open(tmp_
     assert "EV-DAT-04: PASSED" in text
     assert "EV-TST-01: skipped, needs file predictions, param baseline" in text
     assert "fairmind eval run EV-TST-01 --system sys-1 --file predictions=<path> --param baseline=<value>" in text
-    assert "evidence only" in text and "EV-DAT-06" not in text
+    assert "evidence only" in text and "EV-DAT-06" not in text and "EV-TST-04" in text
     assert "Pack pk-1" in text and "auditor token (shown once): tok" in text
     assert "still open: A.7.4 (waits on Data governance)" in text and "still open: A.6.2.4 (waits on Fairness measured)" in text
     assert calls.index(("POST", "/api/v1/packs/evaluations/EV-DAT-04/runs")) < calls.index(("POST", "/api/v1/ai-governance/packs"))
 
-    # read-only by default: no runs, no pack; every clause closed exits 0
-    clauses[:] = [_clause("A.7.4", "A.7.4", "proven")]
+    # read-only by default: no runs, no pack; no open clause exits 0, and a partial one is still named
+    clauses[:] = [_clause("A.7.4", "A.7.4", "proven"), _clause("A.7.2", "A.7.2", "partial")]
     calls.clear()
     code, text, _ = run_cli(["audit", "ISO42001", "--system", "sys-1", "--api-key", "k"], handler, monkeypatch=monkeypatch)
-    assert code == EXIT_GO and not [c for c in calls if c[0] == "POST"] and "0 open of 1" in text
+    assert code == EXIT_GO and not [c for c in calls if c[0] == "POST"] and "0 open of 2" in text and "partial: A.7.2" in text
+    assert "EV-DAT-06" in text and "EV-TST-05" not in text
 
 
 def test_audit_names_the_frameworks_it_has_when_the_key_is_wrong(monkeypatch, capsys):

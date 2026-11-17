@@ -28,6 +28,23 @@ ready() {
   return 1
 }
 
+# A behaviour test runs inside the backend process and a restart kills it, so while one is live (running and
+# reported in the last 5 minutes, evaluation_runs.STALE_AFTER) the deploy waits for a later run. When the backend
+# cannot answer there is nothing to protect, and the deploy goes ahead.
+live_jobs="$(cd deploy/lightsail && docker compose exec -T backend python - 2>/dev/null <<'PY' | tail -n 1 || true
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import text
+from database.connection import db_manager
+since = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+with db_manager.engine.connect() as c:
+    print(c.execute(text("SELECT COUNT(*) FROM governance_evaluation_jobs WHERE status = 'running' AND updated_at > :s"), {"s": since}).scalar())
+PY
+)"
+if [ "${live_jobs:-0}" -gt 0 ] 2>/dev/null; then
+  echo "$live_jobs behaviour test(s) running; deploying main on a later run"
+  exit 0
+fi
+
 git merge --ff-only --quiet origin/main
 if ! (cd deploy/lightsail && docker compose up -d --build && ready); then
   echo "main $(git rev-parse --short HEAD) did not come up healthy; trying again next run" >&2

@@ -103,6 +103,52 @@ def test_plan_attestations_for_organisation_controls_are_hashed_into_the_pack():
     assert verify_manifest(detail["manifest"], detail["manifestHash"])["hashMatches"]
 
 
+def test_pack_carries_the_statement_of_applicability_risks_remediation_links_policies_and_workflows():
+    from database.governance_models import (
+        GovernanceEvidenceLink, GovernancePolicy, GovernancePolicyVersion, GovernanceRemediationTask, GovernanceRisk, WorkflowRun,
+    )
+    from src.application.services.framework_catalog_service import FrameworkCatalogService
+    from src.application.services.governance_assurance_service import GovernanceAssuranceService
+
+    client = _client("pack-soa")
+    sid = _system_with_attestation(client)
+    with db_manager.SessionLocal() as session:
+        org_id = session.execute(sql("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": sid}).scalar()
+        evidence_id = session.execute(sql("SELECT id FROM governance_evidence WHERE system_id = :id"), {"id": sid}).scalar()
+        version_id = FrameworkCatalogService(session).import_catalogue_framework("iso-42001", actor_id="test").version_id
+        assurance = GovernanceAssuranceService(session)
+        assignment, _ = assurance.assign_framework(org_id, sid, version_id)
+        [excluded] = [c for c in assurance.assignment_controls(org_id, assignment["id"]) if c["externalId"] == "A.10.4"]
+        assurance.update_assessment(org_id, excluded["id"], {"applicability": "not_applicable", "justification": "No customers use the system."})
+        policy_id, risk_id = str(uuid.uuid4()), str(uuid.uuid4())
+        for table, values in (
+            (GovernanceRisk, {"id": risk_id, "system_id": sid, "title": "Toxicity check failed", "severity": "high", "status": "open"}),
+            (GovernanceRemediationTask, {"system_id": sid, "title": "Retrain the filter", "source_type": "risk", "source_id": risk_id, "owner": "ml-lead"}),
+            (GovernanceEvidenceLink, {"evidence_id": evidence_id, "entity_type": "control", "entity_id": "ISO42001|A.7.2"}),
+            (GovernancePolicy, {"id": policy_id, "org_id": org_id, "name": "AI policy", "framework": "ISO42001", "status": "approved", "version": 2, "approver": "ceo"}),
+            (GovernancePolicyVersion, {"policy_id": policy_id, "version": 1, "name": "AI policy", "framework": "ISO42001", "status": "draft", "changed_by": "owner"}),
+            (WorkflowRun, {"org_id": org_id, "workflow_id": "ai_policy_review", "workflow_version": "1", "status": "done"}),
+        ):
+            session.execute(table.__table__.insert().values(**values))
+        session.commit()
+    treated = client.patch(f"{GOV}/risks/{risk_id}", json={"status": "accepted", "rationale": "Filter retrain is scheduled", "owner": "risk-lead"})
+    assert treated.status_code == 200, treated.text
+
+    detail = client.get(f"{GOV}/packs/{_pack(client, sid)['id']}").json()
+    system, org = detail["manifest"]["systems"][0], detail["manifest"]["organisation"]
+    soa = {row["control"]: row for row in system["controlApplicability"]}
+    assert len(soa) == 65 and soa["A.10.4"]["applicability"] == "not_applicable"
+    assert soa["A.10.4"]["justification"] == "No customers use the system." and soa["6.1.3"]["accepted_evidence"] == []
+    assert [r["status"] for r in system["risks"]] == ["accepted"] and system["remediation"][0]["owner"] == "ml-lead"
+    decision = system["risks"][0]["decision"]
+    assert (decision["decision"], decision["rationale"], decision["owner"]) == ("accepted", "Filter retrain is scheduled", "risk-lead")
+    assert system["controlLinks"][0]["entity_id"] == "ISO42001|A.7.2"
+    [policy] = org["policies"]
+    assert (policy["version"], policy["approver"], [v["version"] for v in policy["versions"]]) == (2, "ceo", [1])
+    assert [(w["workflow_id"], bool(w["name"])) for w in org["workflows"]] == [("ai_policy_review", True)]
+    assert verify_manifest(detail["manifest"], detail["manifestHash"])["intact"]
+
+
 def test_share_token_public_fetch_wrong_token_expiry_and_revoke():
     client = _client("share")
     sid = _system_with_attestation(client)

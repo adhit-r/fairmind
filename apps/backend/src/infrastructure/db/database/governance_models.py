@@ -368,6 +368,8 @@ class GovernanceControlAssessment(Base):
     applicability = Column(String, nullable=False, default="applicable")
     status = Column(String, nullable=False, default="not_started")
     owner = Column(String, nullable=True)
+    # Why a not_applicable control is excluded: the Statement of Applicability (ISO/IEC 42001 6.1.3).
+    justification = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 

@@ -1,4 +1,4 @@
-import type { PackEvidence, PackManifest, PackSystemEntry } from '@/lib/api/hooks/useEvidencePacks'
+import type { PackEvidence, PackManifest, PackOrganisation, PackSystemEntry } from '@/lib/api/hooks/useEvidencePacks'
 import { Card } from '@/components/ui/card'
 
 const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Conditional go', no_go: 'No go' }
@@ -50,9 +50,94 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
+type Column<T> = [label: string, cell: (row: T) => React.ReactNode]
+
+/** A plain records table; the last column drops the right padding, as in the tables above. */
+function DataTable<T>({ rows, rowKey, columns }: { rows: T[]; rowKey: (row: T) => string; columns: Column<T>[] }) {
+  const last = columns.length - 1
+  return (
+    <table className="w-full text-left text-sm">
+      <thead>
+        <tr className={LABEL}>
+          {columns.map(([label], i) => <th key={label} scope="col" className={i === last ? 'pb-2 font-semibold' : TH}>{label}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={rowKey(row)} className="border-t border-[var(--fm-line)]">
+            {columns.map(([label, cell], i) => <td key={label} className={`${i === last ? 'py-2 align-top' : TD} text-[var(--fm-ink2)]`}>{cell(row)}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+const RECORD_NAME = 'text-[var(--fm-ink)]'
+
+function OrganisationCard({ org, systems }: { org: PackOrganisation; systems: PackSystemEntry[] }) {
+  const workflows = org.workflows ?? []
+  const policies = org.policies ?? []
+  const systemName = (id: string | null) => (id ? systems.find((s) => s.system.id === id)?.system.name || id.slice(0, 8) : 'Organisation')
+  return (
+    <Card className="p-5">
+      <h2 className="text-base font-semibold tracking-tight text-[var(--fm-ink)]">Organisation</h2>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <Stat label="Plan attestations">{org.attestations.length}</Stat>
+        <Stat label="Done workflow runs">{workflows.length}</Stat>
+        <Stat label="AI policies">{policies.length}</Stat>
+      </div>
+      {org.attestations.length > 0 && (
+        <Section title={`Plan attestations: ${org.attestations.length}`}>
+          <DataTable rows={org.attestations} rowKey={(a) => `${a.task_key}-${a.created_at}`} columns={[
+            ['Task', (a) => <span className="font-mono text-xs">{a.task_key}</span>],
+            ['Statement', (a) => <span className={RECORD_NAME}>{a.statement}</span>],
+            ['Reference', (a) => a.reference || ''],
+            ['By', (a) => a.attested_by],
+            ['Date', (a) => <span className="whitespace-nowrap">{formatDate(a.created_at)}</span>],
+          ]} />
+        </Section>
+      )}
+      {workflows.length > 0 && (
+        <Section title={`Done workflow runs: ${workflows.length}`}>
+          <DataTable rows={workflows} rowKey={(w) => w.id} columns={[
+            ['Workflow', (w) => <span className={RECORD_NAME}>{w.name || w.workflow_id}</span>],
+            ['Control', (w) => <span className="font-mono text-xs">{w.common_control || ''}</span>],
+            ['Scope', (w) => systemName(w.ai_system_id)],
+            ['Review', (w) => w.approval || 'none needed'],
+            ['Finished', (w) => <span className="whitespace-nowrap">{formatDate(w.finished_at)}</span>],
+          ]} />
+        </Section>
+      )}
+      {policies.length > 0 && (
+        <Section title={`AI policies: ${policies.length}`}>
+          <DataTable rows={policies} rowKey={(p) => p.id} columns={[
+            ['Policy', (p) => (
+              <>
+                <div className={RECORD_NAME}>{p.name}</div>
+                {p.description && <div className="mt-1 whitespace-pre-line text-xs">{p.description}</div>}
+              </>
+            )],
+            ['Framework', (p) => p.framework],
+            ['Version', (p) => `v${p.version}, ${p.status}`],
+            ['Approved', (p) => (p.approver ? `${p.approver}, ${formatDate(p.approved_at)}` : 'Not approved')],
+            ['History', (p) => p.versions.map((v) => (
+              <div key={`${v.version}-${v.created_at}`} className="text-xs">v{v.version} {v.status}{v.changed_by ? ` by ${v.changed_by}` : ''}, {formatDate(v.created_at)}</div>
+            ))],
+          ]} />
+        </Section>
+      )}
+    </Card>
+  )
+}
+
 function SystemCard({ entry }: { entry: PackSystemEntry }) {
   const seal = sealStatus(entry)
   const verdict = entry.gate.verdict
+  const soa = entry.controlApplicability ?? []
+  const risks = entry.risks ?? []
+  const remediation = entry.remediation ?? []
+  const links = entry.controlLinks ?? []
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -185,6 +270,52 @@ function SystemCard({ entry }: { entry: PackSystemEntry }) {
           </table>
         </Section>
       )}
+      {soa.length > 0 && (
+        <Section title={`Statement of Applicability: ${soa.length} controls, ${soa.filter((c) => c.applicability === 'not_applicable').length} excluded`}>
+          <DataTable rows={soa} rowKey={(c) => `${c.framework}-${c.version}-${c.control}`} columns={[
+            ['Control', (c) => <span className="whitespace-nowrap font-mono text-xs text-[var(--fm-ink)]">{c.framework} {c.control}</span>],
+            ['Title', (c) => <span className={RECORD_NAME}>{c.title}</span>],
+            ['Applicability', (c) => c.applicability.replace(/_/g, ' ')],
+            ['Justification', (c) => <span className="whitespace-pre-line">{c.justification || ''}</span>],
+            ['Owner', (c) => c.owner || ''],
+            ['Status', (c) => c.status.replace(/_/g, ' ')],
+            ['Accepted evidence', (c) => c.accepted_evidence.length],
+          ]} />
+        </Section>
+      )}
+      {risks.length > 0 && (
+        <Section title={`Risk register: ${risks.length}`}>
+          <DataTable rows={risks} rowKey={(r) => r.id} columns={[
+            ['Risk', (r) => <span className={RECORD_NAME}>{r.title}</span>],
+            ['Severity', (r) => `${r.severity}, ${r.likelihood}`],
+            ['Status', (r) => r.status],
+            ['Treatment', (r) => <span className="whitespace-pre-line">{r.decision
+              ? `${r.decision.decision} by ${r.decision.decidedBy} on ${formatDate(r.decision.decidedAt)}${r.decision.owner ? `, owner ${r.decision.owner}` : ''}: ${r.decision.rationale}`
+              : r.mitigation}</span>],
+            ['Raised', (r) => <span className="whitespace-nowrap">{formatDate(r.created_at)}</span>],
+          ]} />
+        </Section>
+      )}
+      {remediation.length > 0 && (
+        <Section title={`Remediation: ${remediation.length}`}>
+          <DataTable rows={remediation} rowKey={(t) => t.id} columns={[
+            ['Task', (t) => <span className={RECORD_NAME}>{t.title}</span>],
+            ['Owner', (t) => t.owner || ''],
+            ['Priority', (t) => t.priority],
+            ['Status', (t) => t.status],
+            ['Due', (t) => <span className="whitespace-nowrap">{formatDate(t.due_date)}</span>],
+          ]} />
+        </Section>
+      )}
+      {links.length > 0 && (
+        <Section title={`Evidence links: ${links.length}`}>
+          <DataTable rows={links} rowKey={(l) => l.id} columns={[
+            ['Evidence', (l) => <span className="font-mono text-xs">{l.evidence_id.slice(0, 8)}</span>],
+            ['Linked to', (l) => `${l.entity_type.replace(/_/g, ' ')} ${l.entity_id}`],
+            ['Date', (l) => <span className="whitespace-nowrap">{formatDate(l.created_at)}</span>],
+          ]} />
+        </Section>
+      )}
     </Card>
   )
 }
@@ -204,6 +335,7 @@ export function PackSummaryView({ manifest, manifestHash }: { manifest: PackMani
           <div className="mt-1 break-all font-mono text-xs text-[var(--fm-ink)]">{manifestHash}</div>
         </div>
       </Card>
+      {manifest.organisation && <OrganisationCard org={manifest.organisation} systems={manifest.systems} />}
       {manifest.systems.map((entry) => (
         <SystemCard key={entry.system.id} entry={entry} />
       ))}

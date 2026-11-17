@@ -2,7 +2,8 @@
 
 GET    /systems/{id}/autopilot                  the route, who does each step, data sources, mode and recent trace
 PUT    /systems/{id}/autopilot                  set the mode: off, ask (a person runs each step) or run (on a schedule)
-POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one kind of them with ?action=
+POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one kind of them with ?action=;
+                                                the run continues after the response (so does turning the mode to run)
 PUT    /systems/{id}/data-sources/{purpose}     an https URL the agent fetches for fairness or monitoring data
 DELETE /systems/{id}/data-sources/{purpose}     forget a data source
 GET    /estate/autopilot                        systems on autopilot, steps done this week, steps that need a person
@@ -21,12 +22,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -51,13 +53,14 @@ from src.application.services.fairness_run_service import (
     EVALUATION_RUN, GATE_CHECKS, FairnessRunError, evaluation_status, gate_check, run_fairness, run_monitoring,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MODES = ("off", "ask", "run")
 PURPOSES = ("fairness", "monitoring")
 AGENT_ACTIONS = {"fairness_run": "fairness", "monitoring_snapshot": "monitoring"}  # action -> the data source it needs
 # EVALUATION_RUN with an evaluationId: a behaviour test the agent runs on the saved connection, with a judge, not a data source
-CHECK_LABELS = {key: label for key, label, _ in GATE_CHECKS}
+CHECK_LABELS = {**{key: label for key, label, _ in GATE_CHECKS}, "behaviour": "Behaviour tests"}
 FAIRNESS_RERUN_HOURS = 24  # a scheduled run repeats a fairness re-run at most daily; "Run now" is not limited
 FETCH_TIMEOUT_S = 30
 AUTOPILOT_ACTOR = "autopilot"
@@ -271,6 +274,8 @@ def _chat_setup(db: Session, org_id: str, system_id: str) -> tuple:
         raise AutopilotError(str(e.detail))
     if target.via_runner:
         raise AutopilotError("This system is on your private network, so only the runner can call it; run behaviour tests from there")
+    if not target.intended_use:  # the agent uploads no probe set, so the judge writes probes from it
+        raise AutopilotError("Behaviour tests write their probes from the system's intended use; add it to the system's connection settings")
     return judge, target
 
 
@@ -361,6 +366,17 @@ def _steps(db: Session, system, route: Dict[str, Any], sources: Dict[str, Any]) 
             out.append(step)
     out += [{"check": check, "action": EVALUATION_RUN, "evaluationId": ev.id, "evidenceClass": "measured", "counts": None, "gain": 0,
              "note": f"{ev.id} {ev.name}", "upkeep": True} for check, evs in tests.items() for ev in evs]
+    # Behaviour tests no gate check counts, which the system has run before: re-run any whose current result is not a pass
+    # (failed, or dropped by a material change), so the clauses they reach do not quietly reopen.
+    current = {e["evaluationId"]: e["status"] for e in route["gate"].get("evaluations") or []}
+    planned = {s.get("evaluationId") for s in out}
+    ran = {json.loads(r[0] or "{}").get("evaluationId") for r in db.execute(
+        text("SELECT content_json FROM governance_evidence WHERE system_id = :s AND evidence_type = :t"), {"s": system.id, "t": EVALUATION_RUN}
+    ).fetchall()}
+    for ev_id in sorted(i for i in ran if i in EVALUATIONS and i not in planned):
+        if current.get(ev_id) != "passed" and _behaviour_engine(ev_id) and gate_check({"evidenceType": EVALUATION_RUN, "content": {"evaluationId": ev_id}}) is None:
+            out.append({"check": "behaviour", "action": EVALUATION_RUN, "evaluationId": ev_id, "evidenceClass": "measured", "counts": None, "gain": 0,
+                        "note": f"{ev_id} {EVALUATIONS[ev_id].name}", "upkeep": True})
     return out
 
 
@@ -413,9 +429,37 @@ async def run_steps(db: Session, system_id: str, actor: str, only: Optional[str]
         _event(db, system.org_id, system_id, check, action, status, detail, actor, evidence_id)
         db.commit()  # the next step's fetch rolls back any open transaction
         done.append({"action": action, "status": status, "detail": detail})
-    db.execute(text("UPDATE system_autopilot SET last_run_at = :now WHERE system_id = :s"), {"now": _now(), "s": system_id})
-    db.commit()
+    _mark_run(db, system.org_id, system_id)
     return done
+
+
+def _mark_run(db: Session, org_id: str, system_id: str) -> None:
+    """Stamp lastRunAt, which the system file waits on; a system whose mode was never set has no row yet."""
+    db.execute(
+        text(
+            "INSERT INTO system_autopilot (system_id, org_id, mode, updated_at, last_run_at) VALUES (:s, :org, 'off', :now, :now) "
+            "ON CONFLICT (system_id) DO UPDATE SET last_run_at = :now"
+        ),
+        {"s": system_id, "org": org_id, "now": _now()},
+    )
+    db.commit()
+
+
+async def _run_later(bind, system_id: str, actor: str, only: Optional[str] = None, scheduled: bool = False) -> None:
+    """run_steps after the response, on its own session: a behaviour test outlasts Cloudflare's 100-second request
+    limit. The view's lastRunAt moves when it is done, which is what the system file waits for."""
+    db = Session(bind=bind)
+    try:
+        await run_steps(db, system_id, actor, only=only, scheduled=scheduled)
+    except Exception:
+        logger.exception("autopilot run for %s failed", system_id)
+        db.rollback()
+        system = _system(db, system_id)
+        if system:  # show the failure in the trace and stop the system file waiting
+            _event(db, system.org_id, system_id, "autopilot", "run", "failed", "The autopilot run stopped on an unexpected error", actor)
+            _mark_run(db, system.org_id, system_id)
+    finally:
+        db.close()
 
 
 async def sweep(session_factory) -> int:
@@ -455,7 +499,7 @@ def _view(db: Session, system) -> Dict[str, Any]:
         elif purpose and sources[purpose]:
             by, why = "agent", None
         elif purpose:
-            by, why = "person", f"Connect a {purpose} data source and the agent takes this over" if basis else "Run a fairness test in the app first; the agent reuses its columns"
+            by, why = "person", f"Connect a {purpose} data source and the agent takes this over" if basis else "Run a fairness test in the app first; the agent reuses its columns" + ("; for a chat model, save its model connection instead" if step["check"] == "fairness" else "")
         else:
             by, why = "person", None
         steps.append({**step, "label": CHECK_LABELS.get(step["check"], step["check"]), "by": by, "needs": why})
@@ -502,7 +546,7 @@ def get_autopilot(system_id: str, current_user: TokenData = Depends(get_current_
 
 
 @router.put("/systems/{system_id}/autopilot")
-async def set_autopilot(system_id: str, body: ModeBody, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def set_autopilot(system_id: str, body: ModeBody, background: BackgroundTasks, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if body.mode not in MODES:
         raise HTTPException(status_code=422, detail="Mode must be off, ask or run")
     _ensure_tables(db)
@@ -517,19 +561,19 @@ async def set_autopilot(system_id: str, body: ModeBody, current_user: TokenData 
     )
     db.commit()
     if body.mode == "run":
-        await run_steps(db, system_id, AUTOPILOT_ACTOR, scheduled=True)  # turning it on starts at once
+        background.add_task(_run_later, db.get_bind(), system_id, AUTOPILOT_ACTOR, scheduled=True)  # turning it on starts at once
     return _view(db, system)
 
 
 @router.post("/systems/{system_id}/autopilot/run")
-async def run_autopilot(system_id: str, action: Optional[str] = Query(default=None), current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def run_autopilot(system_id: str, background: BackgroundTasks, action: Optional[str] = Query(default=None), current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if action is not None and action not in (*AGENT_ACTIONS, EVALUATION_RUN):
         raise HTTPException(status_code=422, detail="The agent runs fairness_run, monitoring_snapshot or evaluation_run")
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_or_404(db, system_id)
-    ran = await run_steps(db, system_id, _authenticated_actor(current_user), only=action)
-    return {"ran": ran, **_view(db, system)}
+    background.add_task(_run_later, db.get_bind(), system_id, _authenticated_actor(current_user), only=action)
+    return _view(db, system)  # the run continues after the response; its events and lastRunAt show on the next read
 
 
 @router.put("/systems/{system_id}/data-sources/{purpose}")

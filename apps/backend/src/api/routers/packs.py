@@ -455,6 +455,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "engine": ev.engine,
         "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
         "codeLocation": ev.codeLocation,
+        "commonControl": ev.commonControl,  # the clause map reaches clauses through this control's crosswalk
         "tests": [
             {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}
             for k in ev.tests

@@ -487,7 +487,7 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
                 c = next((x for x in gates[s["id"]]["checks"] if x["key"] == check), None)
                 state = c["state"] if c else "open"
                 agent_ready = s["id"] in autopilot_on and ((check == "fairness" and (s["id"], "fairness") in sources) or (check == "monitoring" and (s["id"], "monitoring") in sources))
-                system_rows.append({"id": s["id"], "name": s["name"], "done": state in ("proven", "attested"),
+                system_rows.append({"id": s["id"], "name": s["name"], "done": state in ("proven", "attested") and not (c and c.get("fails")),
                                     "detail": "fails" if c and c.get("fails") else state, "agent": agent_ready})
             if any(r["agent"] and not r["done"] for r in system_rows):
                 by = "agent"
@@ -503,9 +503,10 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
                 mine = [r for r in control_runs if r["ai_system_id"] == s["id"]]
                 done = any(r["status"] == "done" for r in mine)
                 detail = "done" if done else ("waiting for approval" if any(r["status"] == "waiting" for r in mine) else "running" if any(r["status"] in ("queued", "running") for r in mine) else "not started")
-                # an evaluation of this control with a passing latest result on the system also does the task there
+                # an evaluation of this control with a passing latest result on the system also does the task there,
+                # unless another of its evaluations fails there: any failing test keeps the clause from proven
                 tests = {r["status"] for e in ev_ids if (r := evaluation_results.system_result(evals, e, s["id"]))}
-                if not done and "passed" in tests:
+                if not done and "passed" in tests and "failed" not in tests:
                     done, detail = True, "tested"
                 elif detail == "not started" and "failed" in tests:
                     detail = "test failed"

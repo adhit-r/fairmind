@@ -9,7 +9,8 @@ export const TIERS: Tier[] = ['critical', 'high', 'medium', 'low']
 const TIER_LABEL: Record<Tier, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
 export const NOT_TRACKED = 'Not tracked per system yet'
 export const ORG_BLANK = 'Not covered by organisation packs'
-const PROVEN_LIKE = new Set<CellState>(['proven', 'estimated', 'attested'])
+/** Proven as the clause map counts it: a proven check, measured or tool-estimated; an attestation alone is not proof. */
+const PROVEN_LIKE = new Set<CellState>(['proven', 'estimated'])
 /** Crosswalk relation to cell strength; "Aligns with" draws blank and is named in the cell title. */
 export const STRENGTH: Record<string, 1 | 2 | 3> = { Satisfies: 3, 'Partially satisfies': 2, Supports: 1 }
 

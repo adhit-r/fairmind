@@ -8,7 +8,7 @@ import type { ControlAssessment } from '@/lib/api/hooks/useGovernanceAssurance'
 
 export type WorkbenchControl = ControlAssessment
 
-type ControlUpdate = Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>
+type ControlUpdate = Pick<ControlAssessment, 'applicability' | 'status' | 'owner' | 'justification'>
 
 type ControlTracePanelProps = {
   control: WorkbenchControl
@@ -31,6 +31,7 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
   const [owner, setOwner] = useState(control.owner || '')
   const [applicability, setApplicability] = useState(control.applicability)
   const [status, setStatus] = useState(control.status)
+  const [justification, setJustification] = useState(control.justification || '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,14 +40,15 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
     setOwner(control.owner || '')
     setApplicability(control.applicability)
     setStatus(control.status)
-  }, [control.applicability, control.id, control.owner, control.status])
+    setJustification(control.justification || '')
+  }, [control.applicability, control.id, control.justification, control.owner, control.status])
 
   const save = async () => {
     setSaving(true)
     setSaved(false)
     setError(null)
     try {
-      await onUpdate(control, { owner: owner.trim() || null, applicability, status })
+      await onUpdate(control, { owner: owner.trim() || null, applicability, status, justification: justification.trim() || null })
       setSaved(true)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Control update failed')
@@ -138,6 +140,22 @@ export function ControlTracePanel({ control, canEdit, onUpdate }: ControlTracePa
                 <option value="pending">Pending decision</option>
               </select>
             </label>
+
+            {applicability === 'not_applicable' ? (
+              <label className="block text-sm font-semibold" htmlFor={`justification-${control.id}`}>
+                Justification
+                <textarea
+                  id={`justification-${control.id}`}
+                  value={justification}
+                  onChange={(event) => setJustification(event.target.value)}
+                  required
+                  maxLength={2000}
+                  rows={3}
+                  className="mt-1 w-full border border-[var(--fm-line)] bg-white px-3 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#0B7659] focus-visible:ring-offset-2"
+                />
+                <span className="mt-1 block text-xs font-normal text-[var(--fm-ink2)]">Why this control is excluded. It goes into the Statement of Applicability in inspection packs.</span>
+              </label>
+            ) : null}
 
             <label className="block text-sm font-semibold" htmlFor={`state-${control.id}`}>
               Assessment state

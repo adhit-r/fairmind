@@ -80,6 +80,7 @@ class AssessmentUpdateRequest(BaseModel):
     status: str | None = None
     applicability: str | None = None
     owner: str | None = None
+    justification: str | None = Field(default=None, max_length=2000)
 
 
 class EvidenceMappingRequest(BaseModel):

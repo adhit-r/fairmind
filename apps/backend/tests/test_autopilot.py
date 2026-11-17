@@ -75,9 +75,11 @@ def test_autopilot_routes_steps_keeps_sources_and_runs_the_measurable_ones(monke
     agent_steps = [s for s in view["steps"] if s["by"] == "agent"]
     assert agent_steps, view["steps"]
     evidence_before = len(client.get(f"{base}/evidence").json())
-    out = client.post(f"{base}/autopilot/run").json()
-    assert [r["action"] for r in out["ran"]] == [s["action"] for s in agent_steps]
-    assert all(r["status"] == "done" for r in out["ran"]), out["ran"]
+    assert not client.post(f"{base}/autopilot/run").json()["events"]  # the run continues after the response
+    out = client.get(f"{base}/autopilot").json()
+    assert out["mode"] == "off" and out["lastRunAt"]  # never set a mode, yet the run is stamped for the card to see
+    assert sorted(e["action"] for e in out["events"]) == sorted(s["action"] for s in agent_steps)
+    assert all(e["status"] == "done" for e in out["events"]), out["events"]
     assert len(client.get(f"{base}/evidence").json()) == evidence_before + len(agent_steps)
     assert len(out["events"]) == len(agent_steps) and all(e["actor"] == "admin@test.invalid" for e in out["events"])
 
@@ -101,10 +103,26 @@ def test_a_failing_fetch_is_recorded_and_the_step_stays_on_the_route(monkeypatch
     monkeypatch.setattr(autopilot, "_fetch", broken)
     for purpose in ("fairness", "monitoring"):
         assert client.put(f"{base}/data-sources/{purpose}", json={"url": "https://data.example.com/d.csv"}).status_code == 200
-    out = client.post(f"{base}/autopilot/run").json()
-    assert out["ran"] and all(r["status"] == "failed" and r["detail"] == "The data URL answered 503" for r in out["ran"])
-    assert [e["status"] for e in out["events"]] == ["failed"] * len(out["ran"])
+    client.post(f"{base}/autopilot/run")
+    out = client.get(f"{base}/autopilot").json()
+    assert out["events"] and all(e["status"] == "failed" and e["detail"] == "The data URL answered 503" for e in out["events"])
     assert client.delete(f"{base}/data-sources/monitoring").json()["sources"]["monitoring"] is None
+
+
+def test_an_unexpected_error_in_a_background_run_is_recorded_and_stamps_the_run(monkeypatch):
+    client = _client()
+    sid = _system(client)
+    base = f"{ROOT}/systems/{sid}"
+
+    async def boom(db, system_id, actor, **kw):
+        db.execute(autopilot.text("SELECT 1"))  # leave a transaction open, as a step failing mid-way would
+        raise RuntimeError("a runner raised something other than AutopilotError")
+
+    monkeypatch.setattr(autopilot, "run_steps", boom)
+    assert client.post(f"{base}/autopilot/run").status_code == 200
+    out = client.get(f"{base}/autopilot").json()
+    assert out["lastRunAt"]
+    assert [(e["status"], e["detail"]) for e in out["events"]] == [("failed", "The autopilot run stopped on an unexpected error")]
 
 
 def test_only_a_measured_snapshot_keeps_monitoring_off_the_due_list():

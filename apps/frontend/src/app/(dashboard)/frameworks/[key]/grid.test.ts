@@ -74,10 +74,10 @@ test('columns run Org, then systems by tier from Critical down, with cells in th
   assert.deepEqual(matrix.groups[1].rows[0].cells, ['atorg', 'attested', 'open'])
 })
 
-test('the Proven count reads proven, estimated and attested over the systems in scope', () => {
+test('the Proven count reads proven and estimated over the systems in scope, never attested', () => {
   const { matrix } = systemGrid(journey, fw, false)
   assert.equal(matrix.groups[0].rows[0].count, '1/2')
-  assert.equal(matrix.groups[1].rows[0].count, '1/2')
+  assert.equal(matrix.groups[1].rows[0].count, '0/2')
 })
 
 test('needs work in High and Critical counts requirements open, failing or stale in at least one such system', () => {

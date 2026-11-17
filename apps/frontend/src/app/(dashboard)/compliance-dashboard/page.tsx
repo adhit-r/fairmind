@@ -171,7 +171,7 @@ export default function ComplianceDashboardPage() {
 
   const updateControl = async (
     control: WorkbenchControl,
-    update: Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>,
+    update: Pick<ControlAssessment, 'applicability' | 'status' | 'owner' | 'justification'>,
   ) => {
     if (!canEdit) throw new Error('Your organization role cannot update control assessments')
     await assurance.updateAssessment(control.id, update)

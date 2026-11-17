@@ -88,8 +88,57 @@ function AssessForm({ system, onSubmit, onCancel }: { system: AISystemSummary; o
   )
 }
 
-function FindingRow({ risk }: { risk: Risk }) {
+type Treat = (riskId: string, body: { status: 'accepted' | 'mitigated'; rationale: string }) => Promise<void>
+
+const CLOSED = ['accepted', 'closed', 'resolved', 'mitigated']
+
+/** Accept or mark mitigated, with the reason: the risk owner's treatment decision. */
+function TreatForm({ risk, onTreat, onDone }: { risk: Risk; onTreat: Treat; onDone: () => void }) {
+  const [status, setStatus] = useState<'accepted' | 'mitigated'>('accepted')
+  const [rationale, setRationale] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const submit = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await onTreat(risk.id, { status, rationale: rationale.trim() })
+      onDone()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not record the decision')
+      setSaving(false)
+    }
+  }
+  return (
+    <form className="mt-3 grid gap-2 lg:col-span-2" onSubmit={(event) => { event.preventDefault(); void submit() }}>
+      <label className={label} htmlFor={`treat-${risk.id}`}>Decision</label>
+      <select id={`treat-${risk.id}`} className={field} value={status} onChange={(event) => setStatus(event.target.value as 'accepted' | 'mitigated')}>
+        <option value="accepted">Accept the residual risk</option>
+        <option value="mitigated">Mitigated</option>
+      </select>
+      <label className={label} htmlFor={`rationale-${risk.id}`}>Reason</label>
+      <textarea
+        id={`rationale-${risk.id}`}
+        required
+        maxLength={2000}
+        rows={3}
+        value={rationale}
+        onChange={(event) => setRationale(event.target.value)}
+        className="w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 py-2 text-[13.5px] outline-none focus:border-[var(--fm-ink)]"
+      />
+      <p className={`text-[12px] ${MUTED}`}>Kept as a record on the system file, so the next release decision seals it. The finding then no longer blocks release.</p>
+      {error && <p role="alert" className={errorText}>{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={saving || !rationale.trim()} className={BTN_P}>{saving ? 'Recording' : 'Record decision'}</button>
+        <button type="button" onClick={onDone} className={BTN}>Cancel</button>
+      </div>
+    </form>
+  )
+}
+
+function FindingRow({ risk, onTreat }: { risk: Risk; onTreat: Treat }) {
   const byPerson = risk.source === 'manual_assessment'
+  const [treating, setTreating] = useState(false)
   return (
     <li className="grid gap-3 border-t border-[var(--fm-line)] py-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
       <div className="min-w-0">
@@ -111,6 +160,10 @@ function FindingRow({ risk }: { risk: Risk }) {
       >
         Create task
       </Link>
+      {!CLOSED.includes(risk.status) && !treating && (
+        <button type="button" className={`${BTN} lg:col-start-2`} onClick={() => setTreating(true)}>Accept or mitigate</button>
+      )}
+      {treating && <TreatForm risk={risk} onTreat={onTreat} onDone={() => setTreating(false)} />}
     </li>
   )
 }
@@ -131,7 +184,7 @@ function SuggestionRow({ item }: { item: SuggestedRisk }) {
 export default function FindingsPage() {
   const { selectedSystem, loading: systemsLoading, error: systemsError, refreshSystems } = useSystemContext()
   const hasSystem = Boolean(selectedSystem.id)
-  const { data: risks, suggested, summary, loading, error, assessRisks } = useRisks(selectedSystem.id)
+  const { data: risks, suggested, summary, loading, error, assessRisks, treatRisk } = useRisks(selectedSystem.id)
   const { toast } = useToast()
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -255,7 +308,7 @@ export default function FindingsPage() {
           )
         ) : (
           <ul className="mt-3">
-            {risks.map((risk) => <FindingRow key={risk.id} risk={risk} />)}
+            {risks.map((risk) => <FindingRow key={risk.id} risk={risk} onTreat={treatRisk} />)}
           </ul>
         )}
       </section>

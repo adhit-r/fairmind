@@ -156,6 +156,43 @@ def _approval_blockers(db: Session, system_id: str, gate: Dict[str, Any]) -> Lis
     return out
 
 
+def _attested_controls(db: Session, system_id: str) -> Dict[str, Dict[str, Any]]:
+    """Controls no gate check reaches that the organisation has stated or worked through, for the clause map.
+
+    From done workflow runs a reviewer did not reject (organisation-scope ones, plus runs on this system; a systemless
+    run of a system-scope workflow counts for no system, as the plan reads it) and from plan
+    attestations, keyed by common control; the newest wins. Gate controls are left out: their checks count already.
+    """
+    from api.routes.pack_catalogue import WORKFLOWS
+    from src.application.services.clause_map_service import GATE_CONTROLS
+
+    org = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+    if not org:
+        return {}
+    found = []
+    for wf_id, sys_id, at, by in db.execute(
+        text(
+            "SELECT r.workflow_id, r.ai_system_id, COALESCE(r.finished_at, r.updated_at), r.started_by FROM workflow_runs r "
+            "LEFT JOIN governance_approval_requests a ON a.id = r.approval_request_id "
+            "WHERE r.org_id = :org AND r.status = 'done' AND (a.status IS NULL OR a.status <> 'rejected')"
+        ),
+        {"org": org},
+    ).fetchall():
+        wf = WORKFLOWS.get(wf_id)
+        if wf and wf.commonControl and (sys_id == system_id or (wf.scope or "").lower().startswith("organisation")):
+            found.append((wf.commonControl, {"statement": f"{wf.name}: completed", "by": by, "at": str(at), "source": "workflow"}))
+    for task_key, statement, by, at in db.execute(
+        text("SELECT task_key, statement, attested_by, created_at FROM plan_attestations WHERE org_id = :org"), {"org": org}
+    ).fetchall():
+        if task_key.startswith("control:"):
+            found.append((task_key.split(":", 1)[1], {"statement": statement, "by": by, "at": str(at), "source": "plan_attestation"}))
+    out: Dict[str, Dict[str, Any]] = {}
+    for control, att in sorted(found, key=lambda f: f[1]["at"]):
+        if control not in GATE_CONTROLS:
+            out[control] = {**att, "confidence": ATTESTATION_CONFIDENCE}
+    return out
+
+
 def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision: bool = True) -> Dict[str, Any]:
     """The release gate; ``with_decision=False`` reads the evidence alone, as the reviewer deciding a request needs it.
 
@@ -202,11 +239,18 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
     gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
+    has_target = _target_row(db, system_id) is not None
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
         approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
-        model_target=_target_row(db, system_id) is not None,
+        model_target=has_target,
     )
+    if not has_target and any(c["key"] == "fairness" and c["state"] != "proven" for c in gate["checks"]):
+        gate["path"]["notes"].append(
+            "Fairness is priced as a CSV fairness run because no model connection is saved. For a chat or LLM system, save how "
+            "FairMind calls it under Model connection, and fairness is measured by a behaviour test instead."
+        )
+    gate["attestedControls"] = _attested_controls(db, system_id)
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
     if gate["policy"]["warnings"]:
