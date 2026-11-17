@@ -514,7 +514,7 @@ function SystemFileBody({ id }: { id: string }) {
             if (step.action === 'request_release') return void act('request', file.requestDecision)
             if (step.action === 'fairness_run') return setPanel({ kind: 'fairness' })
             if (step.action === 'monitoring_snapshot') return setPanel({ kind: 'monitoring' })
-            if (step.action === 'evaluation_run') return open('/evaluations')
+            if (step.action === 'evaluation_run') return open(step.evaluationId ? `/compliance/evaluations/${encodeURIComponent(step.evaluationId)}` : '/evaluations')
             if (step.action === 'environmental_assessment') return router.push(`/environment?system=${encodeURIComponent(id)}`)
             return router.push(`/evidence?system=${encodeURIComponent(id)}&check=${step.check}`)
           }}

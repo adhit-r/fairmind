@@ -2,14 +2,16 @@
 
 GET    /systems/{id}/autopilot                  the route, who does each step, data sources, mode and recent trace
 PUT    /systems/{id}/autopilot                  set the mode: off, ask (a person runs each step) or run (on a schedule)
-POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one of them with ?action=
+POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one kind of them with ?action=
 PUT    /systems/{id}/data-sources/{purpose}     an https URL the agent fetches for fairness or monitoring data
 DELETE /systems/{id}/data-sources/{purpose}     forget a data source
 GET    /estate/autopilot                        systems on autopilot, steps done this week, steps that need a person
 
 The route is ``path_forward``'s, the one the gate already prices. The agent runs a fairness re-run or a
 monitoring snapshot when the system has a data source for it, always with the columns and protected attributes
-a person confirmed on an earlier fairness run. Everything else (attestations, uploads, the environmental
+a person confirmed on an earlier fairness run. For a chat model (a system with a saved connection) it runs the
+catalogue behaviour tests whose common control is an open or stale gate check, with the organisation's AI provider
+as judge, as a person's "Run" on the evaluations page would. Everything else (attestations, uploads, the environmental
 assessment, the release request) stays with people. Every run is measured evidence plus an event in the trace.
 
 Mounted under /api/v1/ai-governance next to the fairness router and sharing its org scoping and access rules.
@@ -29,7 +31,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.routes import llm
+from api.routes import evaluation_runs, llm
 from api.routes.ai_governance import _authenticated_actor, _caller_org, _ensure_tables, _require_system_access
 from api.routes.fairness_runs import (
     MAX_UPLOAD_BYTES,
@@ -39,15 +41,22 @@ from api.routes.fairness_runs import (
     _monitoring_policy,
     _watch,
 )
+from api.routes.packs import _ai_row, _stored_connection
+from api.routes.pack_catalogue import EVALUATIONS
+from api.routes.system_targets import _row as _target_row, stored_target
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
-from src.application.services.fairness_run_service import GATE_CHECKS, FairnessRunError, run_fairness, run_monitoring
+from src.application.services.eval_engines import ALTERNATES, REGISTRY
+from src.application.services.fairness_run_service import (
+    EVALUATION_RUN, GATE_CHECKS, FairnessRunError, evaluation_status, gate_check, run_fairness, run_monitoring,
+)
 
 router = APIRouter()
 
 MODES = ("off", "ask", "run")
 PURPOSES = ("fairness", "monitoring")
 AGENT_ACTIONS = {"fairness_run": "fairness", "monitoring_snapshot": "monitoring"}  # action -> the data source it needs
+# EVALUATION_RUN with an evaluationId: a behaviour test the agent runs on the saved connection, with a judge, not a data source
 CHECK_LABELS = {key: label for key, label, _ in GATE_CHECKS}
 FAIRNESS_RERUN_HOURS = 24  # a scheduled run repeats a fairness re-run at most daily; "Run now" is not limited
 FETCH_TIMEOUT_S = 30
@@ -232,6 +241,64 @@ async def _monitoring_snapshot(db: Session, org_id: str, system_id: str) -> tupl
 RUNNERS = {"fairness_run": _fairness_rerun, "monitoring_snapshot": _monitoring_snapshot}
 
 
+# --- behaviour tests on a chat model ----------------------------------------------
+
+
+def _behaviour_engine(evaluation_id: str):
+    """The evaluation's behaviour test on the system under test, when it needs no file or setting only a person can give."""
+    engine = REGISTRY.get(evaluation_id)
+    if not (engine and engine.live == "target"):
+        engine = ALTERNATES.get(evaluation_id)
+    if not (engine and engine.live == "target") or any(s.required for s in engine.slots) or any(p.required for p in engine.params):
+        return None
+    return engine
+
+
+def _chat_evaluations(checks: List[str]) -> List[tuple]:
+    """(gate check, evaluation) for each behaviour test whose run the gate counts for one of these checks."""
+    counts_for = {ev.id: gate_check({"evidenceType": EVALUATION_RUN, "content": {"evaluationId": ev.id}}) for ev in EVALUATIONS.values() if _behaviour_engine(ev.id)}
+    return [(check, EVALUATIONS[ev_id]) for check in checks for ev_id, c in counts_for.items() if c == check]
+
+
+def _chat_setup(db: Session, org_id: str, system_id: str) -> tuple:
+    """The judge and the saved connection the agent's behaviour tests use; AutopilotError says what a person must set up."""
+    row = _ai_row(db, org_id)
+    if not row or not row["enabled"]:
+        raise AutopilotError("Behaviour tests use your organisation's AI provider as the judge; set one up in organisation settings")
+    try:
+        judge, target = _stored_connection(row), stored_target(db, org_id, system_id)
+    except HTTPException as e:
+        raise AutopilotError(str(e.detail))
+    if target.via_runner:
+        raise AutopilotError("This system is on your private network, so only the runner can call it; run behaviour tests from there")
+    return judge, target
+
+
+async def _evaluation_run(db: Session, org_id: str, system_id: str, evaluation_id: str) -> tuple:
+    judge, target = _chat_setup(db, org_id, system_id)
+    engine = _behaviour_engine(evaluation_id)
+    system = db.execute(text("SELECT name, risk_tier, lifecycle_stage FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    facts = {"name": system[0], "risk_tier": system[1], "lifecycle_stage": system[2]}
+    previous = evaluation_runs._previous_metrics(db, system_id, evaluation_id)
+    by, now, job_id = f"agent:{AUTOPILOT_ACTOR}", _now(), str(uuid.uuid4())
+    db.execute(
+        text(
+            "INSERT INTO governance_evaluation_jobs (id, org_id, system_id, evaluation_id, status, phase, done, total, created_by, created_at, updated_at) "
+            "VALUES (:id, :org, :sys, :ev, 'running', 'Starting', 0, 0, :by, :now, :now)"
+        ),
+        {"id": job_id, "org": org_id, "sys": system_id, "ev": evaluation_id, "by": by, "now": now},
+    )
+    db.commit()
+    # A person's run, awaited here instead of in a request's background: probes, judge and the stored evidence.
+    await evaluation_runs._run_job(db.get_bind(), job_id, org_id, by, system_id, evaluation_id, engine, {}, {}, {}, judge, target, facts, previous)
+    job = evaluation_runs._job_row(db, job_id)
+    if job["status"] != "done":
+        raise AutopilotError(job["error"] or "The behaviour test did not finish")
+    content = json.loads(db.execute(text("SELECT content_json FROM governance_evidence WHERE id = :id"), {"id": job["evidence_id"]}).scalar() or "{}")
+    status = evaluation_status({"evidenceType": EVALUATION_RUN, "content": content})
+    return job["evidence_id"], f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on the saved connection; {status}"
+
+
 def _event(db: Session, org_id: str, system_id: str, check: str, action: str, status: str, detail: str, actor: str, evidence_id: Optional[str] = None) -> None:
     db.execute(
         text(
@@ -269,14 +336,41 @@ def _monitoring_due(db: Session, system_id: str) -> bool:
     ).fetchone() is None
 
 
-def _steps(db: Session, system, option: Optional[Dict[str, Any]], sources: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _steps(db: Session, system, route: Dict[str, Any], sources: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The route's steps, plus a monitoring snapshot whenever one is due and the system has monitoring data:
-    the cheapest route may not need monitoring today, but letting it go stale would cost the verdict later."""
-    steps = list((option or {}).get("steps") or [])
+    the cheapest route may not need monitoring today, but letting it go stale would cost the verdict later.
+    A system with a saved connection (a chat model) gets a behaviour test for each open or stale check one speaks to: the
+    route's catalogue-evaluation step becomes the tests the agent can run (the first keeps the route's price), and checks
+    off the route get them as upkeep. A route step with no such test stays a person's, run from the evaluations page."""
+    steps = list((route["option"] or {}).get("steps") or [])
     if sources["monitoring"] and not any(s["action"] == "monitoring_snapshot" for s in steps) and _monitoring_due(db, system.id):
         steps.append({"check": "monitoring", "action": "monitoring_snapshot", "evidenceClass": "measured", "counts": None, "gain": 0,
                       "note": "keeps monitoring inside its cadence", "upkeep": True})
-    return steps
+    if not _target_row(db, system.id):
+        return steps
+    open_checks = [c["key"] for c in route["gate"].get("checks") or [] if c["state"] == "open"]  # a stale check reads as open
+    tests: Dict[str, List[Any]] = {}
+    for check, ev in _chat_evaluations(open_checks):
+        tests.setdefault(check, []).append(ev)
+    out = []
+    for step in steps:
+        if step["action"] == EVALUATION_RUN and tests.get(step["check"]):
+            out += [{**step, "evaluationId": ev.id, "note": f"{ev.id} {ev.name}", **({} if i == 0 else {"gain": 0})}
+                    for i, ev in enumerate(tests.pop(step["check"]))]
+        else:
+            out.append(step)
+    out += [{"check": check, "action": EVALUATION_RUN, "evaluationId": ev.id, "evidenceClass": "measured", "counts": None, "gain": 0,
+             "note": f"{ev.id} {ev.name}", "upkeep": True} for check, evs in tests.items() for ev in evs]
+    return out
+
+
+def _chat_needs(db: Session, system) -> Optional[str]:
+    """None when the agent can run behaviour tests on this system, else what a person has to set up."""
+    try:
+        _chat_setup(db, system.org_id, system.id)
+    except AutopilotError as e:
+        return str(e)
+    return None
 
 
 def _recent(db: Session, system_id: str, action: str, hours: float) -> bool:
@@ -294,18 +388,24 @@ async def run_steps(db: Session, system_id: str, actor: str, only: Optional[str]
         return []
     route = _route(db, system)
     sources = _sources(db, system_id)
+    steps = _steps(db, system, route, sources)
+    chat_ready = any(s.get("evaluationId") for s in steps) and _chat_needs(db, system) is None
+    # read before any step runs, so one behaviour test does not hold back the next in the same sweep
+    recent = {a for a in {s["action"] for s in steps} if scheduled and _recent(
+        db, system_id, a, _monitoring_policy(db, system_id)["cadenceHours"] if a == "monitoring_snapshot" else FAIRNESS_RERUN_HOURS)}
     done = []
-    for step in _steps(db, system, route["option"], sources):
+    for step in steps:
         action, check = step["action"], step["check"]
-        purpose = AGENT_ACTIONS.get(action)
-        if not purpose or not sources[purpose] or (only and action != only):
+        ready = chat_ready and bool(step.get("evaluationId")) if action == EVALUATION_RUN else bool(AGENT_ACTIONS.get(action) and sources[AGENT_ACTIONS[action]])
+        if not ready or (only and action != only):
             continue
-        if scheduled:
-            cadence = _monitoring_policy(db, system_id)["cadenceHours"] if action == "monitoring_snapshot" else FAIRNESS_RERUN_HOURS
-            if _recent(db, system_id, action, cadence):
-                continue  # a schedule does not repeat a step inside its cadence, whatever the last result was
+        if action in recent:
+            continue  # a schedule does not repeat a step inside its cadence, whatever the last result was
         try:
-            evidence_id, detail = await RUNNERS[action](db, system.org_id, system_id)
+            if action == EVALUATION_RUN:
+                evidence_id, detail = await _evaluation_run(db, system.org_id, system_id, step["evaluationId"])
+            else:
+                evidence_id, detail = await RUNNERS[action](db, system.org_id, system_id)
             status = "done"
         except AutopilotError as e:
             db.rollback()
@@ -345,10 +445,14 @@ def _view(db: Session, system) -> Dict[str, Any]:
     gate, option = route["gate"], route["option"]
     sources = _sources(db, system.id)
     basis = _basis_run(db, system.id)
+    raw = _steps(db, system, route, sources)
+    chat_needs = _chat_needs(db, system) if any(s.get("evaluationId") for s in raw) else None
     steps = []
-    for step in _steps(db, system, option, sources):
+    for step in raw:
         purpose = AGENT_ACTIONS.get(step["action"])
-        if purpose and sources[purpose]:
+        if step.get("evaluationId"):
+            by, why = ("person", chat_needs) if chat_needs else ("agent", None)
+        elif purpose and sources[purpose]:
             by, why = "agent", None
         elif purpose:
             by, why = "person", f"Connect a {purpose} data source and the agent takes this over" if basis else "Run a fairness test in the app first; the agent reuses its columns"
@@ -419,8 +523,8 @@ async def set_autopilot(system_id: str, body: ModeBody, current_user: TokenData 
 
 @router.post("/systems/{system_id}/autopilot/run")
 async def run_autopilot(system_id: str, action: Optional[str] = Query(default=None), current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    if action is not None and action not in AGENT_ACTIONS:
-        raise HTTPException(status_code=422, detail="The agent runs fairness_run or monitoring_snapshot")
+    if action is not None and action not in (*AGENT_ACTIONS, EVALUATION_RUN):
+        raise HTTPException(status_code=422, detail="The agent runs fairness_run, monitoring_snapshot or evaluation_run")
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_or_404(db, system_id)

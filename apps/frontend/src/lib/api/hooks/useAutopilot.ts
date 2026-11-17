@@ -11,6 +11,8 @@ export type DataPurpose = 'fairness' | 'monitoring'
 export interface AutopilotStep {
   check: string
   action: 'fairness_run' | 'evaluation_run' | 'monitoring_snapshot' | 'environmental_assessment' | 'attest' | 'evidence_upload' | 'request_release'
+  /** evaluation_run with an id: the catalogue behaviour test the agent runs on the saved connection */
+  evaluationId?: string
   label: string
   evidenceClass: 'measured' | 'tool_estimated' | 'manual' | null
   gain: number
@@ -91,7 +93,7 @@ export function useAutopilot(systemId: string | undefined, reloadKey?: unknown) 
     error,
     reload: load,
     setMode: (mode: AutopilotMode) => send(apiClient.put<Autopilot>(`${base}/autopilot`, { mode }, { timeout: 120_000 })),
-    // Runs fetch data and compute metrics; the client's 10s default is too short.
+    // Runs fetch data and compute metrics, and a behaviour test calls the system and the judge; the client's 10s default is too short.
     runNow: (action?: string) =>
       send(apiClient.post<Autopilot>(`${base}/autopilot/run${action ? `?action=${action}` : ''}`, {}, { timeout: 120_000, enableRetry: false })),
     setSource: (purpose: DataPurpose, url: string) => send(apiClient.put<Autopilot>(`${base}/data-sources/${purpose}`, { url })),
