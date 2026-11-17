@@ -65,7 +65,28 @@ docker compose up -d --build
 docker compose logs -f backend
 ```
 
-Update: `git pull && docker compose up -d --build`.
+Update: `git pull && docker compose up -d --build`, or let the instance do it (below).
+
+### Automatic deploys
+
+A timer on the instance checks `main` every 5 minutes and, when it has moved since the last good
+deploy, fast-forwards and runs `docker compose up -d --build`. It pulls rather than being pushed to,
+so the instance still takes no inbound traffic and GitHub holds no key to it. A failed build or
+migration leaves the running containers alone and is tried again on the next run. Install once:
+
+```bash
+cd ~/fairmind/deploy/lightsail
+git rev-parse HEAD > .deployed   # what is running now, so the first run does not rebuild it
+sudo cp systemd/fairmind-deploy.service systemd/fairmind-deploy.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now fairmind-deploy.timer
+```
+
+- What happened: `journalctl -u fairmind-deploy -n 50`
+- Which commit is live: `cat ~/fairmind/deploy/lightsail/.deployed`
+- Deploy now: `sudo systemctl start fairmind-deploy`
+- Pause: `sudo systemctl stop fairmind-deploy.timer` (start it again to resume)
+
+Local edits on the instance stop the fast-forward; the journal says so. Keep changes in git.
 
 Every `up` first runs the `migrate` service (`scripts/setup_db.py`: schema upgrade,
 reference data, then verify). The backend starts only if it succeeds; otherwise the
