@@ -156,6 +156,17 @@ class AuthentikCallbackResponse(BaseModel):
 
 
 
+async def _record_sign_in(user_id) -> None:
+    """Stamp users.last_login; the session cache alone kept it for 24 hours only. Never blocks a sign-in."""
+    from config.database import get_db_connection
+
+    try:
+        async with get_db_connection() as db:
+            await db.execute("UPDATE users SET last_login = :now WHERE CAST(id AS TEXT) = :id", {"now": datetime.utcnow(), "id": str(user_id)})
+    except Exception:
+        logger.warning("Could not record sign-in for %s", user_id, exc_info=True)
+
+
 async def _issue_session(user, response: Optional[Response]) -> LoginResponse:
     """Tokens for a signed-in user: the refresh token also goes into the fm_refresh cookie."""
     # Create tokens using new JWT infrastructure
@@ -168,6 +179,8 @@ async def _issue_session(user, response: Optional[Response]) -> LoginResponse:
     if refresh_token.startswith("b'") and refresh_token.endswith("'"):
          refresh_token = refresh_token[2:-1]
     
+    await _record_sign_in(user.id)
+
     # Cache user session
     session_key = f"session:{user.id}"
     await cache_manager.set(
@@ -656,6 +669,7 @@ async def authentik_oauth_callback(
             ttl=86400  # 24 hours
         )
 
+        await _record_sign_in(user.id)
         logger.info(f"User authenticated via Authentik: {user.email}")
 
         _set_refresh_cookie(response, refresh_token)
