@@ -425,6 +425,8 @@ def _discovery(db: Session, org_id: str, plan: Dict[str, Any]) -> Dict[str, Any]
              "source": v.get("source"), "basis": v.get("basis")}
             for k, v in resolved.items() if k not in ("maturity",)
         ],
+        # what the plan's answers point to, kept after the plan is generated so the Frameworks page can offer them
+        "suggested": suggested,
         "map": {
             "frameworks": [{"key": k, "name": _catalogue()["frameworks"][k]["name"], "reason": next((s["reason"] for s in suggested if s["key"] == k), "You chose it"),
                             "requirements": sum(1 for c in in_scope for r in c["requirements"] if r["framework"] == k)} for k in frameworks if k in _catalogue()["frameworks"]],

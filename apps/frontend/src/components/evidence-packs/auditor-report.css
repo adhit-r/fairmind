@@ -1,0 +1,42 @@
+/* The auditor's view of a pack: an outside reader, no FairMind account. */
+.ar { display: flex; flex-direction: column; gap: 20px; color: var(--fm-ink, #15171a); }
+.ar h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+.ar h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.ar-card { background: #fff; border-radius: 14px; box-shadow: var(--fm-shadow, 0 1px 2px rgba(21,23,26,.05), 0 4px 16px rgba(21,23,26,.04)); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ar-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+.ar-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.ar-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #5f646d; }
+.ar-muted { margin: 0; font-size: 13px; color: var(--fm-ink2, #5a5f68); }
+.ar-facts { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; font-size: 13px; }
+.ar-facts dt { color: #5f646d; }
+.ar-facts dd { margin: 4px 0 0; font-weight: 500; }
+.ar-integrity-head { display: flex; gap: 10px; align-items: center; font-size: 15px; }
+.ar-hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--fm-bg, #f4f4f2); border-radius: 8px; padding: 8px 10px; word-break: break-all; }
+.ar-head { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.ar-filters { display: flex; gap: 6px; }
+.ar-filters button { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(21,23,26,.12); background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+.ar-filters button[aria-pressed='true'] { background: var(--fm-ink, #15171a); border-color: var(--fm-ink, #15171a); color: #fff; }
+.ar-scroll { overflow-x: auto; }
+.ar-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+.ar-table th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #5f646d; padding: 10px 8px; }
+.ar-table td { padding: 12px 8px; border-top: 1px solid var(--fm-line, rgba(21,23,26,.08)); vertical-align: top; }
+.ar-table summary { cursor: pointer; }
+.ar-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+.ar-pill.met { background: #1d6b57; color: #fff; }
+.ar-pill.progress { background: #e3f1ec; color: #1d5a4a; }
+.ar-pill.attention { background: #fdebe1; color: #9a3412; }
+.ar-pill.notstarted { box-shadow: inset 0 0 0 1px #c9c9c4; color: var(--fm-ink, #15171a); }
+.ar-checks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.ar-checks li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ar-pre { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--fm-bg, #f4f4f2); border-radius: 10px; padding: 12px; overflow-x: auto; }
+@media (max-width: 860px) { .ar-top, .ar-two, .ar-facts { grid-template-columns: 1fr; } }
+/* The readiness bar outside the app shell, where the Frameworks stylesheet is not loaded */
+.ar .fx-ready { display: flex; flex-direction: column; gap: 6px; }
+.ar .fx-rbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: #fff; box-shadow: inset 0 0 0 1px #e4e4e0; }
+.ar .fx-rbar i { display: block; }
+.ar .fx-rbar .r-met { background: #1d6b57; }
+.ar .fx-rbar .r-progress { background: #8cc2b2; }
+.ar .fx-rbar .r-attention { background: #c2410c; }
+.ar .fx-counts { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: var(--fm-ink2, #5a5f68); font-variant-numeric: tabular-nums; }
+.ar .fx-counts b { color: var(--fm-ink, #15171a); }
+.ar .fx-counts .warn { color: #9a3412; }

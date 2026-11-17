@@ -97,3 +97,67 @@ export function StateBar({ states }: { states: Partial<Record<ReqState, number>>
     </div>
   )
 }
+
+/** The four states a person reads readiness in. The detailed states stay on the trace; these answer "how ready are we". */
+export type Readiness = 'met' | 'progress' | 'attention' | 'notstarted'
+export const READINESS_ORDER: Readiness[] = ['met', 'progress', 'attention', 'notstarted']
+export const READINESS_LABEL: Record<Readiness, string> = { met: 'Met', progress: 'In progress', attention: 'Needs attention', notstarted: 'Not started' }
+/** Met: proven by evidence or attested by a person. Needs attention: failing or out of date. */
+export const READINESS_OF: Record<ReqState, Readiness> = {
+  proven: 'met', attested: 'met',
+  partial: 'progress', estimated: 'progress', planned: 'progress', atorg: 'progress',
+  fails: 'attention', stale: 'attention',
+  open: 'notstarted', none: 'notstarted',
+}
+
+export function readinessCounts(states: Partial<Record<ReqState, number>>): Record<Readiness, number> {
+  const out: Record<Readiness, number> = { met: 0, progress: 0, attention: 0, notstarted: 0 }
+  for (const [s, n] of Object.entries(states)) out[READINESS_OF[s as ReqState] ?? 'notstarted'] += n ?? 0
+  return out
+}
+
+export function ReadinessLegend() {
+  return (
+    <p className="fx-legend" aria-label="Readiness states">
+      {READINESS_ORDER.map((r) => (
+        <span key={r}>
+          <i className={`fx-rk r-${r}`} aria-hidden="true" />
+          {READINESS_LABEL[r]}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/** One bar in the four readiness states, with "X of N met" and the other counts written out. */
+export function ReadinessBar({ counts }: { counts: Record<Readiness, number> }) {
+  const total = READINESS_ORDER.reduce((a, r) => a + counts[r], 0)
+  const words = `${counts.met} of ${total} met, ${counts.progress} in progress, ${counts.attention} need attention, ${counts.notstarted} not started`
+  return (
+    <div className="fx-ready">
+      <div className="fx-rbar" role="img" aria-label={words}>
+        {READINESS_ORDER.filter((r) => counts[r] > 0).map((r) => (
+          <i key={r} className={`r-${r}`} style={{ flexGrow: counts[r], flexBasis: 0 }} />
+        ))}
+      </div>
+      <div className="fx-counts" aria-hidden="true">
+        <span><b>{counts.met} of {total}</b> met</span>
+        {counts.progress > 0 && <span>{counts.progress} in progress</span>}
+        {counts.attention > 0 && <span className="warn">{counts.attention} need attention</span>}
+        {counts.notstarted > 0 && <span>{counts.notstarted} not started</span>}
+      </div>
+    </div>
+  )
+}
+
+/** How a catalogue framework reads to a buyer: law, a standard you can certify against, guidance, or a security reference. */
+export type FrameworkGroup = 'law' | 'cert' | 'guidance' | 'security'
+export const GROUP_LABEL: Record<FrameworkGroup, string> = { law: 'Binding law', cert: 'Certifiable standard', guidance: 'Guidance', security: 'Security reference' }
+export function groupOf(f: { type: string | null; binding: string | null }): FrameworkGroup {
+  const type = (f.type || '').toLowerCase()
+  const binding = (f.binding || '').toLowerCase()
+  if (/\blaw\b|treaty|federal policy/.test(type) || binding.startsWith('binding')) return 'law'
+  if (type.includes('certifiable') || binding.includes('certifiable') || binding.includes('star')) return 'cert'
+  if (/taxonomy|security|threat|attack|adversary|secure development/.test(type)) return 'security'
+  return 'guidance'
+}

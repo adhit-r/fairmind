@@ -580,28 +580,48 @@ def _weakness(state: str) -> int:
     return WEAKEST_FIRST.index(state) if state in WEAKEST_FIRST else WEAKEST_FIRST.index("open")
 
 
+def _plan_frameworks(db: Session, org_id: str) -> List[str]:
+    """The frameworks the organisation chose in its governance plan; [] before it has a plan."""
+    try:
+        row = db.execute(text("SELECT profile_json FROM governance_plans WHERE org_id = :org"), {"org": org_id}).fetchone()
+    except Exception:  # the plan table is created on first use of the plan
+        db.rollback()
+        return []
+    chosen = (_load_json_value(row[0], {}).get("frameworks") or {}).get("value") if row else None
+    return [k for k in chosen if isinstance(k, str)] if isinstance(chosen, list) else []
+
+
 @router.get("/estate/frameworks")
 def get_estate_frameworks(
     http: Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Per framework some system confirmed: how many systems, and the weakest state of each tracked requirement.
+    """The frameworks the organisation follows and, per framework, the weakest state of each tracked requirement.
 
-    One gate computation per confirmed system, shared by every framework it confirmed, so the Frameworks index
-    costs one gate per system rather than one per system per framework.
+    A framework is followed when the plan chose it or a system confirmed it. A system that has not confirmed its
+    frameworks inherits the plan's; a system that confirmed a list without a plan framework has opted out of it.
+    One gate computation per system, shared by every framework it answers to.
     """
     _ensure_tables(db)
     catalogue = _catalogue()["frameworks"]
-    worst: Dict[str, Dict[str, str]] = {}
-    systems: Dict[str, int] = {}
+    plan = [k for k in _plan_frameworks(db, _caller_org(http)) if k in catalogue]
+    worst: Dict[str, Dict[str, str]] = {k: {} for k in plan}
+    systems: Dict[str, int] = {k: 0 for k in plan}
+    inherited: Dict[str, int] = {k: 0 for k in plan}
+    confirmed_by: Dict[str, int] = {}
     unconfirmed = 0
     for row in _org_systems(db, http):
         applicability, _ = _system_applicability(db, row.id)
         if applicability is None:
             unconfirmed += 1
-            continue
-        keys = [f["key"] for f in applicability.get("frameworks") or [] if isinstance(f, dict) and f.get("key") in catalogue]
+            keys = list(plan)
+            for key in keys:
+                inherited[key] += 1
+        else:
+            keys = [f["key"] for f in applicability.get("frameworks") or [] if isinstance(f, dict) and f.get("key") in catalogue]
+            for key in keys:
+                confirmed_by[key] = confirmed_by.get(key, 0) + 1
         if not keys:
             continue
         payload = clause_map(_gate_payload(db, row.id, row.risk_tier), frameworks=keys)
@@ -617,8 +637,11 @@ def get_estate_frameworks(
         states: Dict[str, int] = {}
         for state in worst[key].values():
             states[state] = states.get(state, 0) + 1
-        out.append({"key": key, "systems": count, "tracked": len(tracked_requirements(key)), "states": states})
-    return {"unconfirmed": unconfirmed, "frameworks": out}
+        out.append({
+            "key": key, "systems": count, "tracked": len(tracked_requirements(key)), "states": states,
+            "source": "plan" if key in plan else "system", "inherited": inherited.get(key, 0), "confirmed": confirmed_by.get(key, 0),
+        })
+    return {"unconfirmed": unconfirmed, "plan": plan, "frameworks": out}
 
 
 @router.get("/frameworks/{framework_key}/systems")
@@ -631,17 +654,22 @@ def get_framework_systems(
     """Every requirement of one framework the gate speaks to, with one cell per system that confirmed the framework.
 
     Systems run from the highest tier down; ``cells`` follows that order. Systems with no confirmed applicability
-    count as ``unconfirmed``, confirmed ones without this framework as ``notInScope``.
+    count as ``unconfirmed``, confirmed ones without this framework as ``notInScope``. When the plan chose this
+    framework, unconfirmed systems inherit it and are in scope (``inherited`` counts them).
     """
     framework = _catalogue()["frameworks"].get(framework_key)
     if not framework:
         raise HTTPException(status_code=404, detail="Framework not found")
     _ensure_tables(db)
-    systems, unconfirmed, not_in_scope = [], 0, 0
+    followed_by_plan = framework_key in _plan_frameworks(db, _caller_org(http))
+    systems, unconfirmed, not_in_scope, inherited = [], 0, 0, 0
     for row in _org_systems(db, http):
         applicability, _ = _system_applicability(db, row.id)
         if applicability is None:
             unconfirmed += 1
+            if followed_by_plan:
+                systems.append(row)
+                inherited += 1
         elif any(isinstance(f, dict) and f.get("key") == framework_key for f in applicability.get("frameworks") or []):
             systems.append(row)
         else:
@@ -657,6 +685,8 @@ def get_framework_systems(
         "systems": [{"id": r.id, "name": r.name, "riskTier": r.risk_tier} for r in systems],
         "unconfirmed": unconfirmed,
         "notInScope": not_in_scope,
+        "inherited": inherited,
+        "followedByPlan": followed_by_plan,
         "requirements": [
             # a clause nothing reaches for a system has no cell, so the screen falls back to organisation coverage
             {"key": key, "cells": [{"state": by_key[key]["cell"], "checks": by_key[key]["checks"]} if by_key.get(key, {}).get("cell", "none") != "none" else None for by_key in clauses]}

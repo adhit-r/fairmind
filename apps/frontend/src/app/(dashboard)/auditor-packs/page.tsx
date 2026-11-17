@@ -170,7 +170,8 @@ function AuditorPacks() {
                     <Text color="secondary" size="sm">Built {day(p.createdAt)}{p.createdBy ? ` by ${p.createdBy}` : ''}</Text>
                   </div>
                   <HStack gap={2} wrap="wrap">
-                    <Button label="Open" size="sm" href={`/evidence/packs/${p.id}`} />
+                    <Button label="Preview as auditor" size="sm" href={`/auditor-preview/${p.id}`} />
+                    <Button label="Open" size="sm" variant="ghost" href={`/evidence/packs/${p.id}`} />
                     <Button label="Share a link" size="sm" isLoading={busy === `share-${p.id}`} onClick={() => void share(p)} />
                     {p.share.shared && !p.share.expired && (
                       <Button label="Stop sharing" size="sm" variant="ghost" isLoading={busy === `stop-${p.id}`} onClick={() => void stopSharing(p)} />
