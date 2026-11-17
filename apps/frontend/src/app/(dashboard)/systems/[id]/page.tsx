@@ -42,6 +42,7 @@ import { FairnessRunPanel } from './FairnessRunPanel'
 import { MonitoringRunPanel } from './MonitoringRunPanel'
 import { WatchPanel } from './WatchPanel'
 import { TargetPanel } from './TargetPanel'
+import { OwnerPanel } from './OwnerPanel'
 import { RequirementsTab } from './RequirementsTab'
 import { RecordTab } from './RecordTab'
 import { LeavesOpen } from './LeavesOpen'
@@ -64,7 +65,7 @@ const READINESS_LABEL: Record<string, string> = {
 const REQUEST_TONE = { not_requested: 'neutral', pending: 'orange', approved: 'green', rejected: 'red' } as const
 
 type Panel =
-  | { kind: 'fairness' | 'monitoring' | 'watch' | 'target' | 'analyses' | 'explain' | 'tier' | 'decide' }
+  | { kind: 'fairness' | 'monitoring' | 'watch' | 'target' | 'analyses' | 'explain' | 'tier' | 'decide' | 'owner' }
   | { kind: 'attest'; check: AttestableCheck }
 
 const PANEL_TITLE: Record<Panel['kind'], string> = {
@@ -76,6 +77,7 @@ const PANEL_TITLE: Record<Panel['kind'], string> = {
   explain: 'How the verdict was reached',
   tier: 'Tier and rules',
   decide: 'Release decision',
+  owner: 'Change owner',
   attest: 'Attest a check',
 }
 
@@ -228,7 +230,12 @@ function SystemFileBody({ id }: { id: string }) {
         <MetadataList label={{ width: 110 }}>
           <MetadataListItem label="Stage"><Text type="body">{STAGE_LABEL[status === 'pending' ? 'decision' : (s.lifecycleSummary?.stage ?? s.lifecycleStage)] ?? cap(s.lifecycleStage)}</Text></MetadataListItem>
           <MetadataListItem label="Risk tier"><Badge variant={RISK_TONE[s.riskTier]} label={cap(s.riskTier)} /></MetadataListItem>
-          <MetadataListItem label="Owner"><Text type="body">{s.owner || 'No owner'}</Text></MetadataListItem>
+          <MetadataListItem label="Owner">
+            <HStack gap={2} vAlign="center" wrap="wrap">
+              <Text type="body">{s.owner || 'No owner'}</Text>
+              {!retired && <Button label="Change" variant="secondary" size="sm" onClick={() => { setPanel({ kind: 'owner' }); setRailOpen(false) }} />}
+            </HStack>
+          </MetadataListItem>
           {kind && <MetadataListItem label="Kind"><Text type="body">{kind}</Text></MetadataListItem>}
           <MetadataListItem label="Source"><Text type="body">{SOURCE_LABEL[sourceKey] ?? cap(sourceKey)}</Text></MetadataListItem>
           <MetadataListItem label="Created"><Text type="body">{when(s.createdAt)}</Text></MetadataListItem>
@@ -350,6 +357,18 @@ function SystemFileBody({ id }: { id: string }) {
             })}
           />
         </VStack>
+      )
+      case 'owner': return (
+        <OwnerPanel
+          orgId={selectedOrg?.id}
+          current={s.owner ?? ''}
+          onCancel={() => setPanel(null)}
+          onSubmit={async (owner) => {
+            await changes.setOwner(owner)
+            setPanel(null)
+            await refresh()
+          }}
+        />
       )
       case 'decide': return req && gate ? (
         <DecidePanel
