@@ -29,6 +29,8 @@ CHECK_CONTROLS: Dict[str, str] = {
 }
 # catalogue common control -> gate check key
 GATE_CONTROLS: Dict[str, str] = {control: check for check, control in CHECK_CONTROLS.items()}
+# the common control a policy acknowledgement attests ("AI policies"); its crosswalk picks the clauses
+POLICY_CONTROL = "FMC-GOV-02"
 
 # legacy framework ids used by the report request -> catalogue framework keys
 # (the audit-reports picker sends its display names, so those resolve too)
@@ -163,8 +165,13 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
 
     A gate check left out of the organisation's gate reaches its clauses as "not in gate", which proves nothing;
     ``gate["evaluations"]`` (each evaluation's newest passed or failed run) reaches clauses through ``evaluation_links``.
-    ``gate["attestedControls"]`` ({control: {statement, by, at, source, confidence}}, done workflow runs and plan
-    attestations) reaches the clauses of controls no gate check speaks to, as attested.
+    ``gate["attestedControls"]`` ({control: {statement, by, at, source, confidence}}, done workflow runs, plan
+    attestations and policy acknowledgements) reaches the clauses of controls no gate check speaks to, as attested.
+    ``gate["mappedEvidence"]`` (accepted evidence-to-control mappings, each {clause, evaluationId, evidenceId, state,
+    evidenceClass, confidence, label}) reaches its clause through its catalogue evaluation's ``evaluation_links`` (Supports when
+    that evaluation does not reach it): it proves only where the evaluation itself would. ``gate["controlAssessments"]`` ({clause: [{applicability, status,
+    justification, confidence}]}) attests a clause whose control is accepted, and excludes one whose every control is
+    not applicable with a justification: excluded overrides the evidence state, unless a check fails, and counts as closed.
     """
     from src.application.services.fairness_run_service import GATE_CHECKS  # function-level: that module imports this one
 
@@ -197,6 +204,20 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             entries.append((control, {"check": control, "label": att.get("statement"), "state": "attested", "confidence": att.get("confidence", 0.0),
                                       "evidenceId": None, "evidenceClass": "manual", "cell": "attested", "source": att.get("source"), "by": att.get("by"), "at": att.get("at")}))
 
+    clause_entries: List[tuple] = []  # (requirement key, entry, relation)
+    for m in gate.get("mappedEvidence") or []:
+        entry = {"check": f"mapping:{m['evidenceId']}", "label": f"Accepted mapping: {m['label']}", "state": m["state"], "confidence": m["confidence"],
+                 "evidenceId": m["evidenceId"], "evidenceClass": m["evidenceClass"], "source": "evidence_mapping"}
+        # as strong as the evaluation's own path to the clause (crosswalk relation capped by its tests), else Supports
+        relation = evaluation_links(m.get("evaluationId") or "").get(m["clause"], "Supports")
+        clause_entries.append((m["clause"], {**entry, "cell": cell_state(entry)}, relation))
+    assessments: Dict[str, List[Dict[str, Any]]] = gate.get("controlAssessments") or {}
+    for key, rows in assessments.items():
+        accepted = [r for r in rows if r["applicability"] == "applicable" and r["status"] == "accepted"]
+        if accepted:
+            clause_entries.append((key, {"check": "control_assessment", "label": "Control assessment accepted", "state": "attested", "confidence": accepted[0]["confidence"],
+                                         "evidenceId": None, "evidenceClass": "manual", "cell": "attested", "source": "control_assessment"}, "Satisfies"))
+
     per_framework: Dict[str, Dict[str, Any]] = {}
 
     def framework(fw_key: str) -> Dict[str, Any]:
@@ -217,6 +238,10 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             if frameworks and req["framework"] not in frameworks:
                 continue
             clause(framework(req["framework"]), req)["checks"].append({**entry, "relation": relation})
+    for key, entry, relation in clause_entries:
+        req = cat["active"].get(key)
+        if req and not (frameworks and req["framework"] not in frameworks):
+            clause(framework(req["framework"]), req)["checks"].append({**entry, "relation": relation})
     # seed every active clause, so a clause nothing reaches still counts as open
     for fw_key in frameworks or list(per_framework):
         for req in cat["by_framework"].get(fw_key, []):
@@ -232,10 +257,49 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             clause_row["cell"] = "fails" if "fails" in cells else min(cells, key=CELL_RANK.index) if cells else "none"
             if clause_row["state"] == "partial" and clause_row["cell"] in ("proven", "estimated"):
                 clause_row["cell"] = "partial"  # proof through a weaker link: the grid reads what the clause state says
+            rows = assessments.get(clause_row["key"])
+            if rows:
+                excluded = all(r["applicability"] == "not_applicable" and r.get("justification") for r in rows)
+                clause_row["applicability"] = "not_applicable" if excluded else "applicable" if any(r["applicability"] == "applicable" for r in rows) else rows[0]["applicability"]
+                clause_row["justification"] = "; ".join(r["justification"] for r in rows if r.get("justification")) or None
+                # a failing measured result outweighs a not-applicable statement, as it outweighs an attestation
+                if excluded and clause_row["cell"] != "fails":
+                    clause_row["state"] = clause_row["cell"] = "excluded"
             clauses.append(clause_row)
         clauses.sort(key=lambda c: _natural(c["control"]))
-        counts = {s: sum(1 for c in clauses if c["state"] == s) for s in ("proven", "partial", "attested", "open")}
+        counts = {s: sum(1 for c in clauses if c["state"] == s) for s in ("proven", "partial", "attested", "excluded", "open")}
         out.append({**fw, "clauses": clauses, "counts": {**counts, "total": len(clauses)}})
     order = {k: i for i, k in enumerate(LEAD_FRAMEWORKS)}
     out.sort(key=lambda f: (order.get(f["key"], len(order)), f["name"]))
     return {"verdict": gate.get("verdict"), "confidence": gate.get("confidence"), "frameworks": out}
+
+
+SOA_HEADER = ("clause_key", "control", "title", "state", "reaching_controls", "applicability", "justification", "evidence_ids")
+
+
+def _csv_cell(value: Any) -> str:
+    """A spreadsheet reads a cell starting = + - @ tab or CR as a formula: a leading quote keeps free text as text."""
+    s = str(value)
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+def statement_of_applicability(framework: Dict[str, Any]) -> str:
+    """One clause-map framework as Statement of Applicability CSV (ISO/IEC 42001 6.1.3): one row per clause.
+
+    Reaching controls are the catalogue common controls crosswalked to the clause; applicability and justification come
+    from the system's control assessments ("" when none is recorded); evidence ids from the checks behind the clause.
+    """
+    import csv
+    import io
+
+    reaching: Dict[str, set] = {}
+    for entry in _catalogue()["crosswalk"]:
+        reaching.setdefault(entry["key"], set()).add(entry["commonControl"])
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(SOA_HEADER)
+    for c in framework["clauses"]:
+        evidence = sorted({ch["evidenceId"] for ch in c["checks"] if ch.get("evidenceId")})
+        writer.writerow([_csv_cell(v) for v in (c["key"], c["control"], c["title"], c["state"], " ".join(sorted(reaching.get(c["key"], ()))),
+                                                  c.get("applicability") or "", c.get("justification") or "", " ".join(evidence))])
+    return buf.getvalue()

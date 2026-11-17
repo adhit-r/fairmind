@@ -49,6 +49,7 @@ const WORD: Record<CellState, string> = {
   estimated: 'Estimated',
   partial: 'Partial',
   attested: 'Attested',
+  excluded: 'Excluded',
   planned: 'Planned',
   open: 'Nothing on file',
   fails: 'Fails',

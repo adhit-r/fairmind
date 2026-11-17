@@ -3,7 +3,8 @@
 GET    /systems/{id}/autopilot                  the route, who does each step, data sources, mode and recent trace
 PUT    /systems/{id}/autopilot                  set the mode: off, ask (a person runs each step) or run (on a schedule)
 POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one kind of them with ?action=;
-                                                the run continues after the response (so does turning the mode to run)
+                                                the run continues after the response (so does turning the mode to run);
+                                                409 while a run on the system is in progress (one at a time per system)
 PUT    /systems/{id}/data-sources/{purpose}     an https URL the agent fetches for fairness or monitoring data
 DELETE /systems/{id}/data-sources/{purpose}     forget a data source
 GET    /estate/autopilot                        systems on autopilot, steps done this week, steps that need a person
@@ -24,6 +25,7 @@ import hashlib
 import json
 import logging
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -445,21 +447,64 @@ def _mark_run(db: Session, org_id: str, system_id: str) -> None:
     db.commit()
 
 
+RUN_IN_PROGRESS = "An autopilot run is already in progress for this system"
+
+
+def _lock_key(system_id: str) -> int:
+    return int.from_bytes(hashlib.sha256(f"autopilot:{system_id}".encode()).digest()[:8], "big", signed=True)
+
+
+@contextmanager
+def _system_lock(bind, system_id: str):
+    """Yields whether the caller holds the system's run lock, so runs from requests, the sweep and other workers or
+    replicas never overlap on one system. A transaction advisory lock on a dedicated connection whose transaction stays
+    open for the run: that pins the server backend behind a transaction-mode pooler, and rollback, commit or a lost
+    connection always releases it, so it cannot leak into a pool."""
+    conn = bind.connect()
+    try:
+        yield bool(conn.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _lock_key(system_id)}).scalar())
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def _not_running(db: Session, system_id: str) -> None:
+    """409 while a run holds the system's lock. The try-lock runs on the request's own connection and the rollback
+    releases it at once; the background run takes its own."""
+    free = bool(db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _lock_key(system_id)}).scalar())
+    db.rollback()
+    if not free:
+        raise HTTPException(status_code=409, detail=RUN_IN_PROGRESS)
+
+
 async def _run_later(bind, system_id: str, actor: str, only: Optional[str] = None, scheduled: bool = False) -> None:
     """run_steps after the response, on its own session: a behaviour test outlasts Cloudflare's 100-second request
     limit. The view's lastRunAt moves when it is done, which is what the system file waits for."""
-    db = Session(bind=bind)
-    try:
-        await run_steps(db, system_id, actor, only=only, scheduled=scheduled)
-    except Exception:
-        logger.exception("autopilot run for %s failed", system_id)
-        db.rollback()
-        system = _system(db, system_id)
-        if system:  # show the failure in the trace and stop the system file waiting
-            _event(db, system.org_id, system_id, "autopilot", "run", "failed", "The autopilot run stopped on an unexpected error", actor)
-            _mark_run(db, system.org_id, system_id)
-    finally:
-        db.close()
+    with _system_lock(bind, system_id) as got:
+        if not got:  # another run on this system is going; it stamps lastRunAt when done
+            logger.info("autopilot run for %s skipped: one is already in progress", system_id)
+            if not scheduled:  # a run someone asked for shows in the trace that it did not happen
+                db = Session(bind=bind)
+                try:
+                    system = _system(db, system_id)
+                    if system:
+                        _event(db, system.org_id, system_id, "autopilot", only or "run", "skipped", RUN_IN_PROGRESS, actor)
+                        db.commit()
+                finally:
+                    db.close()
+            return
+        db = Session(bind=bind)
+        try:
+            await run_steps(db, system_id, actor, only=only, scheduled=scheduled)
+        except Exception:
+            logger.exception("autopilot run for %s failed", system_id)
+            db.rollback()
+            system = _system(db, system_id)
+            if system:  # show the failure in the trace and stop the system file waiting
+                _event(db, system.org_id, system_id, "autopilot", "run", "failed", "The autopilot run stopped on an unexpected error", actor)
+                _mark_run(db, system.org_id, system_id)
+        finally:
+            db.close()
 
 
 async def sweep(session_factory) -> int:
@@ -470,7 +515,9 @@ async def sweep(session_factory) -> int:
         ids = [r[0] for r in db.execute(text("SELECT system_id FROM system_autopilot WHERE mode = 'run'")).fetchall()]
         attempted = 0
         for system_id in ids:
-            attempted += len(await run_steps(db, system_id, AUTOPILOT_ACTOR, scheduled=True))
+            with _system_lock(db.get_bind(), system_id) as got:
+                if got:  # a system with a run in progress is left to it; the next sweep comes back
+                    attempted += len(await run_steps(db, system_id, AUTOPILOT_ACTOR, scheduled=True))
         return attempted
     finally:
         db.close()
@@ -552,6 +599,8 @@ def set_autopilot(system_id: str, body: ModeBody, background: BackgroundTasks, c
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_or_404(db, system_id)
+    if body.mode == "run":
+        _not_running(db, system_id)
     db.execute(
         text(
             "INSERT INTO system_autopilot (system_id, org_id, mode, updated_by, updated_at) VALUES (:s, :org, :mode, :by, :now) "
@@ -572,6 +621,7 @@ def run_autopilot(system_id: str, background: BackgroundTasks, action: Optional[
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_or_404(db, system_id)
+    _not_running(db, system_id)
     background.add_task(_run_later, db.get_bind(), system_id, _authenticated_actor(current_user), only=action)
     return _view(db, system)  # the run continues after the response; its events and lastRunAt show on the next read
 

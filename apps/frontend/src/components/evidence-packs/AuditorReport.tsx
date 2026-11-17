@@ -6,7 +6,7 @@ import type { PackManifest } from '@/lib/api/hooks/useEvidencePacks'
 import { READINESS_LABEL, READINESS_OF, READINESS_ORDER, ReadinessBar, readinessCounts, type ReqState } from '@/app/(dashboard)/frameworks/parts'
 import { PackSummaryView } from './PackSummaryView'
 
-const WEAKEST: ReqState[] = ['fails', 'stale', 'open', 'none', 'planned', 'estimated', 'partial', 'attested', 'proven']
+const WEAKEST: ReqState[] = ['fails', 'stale', 'open', 'none', 'planned', 'estimated', 'partial', 'attested', 'excluded', 'proven']
 const weaker = (a: ReqState, b: ReqState) => (WEAKEST.indexOf(a) <= WEAKEST.indexOf(b) ? a : b)
 const date = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 

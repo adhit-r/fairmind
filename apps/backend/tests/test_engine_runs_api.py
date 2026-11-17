@@ -1,6 +1,7 @@
 """Evaluation runs through the API: run, store as evidence, read back on the evaluations list."""
 
 import io
+import json
 import uuid
 
 import numpy as np
@@ -97,10 +98,19 @@ def test_a_failed_run_opens_one_finding_and_a_passing_run_resolves_it(tmp_databa
     assert [r.status for r in _findings(tmp_database, system)] == ["resolved"]
 
 
-def test_a_person_accepts_a_failed_runs_finding_with_a_reason_that_is_kept_as_a_record(tmp_database):
+def _acceptance_records(engine, system):
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT content_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'risk_acceptance'"), {"id": system}).scalars()
+        return [json.loads(r) for r in rows]
+
+
+def test_accepting_a_failed_runs_finding_takes_two_people_and_is_kept_as_a_record(tmp_database):
     from sqlalchemy import text
 
     org_id, client = _org(tmp_database)
+    approver = _client(tmp_database, org_id)
     system = _system(tmp_database, org_id)
     assert _run(client, system, 1.0).json()["status"] == "failed"
     with tmp_database.connect() as conn:
@@ -108,14 +118,93 @@ def test_a_person_accepts_a_failed_runs_finding_with_a_reason_that_is_kept_as_a_
     url = f"/api/v1/ai-governance/risks/{risk_id}"
 
     assert client.patch(url, json={"status": "accepted", "rationale": "   "}).status_code == 422
-    accepted = client.patch(url, json={"status": "accepted", "rationale": "Drift is within the seasonal range", "owner": "risk-lead"})
-    assert accepted.status_code == 200, accepted.text
-    assert (accepted.json()["residualSeverity"], accepted.json()["owner"]) == ("high", "risk-lead")
+    proposed = client.patch(url, json={"status": "accepted", "rationale": "Drift is within the seasonal range", "owner": "risk-lead"})
+    assert proposed.status_code == 200, proposed.text
+    assert (proposed.json()["status"], proposed.json()["owner"]) == ("acceptance_pending", "risk-lead")
+    assert [r.status for r in _findings(tmp_database, system)] == ["acceptance_pending"] and _acceptance_records(tmp_database, system) == []
+    assert client.patch(url, json={"status": "accepted", "rationale": "again"}).status_code == 409
+    assert client.post(f"{url}/acceptance/approve").status_code == 403  # the proposer cannot approve their own
+
+    approved = approver.post(f"{url}/acceptance/approve")
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["residualSeverity"] == "high" and approved.json()["proposedBy"] != approved.json()["approvedBy"]
     assert client.patch(url, json={"status": "mitigated", "rationale": "again"}).status_code == 409
+    assert approver.post(f"{url}/acceptance/approve").status_code == 409
     assert [r.status for r in _findings(tmp_database, system)] == ["accepted"]
+    [record] = _acceptance_records(tmp_database, system)
+    assert record["rationale"] == "Drift is within the seasonal range" and record["owner"] == "risk-lead"
+    assert (record["proposedBy"], record["approvedBy"]) == (approved.json()["proposedBy"], approved.json()["approvedBy"])
+
+
+def test_either_person_withdraws_a_pending_acceptance_and_the_finding_opens_again(tmp_database):
+    from sqlalchemy import text
+
+    org_id, client = _org(tmp_database)
+    other = _client(tmp_database, org_id)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
     with tmp_database.connect() as conn:
-        content = conn.execute(text("SELECT content_json FROM governance_evidence WHERE system_id = :id AND evidence_type = 'risk_acceptance'"), {"id": system}).scalar()
-    assert '"rationale": "Drift is within the seasonal range"' in content
+        risk_id = conn.execute(text("SELECT id FROM governance_risks WHERE system_id = :id"), {"id": system}).scalar()
+    url = f"/api/v1/ai-governance/risks/{risk_id}"
+    assert client.post(f"{url}/acceptance/withdraw").status_code == 409  # nothing pending
+    for withdrawer in (client, other):
+        assert client.patch(url, json={"status": "accepted", "rationale": "Within range"}).status_code == 200
+        withdrawn = withdrawer.post(f"{url}/acceptance/withdraw")
+        assert withdrawn.status_code == 200 and withdrawn.json()["status"] == "open"
+    assert [r.status for r in _findings(tmp_database, system)] == ["open"] and _acceptance_records(tmp_database, system) == []
+    assert other.post(f"{url}/acceptance/approve").status_code == 409
+
+
+def test_mitigating_or_resolving_a_pending_acceptance_drops_it(tmp_database):
+    from sqlalchemy import text
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+
+    def pending_risk():
+        assert _run(client, system, 1.0).json()["status"] == "failed"
+        with tmp_database.connect() as conn:
+            risk_id = conn.execute(text("SELECT id FROM governance_risks WHERE system_id = :id AND status = 'open'"), {"id": system}).scalar()
+        assert client.patch(f"/api/v1/ai-governance/risks/{risk_id}", json={"status": "accepted", "rationale": "Within range"}).status_code == 200
+        return risk_id
+
+    def state(risk_id):
+        with tmp_database.connect() as conn:
+            status, metadata = conn.execute(text("SELECT status, metadata_json FROM governance_risks WHERE id = :id"), {"id": risk_id}).one()
+        return status, "pendingAcceptance" in json.loads(metadata)
+
+    mitigated = pending_risk()
+    assert client.patch(f"/api/v1/ai-governance/risks/{mitigated}", json={"status": "mitigated", "rationale": "Retrained"}).status_code == 200
+    assert state(mitigated) == ("mitigated", False)
+    resolved = pending_risk()
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    assert state(resolved) == ("resolved", False)
+
+
+def test_approving_an_acceptance_a_passing_run_resolved_meanwhile_is_refused(tmp_database, monkeypatch):
+    from sqlalchemy import text
+
+    from api.routes import ai_governance
+
+    org_id, client = _org(tmp_database)
+    approver = _client(tmp_database, org_id)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    with tmp_database.connect() as conn:
+        risk_id = conn.execute(text("SELECT id FROM governance_risks WHERE system_id = :id"), {"id": system}).scalar()
+    url = f"/api/v1/ai-governance/risks/{risk_id}"
+    assert client.patch(url, json={"status": "accepted", "rationale": "Within range"}).status_code == 200
+    check_access = ai_governance._require_system_access
+
+    def passed_meanwhile(*args, **kwargs):  # between the approval's read of the pending risk and its update
+        membership = check_access(*args, **kwargs)
+        with tmp_database.begin() as conn:
+            conn.execute(text("UPDATE governance_risks SET status = 'resolved' WHERE id = :id"), {"id": risk_id})
+        return membership
+
+    monkeypatch.setattr(ai_governance, "_require_system_access", passed_meanwhile)
+    assert approver.post(f"{url}/acceptance/approve").status_code == 409
+    assert [r.status for r in _findings(tmp_database, system)] == ["resolved"] and _acceptance_records(tmp_database, system) == []
 
 
 def test_accepting_a_risk_a_passing_run_resolved_meanwhile_is_refused(tmp_database, monkeypatch):
@@ -239,6 +328,98 @@ def test_a_catalogue_run_supports_a_control_only_while_its_evaluation_still_pass
 
     assert _run(client, system, 0.0).json()["status"] == "passed"
     assert missing() == 0  # passing again restores the accepted mapping
+
+
+def test_an_accepted_mapping_and_an_excluded_control_reach_the_clause_map_and_the_soa(tmp_database):
+    import csv
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, _, accept, _ = _assigned_control(tmp_database, client, org_id, system)  # A.6.2.4
+    clause_map = f"/api/v1/ai-governance/systems/{system}/clause-map"
+
+    def a624():
+        fw = next(f for f in client.get(clause_map).json()["frameworks"] if f["key"] == "ISO42001")
+        return fw, next(c for c in fw["clauses"] if c["control"] == "A.6.2.4")
+
+    passed = _run(client, system, 0.0).json()
+    accept(passed["id"])
+    _, clause = a624()
+    # EV-DAT-01 does not test A.6.2.4: the accepted mapping supports it, it cannot prove it
+    [mapping] = [ch for ch in clause["checks"] if ch["check"] == f"mapping:{passed['id']}"]
+    assert (mapping["relation"], mapping["state"], mapping["evidenceClass"]) == ("Supports", "proven", "measured") and clause["state"] == "partial"
+
+    [control] = client.get(f"{gov}/framework-assignments/{client.get(f'{gov}/systems/{system}/framework-assignments').json()[0]['id']}/controls").json()
+    excluded = client.patch(f"{gov}/control-assessments/{control['id']}", json={"applicability": "not_applicable", "justification": "No model verification in scope."})
+    assert excluded.status_code == 200, excluded.text
+    fw, clause = a624()
+    assert (clause["state"], clause["cell"], clause["justification"]) == ("excluded", "excluded", "No model verification in scope.")
+    assert fw["counts"]["excluded"] == 1
+
+    soa = client.get(f"/api/v1/ai-governance/systems/{system}/soa/ISO42001")
+    assert soa.status_code == 200 and soa.headers["content-type"].startswith("text/csv")
+    rows = {r["control"]: r for r in csv.DictReader(io.StringIO(soa.text))}
+    assert len(rows) == fw["counts"]["total"]
+    row = rows["A.6.2.4"]
+    assert (row["state"], row["applicability"], row["justification"]) == ("excluded", "not_applicable", "No model verification in scope.")
+    assert "FMC-DAT-01" in row["reaching_controls"].split() and passed["id"] in row["evidence_ids"].split()
+    _, foreign = _org(tmp_database)
+    assert foreign.get(f"/api/v1/ai-governance/systems/{system}/soa/ISO42001").status_code in (403, 404)
+    assert client.get(f"/api/v1/ai-governance/systems/{system}/soa/NOPE").status_code == 404
+
+
+def test_only_the_newest_assigned_version_and_active_controls_speak_for_a_clause(tmp_database):
+    from database.governance_models import GovernanceControlDefinition, GovernanceFrameworkVersion
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, _, _, _ = _assigned_control(tmp_database, client, org_id, system)  # A.6.2.4 on version iso-v
+    [old] = client.get(f"{gov}/framework-assignments/{client.get(f'{gov}/systems/{system}/framework-assignments').json()[0]['id']}/controls").json()
+    client.patch(f"{gov}/control-assessments/{old['id']}", json={"applicability": "not_applicable", "justification": "Out of scope."})
+
+    def a624():
+        fw = next(f for f in client.get(f"/api/v1/ai-governance/systems/{system}/clause-map").json()["frameworks"] if f["key"] == "ISO42001")
+        return next(c for c in fw["clauses"] if c["control"] == "A.6.2.4")
+
+    assert a624()["state"] == "excluded"
+    with tmp_database.begin() as conn:
+        conn.execute(GovernanceFrameworkVersion.__table__.insert().values(
+            id="iso-v2", framework_key="iso-42001", name="ISO/IEC 42001", version_label="2024", source_hash="h2", status="active"))
+        conn.execute(GovernanceControlDefinition.__table__.insert().values(
+            id="iso-c2", framework_version_id="iso-v2", external_id="A.6.2.4", title="Verification and validation",
+            statement="Verify and validate the AI system", frequency="Annual", active=1))
+    assert client.post(f"{gov}/systems/{system}/framework-assignments", json={"frameworkVersionId": "iso-v2"}).status_code in (200, 201)
+    # the newer version's applicable row stands; the older version's not-applicable row no longer excludes the clause
+    clause = a624()
+    assert clause["state"] == "open" and clause["applicability"] == "applicable"
+    with tmp_database.begin() as conn:
+        conn.execute(GovernanceControlDefinition.__table__.update().where(GovernanceControlDefinition.__table__.c.id == "iso-c2").values(active=0))
+    assert "applicability" not in a624()  # a retired control speaks for nothing
+
+
+def test_an_acknowledged_published_policy_attests_the_policy_clauses_of_its_own_organisation_only(tmp_database):
+    from database.governance_models import OrgPolicy, OrgPolicyAcknowledgement
+
+    org_id, client = _org(tmp_database)
+    foreign_org, _ = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+
+    def clause_52():
+        fw = next(f for f in client.get(f"/api/v1/ai-governance/systems/{system}/clause-map").json()["frameworks"] if f["key"] == "ISO42001")
+        return next(c for c in fw["clauses"] if c["control"] == "5.2")
+
+    def acknowledged(org, status="published"):
+        policy = str(uuid.uuid4())
+        with tmp_database.begin() as conn:
+            conn.execute(OrgPolicy.__table__.insert().values(id=policy, org_id=str(org), name="AI use policy", status=status, published_version=1, created_by="u"))
+            conn.execute(OrgPolicyAcknowledgement.__table__.insert().values(id=str(uuid.uuid4()), org_id=str(org), policy_id=policy, version=1, user_id="u", acknowledged_at="2026-11-01T00:00:00+00:00"))
+
+    acknowledged(foreign_org)
+    acknowledged(org_id, status="retired")
+    assert clause_52()["state"] == "open"
+    acknowledged(org_id)
+    clause = clause_52()
+    assert clause["state"] == "attested" and any(ch.get("source") == "policy_acknowledgement" for ch in clause["checks"])
 
 
 def test_a_passed_catalogue_run_proposes_the_iso_clauses_its_control_reaches(tmp_database):

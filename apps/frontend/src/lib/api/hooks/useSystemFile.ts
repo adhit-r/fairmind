@@ -344,14 +344,18 @@ export interface DecisionSeal {
 export interface ClauseMapFramework {
   key: string
   name: string
-  counts: { proven: number; partial?: number; attested: number; open: number; total: number }
+  counts: { proven: number; partial?: number; attested: number; excluded?: number; open: number; total: number }
   clauses: Array<{
     key: string
     control: string
     title: string
     group: string | null
     /** proven only through a check that satisfies the clause; partial when the proof comes through a weaker link. */
-    state: 'proven' | 'partial' | 'attested' | 'open'
+    /** excluded: every control behind the clause is assessed not applicable for this system with a justification; counts as closed. */
+    state: 'proven' | 'partial' | 'attested' | 'excluded' | 'open'
+    /** From the system's control assessments, when any is recorded for the clause. */
+    applicability?: string
+    justification?: string | null
     /** The grid state derived on the server from the contributing checks' class, result and freshness; none when nothing reaches the clause. */
     cell: CellState | 'none'
     checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string; evidenceClass?: GateCheck['evidenceClass']; stale?: true; fails?: true }>
@@ -359,6 +363,7 @@ export interface ClauseMapFramework {
 }
 
 export interface ClauseMap {
+  systemId?: string
   verdict: string | null
   confidence: number | null
   frameworks: ClauseMapFramework[]
@@ -366,6 +371,19 @@ export interface ClauseMap {
   scoped?: boolean
   /** The confirmed frameworks, including any with no clause mapped to a gate check. */
   confirmed?: Array<{ key: string; name: string }>
+}
+
+/** Saves one framework's Statement of Applicability for a system as the server's CSV; an error message, or null when saved. */
+export async function downloadSoa(systemId: string, framework: string): Promise<string | null> {
+  const res = await apiClient.get<Blob>(`${GOV}/systems/${systemId}/soa/${encodeURIComponent(framework)}`, { responseType: 'blob' })
+  if (!res.success || !res.data) return res.error || 'The Statement of Applicability could not be downloaded'
+  const url = URL.createObjectURL(res.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `soa-${framework}-${systemId}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+  return null
 }
 
 /** Environmental is not attested from the UI: an attestation would shadow any later assessment. */

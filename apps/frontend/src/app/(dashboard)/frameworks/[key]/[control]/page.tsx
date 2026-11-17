@@ -24,6 +24,7 @@ const DECISION: Record<ReqState, string> = {
   proven: 'Current evidence proves this on the system.',
   partial: 'Proven through a link that only supports or partly satisfies this; nothing proves it in full.',
   attested: 'A person attested to this; no measured evidence yet.',
+  excluded: 'Assessed not applicable to this system, with a recorded justification.',
   estimated: 'Estimated from related evidence; nothing measures it directly.',
   planned: 'Planned, with no evidence yet.',
   open: 'No current evidence for the checks that satisfy this.',

@@ -1,4 +1,8 @@
-import type { PackEvidence, PackManifest, PackOrganisation, PackSystemEntry } from '@/lib/api/hooks/useEvidencePacks'
+'use client'
+
+import { useEffect, useRef } from 'react'
+import type { PackEvidence, PackManifest, PackOrganisation, PackRisk, PackSystemEntry } from '@/lib/api/hooks/useEvidencePacks'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
 const VERDICT_LABEL: Record<string, string> = { go: 'Go', conditional_go: 'Conditional go', no_go: 'No go' }
@@ -30,6 +34,12 @@ function resultOf(e: PackEvidence): string {
     // content is free text for some record types
   }
   return e.status || ''
+}
+
+/** An acceptance names who proposed it and who approved it; a mitigation, and acceptances in older packs, name the one decider. */
+function treatment(d: NonNullable<PackRisk['decision']>) {
+  const who = d.proposedBy && d.approvedBy ? `proposed by ${d.proposedBy}, approved by ${d.approvedBy}` : `by ${d.decidedBy}`
+  return `${d.decision} ${who} on ${formatDate(d.decidedAt)}${d.owner ? `, owner ${d.owner}` : ''}: ${d.rationale}`
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -289,9 +299,7 @@ function SystemCard({ entry }: { entry: PackSystemEntry }) {
             ['Risk', (r) => <span className={RECORD_NAME}>{r.title}</span>],
             ['Severity', (r) => `${r.severity}, ${r.likelihood}`],
             ['Status', (r) => r.status],
-            ['Treatment', (r) => <span className="whitespace-pre-line">{r.decision
-              ? `${r.decision.decision} by ${r.decision.decidedBy} on ${formatDate(r.decision.decidedAt)}${r.decision.owner ? `, owner ${r.decision.owner}` : ''}: ${r.decision.rationale}`
-              : r.mitigation}</span>],
+            ['Treatment', (r) => <span className="whitespace-pre-line">{r.decision ? treatment(r.decision) : r.mitigation}</span>],
             ['Raised', (r) => <span className="whitespace-nowrap">{formatDate(r.created_at)}</span>],
           ]} />
         </Section>
@@ -322,9 +330,19 @@ function SystemCard({ entry }: { entry: PackSystemEntry }) {
 
 /** The read-only summary shared by the signed-in pack page and the auditor page. */
 export function PackSummaryView({ manifest, manifestHash }: { manifest: PackManifest; manifestHash: string }) {
+  const root = useRef<HTMLDivElement>(null)
+  // A printed pack shows every section, however the reader left them folded on screen.
+  useEffect(() => {
+    const openAll = () => root.current?.querySelectorAll('details').forEach((d) => { d.open = true })
+    window.addEventListener('beforeprint', openAll)
+    return () => window.removeEventListener('beforeprint', openAll)
+  }, [])
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={root} className="fm-pack flex flex-col gap-4">
       <Card className="p-5">
+        <div className="mb-4 flex justify-end print:hidden">
+          <Button variant="outline" size="sm" onClick={() => window.print()}>Print / Save as PDF</Button>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Stat label="Built">{formatDate(manifest.createdAt)}</Stat>
           <Stat label="Frameworks">{manifest.frameworks.join(', ')}</Stat>

@@ -77,7 +77,8 @@ export interface PackRisk {
   created_at: string
   updated_at: string
   // The latest accept or mitigate decision recorded for the risk; absent on older packs.
-  decision?: { decision: string; rationale: string; owner: string | null; decidedBy: string; decidedAt: string } | null
+  // An acceptance also names who proposed it and who approved it; absent on mitigations and older packs.
+  decision?: { decision: string; rationale: string; owner: string | null; decidedBy: string; decidedAt: string; proposedBy?: string | null; approvedBy?: string | null } | null
 }
 
 export interface PackRemediation {
@@ -249,14 +250,14 @@ export function useEvidencePack(packId: string | undefined) {
     return res
   }, [packId, refresh])
 
-  /** The pack as {manifest, manifestHash}, the file `fairmind verify` reads. Saved as the server's own bytes: re-serialising in the browser would change the numbers the hash covers. */
-  const download = useCallback(async () => {
-    const res = await apiClient.get<Blob>(`${GOV}/packs/${packId}/download`, { responseType: 'blob' })
+  /** The pack as {manifest, manifestHash}, the file `fairmind verify` reads, or as one CSV of its records. Saved as the server's own bytes: re-serialising in the browser would change the numbers the hash covers. */
+  const download = useCallback(async (format: 'json' | 'csv' = 'json') => {
+    const res = await apiClient.get<Blob>(`${GOV}/packs/${packId}/download?format=${format}`, { responseType: 'blob' })
     if (!res.success || !res.data) return false
     const url = URL.createObjectURL(res.data)
     const link = document.createElement('a')
     link.href = url
-    link.download = `inspection-pack-${packId}.json`
+    link.download = `inspection-pack-${packId}.${format}`
     link.click()
     URL.revokeObjectURL(url)
     return true

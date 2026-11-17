@@ -115,14 +115,23 @@ def render_engine(spec: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render_clause_map(cmap: Dict[str, Any]) -> str:
+def audit_blockers(fw: Dict[str, Any], strict: bool = False) -> List[str]:
+    """Clauses that fail `fairmind audit` for one framework: open ones, and partial ones too when strict. Excluded clauses are closed."""
+    return [cl["control"] for cl in fw["clauses"] if cl["state"] == "open" or (strict and cl["state"] == "partial")]
+
+
+def render_clause_map(cmap: Dict[str, Any], strict: bool = False) -> str:
     lines = [f"Gate {VERDICT_WORD.get(cmap['verdict'], cmap['verdict'])}, confidence {cmap['confidence']:.2f}"]
     for fw in cmap["frameworks"]:
         c = fw["counts"]
-        lines.append(f"{fw['name']} ({fw['key']}): {c['proven']} proven, {c.get('partial', 0)} partial, {c['attested']} attested, {c['open']} open of {c['total']} clauses")
+        excluded = f", {c['excluded']} excluded" if c.get("excluded") else ""
+        lines.append(f"{fw['name']} ({fw['key']}): {c['proven']} proven, {c.get('partial', 0)} partial, {c['attested']} attested{excluded}, {c['open']} open of {c['total']} clauses")
         open_clauses = [cl["control"] for cl in fw["clauses"] if cl["state"] == "open"]
         if open_clauses:
             lines.append(f"  open: {', '.join(open_clauses)}")
+        if strict:
+            blockers = audit_blockers(fw, strict=True)
+            lines.append(f"  strict audit: {'not ready, ' + ', '.join(blockers) + ' open or partial' if blockers else 'ready'}")
     return "\n".join(lines)
 
 
@@ -190,10 +199,11 @@ def create_server(client: Optional[FairMind] = None) -> FastMCP:
 
     @server.tool()
     @guarded
-    def clause_map(system_id: str, frameworks: Optional[List[str]] = None) -> CallToolResult:
-        """Read the release gate per regulatory clause (EU AI Act, ISO 42001, NIST AI RMF, ...). `frameworks` optionally limits it to catalogue keys such as EUAIA or ISO42001."""
+    def clause_map(system_id: str, frameworks: Optional[List[str]] = None, strict: bool = False) -> CallToolResult:
+        """Read the release gate per regulatory clause (EU AI Act, ISO 42001, NIST AI RMF, ...). `frameworks` optionally limits it to catalogue keys such as EUAIA or ISO42001. `auditReady` says whether `fairmind audit` would pass: no open clause (excluded ones count as closed); `strict=true` also fails on a partial clause, as `fairmind audit --strict` does."""
         cmap = fm().clause_map(system_id, frameworks)
-        return _result(render_clause_map(cmap), dict(cmap))
+        ready = not any(audit_blockers(fw, strict) for fw in cmap["frameworks"])
+        return _result(render_clause_map(cmap, strict), {**dict(cmap), "auditReady": ready})
 
     @server.tool()
     @guarded

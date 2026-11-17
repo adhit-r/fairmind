@@ -16,8 +16,10 @@ from its fields with ``decision_seal_service.entry_hash``.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import hmac
+import io
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -27,7 +29,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.application.services.clause_map_service import CATALOGUE_PATH, clause_map
+from src.application.services.clause_map_service import CATALOGUE_PATH, _csv_cell as _csv_text, clause_map
 from src.application.services.decision_seal_service import chain_head, entry_hash, evidence_records, list_seals
 
 MANIFEST_VERSION = 2
@@ -125,12 +127,13 @@ def _organisation(db: Session, org_id: str) -> Dict[str, Any]:
 
 
 def _risks(db: Session, system_id: str, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """The risk register, each risk with the latest treatment decision recorded for it (risk_acceptance evidence), or None."""
+    """The risk register, each risk with the latest treatment decision recorded for it (risk_acceptance evidence), or None.
+    An acceptance names both people, who proposed it and who approved it; a mitigation and older acceptances carry None for both."""
     decisions: Dict[str, Dict[str, Any]] = {}
     for entry in entries:  # oldest first, so the latest decision wins
         if entry["type"] == "risk_acceptance":
             content = json.loads(entry["content"]) if isinstance(entry["content"], str) else entry["content"]
-            decisions[content["riskId"]] = {k: content.get(k) for k in ("decision", "rationale", "owner", "decidedBy", "decidedAt")}
+            decisions[content["riskId"]] = {k: content.get(k) for k in ("decision", "rationale", "owner", "decidedBy", "decidedAt", "proposedBy", "approvedBy")}
     return [{**risk, "decision": decisions.get(risk["id"])} for risk in _rows(db, _RISKS_SQL, {"id": system_id})]
 
 
@@ -173,6 +176,55 @@ def build_manifest(
         "createdBy": created_by,
         "systems": out,
     }
+
+
+_CSV_SYSTEM_SECTIONS = ("evidence", "seals", "controlApplicability", "risks", "remediation", "controlLinks")
+
+
+def _flat(row: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key, value in row.items():
+        if isinstance(value, dict):
+            out.update(_flat(value, f"{prefix}{key}."))
+        else:
+            out[f"{prefix}{key}"] = value
+    return out
+
+
+def _csv_cell(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return _csv_text(value) if isinstance(value, str) else value
+
+
+def manifest_csv(manifest: Dict[str, Any]) -> str:
+    """The pack as one CSV, a row per record with a section column, read from the same manifest the JSON pack holds,
+    so every count and value matches it. Nested objects become dotted columns; lists are written as JSON."""
+    rows: List[Dict[str, Any]] = []
+    org = manifest.get("organisation") or {}
+    for section in ("attestations", "workflows", "policies"):
+        rows += [{"section": section, **_flat(r)} for r in org.get(section) or []]
+    for item in manifest.get("systems", []):
+        system = item.get("system") or {}
+        base = {"system_id": system.get("id"), "system_name": system.get("name")}
+        gate = item.get("gate") or {}
+        rows.append({"section": "gate", **base, "riskTier": system.get("riskTier"), "chainHead": item.get("chainHead"),
+                     **{k: gate.get(k) for k in ("verdict", "confidence", "reasons")}})
+        rows += [{"section": "gate_checks", **base, **_flat(check)} for check in gate.get("checks") or []]
+        for fw in (item.get("clauseMap") or {}).get("frameworks", []):
+            rows += [{"section": "clauses", **base, "framework": fw.get("key"), **_flat(clause)} for clause in fw.get("clauses", [])]
+        for section in _CSV_SYSTEM_SECTIONS:
+            rows += [{"section": section, **base, **_flat(r)} for r in item.get(section) or []]
+    columns = list(dict.fromkeys(["section", "system_id", "system_name", *(k for r in rows for k in r)]))
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=columns, restval="")
+    writer.writeheader()
+    writer.writerows({k: _csv_cell(v) for k, v in r.items()} for r in rows)
+    return buf.getvalue()
 
 
 def verify_manifest(manifest: Dict[str, Any], expected_hash: str) -> Dict[str, Any]:

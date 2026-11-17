@@ -31,6 +31,7 @@ import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { checkCell, classLabel } from '@/components/ui/matrix'
 import { shortFrameworkName, tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
 import { useAutopilot } from '@/lib/api/hooks/useAutopilot'
+import { isOpenRisk } from '@/lib/api/hooks/useRisks'
 import { useEnvironmentalImpact } from '@/lib/api/hooks/useAIGovernance'
 import { systemFileScopeKey, useSystemFile, type AttestableCheck, type GatePathStep } from '@/lib/api/hooks/useSystemFile'
 import {
@@ -183,7 +184,7 @@ function SystemFileBody({ id }: { id: string }) {
   const option = gate?.path?.toGo ?? gate?.path?.options?.[0] ?? null
   const override = tierOverride(gate?.explain)
   const seal = seals[0]
-  const recordedOpen = (risks?.risks ?? []).filter((r) => !['accepted', 'closed', 'resolved', 'mitigated'].includes(r.status))
+  const recordedOpen = (risks?.risks ?? []).filter(isOpenRisk)
   const envRec = env.data?.recommendation
   const envStatus = typeof envRec === 'string' ? envRec : envRec?.status
   const canRequest = status === 'not_requested' || status === 'rejected'

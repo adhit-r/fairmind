@@ -153,3 +153,9 @@ test('confirmed frameworks come from each system applicability, once each, in sy
   const sys = (fws: string[] | null) => ({ metadata: fws ? { applicability: { frameworks: fws.map((k) => ({ key: k, name: `${k} name` })) } } : {} })
   assert.deepEqual(confirmedFrameworks([sys(['B', 'A']), sys(null), sys(['A', 'C'])]).map((f) => f.key), ['B', 'A', 'C'])
 })
+
+test('an excluded clause is counted as excluded, never as work', () => {
+  const withExcluded: FrameworkSystems = { ...fw, requirements: [{ key: 'FW|1.1', cells: [cell('excluded'), cell('open')] }] }
+  assert.equal(systemGrid(journey, withExcluded, false).totals.excluded, 1)
+  assert.equal(needsWorkInHighCritical({ ...fw, requirements: [{ key: 'FW|1.1', cells: [cell('open'), cell('excluded')] }] }), 0)
+})

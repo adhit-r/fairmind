@@ -10,6 +10,7 @@
     fairmind verify "<share link>" [--api URL]  fetch the pack behind an auditor link (from the link's own site
                                                 unless --api or FAIRMIND_API_URL is set), then verify it locally
     fairmind clause-map --system <id> [--frameworks EUAIA,ISO42001]   the gate read per framework clause
+    fairmind soa ISO42001 --system <id> [--output soa.csv]   save the Statement of Applicability as CSV
     fairmind system get <id> | create --name N [--risk-tier T --stage S --workspace W --owner O]
     fairmind pack create|list|show|download|share|revoke   inspection packs
     fairmind finding add|list                   risk findings
@@ -18,8 +19,9 @@
     fairmind report generate|list               audit report snapshots
     fairmind eval list|show|run|result          evaluation catalogue and runs
     fairmind eval run <id> --system <id> --live --local   behaviour test on a model only your network can reach
-    fairmind audit ISO42001 --system <id> [--run --inputs plan.json --local] [--pack] [--share]
-                                                one framework audit: open clauses, their evaluations, pack, auditor link
+    fairmind audit ISO42001 --system <id> [--run --inputs plan.json --local] [--pack] [--share] [--strict]
+                                                one framework audit: open clauses, their evaluations, pack, auditor link;
+                                                exit 1 on an open clause (with --strict, on a partial one too)
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
 http://localhost:8010) and FAIRMIND_API_KEY, a key minted at POST /api/v1/auth/api-keys.
@@ -69,7 +71,7 @@ def _client(args: argparse.Namespace, factory: ClientFactory) -> httpx.Client:
     return factory(base_url, headers)
 
 
-def _call(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any:
+def _call(client: httpx.Client, method: str, path: str, *, raw: bool = False, **kwargs: Any) -> Any:
     try:
         response = client.request(method, path, **kwargs)
     except httpx.HTTPError as exc:
@@ -84,6 +86,8 @@ def _call(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any:
         except ValueError:
             detail = response.text
         raise CliError(f"{method} {path} failed with {response.status_code}: {detail}")
+    if raw:
+        return response.text
     try:
         return response.json()
     except ValueError as exc:
@@ -686,7 +690,8 @@ def _hint(eval_id: str, system: str, step: Dict[str, Any], local: bool) -> str:
 
 def _counts(fw: Dict[str, Any]) -> str:
     n = fw["counts"]
-    return f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n.get('partial', 0)} partial, {n['attested']} attested, {n['open']} open of {n['total']} clauses"
+    excluded = f", {n['excluded']} excluded" if n.get("excluded") else ""
+    return f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n.get('partial', 0)} partial, {n['attested']} attested{excluded}, {n['open']} open of {n['total']} clauses"
 
 
 def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
@@ -766,9 +771,21 @@ def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[s
     still = [c for c in after["clauses"] if c["state"] == "open"]
     lines += ["", ("After the runs, " if args.run else "") + _counts(after)]
     lines += [f"  still open: {c['control']} (waits on {_waits_on(c)})" for c in still]
-    lines += [f"  partial: {c['control']} (waits on {_waits_on(c)})" for c in after["clauses"] if c["state"] == "partial"]
+    partial = [c for c in after["clauses"] if c["state"] == "partial"]
+    lines += [f"  partial: {c['control']} (waits on {_waits_on(c)})" for c in partial]
+    lines += [f"  excluded: {c['control']} ({c.get('justification') or 'not applicable'})" for c in after["clauses"] if c["state"] == "excluded"]
     out(json.dumps(report, indent=2, default=str) if args.json else "\n".join(lines))
-    return EXIT_NO_GO if still else EXIT_GO
+    return EXIT_NO_GO if still or (args.strict and partial) else EXIT_GO
+
+
+def cmd_soa(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
+    key = args.framework.upper()
+    with _client(args, factory) as client:
+        body = _call(client, "GET", f"{GOV}/systems/{args.system}/soa/{key}", raw=True)
+    target = Path(args.output or f"soa-{key}-{args.system}.csv")
+    target.write_text(body, encoding="utf-8")
+    out(f"Saved {target}")
+    return EXIT_GO
 
 # ---------------------------------------------------------------------------
 # entry point
@@ -892,7 +909,7 @@ def build_parser() -> argparse.ArgumentParser:
     ev["run"].add_argument("--use-connection", action="store_true", help="read the organisation's agent platform instead of files")
     ev["run"].add_argument("--timeout", type=float, default=900.0)
 
-    audit = sub.add_parser("audit", parents=[common], help="get one system ready for a framework audit: clause map, evaluations, pack, auditor link; exit 0 when no clause is open, 1 when any is")
+    audit = sub.add_parser("audit", parents=[common], help="get one system ready for a framework audit: clause map, evaluations, pack, auditor link; exit 0 when no clause is open, 1 when any is (excluded clauses count as closed)")
     audit.add_argument("framework", help="catalogue key, e.g. ISO42001, EUAIA, NISTRMF")
     audit.add_argument("--system", required=True)
     audit.add_argument("--run", action="store_true", help="run the mapped evaluations that have not passed for this system")
@@ -902,7 +919,14 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--share", action="store_true", help="also mint the auditor link (implies --pack)")
     audit.add_argument("--title", help="pack title (default '<framework> audit: <system> <date>')")
     audit.add_argument("--timeout", type=float, default=900.0, help="seconds to wait for each evaluation")
+    audit.add_argument("--strict", action="store_true", help="also exit 1 when any clause is only partial; by default partial passes, since some ISO 42001 clauses can never be more than partial")
     audit.set_defaults(func=cmd_audit)
+
+    soa = sub.add_parser("soa", parents=[common], help="save one framework's Statement of Applicability for a system as CSV")
+    soa.add_argument("framework", help="catalogue key, e.g. ISO42001")
+    soa.add_argument("--system", required=True)
+    soa.add_argument("--output", help="file to write (default soa-<framework>-<system>.csv)")
+    soa.set_defaults(func=cmd_soa)
 
     verify = sub.add_parser("verify", parents=[common], help="verify an inspection pack (a downloaded pack.json is checked with no network; a share link is fetched first); exit 0 intact, 1 not", description=CANONICAL_FORM)
     verify.add_argument("pack", help="pack JSON downloaded from FairMind, or an auditor share link (.../verify/<id>?t=<token>)")

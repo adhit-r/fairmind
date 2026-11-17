@@ -8,6 +8,7 @@ PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops coun
 POST /systems/{id}/attestations            a person states a check is satisfied; manual evidence
 GET  /systems/{id}/gate                    verdict, confidence, check states, the release decision status, why, and the path to the next verdict
 GET  /systems/{id}/clause-map              the gate per framework clause, scoped to the confirmed frameworks
+GET  /systems/{id}/soa/{framework}         that framework's clauses as a Statement of Applicability CSV
 GET  /estate/gates                         the gate of every system in the caller's org, without explain and path
 GET  /frameworks/{key}/systems             per requirement, the cell of every system that confirmed the framework
 
@@ -22,7 +23,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
@@ -45,7 +46,7 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
-from src.application.services.clause_map_service import _catalogue, clause_map, tracked_requirements
+from src.application.services.clause_map_service import POLICY_CONTROL, _catalogue, clause_map, statement_of_applicability, tracked_requirements
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
 from src.application.services.fairness_run_service import (
@@ -160,8 +161,9 @@ def _attested_controls(db: Session, system_id: str) -> Dict[str, Dict[str, Any]]
     """Controls no gate check reaches that the organisation has stated or worked through, for the clause map.
 
     From done workflow runs a reviewer did not reject (organisation-scope ones, plus runs on this system; a systemless
-    run of a system-scope workflow counts for no system, as the plan reads it) and from plan
-    attestations, keyed by common control; the newest wins. Gate controls are left out: their checks count already.
+    run of a system-scope workflow counts for no system, as the plan reads it), from plan attestations and from
+    acknowledgements of a published policy's current version (the policy control), keyed by common control; the newest
+    wins. Gate controls are left out: their checks count already.
     """
     from api.routes.pack_catalogue import WORKFLOWS
     from src.application.services.clause_map_service import GATE_CONTROLS
@@ -186,11 +188,83 @@ def _attested_controls(db: Session, system_id: str) -> Dict[str, Dict[str, Any]]
     ).fetchall():
         if task_key.startswith("control:"):
             found.append((task_key.split(":", 1)[1], {"statement": statement, "by": by, "at": str(at), "source": "plan_attestation"}))
+    for name, people, at in db.execute(
+        text(
+            "SELECT p.name, COUNT(*), MAX(k.acknowledged_at) FROM org_policy_acknowledgements k "
+            "JOIN org_policies p ON p.id = k.policy_id AND p.org_id = k.org_id "
+            "WHERE k.org_id = :org AND p.status <> 'retired' AND k.version = p.published_version GROUP BY p.id, p.name"
+        ),
+        {"org": org},
+    ).fetchall():
+        found.append((POLICY_CONTROL, {"statement": f"{name}: acknowledged by {people}", "by": None, "at": str(at), "source": "policy_acknowledgement"}))
     out: Dict[str, Dict[str, Any]] = {}
     for control, att in sorted(found, key=lambda f: f[1]["at"]):
         if control not in GATE_CONTROLS:
             out[control] = {**att, "confidence": ATTESTATION_CONFIDENCE}
     return out
+
+
+def _control_evidence(db: Session, system_id: str, records: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    """(accepted evidence mappings, control assessments by clause) of this system, for the clause map.
+
+    The assurance store's controls are framework clauses: a control's catalogue clause is its framework's key joined to
+    its external id, or to its parent requirement for a workbook sub-control. Rows are read in the system's own org. A
+    mapping counts while its run passed and still stands (the readiness rule) and its record survives the latest
+    material change; its evidence is weighed as the gate weighs any record.
+    """
+    from src.application.services.fairness_run_service import _weigh
+    from src.application.services.framework_catalog_service import CATALOGUE_STORE_KEYS
+    from src.application.services.governance_assurance_service import GovernanceAssuranceService
+
+    org = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+    if not org:
+        return [], {}
+    catalogue_key = {store: key for key, store in CATALOGUE_STORE_KEYS.items()}
+    active = _catalogue()["active"]
+    clause_of: Dict[str, str] = {}
+    by_clause: Dict[str, List[Dict[str, Any]]] = {}
+    for assessment_id, applicability, status, justification, external_id, parent, store_key in db.execute(
+        text(
+            "SELECT a.id, a.applicability, a.status, a.justification, d.external_id, d.parent_requirement_id, v.framework_key "
+            "FROM governance_control_assessments a "
+            "JOIN governance_control_definitions d ON d.id = a.control_definition_id "
+            "JOIN governance_framework_versions v ON v.id = d.framework_version_id "
+            "JOIN governance_framework_assignments g ON g.id = a.framework_assignment_id "
+            "WHERE a.org_id = :org AND a.system_id = :id AND d.active = 1 "
+            # only the newest assignment of each framework: an older version still assigned does not speak for the clause
+            "AND NOT EXISTS (SELECT 1 FROM governance_framework_assignments g2 "
+            "JOIN governance_framework_versions v2 ON v2.id = g2.framework_version_id "
+            "WHERE g2.org_id = g.org_id AND g2.system_id = g.system_id AND v2.framework_key = v.framework_key "
+            "AND (g2.created_at, g2.id) > (g.created_at, g.id))"
+        ),
+        {"org": org, "id": system_id},
+    ).fetchall():
+        fw = catalogue_key.get(store_key)
+        key = next((k for k in (f"{fw}|{external_id}", f"{fw}|{parent}") if k in active), None) if fw else None
+        if key:
+            clause_of[assessment_id] = key
+            by_clause.setdefault(key, []).append(
+                {"applicability": applicability, "status": status, "justification": justification, "confidence": ATTESTATION_CONFIDENCE}
+            )
+    outdated = GovernanceAssuranceService(db)._outdated_catalogue_runs(org, system_id)
+    current = {r["id"]: r for r in records}
+    mapped = []
+    for assessment_id, evidence_id, run_id in db.execute(
+        text(
+            "SELECT m.control_assessment_id, m.artifact_evidence_id, r.id FROM governance_control_evidence m "
+            "JOIN governance_evidence_runs r ON r.id = m.evidence_id AND r.org_id = m.org_id "
+            "WHERE m.org_id = :org AND m.system_id = :id AND m.state = 'accepted' AND r.result = 'passed'"
+        ),
+        {"org": org, "id": system_id},
+    ).fetchall():
+        record = current.get(evidence_id)
+        if assessment_id not in clause_of or run_id in outdated or not record:
+            continue
+        evidence_class, confidence, state = _weigh(record)
+        evaluation_id = (record.get("content") or {}).get("evaluationId") if isinstance(record.get("content"), dict) else None
+        mapped.append({"clause": clause_of[assessment_id], "evaluationId": evaluation_id, "evidenceId": evidence_id, "state": state,
+                       "evidenceClass": evidence_class, "confidence": round(confidence, 2), "label": evaluation_id or "evidence run"})
+    return mapped, by_clause
 
 
 def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision: bool = True) -> Dict[str, Any]:
@@ -251,6 +325,7 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
             "FairMind calls it under Model connection, and fairness is measured by a behaviour test instead."
         )
     gate["attestedControls"] = _attested_controls(db, system_id)
+    gate["mappedEvidence"], gate["controlAssessments"] = _control_evidence(db, system_id, records)
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
     if gate["policy"]["warnings"]:
@@ -480,6 +555,28 @@ def get_clause_map(
     return payload
 
 
+@router.get("/systems/{system_id}/soa/{framework_key}")
+def get_statement_of_applicability(
+    system_id: str,
+    framework_key: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """One framework's clauses for this system as Statement of Applicability CSV, from the same clause map."""
+    if framework_key not in _catalogue()["frameworks"]:
+        raise HTTPException(status_code=404, detail="Framework not found")
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    system = _system_row(db, system_id)
+    frameworks = clause_map(_gate_payload(db, system_id, system.risk_tier), frameworks=[framework_key])["frameworks"]
+    if not frameworks:
+        raise HTTPException(status_code=404, detail="The framework has no active clauses")
+    return Response(
+        statement_of_applicability(frameworks[0]), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="soa-{framework_key}-{system_id}.csv"'},
+    )
+
+
 @router.get("/systems/{system_id}/seals")
 def get_decision_seals(
     system_id: str,
@@ -573,7 +670,7 @@ def get_estate_gates(
     return out
 
 
-WEAKEST_FIRST = ("fails", "stale", "open", "none", "planned", "estimated", "partial", "attested", "proven")  # none: nothing reaches the clause
+WEAKEST_FIRST = ("fails", "stale", "open", "none", "planned", "estimated", "partial", "attested", "excluded", "proven")  # none: nothing reaches the clause
 
 
 def _weakness(state: str) -> int:

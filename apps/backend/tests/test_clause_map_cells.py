@@ -222,3 +222,44 @@ def test_a_failing_csv_fairness_run_still_counts_after_a_later_passing_evaluatio
     # a newer passing CSV run clears it
     fixed = _record("fairness_test", 0.95, "measured", passes=True, ts="2026-11-06T12:00:00+00:00")
     assert "fails" not in next(c for c in release_gate("low", [csv, fixed, _evaluation("EV-FAI-05", "passed")], now=NOW)["checks"] if c["key"] == "fairness")
+
+
+def test_accepted_mappings_and_control_assessments_reach_their_clauses():
+    def iso(**extra):
+        gate = {**release_gate("medium", [], now=NOW, include_environmental=False), **extra}
+        fw = clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]
+        return fw, {c["control"]: c for c in fw["clauses"]}
+
+    mapped = lambda key, ev: {"clause": key, "evaluationId": ev, "evidenceId": f"e-{ev}", "state": "proven", "evidenceClass": "measured", "confidence": 1.0, "label": ev}  # noqa: E731
+    # an accepted mapping proves only a clause its evaluation tests: EV-TST-01 tests A.6.2.4, EV-DAT-01 does not
+    _, clauses = iso(mappedEvidence=[mapped("ISO42001|A.6.2.4", "EV-TST-01"), mapped("ISO42001|A.6.2.3", "EV-DAT-01")])
+    assert (clauses["A.6.2.4"]["state"], clauses["A.6.2.4"]["cell"]) == ("proven", "proven")
+    assert clauses["A.6.2.3"]["state"] == "partial"
+    row = lambda applicability, status="not_started", justification=None: {"applicability": applicability, "status": status, "justification": justification, "confidence": 0.3}  # noqa: E731
+    fw, clauses = iso(controlAssessments={
+        "ISO42001|A.10.4": [row("not_applicable", justification="No customers use the system.")],
+        "ISO42001|A.10.3": [row("not_applicable")],  # no justification: not excluded
+        "ISO42001|A.10.2": [row("applicable", "accepted")],
+    })
+    assert (clauses["A.10.4"]["state"], clauses["A.10.4"]["cell"], clauses["A.10.4"]["justification"]) == ("excluded", "excluded", "No customers use the system.")
+    assert clauses["A.10.3"]["state"] == "open" and clauses["A.10.2"]["state"] == "attested"
+    assert fw["counts"]["excluded"] == 1 and sum(fw["counts"][s] for s in ("proven", "partial", "attested", "excluded", "open")) == fw["counts"]["total"]
+
+
+def test_an_accepted_mapping_is_only_as_strong_as_its_evaluation_path_and_a_failure_is_never_excluded():
+    from src.application.services.clause_map_service import statement_of_applicability
+
+    # EV-DAT-03 tests A.7.4 but its control only partially satisfies it: an accepted mapping cannot prove it
+    m = {"clause": "ISO42001|A.7.4", "evaluationId": "EV-DAT-03", "evidenceId": "e1", "state": "proven", "evidenceClass": "measured", "confidence": 1.0, "label": "EV-DAT-03"}
+    gate = {**release_gate("medium", [_record("monitoring", 0.90, "measured", passes=False)], now=NOW, include_environmental=False), "mappedEvidence": [m]}
+    failing = next(c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"] if c["cell"] == "fails")
+    note = "=HYPERLINK(\"http://x\",\"see\")"
+    gate["controlAssessments"] = {failing["key"]: [{"applicability": "not_applicable", "status": "not_started", "justification": note, "confidence": 0.3}]}
+    fw = clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]
+    clauses = {c["key"]: c for c in fw["clauses"]}
+    assert clauses["ISO42001|A.7.4"]["state"] == "partial"
+    # a failing measured result outweighs a not-applicable statement
+    row = clauses[failing["key"]]
+    assert row["cell"] == "fails" and row["state"] != "excluded" and row["applicability"] == "not_applicable"
+    # free text cannot run as a spreadsheet formula in the Statement of Applicability
+    assert "'" + note.replace('"', '""') in statement_of_applicability(fw)

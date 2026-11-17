@@ -24,7 +24,7 @@ export function confirmedFrameworks(systems: Array<{ metadata?: Record<string, u
   return [...out].map(([key, name]) => ({ key, name }))
 }
 
-const emptyTotals = (): Record<CellState, number> => ({ proven: 0, estimated: 0, partial: 0, attested: 0, planned: 0, open: 0, fails: 0, stale: 0, atorg: 0 })
+const emptyTotals = (): Record<CellState, number> => ({ proven: 0, estimated: 0, partial: 0, attested: 0, excluded: 0, planned: 0, open: 0, fails: 0, stale: 0, atorg: 0 })
 
 /** Requirements by system: an Org column, then one group per risk tier of the systems that confirmed the framework. */
 export function systemGrid(journey: Journey, fw: FrameworkSystems, showAll: boolean) {

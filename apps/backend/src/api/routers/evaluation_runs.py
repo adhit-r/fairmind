@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import bindparam, insert, text
 from sqlalchemy.orm import Session
 
-from api.routes.ai_governance import CLOSED_RISK_STATUSES, _ensure_tables, _risk_score, _utc_now_iso
+from api.routes.ai_governance import CLOSED_RISK_STATUSES, RISK_ACCEPTANCE_PENDING, _ensure_tables, _risk_score, _utc_now_iso, _without_pending
 from api.routes import llm, platform_connections
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS
@@ -243,6 +243,9 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
     finding = {"sys": system_id, "source": "fairmind.eval_engines", "tag": f'%"evaluationId": "{evaluation_id}"%', "closed": list(CLOSED_RISK_STATUSES), "now": now}
     where = "WHERE system_id = :sys AND source = :source AND metadata_json LIKE :tag AND status NOT IN :closed"
     if outcome["status"] == "passed":
+        pending = db.execute(text(f"SELECT id, metadata_json FROM governance_risks {where} AND status = :pending").bindparams(bindparam("closed", expanding=True)), {**finding, "pending": RISK_ACCEPTANCE_PENDING})
+        for risk_id, metadata in pending.fetchall():  # resolving drops a waiting acceptance with it
+            db.execute(text("UPDATE governance_risks SET metadata_json = :metadata WHERE id = :id"), {"metadata": _without_pending(metadata), "id": risk_id})
         db.execute(text(f"UPDATE governance_risks SET status = 'resolved', updated_at = :now {where}").bindparams(bindparam("closed", expanding=True)), finding)
     elif outcome["status"] == "failed" and not db.execute(text(f"SELECT id FROM governance_risks {where}").bindparams(bindparam("closed", expanding=True)), finding).fetchone():
         db.execute(

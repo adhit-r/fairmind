@@ -6,6 +6,10 @@ import { useState, useEffect } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 
+/** Statuses that settle a risk; every other status (open, acceptance_pending, ...) still blocks release, matching the backend. */
+export const CLOSED_RISK_STATUSES = ['accepted', 'closed', 'resolved', 'mitigated']
+export const isOpenRisk = (r: { status: string }) => !CLOSED_RISK_STATUSES.includes(r.status)
+
 export interface Risk {
   id: string
   systemId?: string
@@ -17,6 +21,16 @@ export interface Risk {
   timestamp: string
   /** "manual_assessment" when a person typed it in; anything else was raised by FairMind. */
   source?: string
+  metadata?: { pendingAcceptance?: PendingAcceptance }
+}
+
+/** An acceptance one person proposed, waiting for a different person to approve it (status "acceptance_pending"). */
+export interface PendingAcceptance {
+  rationale: string
+  owner: string | null
+  proposedBy: string
+  proposedById: string
+  proposedAt: string
 }
 
 /** A general MIT/IBM risk-library entry. Not matched to any system and not a finding. */
@@ -130,6 +144,13 @@ export function useRisks(systemId?: string) {
     setReloads((n) => n + 1)
   }
 
+  // A different person approves a pending acceptance, or either person withdraws it.
+  const settleAcceptance = async (riskId: string, action: 'approve' | 'withdraw') => {
+    const response: ApiResponse<unknown> = await apiClient.post(API_ENDPOINTS.aiGovernance.riskAcceptance(riskId, action))
+    if (!response.success) throw new Error(response.error || 'Could not record the decision')
+    setReloads((n) => n + 1)
+  }
+
   // Also loading while the data on hand belongs to a different system than the one asked for.
-  return { data, suggested, summary, loading: loading || loadedFor !== systemId, error, assessRisks, treatRisk }
+  return { data, suggested, summary, loading: loading || loadedFor !== systemId, error, assessRisks, treatRisk, settleAcceptance }
 }

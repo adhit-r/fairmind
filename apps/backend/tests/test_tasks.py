@@ -73,6 +73,20 @@ def test_an_agent_task_reports_back_and_blocks_when_it_cannot_run(org):
     assert editor.post(f"/api/v1/tasks/{task['id']}/run").json()["status"] == "blocked"
 
 
+def test_an_agent_task_does_not_run_while_an_autopilot_run_holds_the_system(org):
+    from api.routes import autopilot
+
+    clients, _, system_id, engine = org
+    editor = clients["editor"]
+    with autopilot._system_lock(engine, system_id) as got:
+        assert got
+        task = editor.post("/api/v1/tasks", json={
+            "title": "Re-run the fairness check", "assignee_agent": "autopilot", "agent_action": "fairness_run", "system_id": system_id,
+        }).json()
+    assert task["status"] == "blocked"
+    assert autopilot.RUN_IN_PROGRESS in editor.get(f"/api/v1/tasks/{task['id']}").json()["comments"][-1]["body"]
+
+
 def test_tasks_stay_in_their_organisation(org):
     clients, _, _, engine = org
     task = clients["editor"].post("/api/v1/tasks", json={"title": "Ours"}).json()
