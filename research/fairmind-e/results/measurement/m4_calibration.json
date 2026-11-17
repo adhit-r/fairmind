@@ -1,6 +1,6 @@
 {
   "reference": {
-    "file": "/Users/adhi/fairmind/research/fairmind-e/results/measurement/m4_power_reference.csv",
+    "file": "m4_power_reference.csv",
     "column": "reference_kwh_total",
     "caveat": "powermetrics reports per-subsystem SoC power from Apple's own model; the vendor documents these values as estimated. This is an independent, higher-directness reference, not ground truth, and it excludes display, storage, networking, and PSU losses."
   },
@@ -27,7 +27,8 @@
       "mean_abs_pct_error": 72.59,
       "median_signed_pct_error": 106.11,
       "direction": "over-estimates",
-      "mean_log_ratio": 0.5085
+      "mean_log_ratio": 0.5085,
+      "median_abs_pct_error_after_median_rescale": 6.79
     },
     "manual_flop": {
       "provenance_class": "manual",
@@ -37,7 +38,8 @@
       "mean_abs_pct_error": 589.51,
       "median_signed_pct_error": 202.99,
       "direction": "over-estimates",
-      "mean_log_ratio": 1.5855
+      "mean_log_ratio": 1.5855,
+      "median_abs_pct_error_after_median_rescale": 39.35
     }
   },
   "confidence_vs_error": {

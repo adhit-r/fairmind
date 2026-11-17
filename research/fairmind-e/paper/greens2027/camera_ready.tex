@@ -48,12 +48,12 @@ inside FairMind, an open-source AI governance platform. A confidence score
 fixed by provenance class, crossed with an impact tier, resolves to \emph{go},
 \emph{conditional\_go}, or \emph{no\_go} and blocks the platform's
 deployment-approval workflow. In a measurement study over four workloads, a
-software power tracker and an analytic FLOP model disagreed in direction from
-one workload to the next; no choice of the FLOP model's free constant brings
-them within a factor of 4.7 on every workload. The study also caught our own
+software power tracker and an analytic FLOP model disagreed by a ratio that
+varied 22-fold across workloads, so no choice of the FLOP model's free constant
+brings them closer than a factor of 4.7 on every workload. The study also caught our own
 gate passing a weak number: the tracker had fallen back to a CPU-load model,
 yet the gate, which keyed provenance on tool identity, gave it high confidence
-and an unconditional \emph{go} on all 20 runs. Finally, casting a fine-tune to
+and an unconditional \emph{go} on every run. Finally, casting a fine-tune to
 \texttt{bfloat16} made it 46 times slower, and 44 times on a second host
 that has hardware \texttt{bfloat16}, so a gate that accepts declared mitigations would have logged a reduction that
 never happened. Both failures argue for deriving provenance from how a number
@@ -125,10 +125,10 @@ cannot lower a gate outcome. Confidence bands (\emph{high} $\geq 0.70$;
 here so they do not collide with the provenance classes.} cross with impact
 tiers into the matrix in Fig.~\ref{fig:main}(b). Confidence 0.0 short-circuits
 to \emph{no\_go}: an undisclosed claim never passes. The matrix is deliberately
-asymmetric: \emph{vendor\_reported} evidence tops out in \emph{moderate}, so a
-medium-impact workload assessed only from provider figures never receives an
-unconditional \emph{go}, and no evidence earns a high-impact release more than
-\emph{conditional\_go}. A \emph{conditional\_go} cannot be approved until it
+asymmetric: no evidence earns a medium- or high-impact release more than
+\emph{conditional\_go}, and at high impact only \emph{high}-band evidence earns
+even that, so a high-impact workload assessed only from provider figures
+(\emph{vendor\_reported}, \emph{moderate}) is \emph{no\_go}. A \emph{conditional\_go} cannot be approved until it
 carries a dated, owned mitigation or an explicit exception with owner, expiry,
 and rationale, so reviewer overrides are auditable rather than informal. Six
 controls (ENV-1 to ENV-6: boundary, energy accounting, dual location and market
@@ -189,17 +189,19 @@ the best possible constant still leaves them a factor of 4.7 apart at the
 extremes. The reason is visible in the tracker's own output. With no hardware
 counters it ran in load-model fallback, and its implied power was 23.5--27.2~W
 on every workload, so it effectively measured wall-clock time. The FLOP model
-counts arithmetic. The two plausibly diverge by each workload's arithmetic
-intensity: classical ML spends much of its time in solver and interpreter
-overhead the FLOP count ignores, while the fine-tune is arithmetic-heavy. Two methods a practitioner
-might reasonably choose disagree in direction, not just in degree.
+counts arithmetic, so their ratio tracks each workload's achieved FLOP rate:
+classical ML spends much of its time in solver and interpreter overhead the
+FLOP count ignores, while the fine-tune is arithmetic-heavy. Two methods a
+practitioner might reasonably choose are not interchangeable, and which one
+reads higher depends on the workload and on an arbitrary constant.
 
 \paragraph{The gate passed its own degraded tracker} Under the
 policy in force when these runs were gated (release v0.3.0-alpha), provenance
 was keyed on tool identity. Codecarbon is a power tracker, so it was classed
 \emph{tool\_estimated}, confidence 0.72, \emph{high} band, \emph{go}; the FLOP
-model was \emph{manual}, 0.30, \emph{low} band, \emph{conditional\_go}, on all
-20 runs (Fig.~\ref{fig:main}(b)). But the tracker's figure was itself a
+model was \emph{manual}, 0.30, \emph{low} band, \emph{conditional\_go}, on every
+run, since the class followed from the tool name alone
+(Fig.~\ref{fig:main}(b)). But the tracker's figure was itself a
 load-times-TDP model, an analytic estimate in kind. The gate gave an
 unconditional release to exactly the kind of weak source it exists to catch,
 because it trusted the tool's name rather than how the number was produced. A
@@ -215,8 +217,8 @@ self-reported number.
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{fig2_mitigations.pdf}
-  \caption{The three physical mitigation reruns, one execution each ($n=1$, so
-  no interval is drawn). Casting the fine-tune to \texttt{bfloat16} on a host
+  \caption{The three physical mitigation reruns on the M1, one execution each
+  ($n=1$, so no interval is drawn; the five M4 repeats are given in the text). Casting the fine-tune to \texttt{bfloat16} on a host
   with no optimised kernel took it from 62.7\,s to 2887.6\,s; its bar is
   clipped at the break mark. Region- and time-shift accounting scenarios are
   not shown: they recompute one run against placeholder emission factors and
@@ -227,8 +229,9 @@ self-reported number.
 \paragraph{Mitigations} Only three mitigations were physical reruns
 (Fig.~\ref{fig:mitigations}), each a single execution here; we repeated them
 five times on a second host (Apple M4). A reduced-precision cast on RAG cut
-intensity 17.5 percent (15.9 on the M4). Batching cut 22.8 percent, but only 1.3
-on the M4, so that saving is host-dependent, not a property of batching. The
+energy 17.5 percent (15.2--18.2 on the M4). Batching cut 22.8 percent, but only
+$-2.7$ to $+0.3$ on the M4, so that single-run saving did not reproduce on a
+second host. The
 third inverted: casting the fine-tune to \texttt{bfloat16} made it 46 times
 slower, and the tracker estimated roughly 41 times the energy. It was 44 times
 slower on the M4 as well, although that chip implements the Arm
@@ -238,8 +241,9 @@ measured directly; the energy figure largely follows from it, since a
 load-based power model multiplies utilisation by time. The
 point is not that the intervention is bad, but that ``we reduced precision,
 therefore we cut carbon'' is routine, plausible, and here false in the harmful
-direction. This is why ENV-6 requires a mitigation to be re-measured rather
-than declared.
+direction. This is why ENV-6 should require a mitigation to be re-measured
+rather than declared. The shipped control does not yet: it accepts a dated,
+owned plan, which this example shows is not enough.
 
 \section{Implications for green software engineering}
 
@@ -273,13 +277,17 @@ counters, so the study compares an estimate with an estimate and never claims
 the \emph{measured} class. Benchmark workloads exercise only the low-impact
 row, and the FLOP model uses placeholder constants. A first calibration
 against \texttt{powermetrics} was discarded because background load
-contaminated 19 of 20 runs. A rerun on a quiet Apple M4 (200\,ms sampling, 19
-clean runs) supports the ordering: the tracker's median error against the
-reference was 106 percent, the FLOP model's 203 percent, and the tracker again
-implied a flat 12\,W on every workload. Two caveats bound this. The reference
-is Apple's SoC power model, which omits memory and power-supply losses, so
-absolute errors partly reflect scope; and both methods are \emph{manual} on
-this hardware, so the upper classes remain uncalibrated. A host with hardware
+contaminated 19 of 20 runs, and the M1 study itself ran without a background
+monitor. A rerun on a quiet, monitored Apple M4 (200\,ms sampling; one of 20
+runs excluded by a 35 percent background threshold fixed in the tooling
+beforehand) favours the tracker: after dividing each method by its own median
+ratio to the reference, so the FLOP model's arbitrary constant drops out, the
+median error was 6.8 percent for the tracker and 39 percent for the FLOP
+model, and the tracker again implied a flat 12\,W on every workload. Two
+caveats bound this. The reference is Apple's SoC power model, which omits
+memory and power-supply losses, so both methods' absolute levels partly
+reflect scope; and both methods are \emph{manual} on this hardware, so this is
+evidence within the lowest class, and the upper classes remain uncalibrated. A host with hardware
 counters and a 15-reviewer expert panel already designed are the next steps. Code, run data, and analysis scripts are public in the FairMind
 repository (\url{https://github.com/adhit-r/fairmind}); the study runs are
 archived as release v0.3.0-alpha (doi:10.5281/zenodo.24043235), the
