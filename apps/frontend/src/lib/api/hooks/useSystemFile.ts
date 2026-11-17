@@ -107,9 +107,11 @@ export interface ReleaseGate {
   band: 'measured' | 'estimated' | 'unknown'
   checks: GateCheck[]
   reasons: string[]
+  /** Checks proven and passing; a failing check is counted in failing instead. */
   proven: number
   attested: number
   open: number
+  failing?: number
   /** The latest approval request's status, or not_requested. */
   approvalStatus?: string
   systemId?: string

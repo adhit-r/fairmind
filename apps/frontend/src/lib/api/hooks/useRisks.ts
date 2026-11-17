@@ -123,6 +123,13 @@ export function useRisks(systemId?: string) {
     return response.data
   }
 
+  // A person accepts or mitigates an open finding, with the reason; the server keeps the decision as a record.
+  const treatRisk = async (riskId: string, body: { status: 'accepted' | 'mitigated'; rationale: string; owner?: string | null }) => {
+    const response: ApiResponse<unknown> = await apiClient.patch(API_ENDPOINTS.aiGovernance.treatRisk(riskId), body)
+    if (!response.success) throw new Error(response.error || 'Could not record the decision')
+    setReloads((n) => n + 1)
+  }
+
   // Also loading while the data on hand belongs to a different system than the one asked for.
-  return { data, suggested, summary, loading: loading || loadedFor !== systemId, error, assessRisks }
+  return { data, suggested, summary, loading: loading || loadedFor !== systemId, error, assessRisks, treatRisk }
 }

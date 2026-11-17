@@ -29,7 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes import llm
-from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes.ai_governance import _ensure_tables, _load_json_value, _utc_now_iso
 from api.routes.packs import _manager, _member
 from database.connection import get_db
 from src.application.services.governance_assurance_service import OrgMembership
@@ -126,8 +126,8 @@ def _at(data: Any, path: str) -> Any:
     return data
 
 
-async def ask(target: Target, prompt: str) -> str:
-    """One prompt to the system under test and its answer as text."""
+async def ask(target: Target, prompt: str, attempts: int = 1) -> str:
+    """One prompt to the system under test and its answer as text; attempts > 1 retries rate limits and gateway errors."""
     if target.via_runner:
         raise Unreachable("This system is called by your runner inside your network, not by FairMind")
     url = llm._public_https(target.url, "Endpoint")  # again at call time: DNS can change after save
@@ -144,7 +144,7 @@ async def ask(target: Target, prompt: str) -> str:
         body = _fill(json.loads(target.fields["requestTemplate"]), prompt)
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_S, headers=headers, follow_redirects=False) as client:
-            resp = await client.post(url, json=body)
+            resp = await llm.post_with_retry(client, url, attempts, json=body)
     except httpx.TimeoutException:
         raise TimedOut("The system did not answer in time")
     except httpx.HTTPError:
@@ -222,7 +222,12 @@ def stored_target(db: Session, org_id: str, system_id: str) -> Target:
     auth = llm.decrypt(row["auth_enc"])
     if row["auth_enc"] and auth is None:
         raise HTTPException(status_code=409, detail="The stored auth value for this system can no longer be read; enter it again")
-    return Target(row["kind"], row["url"], json.loads(row["fields_json"] or "{}"), auth)
+    fields = json.loads(row["fields_json"] or "{}")
+    if not fields.get("intendedUse"):  # the purpose a person gave when classifying the system, when the connection has none
+        meta = db.execute(text("SELECT metadata_json FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+        purpose = ((_load_json_value(meta, {}).get("applicability") or {}).get("answers") or {}).get("intendedPurpose")
+        fields["intendedUse"] = (purpose or "").strip()
+    return Target(row["kind"], row["url"], fields, auth)
 
 
 def _fields(body: TargetBody) -> Dict[str, str]:

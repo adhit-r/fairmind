@@ -789,8 +789,10 @@ def release_gate(
         "band": band_from_score(overall),
         "checks": checks,
         "reasons": reasons,
-        "proven": sum(1 for c in checks if c["state"] == "proven"),
-        "attested": sum(1 for c in checks if c["state"] == "attested"),
+        # a failing check is well evidenced (state proven) but proves nothing passed, as clause_state reads it
+        "proven": sum(1 for c in checks if c["state"] == "proven" and not c.get("fails")),
+        "failing": sum(1 for c in checks if c.get("fails")),
+        "attested": sum(1 for c in checks if c["state"] == "attested" and not c.get("fails")),
         "open": len(open_checks),
         "approvalStatus": approval_status,
         "evaluations": list(runs.values()),

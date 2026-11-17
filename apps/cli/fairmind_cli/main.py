@@ -102,12 +102,13 @@ APPROVAL_WORD = {"not_requested": "not requested", "pending": "pending", "approv
 def render_gate(gate: Dict[str, Any]) -> str:
     lines = [
         f"{VERDICT_WORD.get(gate['verdict'], gate['verdict'])}  confidence {gate['confidence']:.2f} ({gate['band']})  "
-        f"{gate['proven']} proven, {gate['attested']} attested, {gate['open']} open",
+        f"{gate['proven']} proven, {gate['attested']} attested, {gate['open']} open" + (f", {gate['failing']} failing" if gate.get("failing") else ""),
         "",
     ]
     for check in gate.get("checks", []):
         conf = f" {check['confidence']:.2f}" if check.get("confidence") else ""
-        lines.append(f"  {STATE_MARK.get(check['state'], '?')} {check['label']:<22} {check['state']}{conf}")
+        state = "fails" if check.get("fails") else check["state"]  # well evidenced, but the test failed
+        lines.append(f"  {'x' if check.get('fails') else STATE_MARK.get(state, '?')} {check['label']:<22} {state}{conf}")
     if "approvalStatus" in gate:
         lines.append(f"    {'Release decision':<22} {APPROVAL_WORD.get(gate['approvalStatus'], gate['approvalStatus'])}")
     if gate.get("reasons"):
@@ -702,14 +703,25 @@ def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[s
     lines: List[str] = []
     with _client(args, factory) as client:
         fw = _framework(client, args.system, key)
-        open_clauses = [c for c in fw["clauses"] if c["state"] == "open"]
+        # partial clauses are listed with the open ones: some proof, but not through a link that satisfies them
+        open_clauses = [c for c in fw["clauses"] if c["state"] in ("open", "partial")]
         packs = _packs(client)
         lines += [_counts(fw)]
-        evals = [e for e in packs("/evaluations") if any(t["key"] in {c["key"] for c in open_clauses} for t in e["tests"])]
+        # an evaluation reaches clauses through its common control's crosswalk, as the clause map reads it
+        reach: Dict[str, set] = {}
+        for link in packs("/controls")["crosswalk"]:
+            reach.setdefault(link["commonControl"], set()).add(link["key"])
+        here = {c["key"] for c in fw["clauses"]}
+        still_open = {c["key"] for c in fw["clauses"] if c["state"] == "open"}
         steps: Dict[str, Dict[str, Any]] = {}
-        for e in evals:
+        for e in packs("/evaluations"):
+            # a clause the evaluation does not test it can only support, which moves an open clause and never a partial one
+            tests = {t["key"] for t in e.get("tests") or []}
+            clauses = {k for k in reach.get(e.get("commonControl"), set()) & here if k in still_open or k in tests}
+            if not clauses & {c["key"] for c in open_clauses}:
+                continue
             latest = next((s for s in (e.get("results") or {}).get("systems", []) if s["systemId"] == args.system), None)
-            row = {"id": e["id"], "name": e["name"], "clauses": [t["key"] for t in e["tests"] if t["framework"].upper() == key],
+            row = {"id": e["id"], "name": e["name"], "clauses": sorted(clauses),
                    "latest": latest["status"] if latest else None, "runnable": bool(e.get("runnable")), "needs": None}
             if row["runnable"] and row["latest"] != "passed":
                 steps[e["id"]] = _plan_step(packs(f"/evaluations/{e['id']}/engine"), inputs.get(e["id"]) or {}, base)
@@ -717,9 +729,9 @@ def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[s
             report["evaluations"].append(row)
         if open_clauses:
             lines.append("")
-            lines.append("Open clauses")
+            lines.append("Open or partial clauses")
         for clause in open_clauses:
-            lines.append(f"  {clause['control']:<10} {clause['title']}  (waits on {_waits_on(clause)})")
+            lines.append(f"  {clause['control']:<10} {clause['title']}  ({clause['state']}, waits on {_waits_on(clause)})")
             for row in (r for r in report["evaluations"] if clause["key"] in r["clauses"]):
                 state = row["latest"] or "not run"
                 how = "" if row["latest"] == "passed" else ("ready to run" if not row["needs"] else "needs " + ", ".join(row["needs"])) if row["runnable"] else "evidence only, FairMind does not run it"
@@ -756,8 +768,9 @@ def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[s
     still = [c for c in after["clauses"] if c["state"] == "open"]
     lines += ["", ("After the runs, " if args.run else "") + _counts(after)]
     lines += [f"  still open: {c['control']} (waits on {_waits_on(c)})" for c in still]
+    lines += [f"  partial: {c['control']} (waits on {_waits_on(c)})" for c in after["clauses"] if c["state"] == "partial"]
     if still and any(r["status"] == "passed" for r in report["runs"]):
-        lines.append("  A passing evaluation is hashed into the pack as evidence; it closes the clauses its common control maps to, so a clause it tests outside that map stays open.")
+        lines.append("  A passing evaluation is hashed into the pack as evidence; it proves the clauses of its common control's map that it also tests, and only supports the rest.")
     out(json.dumps(report, indent=2, default=str) if args.json else "\n".join(lines))
     return EXIT_NO_GO if still else EXIT_GO
 

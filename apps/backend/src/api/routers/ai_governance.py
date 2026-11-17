@@ -15,12 +15,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, UserRole, get_current_active_user
@@ -34,7 +34,7 @@ from src.application.services.governance_assurance_service import (
     OrgMembership,
     member_user_matches,
 )
-from src.application.services.fairness_run_service import evaluation_status, gate_check, gate_checks
+from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, evaluation_status, gate_check, gate_checks
 
 
 def _caller_org(request: Request) -> str:
@@ -580,6 +580,12 @@ class RemediationCreateRequest(BaseModel):
     notes: str = ""
 
 
+class RiskTreatmentRequest(BaseModel):
+    status: Literal["accepted", "mitigated"]
+    rationale: str = Field(min_length=1, max_length=2000)
+    owner: Optional[str] = Field(default=None, max_length=200)
+
+
 class RemediationUpdateRequest(BaseModel):
     status: Optional[str] = Field(
         default=None,
@@ -1063,7 +1069,7 @@ def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]
 
 # Decision records stored as evidence so seals hash them; they are not evidence of a control,
 # so they neither move the lifecycle stage nor count toward readiness.
-RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted"}
+RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted", "risk_acceptance"}
 
 
 def _reject_record_only_type(evidence_type: str) -> None:
@@ -2840,6 +2846,56 @@ def update_remediation_task(
     if not updated_row:
         raise HTTPException(status_code=404, detail="Remediation task not found")
     return _serialize_remediation_task_row(updated_row)
+
+
+@router.patch("/risks/{risk_id}")
+def treat_risk(
+    risk_id: str,
+    request: RiskTreatmentRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """A person accepts or mitigates an open finding, with the reason and the residual risk (ISO/IEC 42001 6.1.3, 8.3).
+    The decision is also an evidence record, so a later decision seal hashes it. A closed risk no longer blocks release."""
+    _ensure_tables(db)
+    row = db.execute(text("SELECT system_id, title, severity, likelihood, status FROM governance_risks WHERE id = :id"), {"id": risk_id}).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Risk not found")
+    membership = _require_system_access(db, str(row[0]), current_user, mutate=True)
+    if row[4] in CLOSED_RISK_STATUSES:
+        raise HTTPException(status_code=409, detail="This risk is already closed")
+    rationale = request.rationale.strip()
+    if not rationale:
+        raise HTTPException(status_code=422, detail="Say why the risk is accepted or mitigated")
+    actor, now = _authenticated_actor(current_user), _utc_now_iso()
+    record = {
+        "riskId": risk_id, "title": row[1], "decision": request.status, "rationale": rationale,
+        "owner": (request.owner or "").strip() or None, "residualSeverity": row[2], "residualLikelihood": row[3],
+        "decidedBy": actor, "decidedAt": now,
+    }
+    # Guarded: a passing run may have resolved the risk since the read above.
+    if not db.execute(
+        text("UPDATE governance_risks SET status = :status, updated_at = :now WHERE id = :id AND status NOT IN :closed").bindparams(
+            bindparam("closed", expanding=True)
+        ),
+        {"status": request.status, "now": now, "id": risk_id, "closed": list(CLOSED_RISK_STATUSES)},
+    ).rowcount:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This risk is already closed")
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :org_id, 'risk_acceptance', :title, 'fairmind.risks', :content, :confidence, 'collected', :by, :metadata, :now, :now)"
+        ),
+        {
+            "id": str(uuid.uuid4()), "system_id": str(row[0]), "org_id": membership.org_id,
+            "title": f"Risk {request.status}: {row[1]}", "content": json.dumps(record), "confidence": ATTESTATION_CONFIDENCE,
+            "by": actor, "metadata": json.dumps({"provenance_class": "manual", "computed_at": now}), "now": now,
+        },
+    )
+    db.commit()
+    return record
 
 
 # ---------------------------------------------------------------------------

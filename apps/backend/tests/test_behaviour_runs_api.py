@@ -266,3 +266,26 @@ def test_local_needs_a_runner_target(tmp_database, stub):
     _target(client, system)
     response = client.post(f"{PACKS}/evaluations/EV-SEC-01/runs", data={"system_id": system, "runner": "1"})
     assert response.status_code == 422 and "without --local" in response.json()["detail"]
+
+
+def test_a_rate_limit_or_gateway_error_is_retried_a_bounded_number_of_times(monkeypatch):
+    import asyncio
+
+    from api.routes import llm
+
+    pauses, answers = [], [httpx.Response(503), httpx.Response(429, headers={"Retry-After": "300"}), httpx.Response(200)]
+
+    async def pause(s):
+        pauses.append(s)
+
+    monkeypatch.setattr(llm.asyncio, "sleep", pause)
+
+    async def post(statuses, attempts=3):
+        queue = list(statuses)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: queue.pop(0))) as client:
+            return (await llm.post_with_retry(client, "https://judge.test/v1", attempts, json={})).status_code
+
+    assert asyncio.run(post(answers)) == 200
+    assert 1 <= pauses[0] <= 2 and pauses[1] == llm.RETRY_AFTER_MAX_S  # jittered backoff, then Retry-After capped
+    assert asyncio.run(post([httpx.Response(503)] * 3)) == 503  # the last answer stands after three attempts
+    assert asyncio.run(post([httpx.Response(429)], attempts=1)) == 429 and len(pauses) == 4  # a request's single attempt

@@ -52,7 +52,7 @@ from database.governance_models import GovernanceEvidenceRun
 from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
 from src.application.services.eval_engines.behaviour import CallError, Live
 from src.application.services.eval_engines.platform import load_export
-from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, OrgMembership
+from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService, OrgMembership
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -237,6 +237,8 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             "now": now,
         },
     )
+    if outcome["status"] == "passed":  # proposes the ISO 42001 clauses its control reaches, for a reviewer to accept
+        GovernanceAssuranceService(db).map_catalogue_run(org_id, system_id, run_pk, evidence_id, EVALUATIONS[evaluation_id].commonControl)
     # A failed run opens one finding for this evaluation on this system; a passing run resolves it.
     finding = {"sys": system_id, "source": "fairmind.eval_engines", "tag": f'%"evaluationId": "{evaluation_id}"%', "closed": list(CLOSED_RISK_STATUSES), "now": now}
     where = "WHERE system_id = :sys AND source = :source AND metadata_json LIKE :tag AND status NOT IN :closed"
@@ -346,7 +348,7 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
 
     async def call_target(prompt: str) -> str:
         try:
-            return await ask(target, prompt)
+            return await ask(target, prompt, attempts=llm.RETRY_ATTEMPTS)
         except (TargetError, llm.LLMError) as e:
             raise CallError(f"System under test: {e}")
 
@@ -356,13 +358,13 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
 
     async def call_judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            return (await llm.complete(judge, system, user, schema))[0]
+            return (await llm.complete(judge, system, user, schema, attempts=llm.RETRY_ATTEMPTS))[0]
         except llm.LLMError as e:
             raise CallError(f"Judge: {e}")
 
     async def call_agent(agent_facts: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            return (await llm.complete(judge, AGENT_SYSTEM, json.dumps(agent_facts, default=str, sort_keys=True), AGENT_SCHEMA))[0]
+            return (await llm.complete(judge, AGENT_SYSTEM, json.dumps(agent_facts, default=str, sort_keys=True), AGENT_SCHEMA, attempts=llm.RETRY_ATTEMPTS))[0]
         except llm.LLMError as e:
             raise CallError(f"FairMind agent: {e}")
 

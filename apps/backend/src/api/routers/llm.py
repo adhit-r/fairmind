@@ -10,6 +10,7 @@ import asyncio
 import base64
 import ipaddress
 import json
+import random
 import re
 import socket
 import time
@@ -27,6 +28,9 @@ from config.settings import settings
 from src.application.services.llm_runtime import grok_cli
 
 TIMEOUT_S = 75  # under Cloudflare's 100 s edge limit, so a slow model fails here and not at the edge
+RETRY_ATTEMPTS = 3  # for background runs only; a request keeps one attempt so it stays under the edge limit
+RETRY_STATUSES = (429, 502, 503, 504)
+RETRY_AFTER_MAX_S = 20
 
 
 class LLMError(Exception):
@@ -229,6 +233,31 @@ def _with_schema(system: str, schema: Dict[str, Any]) -> str:
 # --- calls ------------------------------------------------------------------
 
 
+async def post_with_retry(client: httpx.AsyncClient, url: str, attempts: int = 1, **kwargs) -> httpx.Response:
+    """client.post, tried again after a rate limit, a gateway error or a dropped connection. A timeout is not
+    retried: the call already waited its full timeout. After the last attempt, the last answer or error stands."""
+    for attempt in range(attempts):
+        last = attempt == attempts - 1
+        try:
+            resp = await client.post(url, **kwargs)
+        except httpx.TimeoutException:
+            raise
+        except httpx.TransportError:
+            if last:
+                raise
+            resp = None
+        if resp is not None and (last or resp.status_code not in RETRY_STATUSES):
+            return resp
+        wait = (resp.headers.get("retry-after") or "") if resp is not None else ""
+        try:
+            pause = float(wait)
+            pause = pause if 0 <= pause <= RETRY_AFTER_MAX_S else RETRY_AFTER_MAX_S  # NaN and huge values get the cap
+        except ValueError:
+            pause = random.uniform(1, 2) * 2 ** attempt  # 1-2 s, then 2-4 s
+        await asyncio.sleep(pause)
+    raise ValueError("attempts must be at least 1")
+
+
 async def list_models(conn: Connection) -> List[str]:
     if not conn.provider.lists_models:
         return []
@@ -255,8 +284,9 @@ async def list_models(conn: Connection) -> List[str]:
     return sorted({m["id"] for m in resp.json().get("data", []) if isinstance(m, dict) and m.get("id")})
 
 
-async def complete(conn: Connection, system: str, user: str, schema: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """One JSON answer and what it cost: (data, {"model", "latencyMs", "usage"})."""
+async def complete(conn: Connection, system: str, user: str, schema: Dict[str, Any], attempts: int = 1) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """One JSON answer and what it cost: (data, {"model", "latencyMs", "usage"}). attempts > 1 retries an
+    OpenAI-compatible provider's rate limits and gateway errors; the Anthropic SDK retries on its own."""
     if not conn.model:
         raise LLMError("Choose a model first")
     started = time.monotonic()
@@ -304,7 +334,7 @@ async def complete(conn: Connection, system: str, user: str, schema: Dict[str, A
         }
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT_S, headers=_headers(conn)) as client:
-                resp = await client.post(f"{conn.base_url}/chat/completions", json=body)
+                resp = await post_with_retry(client, f"{conn.base_url}/chat/completions", attempts, json=body)
         except httpx.TimeoutException:
             raise LLMError(f"{conn.provider.name} did not answer in time")
         except httpx.HTTPError:

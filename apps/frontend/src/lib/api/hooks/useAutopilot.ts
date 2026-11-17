@@ -73,6 +73,7 @@ export function useAutopilot(systemId: string | undefined, reloadKey?: unknown) 
     const res = await apiClient.get<Autopilot>(`${base}/autopilot`)
     if (res.success && res.data) setData(res.data)
     else setError(res.error || 'Could not load the autopilot')
+    return res.success ? res.data : undefined
   }, [base])
 
   useEffect(() => {
@@ -92,10 +93,10 @@ export function useAutopilot(systemId: string | undefined, reloadKey?: unknown) 
     data,
     error,
     reload: load,
-    setMode: (mode: AutopilotMode) => send(apiClient.put<Autopilot>(`${base}/autopilot`, { mode }, { timeout: 120_000 })),
-    // Runs fetch data and compute metrics, and a behaviour test calls the system and the judge; the client's 10s default is too short.
+    // Turning the mode to run, or Run now, answers at once; the run continues on the server and moves lastRunAt when done.
+    setMode: (mode: AutopilotMode) => send(apiClient.put<Autopilot>(`${base}/autopilot`, { mode })),
     runNow: (action?: string) =>
-      send(apiClient.post<Autopilot>(`${base}/autopilot/run${action ? `?action=${action}` : ''}`, {}, { timeout: 120_000, enableRetry: false })),
+      send(apiClient.post<Autopilot>(`${base}/autopilot/run${action ? `?action=${action}` : ''}`, {}, { enableRetry: false })),
     setSource: (purpose: DataPurpose, url: string) => send(apiClient.put<Autopilot>(`${base}/data-sources/${purpose}`, { url })),
     removeSource: (purpose: DataPurpose) => send(apiClient.delete<Autopilot>(`${base}/data-sources/${purpose}`)),
   }

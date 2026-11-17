@@ -51,6 +51,57 @@ export interface PackEvidence {
   metadata?: string | null
 }
 
+/** One assessed control: the Statement of Applicability row, with the evidence a reviewer accepted for it. */
+export interface PackControlApplicability {
+  framework: string
+  version: string
+  control: string
+  title: string
+  applicability: string
+  justification: string | null
+  status: string
+  owner: string | null
+  updated_at: string
+  accepted_evidence: string[]
+}
+
+export interface PackRisk {
+  id: string
+  title: string
+  severity: string
+  likelihood: string
+  risk_score: number
+  status: string
+  mitigation: string
+  source: string
+  created_at: string
+  updated_at: string
+  // The latest accept or mitigate decision recorded for the risk; absent on older packs.
+  decision?: { decision: string; rationale: string; owner: string | null; decidedBy: string; decidedAt: string } | null
+}
+
+export interface PackRemediation {
+  id: string
+  title: string
+  owner: string | null
+  priority: string
+  status: string
+  due_date: string | null
+  linked_risk_ids_json: string
+  retest_status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PackControlLink {
+  id: string
+  evidence_id: string
+  entity_type: string
+  entity_id: string
+  created_at: string
+}
+
+/** Packs built before these sections existed leave them out. */
 export interface PackSystemEntry {
   system: { id: string; name: string; riskTier: string }
   gate: { verdict: 'go' | 'conditional_go' | 'no_go' | null; confidence: number | null; checks: GateCheck[]; reasons: string[] }
@@ -58,11 +109,59 @@ export interface PackSystemEntry {
   evidence: PackEvidence[]
   chainHead: string
   seals: PackSeal[]
+  controlApplicability?: PackControlApplicability[]
+  risks?: PackRisk[]
+  remediation?: PackRemediation[]
+  controlLinks?: PackControlLink[]
+}
+
+export interface PackAttestation {
+  task_key: string
+  statement: string
+  reference: string | null
+  attested_by: string
+  created_at: string
+}
+
+/** A done workflow run a reviewer did not reject. */
+export interface PackWorkflowRun {
+  id: string
+  workflow_id: string
+  workflow_version: string
+  ai_system_id: string | null
+  finished_at: string | null
+  approval: string | null
+  name: string | null
+  common_control: string | null
+}
+
+export interface PackPolicy {
+  id: string
+  name: string
+  framework: string
+  description: string | null
+  status: string
+  version: number
+  owner: string | null
+  reviewer: string | null
+  approver: string | null
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+  versions: { version: number; status: string; description: string | null; changed_by: string | null; change_summary: string | null; created_at: string }[]
+}
+
+/** Organisation-level records; attestations only, in packs built before workflows and policies were added. */
+export interface PackOrganisation {
+  attestations: PackAttestation[]
+  workflows?: PackWorkflowRun[]
+  policies?: PackPolicy[]
 }
 
 export interface PackManifest {
   version: number
   title: string
+  organisation?: PackOrganisation
   frameworks: string[]
   createdAt: string
   createdBy: string | null

@@ -172,7 +172,8 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
 
 
 def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime]]) -> Dict[str, Dict[str, Any]]:
-    """Latest engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router)."""
+    """Latest engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router): the newest
+    passed or failed one, or the newest insufficient one when nothing else is on file."""
     from src.application.services.eval_engines import REGISTRY
 
     rows = db.execute(
@@ -189,7 +190,11 @@ def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime
             continue
         content = json.loads(row["content_json"] or "{}")
         ev_id = content.get("evaluationId")
-        if ev_id not in latest or row["system_id"] in latest[ev_id]:
+        if ev_id not in latest:
+            continue
+        held = latest[ev_id].get(row["system_id"])
+        # newest first; an insufficient run measured nothing, so an older passed or failed run still stands, as in the gate
+        if held and (held["status"] != "insufficient" or content.get("status") == "insufficient"):
             continue
         latest[ev_id][row["system_id"]] = {
             "systemId": row["system_id"],

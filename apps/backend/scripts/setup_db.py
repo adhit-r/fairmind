@@ -190,6 +190,7 @@ def load_reference_data(engine) -> None:
                 AIUC_WORKBOOK.read_bytes(), source_filename=AIUC_WORKBOOK.name, actor_id="setup_db"
             ),
             service.import_principles_json(OECD_PRINCIPLES, actor_id="setup_db"),
+            service.import_catalogue_framework("iso-42001", actor_id="setup_db"),
         )
     for result in results:
         print(f"reference: {result.framework_key} {'imported' if result.created else 'already present'} "
@@ -208,7 +209,7 @@ def verify(engine) -> int:
         problems += [f"missing column {name}.{c}" for c in table.columns.keys() if c not in have]
     counts = {}
     with engine.connect() as conn:
-        for key in ("aiuc-1", "oecd-ai"):
+        for key in ("aiuc-1", "oecd-ai", "iso-42001"):
             counts[key] = conn.execute(text(
                 "SELECT count(*) FROM governance_control_definitions d "
                 "JOIN governance_framework_versions v ON v.id = d.framework_version_id "

@@ -7,7 +7,8 @@ POST /systems/{id}/applicability/accept-override  a second person accepts a tier
 Mounted under /api/v1/ai-governance next to the fairness router, with the same
 org scoping and system access rules. The confirmed record lives in
 governance_ai_systems.metadata_json.applicability; each decision also writes an
-evidence row, so a later decision seal hashes it.
+evidence row, so a later decision seal hashes it. Confirming also assigns the newest stored version of
+each confirmed framework the assurance store holds, so its controls can be assessed and mapped.
 """
 
 from __future__ import annotations
@@ -37,6 +38,8 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services.applicability_service import USE_KEYS, ApplicabilityError, build_record, suggest
 from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE
+from src.application.services.framework_catalog_service import CATALOGUE_STORE_KEYS
+from src.application.services.governance_assurance_service import GovernanceAssuranceService
 
 router = APIRouter(tags=["applicability"], dependencies=[Depends(_enforce_org_scope)])
 
@@ -106,6 +109,18 @@ def _save(db: Session, http: Request, actor: str, system_id: str, *, tier: str, 
     db.commit()
 
 
+def _assign_frameworks(db: Session, org_id: str, system_id: str, frameworks: List[Dict[str, Any]]) -> None:
+    """Assign the newest stored version of each confirmed framework the system has no version of yet. Never unassigns,
+    and never adds a second version beside a pinned one: a catalogue edit imports a new version on the next deploy."""
+    service = GovernanceAssuranceService(db)
+    assigned = {a["frameworkVersionId"] for a in service.list_assignments(org_id, system_id) or []}
+    for framework in frameworks:
+        store_key = CATALOGUE_STORE_KEYS.get(framework["key"])
+        versions = service.list_versions(store_key) if store_key else []
+        if versions and not assigned & {v["id"] for v in versions}:
+            service.assign_framework(org_id, system_id, versions[0]["id"])
+
+
 @router.post("/applicability/suggest", dependencies=[Depends(org_member)])
 def suggest_applicability(body: ApplicabilityAnswers):
     """Stateless: the onboard form calls it on every answer, before the system exists."""
@@ -137,6 +152,7 @@ def confirm_applicability(
         db, http, actor, system_id, tier=record["tier"], metadata=metadata, record=record,
         evidence_id=record["evidenceId"], evidence_type="applicability_decision", title=f"Risk tier {record['tier']} and frameworks confirmed",
     )
+    _assign_frameworks(db, _caller_org(http), system_id, record["frameworks"])
     return {"applicability": record, "gate": _gate_payload(db, system_id, record["tier"])}
 
 

@@ -562,6 +562,38 @@ def test_assessment_update_clears_owner_when_explicitly_null(assurance_client) -
     assert cleared.json()["owner"] is None
 
 
+def test_excluding_a_control_needs_a_justification_that_the_controls_list_returns(assurance_client) -> None:
+    client, session_factory, _ = assurance_client
+    session = session_factory()
+    _seed_org(session, ORG_A, USER_A, role="admin")
+    system_id, _, version_id = _seed_catalog_and_system(session)
+    session.close()
+    base = f"/api/v1/ai-governance/organizations/{ORG_A}"
+    assignment = client.post(f"{base}/systems/{system_id}/framework-assignments", json={"frameworkVersionId": version_id}).json()
+    assessment_id = client.get(f"{base}/framework-assignments/{assignment['id']}/controls").json()[0]["id"]
+
+    refused = client.patch(f"{base}/control-assessments/{assessment_id}", json={"applicability": "not_applicable", "justification": "  "})
+    excluded = client.patch(
+        f"{base}/control-assessments/{assessment_id}",
+        json={"applicability": "not_applicable", "justification": "The system makes no decisions about people."},
+    )
+    owner_only = client.patch(f"{base}/control-assessments/{assessment_id}", json={"owner": "governance-lead"})
+    cleared = client.patch(f"{base}/control-assessments/{assessment_id}", json={"justification": None})
+
+    assert refused.status_code == 422 and "justification" in refused.text
+    assert excluded.status_code == owner_only.status_code == 200
+    assert cleared.status_code == 422
+    [control] = [c for c in client.get(f"{base}/framework-assignments/{assignment['id']}/controls").json() if c["id"] == assessment_id]
+    assert control["applicability"] == "not_applicable"
+    assert control["justification"] == "The system makes no decisions about people."
+    # Back in scope: the stale exclusion reason is dropped even when the client sends it again.
+    included = client.patch(
+        f"{base}/control-assessments/{assessment_id}",
+        json={"applicability": "applicable", "justification": "The system makes no decisions about people."},
+    )
+    assert included.status_code == 200 and included.json()["justification"] is None
+
+
 def test_assessment_update_allows_existing_org_role_permission_and_readiness_is_counts_only(
     assurance_client,
 ) -> None:
@@ -767,6 +799,7 @@ def test_assignment_controls_return_real_definition_and_evidence_trace(assurance
         "applicability": "applicable",
         "status": "not_started",
         "owner": None,
+        "justification": None,
         "acceptedEvidenceCount": 1,
         "latestEvaluation": "Bias suite run 418",
         "latestEvaluationSource": "bias-suite",

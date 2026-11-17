@@ -610,8 +610,9 @@ export function usePackActions() {
       saveTarget: (systemId: string, body: SystemTargetBody) =>
         send<{ target: SystemTarget | null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.put(p, body)),
       deleteTarget: (systemId: string) => send<{ target: null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.delete(p)),
+      // A cold endpoint can take a while; the server waits 60s for it (system_targets.TIMEOUT_S), past the client's 10s default.
       testTarget: (systemId: string) =>
-        send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p)),
+        send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p, undefined, { timeout: 75_000 })),
       runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
       // The model can take a while; the server gives it 75s (llm.TIMEOUT_S), the client's 10s default would cut it off.
       ask: (question: string) => send<AskAnswer>(API_ENDPOINTS.packs.ask, (p) => apiClient.post(p, { question }, { timeout: 90_000 })),

@@ -113,12 +113,14 @@ def framework_keys(requested: Optional[List[str]]) -> Optional[List[str]]:
 def clause_state(checks: List[Dict[str, Any]]) -> str:
     """proven only through a proven check that satisfies the clause; a proven check on a weaker link makes it partial.
 
-    A failing check proves and attests nothing, so a clause reached only by failing checks stays open, and a
-    clause with any failing check is never proven.
+    A failing check proves and attests nothing, and a clause with any failing check is never proven. A failing measured
+    test outweighs a person's statement: with nothing proven left, a clause with a failing check stays open.
     """
     failing = any(c.get("fails") for c in checks)
     checks = [c for c in checks if not c.get("fails")]
     proven = [c for c in checks if c["state"] == "proven"]
+    if failing and not proven:
+        return "open"
     if any(c["relation"] == "Satisfies" for c in proven):
         return "partial" if failing else "proven"
     return "partial" if proven else "attested" if any(c["state"] == "attested" for c in checks) else "open"
@@ -128,7 +130,9 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
     """Every active clause of each requested framework (every framework something reaches when none are requested).
 
     A gate check left out of the organisation's gate reaches its clauses as "not in gate", which proves nothing;
-    ``gate["evaluations"]`` (newest passed or failed run per non-gate control) reaches clauses through its control.
+    ``gate["evaluations"]`` (newest passed or failed run per non-gate control) reaches clauses through its control, proving
+    only those its evaluation tests. ``gate["attestedControls"]`` ({control: {statement, by, at, source, confidence}}, done
+    workflow runs and plan attestations) reaches the clauses of controls no gate check speaks to, as attested.
     """
     from src.application.services.fairness_run_service import GATE_CHECKS  # function-level: that module imports this one
 
@@ -146,14 +150,21 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             "evidenceId": check.get("evidenceId"), "evidenceClass": check.get("evidenceClass"), "cell": cell_state(check),
             **{flag: True for flag in ("stale", "fails") if check.get(flag)},
         }))
+    tested: Dict[str, set] = {}  # evaluation id -> the clauses it actually tests
     for run in gate.get("evaluations", []):
-        name = cat["evaluations"].get(run["evaluationId"], {}).get("name", "")
+        ev = cat["evaluations"].get(run["evaluationId"], {})
+        tested[run["evaluationId"]] = set(ev.get("tests") or [])
         entry = {
-            "check": run["evaluationId"], "label": f"{run['evaluationId']} {name}".strip(), "state": run["state"],
+            "check": run["evaluationId"], "label": f"{run['evaluationId']} {ev.get('name', '')}".strip(), "state": run["state"],
             "confidence": run["confidence"], "evidenceId": run.get("evidenceId"), "evidenceClass": run["evidenceClass"],
             **({"fails": True} if run["status"] == "failed" else {}),
         }
         entries.append((run["control"], {**entry, "cell": cell_state(entry)}))
+    # organisation work and workflow runs for controls no gate check reaches: a person's statement, so attested at most
+    for control, att in (gate.get("attestedControls") or {}).items():
+        if control not in GATE_CONTROLS:
+            entries.append((control, {"check": control, "label": att.get("statement"), "state": "attested", "confidence": att.get("confidence", 0.0),
+                                      "evidenceId": None, "evidenceClass": "manual", "cell": "attested", "source": att.get("source"), "by": att.get("by"), "at": att.get("at")}))
 
     per_framework: Dict[str, Dict[str, Any]] = {}
 
@@ -168,7 +179,11 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             req = link["requirement"]
             if frameworks and req["framework"] not in frameworks:
                 continue
-            clause(framework(req["framework"]), req)["checks"].append({**entry, "relation": link["relation"]})
+            relation = link["relation"]
+            # an evaluation proves only the clauses it tests; through the rest of its control's crosswalk it supports at most
+            if entry["check"] in tested and req["key"] not in tested[entry["check"]] and RELATION_RANK.get(relation, 9) < RELATION_RANK["Supports"]:
+                relation = "Supports"
+            clause(framework(req["framework"]), req)["checks"].append({**entry, "relation": relation})
     # seed every active clause, so a clause nothing reaches still counts as open
     for fw_key in frameworks or list(per_framework):
         for req in cat["by_framework"].get(fw_key, []):

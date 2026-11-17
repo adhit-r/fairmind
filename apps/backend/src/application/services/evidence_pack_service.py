@@ -2,8 +2,10 @@
 
 The manifest freezes, per system, the release gate, the clause map for the chosen
 frameworks, every evidence record with the fields its hash covers, and every decision seal
-with the gate it saw and the approver's notes; and, for the organisation, the plan
-attestations people made for organisation-level controls. Canonical form:
+with the gate it saw and the approver's notes, its control applicability decisions (the
+Statement of Applicability), risk register, remediation tasks and evidence links; and, for the
+organisation, the plan attestations people made for organisation-level controls, the done
+workflow runs, and the AI policies with their version history. Canonical form:
 ``json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()``;
 from version 2 every float with an integral value is written as an integer first, so a pack
 re-saved by a browser (``JSON.stringify`` writes 0.0 as 0) still verifies.
@@ -19,12 +21,13 @@ import hmac
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.application.services.clause_map_service import clause_map
+from src.application.services.clause_map_service import CATALOGUE_PATH, clause_map
 from src.application.services.decision_seal_service import chain_head, entry_hash, evidence_records, list_seals
 
 MANIFEST_VERSION = 2
@@ -51,6 +54,86 @@ def manifest_digest(manifest: Dict[str, Any]) -> str:
     return hashlib.sha256(canonical_bytes(manifest)).hexdigest()
 
 
+def _rows(db: Session, sql: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [dict(r) for r in db.execute(text(sql), params).mappings().all()]
+
+
+# Per system: the Statement of Applicability (every assessed control, included or excluded, with the reason),
+# accepted reviewer mappings per control, the risk register, remediation and evidence links. Deterministic order.
+_SOA_SQL = (
+    "SELECT v.framework_key AS framework, v.version_label AS version, d.external_id AS control, d.title, "
+    "a.applicability, a.justification, a.status, a.owner, a.updated_at, "
+    "(SELECT string_agg(m.artifact_evidence_id, ',' ORDER BY m.artifact_evidence_id) FROM governance_control_evidence m "
+    " WHERE m.control_assessment_id = a.id AND m.state = 'accepted') AS accepted_evidence "
+    "FROM governance_control_assessments a "
+    "JOIN governance_control_definitions d ON d.id = a.control_definition_id "
+    "JOIN governance_framework_assignments f ON f.id = a.framework_assignment_id "
+    "JOIN governance_framework_versions v ON v.id = f.framework_version_id "
+    "WHERE a.system_id = :id AND a.org_id = :org ORDER BY v.framework_key, v.version_label, d.external_id"
+)
+_RISKS_SQL = (
+    "SELECT id, title, severity, likelihood, risk_score, status, mitigation, source, created_at, updated_at "
+    "FROM governance_risks WHERE system_id = :id ORDER BY created_at, id"
+)
+_REMEDIATION_SQL = (
+    "SELECT id, title, owner, priority, status, due_date, linked_risk_ids_json, retest_status, created_at, updated_at "
+    "FROM governance_remediation_tasks WHERE system_id = :id ORDER BY created_at, id"
+)
+_LINKS_SQL = (
+    "SELECT l.id, l.evidence_id, l.entity_type, l.entity_id, l.created_at FROM governance_evidence_links l "
+    "JOIN governance_evidence e ON e.id = l.evidence_id WHERE e.system_id = :id ORDER BY l.created_at, l.id"
+)
+# Organisation: done workflow runs a reviewer did not reject (the rule packs._org_coverage uses), and policies.
+_WORKFLOWS_SQL = (
+    "SELECT r.id, r.workflow_id, r.workflow_version, r.ai_system_id, r.finished_at, a.status AS approval "
+    "FROM workflow_runs r LEFT JOIN governance_approval_requests a ON a.id = r.approval_request_id "
+    "WHERE r.org_id = :org AND r.status = 'done' AND (a.status IS NULL OR a.status <> 'rejected') "
+    "ORDER BY r.finished_at, r.id"
+)
+_POLICIES_SQL = (
+    "SELECT id, name, framework, description, status, version, owner, reviewer, approver, approved_at, created_at, updated_at "
+    "FROM governance_policies WHERE org_id = :org ORDER BY created_at, id"
+)
+_POLICY_VERSIONS_SQL = (
+    "SELECT v.policy_id, v.version, v.status, v.description, v.changed_by, v.change_summary, v.created_at "
+    "FROM governance_policy_versions v JOIN governance_policies p ON p.id = v.policy_id "
+    "WHERE p.org_id = :org ORDER BY v.policy_id, v.version, v.created_at"
+)
+
+
+@lru_cache(maxsize=1)
+def _workflows() -> Dict[str, Dict[str, Any]]:
+    return {w["id"]: w for w in json.loads(CATALOGUE_PATH.read_text(encoding="utf-8"))["workflows"]}
+
+
+def _organisation(db: Session, org_id: str) -> Dict[str, Any]:
+    params = {"org": org_id}
+    workflows = _rows(db, _WORKFLOWS_SQL, params)
+    for run in workflows:
+        workflow = _workflows().get(run["workflow_id"]) or {}
+        run.update(name=workflow.get("name"), common_control=workflow.get("commonControl"))
+    versions: Dict[str, List[Dict[str, Any]]] = {}
+    for row in _rows(db, _POLICY_VERSIONS_SQL, params):
+        versions.setdefault(row.pop("policy_id"), []).append(row)
+    return {
+        "attestations": _rows(
+            db, "SELECT task_key, statement, reference, attested_by, created_at FROM plan_attestations WHERE org_id = :org ORDER BY created_at", params
+        ),
+        "workflows": workflows,
+        "policies": [{**p, "versions": versions.get(p["id"], [])} for p in _rows(db, _POLICIES_SQL, params)],
+    }
+
+
+def _risks(db: Session, system_id: str, entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The risk register, each risk with the latest treatment decision recorded for it (risk_acceptance evidence), or None."""
+    decisions: Dict[str, Dict[str, Any]] = {}
+    for entry in entries:  # oldest first, so the latest decision wins
+        if entry["type"] == "risk_acceptance":
+            content = json.loads(entry["content"]) if isinstance(entry["content"], str) else entry["content"]
+            decisions[content["riskId"]] = {k: content.get(k) for k in ("decision", "rationale", "owner", "decidedBy", "decidedAt")}
+    return [{**risk, "decision": decisions.get(risk["id"])} for risk in _rows(db, _RISKS_SQL, {"id": system_id})]
+
+
 def build_manifest(
     db: Session, *, org_id: str, title: str, frameworks: List[str], systems: List[Dict[str, Any]], created_by: Optional[str]
 ) -> Dict[str, Any]:
@@ -73,15 +156,18 @@ def build_manifest(
             "evidence": entries,
             "chainHead": chain_head(entries),
             "seals": seals,
+            "controlApplicability": [
+                {**row, "accepted_evidence": row["accepted_evidence"].split(",") if row["accepted_evidence"] else []}
+                for row in _rows(db, _SOA_SQL, {"id": system["id"], "org": org_id})
+            ],
+            "risks": _risks(db, system["id"], entries),
+            "remediation": _rows(db, _REMEDIATION_SQL, {"id": system["id"]}),
+            "controlLinks": _rows(db, _LINKS_SQL, {"id": system["id"]}),
         })
-    attestations = db.execute(
-        text("SELECT task_key, statement, reference, attested_by, created_at FROM plan_attestations WHERE org_id = :org ORDER BY created_at"),
-        {"org": org_id},
-    ).mappings().all()
     return {
         "version": MANIFEST_VERSION,
         "title": title,
-        "organisation": {"attestations": [dict(r) for r in attestations]},
+        "organisation": _organisation(db, org_id),
         "frameworks": frameworks,
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "createdBy": created_by,

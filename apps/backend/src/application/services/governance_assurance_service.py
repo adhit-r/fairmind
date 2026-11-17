@@ -394,6 +394,7 @@ class GovernanceAssuranceService:
                 assessments.c.applicability,
                 assessments.c.status,
                 assessments.c.owner,
+                assessments.c.justification,
                 controls.c.external_id,
                 controls.c.title,
                 controls.c.statement,
@@ -492,6 +493,7 @@ class GovernanceAssuranceService:
                     "applicability": row["applicability"],
                     "status": row["status"],
                     "owner": row["owner"],
+                    "justification": row["justification"],
                     "acceptedEvidenceCount": len(accepted) + (len(policy_items) if policy_ok else 0),
                     "latestEvaluation": (
                         latest["artifact_title"] or latest["source_identifier"]
@@ -527,23 +529,30 @@ class GovernanceAssuranceService:
         updates = {key: values[key] for key in ("status", "applicability") if values.get(key) is not None}
         if "owner" in values:
             updates["owner"] = values["owner"]
+        if "justification" in values:
+            updates["justification"] = (values["justification"] or "").strip() or None
         if not updates:
             return dict(row)
         if "status" in updates and updates["status"] not in _CONTROL_STATUSES:
             raise ValueError("Unsupported control assessment status")
         if "applicability" in updates and updates["applicability"] not in _APPLICABILITY:
             raise ValueError("Unsupported applicability")
+        # The Statement of Applicability records why a control is excluded; an exclusion without a reason is refused.
+        excluded = updates.get("applicability", row["applicability"]) == "not_applicable"
+        if not excluded:  # the justification is the reason for an exclusion; an applicable control carries none
+            updates["justification"] = None
+        elif {"applicability", "justification"} & updates.keys() and not updates.get("justification", row["justification"]):
+            raise ValueError("A justification is required to mark a control not applicable")
         updates["updated_at"] = _now()
         self.db.execute(update(assessments).where(assessments.c.id == assessment_id).values(**updates))
         self.db.commit()
         return dict(self.db.execute(select(assessments).where(assessments.c.id == assessment_id)).mappings().one())
 
     def ingest_evidence_run(self, org_id: str, system_id: str, envelope: dict, actor_id: str) -> tuple[dict | None, bool]:
-        systems, runs, evidence, mappings = (
+        systems, runs, evidence = (
             GovernanceAISystem.__table__,
             GovernanceEvidenceRun.__table__,
             GovernanceEvidence.__table__,
-            GovernanceControlEvidence.__table__,
         )
         if not self.db.execute(
             select(systems.c.id).where(systems.c.id == system_id, systems.c.org_id == org_id)
@@ -607,26 +616,9 @@ class GovernanceAssuranceService:
             control_ids = set(envelope.get("control_external_ids", []))
             for tag in envelope.get("evaluation_tags", []):
                 control_ids.update(EVALUATION_TAG_CONTROL_IDS.get(tag, ()))
-            if control_ids:
-                assessments, controls = GovernanceControlAssessment.__table__, GovernanceControlDefinition.__table__
-                candidates = list(self.db.execute(
-                    select(assessments.c.id).join(controls, controls.c.id == assessments.c.control_definition_id).where(
-                        assessments.c.org_id == org_id, assessments.c.system_id == system_id,
-                        controls.c.external_id.in_(control_ids),
-                    )
-                ).scalars())
-                mapping_values = [
-                    {
-                        "id": str(uuid.uuid4()), "org_id": org_id, "system_id": system_id,
-                        "evidence_id": run_id, "artifact_evidence_id": evidence_id,
-                        "control_assessment_id": assessment_id, "state": "candidate",
-                        "mapping_rationale": "Explicit evaluation control identifier.",
-                        "created_at": now, "updated_at": now,
-                    }
-                    for assessment_id in candidates
-                ]
-                if mapping_values:
-                    self.db.execute(insert(mappings), mapping_values)
+            self.add_candidate_mappings(
+                org_id, system_id, run_id, evidence_id, control_ids, "Explicit evaluation control identifier."
+            )
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
@@ -642,6 +634,47 @@ class GovernanceAssuranceService:
                 raise EvidenceRunConflictError("Evidence run content is immutable")
             raise
         return self._evidence_run(run_id), True
+
+    def add_candidate_mappings(
+        self, org_id: str, system_id: str, run_id: str, evidence_id: str, control_ids: set[str], rationale: str,
+        framework_key: str | None = None,
+    ) -> None:
+        """Candidate mappings from a run to the system's assessed controls with these external ids. No commit: the caller's transaction."""
+        if not control_ids:
+            return
+        assessments, controls, assignments, versions = (
+            GovernanceControlAssessment.__table__, GovernanceControlDefinition.__table__,
+            GovernanceFrameworkAssignment.__table__, GovernanceFrameworkVersion.__table__,
+        )
+        query = select(assessments.c.id).join(controls, controls.c.id == assessments.c.control_definition_id).where(
+            assessments.c.org_id == org_id, assessments.c.system_id == system_id, controls.c.external_id.in_(control_ids),
+        )
+        if framework_key:
+            query = query.join(assignments, assignments.c.id == assessments.c.framework_assignment_id).join(
+                versions, versions.c.id == assignments.c.framework_version_id
+            ).where(versions.c.framework_key == framework_key)
+        now = _now()
+        values = [
+            {
+                "id": str(uuid.uuid4()), "org_id": org_id, "system_id": system_id,
+                "evidence_id": run_id, "artifact_evidence_id": evidence_id,
+                "control_assessment_id": assessment_id, "state": "candidate",
+                "mapping_rationale": rationale, "created_at": now, "updated_at": now,
+            }
+            for assessment_id in self.db.execute(query).scalars()
+        ]
+        if values:
+            self.db.execute(insert(GovernanceControlEvidence.__table__), values)
+
+    def map_catalogue_run(self, org_id: str, system_id: str, run_id: str, evidence_id: str, common_control: str | None) -> None:
+        """A passed catalogue run proposes the ISO 42001 clauses its evaluation's common control is crosswalked to.
+        Candidates only: a reviewer accepts or rejects each one."""
+        from src.application.services.framework_catalog_service import crosswalk_clauses
+
+        self.add_candidate_mappings(
+            org_id, system_id, run_id, evidence_id, crosswalk_clauses(common_control, "iso-42001"),
+            f"Catalogue crosswalk: {common_control} reaches this clause.", framework_key="iso-42001",
+        )
 
     def list_evidence_runs(self, org_id: str, system_id: str) -> list[dict] | None:
         systems, runs = GovernanceAISystem.__table__, GovernanceEvidenceRun.__table__

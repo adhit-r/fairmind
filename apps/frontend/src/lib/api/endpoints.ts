@@ -116,6 +116,7 @@ export const API_ENDPOINTS = {
     listReports: '/api/v1/ai-governance/reports',
     exportReport: (id: string, format: 'pdf' | 'docx') => `/api/v1/reports/snapshots/${encodeURIComponent(id)}/${format}`,
     assessRisks: '/api/v1/ai-governance/risks/assess',
+    treatRisk: (riskId: string) => `/api/v1/ai-governance/risks/${encodeURIComponent(riskId)}`,
     riskDashboard: '/api/v1/ai-governance/dashboard/risk',
     status: '/api/v1/ai-governance/status',
     // Model Inventory
