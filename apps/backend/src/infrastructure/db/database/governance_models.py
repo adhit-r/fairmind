@@ -4656,6 +4656,9 @@ class OrgTask(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     completed_at = Column(String, nullable=True)
+    # The due date each reminder was last sent for, so a new due date gets reminded again.
+    soon_reminded_for = Column(String(10), nullable=True)
+    overdue_reminded_for = Column(String(10), nullable=True)
 
     __table_args__ = (UniqueConstraint("org_id", "number", name="uq_org_tasks_number"),)
 

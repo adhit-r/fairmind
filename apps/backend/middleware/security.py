@@ -392,6 +392,7 @@ _OWNER_CHECK = re.compile(r"/api/v1/public/owner-check/[^/]+")
 _LAPTOP_REPORT = "/api/v1/public/laptop-report"
 _OSQUERY = ("/api/v1/public/osquery/enroll", "/api/v1/public/osquery/config", "/api/v1/public/osquery/log")
 _NOTIFIER = ("/api/v1/public/notifier/enroll", "/api/v1/public/notifier/messages", "/api/v1/public/notifier/ack")
+_TASK_REMINDERS_OFF = "/api/v1/public/task-reminders/unsubscribe"
 
 
 def _is_public_path(path: str) -> bool:
@@ -488,6 +489,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # The notifier enrols with the organisation's notifier secret and then uses its own key; the routes check both.
         if request.method in ("GET", "POST") and request.url.path in _NOTIFIER:
+            return await call_next(request)
+
+        # The unsubscribe link in a task reminder is signed for one person; the route checks it.
+        if request.method in ("GET", "POST") and request.url.path == _TASK_REMINDERS_OFF:
             return await call_next(request)
 
         # An invitee previews an invitation before they have an account; accepting needs one.

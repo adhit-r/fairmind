@@ -79,3 +79,55 @@ def test_tasks_stay_in_their_organisation(org):
     other = _client(engine, _new_org(engine), role="owner")
     assert other.get(f"/api/v1/tasks/{task['id']}").status_code == 404
     assert other.get("/api/v1/tasks").json()["tasks"] == []
+
+
+def test_reminders_go_once_per_due_date_and_the_link_stops_them(org):
+    import asyncio
+    from datetime import date
+    from urllib.parse import parse_qs, urlsplit
+
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import sessionmaker
+
+    from api.routes.tasks import sweep_task_reminders
+
+    clients, ids, _, engine = org
+    editor = clients["editor"]
+    today = date(2026, 11, 19)
+
+    def task(title, due, **kw):
+        return editor.post("/api/v1/tasks", json={"title": title, "assignee_user_id": ids["viewer"], "due_date": due, **kw}).json()
+
+    soon, late = task("Write the AI policy", "2026-11-20"), task("Connect the runner", "2026-11-17")
+    task("Later", "2026-11-25")
+    finished = task("Done already", "2026-11-10")
+    editor.patch(f"/api/v1/tasks/{finished['id']}", json={"status": "done"})
+
+    outbox = []
+
+    async def send(to, due_soon, overdue, unsubscribe):
+        outbox.append((to, [t["title"] for t in due_soon], [t["title"] for t in overdue], unsubscribe))
+        return True
+
+    sweep = lambda day=today: asyncio.run(sweep_task_reminders(sessionmaker(bind=engine), send, "https://app.example.com", day))
+
+    assert sweep() == 1
+    to, due_soon, overdue, link = outbox[-1]
+    assert (to, due_soon, overdue) == (f"{ids['viewer']}@packs.test", ["Write the AI policy"], ["Connect the runner"])
+    assert sweep() == 0  # once per due date
+
+    editor.patch(f"/api/v1/tasks/{late['id']}", json={"due_date": "2026-11-18"})
+    assert sweep() == 1 and outbox[-1][2] == ["Connect the runner"]  # a new due date is reminded again
+
+    q = {k: v[0] for k, v in parse_qs(urlsplit(link).query).items()}
+    public = TestClient(editor.app)  # the same app the signed-in clients use, with the test database
+    url = "/api/v1/public/task-reminders/unsubscribe"
+    assert public.get(url, params=q).status_code == 200  # opening the link only asks
+    assert public.post(url, params={**q, "t": "0" * 64}).status_code == 404
+    assert public.post(url, params=q).status_code == 200
+    task("Review the tiers", "2026-11-20")
+    assert sweep() == 0
+
+    assert public.post(url, params={**q, "on": 1}).status_code == 200
+    assert sweep() == 1 and outbox[-1][1] == ["Review the tiers"]
+    assert soon["id"]  # reminded in the first sweep, not again
