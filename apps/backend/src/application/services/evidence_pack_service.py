@@ -21,12 +21,13 @@ import hmac
 import json
 import secrets
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.application.services.clause_map_service import clause_map
+from src.application.services.clause_map_service import CATALOGUE_PATH, clause_map
 from src.application.services.decision_seal_service import chain_head, entry_hash, evidence_records, list_seals
 
 MANIFEST_VERSION = 2
@@ -100,14 +101,17 @@ _POLICY_VERSIONS_SQL = (
 )
 
 
-def _organisation(db: Session, org_id: str) -> Dict[str, Any]:
-    from api.routes.pack_catalogue import WORKFLOWS
+@lru_cache(maxsize=1)
+def _workflows() -> Dict[str, Dict[str, Any]]:
+    return {w["id"]: w for w in json.loads(CATALOGUE_PATH.read_text(encoding="utf-8"))["workflows"]}
 
+
+def _organisation(db: Session, org_id: str) -> Dict[str, Any]:
     params = {"org": org_id}
     workflows = _rows(db, _WORKFLOWS_SQL, params)
     for run in workflows:
-        workflow = WORKFLOWS.get(run["workflow_id"])
-        run.update(name=workflow.name if workflow else None, common_control=workflow.commonControl if workflow else None)
+        workflow = _workflows().get(run["workflow_id"]) or {}
+        run.update(name=workflow.get("name"), common_control=workflow.get("commonControl"))
     versions: Dict[str, List[Dict[str, Any]]] = {}
     for row in _rows(db, _POLICY_VERSIONS_SQL, params):
         versions.setdefault(row.pop("policy_id"), []).append(row)
