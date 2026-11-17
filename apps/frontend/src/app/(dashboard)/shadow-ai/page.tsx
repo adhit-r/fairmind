@@ -919,7 +919,7 @@ function LaptopScriptCard() {
               <Banner
                 status="success"
                 title="Ingest token, shown once"
-                description={`${token}  Put it in the script's parameter in your device management (Jamf: parameter 4; Intune: -Token). Any earlier token has stopped working.`}
+                description={`${token}  Jamf: put it in script parameter 4. Intune scripts take no parameters, so put it in the script itself. Any earlier token has stopped working.`}
                 endContent={<Button size="sm" variant="secondary" label="Copy" onClick={() => void navigator.clipboard.writeText(token)} />}
               />
             )}

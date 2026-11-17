@@ -1,0 +1,136 @@
+---
+title: Watch AI on company laptops
+description: Tell people first, then install the laptop script, the FairMind agent and the notifier with your device management.
+---
+
+Shadow AI reads three things on company laptops, each optional:
+
+| Part | What it is | How often |
+| --- | --- | --- |
+| Laptop script | A read-only script your device management runs | Once a day |
+| FairMind agent | osquery's official package, reporting to FairMind | As AI apps start on macOS, every minute on Windows |
+| FairMind notifier | A small app that shows the agent's messages to the person | Checks for messages every minute |
+
+The laptop script alone fills the **Laptops** tab. Add the agent to see apps as they start, and the notifier to tell people directly.
+
+<Callout title="Early access">On macOS, the laptop script and the notifier have run on real laptops, and the agent has run in user mode only, not yet as a root service with Full Disk Access. Nothing has been run on a real Windows laptop yet. The notifier is not signed yet, so install it on test laptops only.</Callout>
+
+## 1. Tell people first
+
+Send the notice below before anything is installed, and keep it where people can find it later. Fill in the parts in braces, delete the rows for parts you do not install, and check it with your legal or privacy lead: it describes what FairMind collects, not what your own policies require.
+
+```text
+Subject: How {Organisation} checks AI tools on company laptops
+
+From {date}, {Organisation} will check which AI tools are used on company laptops, so that we can
+approve the ones people need, buy company accounts for them, and keep company data out of tools we
+have not reviewed. We use FairMind for this.
+
+What is checked on your company laptop
+- Which AI apps and editor extensions are installed, from FairMind's list of AI tools, and the apps'
+  versions.
+- Whether an AI app (Cursor, Claude Code) is signed in with a company account or another one. The
+  address is compared on the laptop; only "company" or "other" is sent.
+- The names of MCP servers your AI apps are set up to use, and the program that starts them.
+- AI models downloaded by local runtimes (Ollama, LM Studio, the Hugging Face cache): their names,
+  and, if the agent is installed, their sizes and whose account folder they are in.
+- The laptop's serial number and name, the operating system version, and your account name on the
+  laptop (or your company email address, if an AI app is signed in with it).
+- {If the agent is installed:} which AI apps from that list start, and when, and the names of MCP
+  servers as they start.
+- {If you upload web proxy logs:} visits to AI services' websites, and how many requests each
+  person made.
+
+What is never checked or sent
+- Your prompts, the replies, your files or your screen.
+- Your keystrokes, or your browsing beyond the AI services listed above.
+- Your personal email address, passwords or sign-in tokens.
+- Anything about apps that are not AI tools.
+
+Nothing is blocked. You can keep working as you do today.
+
+Who sees it
+People with access to {Organisation}'s FairMind workspace: {team names, for example IT and the AI
+governance team}. Findings name the laptop and the person.
+
+What may happen
+- If an AI tool is used with a personal account, you may get an email or a message on your laptop
+  asking you to switch to your company account.
+- {If the notifier is installed:} the FairMind app in your menu bar or system tray shows these
+  messages. Its "What FairMind checks on this laptop" page lists every check and every message it
+  showed you.
+
+How long it is kept
+Each laptop's latest daily report replaces the one before. Events from the agent, including messages
+shown to you, are deleted after 30 days. The current list of laptops and findings is kept while
+{Organisation} uses FairMind.
+
+Questions
+{Contact name and address}.
+```
+
+## 2. Set your company domains
+
+1. Open **Inventory › Shadow AI** and the **Laptops** tab.
+2. In **Laptop script**, enter every email domain your company accounts use, for example `acme.com, acme.in`, and press **Save domains**. An account on these domains, or on one of their subdomains, counts as a company account.
+
+The agent's account check uses the same domains.
+
+## 3. Install the laptop script
+
+1. Press **Create the token** and copy it. It is shown once; creating a new one stops the old one.
+2. Press **Download for macOS** or **Download for Windows**. The script already holds your domains and FairMind's address.
+3. Add it to your device management, run as root or SYSTEM, once a day:
+   - **Jamf Pro**: add `fairmind-laptop-check.sh` as a script, put the token in parameter 4, and run it from a policy set to **Once every day**.
+   - **Intune, Windows**: Intune scripts take no parameters, so replace `$env:FAIRMIND_TOKEN` on the `param(...)` line with the token in quotes. Run it as a remediation detection script on a daily schedule, as SYSTEM, in 64-bit PowerShell.
+   - **Intune, macOS**: replace `"${4:-$1}"` on the `TOKEN=` line with the token in quotes, and add it as a shell script that runs as root, every day.
+4. When the first laptop has run it, the card shows how many laptops report and when the last one did.
+
+Treat the edited script as a secret: the token lets anyone send reports for your organisation.
+
+## 4. Install the FairMind agent (optional)
+
+1. In **FairMind agent**, press **Set up the agent**, then **Create the enrol secret** and copy it.
+2. Press **osquery settings for macOS** or **osquery settings for Windows** to download `osquery.flags`.
+3. With your device management, install osquery's official package from [osquery.io](https://osquery.io/downloads), then:
+
+**macOS**
+
+- Put `osquery.flags` in `/var/osquery/` and the secret in `/var/osquery/fairmind.secret`, readable by root only (`chmod 600`).
+- Deploy a privacy preferences profile that grants Full Disk Access to `/opt/osquery/lib/osquery.app`. Read its code requirement with `codesign -dr - /opt/osquery/lib/osquery.app`. Without it, the agent checks every minute instead of as apps start.
+- Start it: `cp /var/osquery/io.osquery.agent.plist /Library/LaunchDaemons/ && launchctl load /Library/LaunchDaemons/io.osquery.agent.plist`.
+
+**Windows**
+
+- Put `osquery.flags` and the secret, as `fairmind.secret`, in `C:\Program Files\osquery\`, readable by SYSTEM and Administrators only.
+- Restart the `osqueryd` service.
+
+The card shows each enrolled laptop. Under **Needs attention** it lists laptops that have not checked in for 3 days, and laptops where osquery reports it cannot see what it should, such as missing Full Disk Access.
+
+### Choose what the agent does
+
+Under **What the agent does**, set each event to **Log only**, **Tell you**, **Tell the person** or **Tell you and the person**:
+
+| Event | Default |
+| --- | --- |
+| A personal account signs in to an approved tool | Tell the person |
+| A tool you do not allow starts | Tell you and the person |
+| An MCP server not in your registry starts | Tell you |
+| A new local model is downloaded | Log only |
+
+**Tell you** emails your reviewers at most once a day for the same thing. **Tell the person** needs the notifier.
+
+## 5. Install the notifier (optional)
+
+1. Press **Create notifier settings** and download `notifier.json`. Creating new settings stops the old secret for laptops that have not enrolled yet.
+2. Build the notifier from `apps/notifier` (`cargo build --release`) until signed builds are published.
+3. Install it with your device management:
+   - **macOS**: the binary as `/Library/Application Support/FairMind/fairmind-notifier`, `notifier.json` beside it, and `apps/notifier/deploy/com.fairmind.notifier.plist` in `/Library/LaunchAgents/`, so it starts in every person's session at login.
+   - **Windows**: `notifier.json` in `C:\ProgramData\FairMind\`, then run `apps/notifier/deploy/install-windows.ps1` as SYSTEM with `fairmind-notifier.exe` beside it. It starts at every sign-in.
+4. Check a laptop with `fairmind-notifier --once`. It prints how many messages are new and how many were shown before. The card shows how many laptops have it.
+
+The notifier sends only the laptop's serial number and the account name, and shows a message only to the account it is about.
+
+## Check it
+
+On **Laptops**, open a laptop. **Every AI tool on this laptop** shows what each source saw. A laptop reported by both the script and the agent appears once, matched by serial number.
