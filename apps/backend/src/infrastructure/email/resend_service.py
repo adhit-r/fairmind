@@ -19,7 +19,7 @@ class ResendEmailService:
         self.api_key = settings.resend_api_key
         self.from_email = settings.resend_from_email
 
-    async def _send(self, to: str, subject: str, html: str) -> bool:
+    async def _send(self, to: str, subject: str, html: str, headers: Optional[dict] = None) -> bool:
         if not self.api_key:
             logger.info(f"[EMAIL console] To: {to} | Subject: {subject}")
             return True
@@ -28,7 +28,7 @@ class ResendEmailService:
                 resp = await client.post(
                     self.API_URL,
                     headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                    json={"from": self.from_email, "to": [to], "subject": subject, "html": html},
+                    json={"from": self.from_email, "to": [to], "subject": subject, "html": html, **({"headers": headers} if headers else {})},
                 )
                 if resp.status_code in (200, 201):
                     logger.info(f"Email sent to {to}: {subject}")
@@ -137,6 +137,41 @@ class ResendEmailService:
         </div>
         """
         return await self._send(email, f"Task assigned: {title}", html)
+
+    async def send_task_reminder(self, to: str, soon: list, overdue: list, unsubscribe_url: str) -> bool:
+        """One email per person: tasks due tomorrow and tasks that went past their due date.
+
+        Each item is a dict with title, due and url. The unsubscribe link stops reminders only.
+        """
+        def items(rows: list) -> str:
+            return "".join(
+                f'<li style="margin:6px 0"><a href="{escape(r["url"])}" style="color:#15171a">{escape(r["title"])}</a>'
+                f' <span style="color:#5a5f68">due {escape(r["due"])}</span></li>'
+                for r in rows
+            )
+
+        parts = []
+        if overdue:
+            parts.append(f'<h2 style="font-size:15px;font-weight:600;margin:20px 0 4px">Past the due date</h2><ul style="padding-left:18px;margin:0">{items(overdue)}</ul>')
+        if soon:
+            parts.append(f'<h2 style="font-size:15px;font-weight:600;margin:20px 0 4px">Due tomorrow</h2><ul style="padding-left:18px;margin:0">{items(soon)}</ul>')
+        count = len(soon) + len(overdue)
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:20px;font-weight:600;padding-bottom:4px">Your FairMind tasks</h1>
+          {"".join(parts)}
+          <p style="margin-top:28px;font-size:12px;color:#5a5f68">
+            You get this because these tasks are assigned to you.
+            <a href="{escape(unsubscribe_url)}" style="color:#5a5f68">Stop task reminders</a>
+          </p>
+        </div>
+        """
+        if overdue:
+            subject = f"{len(overdue)} task{'s' if len(overdue) != 1 else ''} past the due date" if not soon else f"{count} tasks need you: {len(overdue)} overdue, {len(soon)} due tomorrow"
+        else:
+            subject = f"Due tomorrow: {soon[0]['title']}" if len(soon) == 1 else f"{len(soon)} tasks due tomorrow"
+        headers = {"List-Unsubscribe": f"<{unsubscribe_url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+        return await self._send(to, subject, html, headers)
 
     async def send_join_request(self, to: str, requester_name: str, requester_email: str, org_name: str, url: str) -> bool:
         html = f"""

@@ -7,6 +7,7 @@ GET    /tasks/{id}?org_id=                  the task with its comments and activ
 PATCH  /tasks/{id}?org_id=                  edit (editor or above); the assignee may change the status of their own task
 POST   /tasks/{id}/comments?org_id=         comment (any member)
 POST   /tasks/{id}/run?org_id=              run the assigned agent again (editor or above)
+GET    /public/task-reminders/unsubscribe   no session: a signed link from the reminder email; POST turns reminders off
 
 An agent does real work and reports it on the task: the release autopilot re-runs the fairness check or takes a
 monitoring snapshot from the system's data source, records measured evidence, then marks the task done, or
@@ -15,14 +16,19 @@ blocked with the reason it could not run.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from datetime import date, datetime, timedelta, timezone
+from html import escape
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -35,6 +41,7 @@ from src.application.services.governance_assurance_service import GovernanceAssu
 
 logger = logging.getLogger("fairmind.tasks")
 router = APIRouter(tags=["tasks"])
+public_router = APIRouter(tags=["tasks"])
 
 STATUSES = ("open", "in_progress", "blocked", "done")
 PRIORITIES = ("high", "medium", "low")
@@ -349,3 +356,115 @@ async def run_task_agent(task_id: str, m: OrgMembership = Depends(_manager), db:
         raise HTTPException(status_code=400, detail="This task is assigned to a person, not an agent")
     await _run_agent(db, m.org_id, task_id)
     return _out(_task(db, m.org_id, task_id))
+
+
+# Reminders: once the day before a task is due and once after it passes, to the person it is assigned to
+
+def unsubscribe_token(user_id: str) -> str:
+    return hmac.new(settings.jwt_secret.encode(), f"task-reminders:{user_id}".encode(), hashlib.sha256).hexdigest()
+
+
+def unsubscribe_url(user_id: str, frontend_url: str) -> str:
+    # through the app's proxy: the API itself is not public
+    return f"{frontend_url.rstrip('/')}/api/proxy/api/v1/public/task-reminders/unsubscribe?u={user_id}&t={unsubscribe_token(user_id)}"
+
+
+def reminders_due(db: Session, today: date) -> List[Dict[str, Any]]:
+    """Open tasks assigned to an active member who still gets reminders, due tomorrow or past due, not yet reminded for that date."""
+    rows = db.execute(
+        text(
+            "SELECT t.id, t.title, t.due_date, CAST(u.id AS TEXT) AS uid, u.email, "
+            "CASE WHEN t.due_date < :today THEN 'overdue' ELSE 'soon' END AS kind "
+            "FROM org_tasks t "
+            "JOIN users u ON CAST(u.id AS TEXT) = t.assignee_user_id "
+            "JOIN org_members m ON CAST(m.org_id AS TEXT) = t.org_id AND CAST(m.user_id AS TEXT) = t.assignee_user_id AND m.status = 'active' "
+            "WHERE t.status <> 'done' AND t.due_date IS NOT NULL AND COALESCE(u.task_reminders_off, false) = false "
+            "AND ((t.due_date = :tomorrow AND t.soon_reminded_for IS DISTINCT FROM t.due_date) "
+            "  OR (t.due_date < :today AND t.overdue_reminded_for IS DISTINCT FROM t.due_date)) "
+            "ORDER BY t.due_date, t.number"
+        ),
+        {"today": today.isoformat(), "tomorrow": (today + timedelta(days=1)).isoformat()},
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+async def sweep_task_reminders(
+    session_factory: Callable[[], Session],
+    send: Callable[[str, list, list, str], Awaitable[bool]],
+    frontend_url: str,
+    today: Optional[date] = None,
+) -> int:
+    """Email each person one reminder listing their tasks due tomorrow and past due; a failed send retries next sweep."""
+    today = today or datetime.now(timezone.utc).date()
+
+    def collect() -> List[Dict[str, Any]]:
+        db = session_factory()
+        try:
+            return reminders_due(db, today)
+        finally:
+            db.close()
+
+    people: Dict[str, Dict[str, Any]] = {}
+    for r in await asyncio.to_thread(collect):
+        p = people.setdefault(r["uid"], {"email": r["email"], "soon": [], "overdue": []})
+        p[r["kind"]].append({"id": r["id"], "title": r["title"], "due": r["due_date"], "url": f"{frontend_url.rstrip('/')}/tasks?task={r['id']}"})
+
+    sent = 0
+    for uid, p in people.items():
+        if not await send(p["email"], p["soon"], p["overdue"], unsubscribe_url(uid, frontend_url)):
+            continue
+        sent += 1
+
+        def mark(p=p) -> None:
+            db = session_factory()
+            try:
+                for kind, col in (("soon", "soon_reminded_for"), ("overdue", "overdue_reminded_for")):
+                    for t in p[kind]:
+                        # only for the date reminded: a due date moved meanwhile gets its own reminder
+                        db.execute(text(f"UPDATE org_tasks SET {col} = due_date WHERE id = :id AND due_date = :due"), {"id": t["id"], "due": t["due"]})
+                db.commit()
+            finally:
+                db.close()
+
+        await asyncio.to_thread(mark)
+    return sent
+
+
+def _page(title: str, body: str) -> HTMLResponse:
+    return HTMLResponse(
+        f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{escape(title)} · FairMind</title></head>
+<body style="margin:0;background:#f4f4f2;font-family:system-ui,sans-serif;color:#15171a">
+<main style="max-width:480px;margin:12vh auto;padding:32px;background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(21,23,26,.05),0 4px 16px rgba(21,23,26,.04)">
+<h1 style="font-size:20px;font-weight:600;margin:0 0 12px">{escape(title)}</h1>{body}</main></body></html>"""
+    )
+
+
+def _button(label: str, query: str) -> str:
+    return (f'<form method="post" action="?{query}" style="margin-top:20px">'
+            f'<button type="submit" style="height:40px;padding:0 20px;border-radius:999px;border:0;background:#15171a;color:#fff;font:inherit;font-weight:600;cursor:pointer">{escape(label)}</button></form>')
+
+
+def _check_link(u: str, t: str) -> None:
+    if not u or not t or len(t) > 128 or not hmac.compare_digest(t, unsubscribe_token(u)):
+        raise HTTPException(status_code=404, detail="This link is not valid")
+
+
+@public_router.get("/task-reminders/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_page(u: str = "", t: str = ""):
+    # a GET only asks: mail scanners open links, and must not turn reminders off
+    _check_link(u, t)
+    q = f"u={escape(u)}&t={escape(t)}"
+    return _page("Stop task reminders?", '<p style="color:#5a5f68;margin:0">FairMind emails you the day before a task assigned to you is due, and once if it goes past the due date. You will still get an email when a task is assigned to you.</p>' + _button("Stop task reminders", q))
+
+
+@public_router.post("/task-reminders/unsubscribe", response_class=HTMLResponse)
+def unsubscribe(u: str = "", t: str = "", on: int = 0, db: Session = Depends(get_db)):
+    """Also the one-click target of the List-Unsubscribe header."""
+    _check_link(u, t)
+    db.execute(text("UPDATE users SET task_reminders_off = :off WHERE CAST(id AS TEXT) = :u"), {"off": not on, "u": u})
+    db.commit()
+    q = f"u={escape(u)}&t={escape(t)}"
+    if on:
+        return _page("Task reminders are on", '<p style="color:#5a5f68;margin:0">You will get reminders again for tasks assigned to you.</p>')
+    return _page("Task reminders are off", '<p style="color:#5a5f68;margin:0">FairMind will not email you reminders about due dates. Assignment emails still go out.</p>' + _button("Turn them back on", q + "&on=1"))

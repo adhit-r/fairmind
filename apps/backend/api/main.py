@@ -51,6 +51,7 @@ logger = get_logger("main")
 _AUTOPILOT_LOCK = 7_310_001
 _POLICY_ALERT_LOCK = 7_310_002
 _DISCOVERY_LOCK = 7_310_003
+_TASK_REMINDER_LOCK = 7_310_004
 
 
 async def _exclusively(key: int, work) -> bool:
@@ -118,6 +119,23 @@ async def _policy_alert_loop(interval: int) -> None:
             )
         except Exception as e:  # a failed sweep must not stop the next one
             logger.warning(f"Policy alert sweep failed: {e}")
+
+
+async def _task_reminder_loop(interval: int) -> None:
+    """Email people about their tasks due tomorrow or past due, once per due date."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.tasks import sweep_task_reminders
+    from src.infrastructure.email.resend_service import email_service
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(
+                _TASK_REMINDER_LOCK,
+                lambda: sweep_task_reminders(orm_db_manager.SessionLocal, email_service.send_task_reminder, settings.frontend_url),
+            )
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Task reminder sweep failed: {e}")
 
 
 @asynccontextmanager
@@ -203,6 +221,9 @@ async def lifespan(app: FastAPI):
     discovery = None
     if settings.discovery_check_interval_seconds > 0:
         discovery = asyncio.create_task(_discovery_loop(settings.discovery_check_interval_seconds))
+    task_reminders = None
+    if settings.task_reminder_interval_seconds > 0:
+        task_reminders = asyncio.create_task(_task_reminder_loop(settings.task_reminder_interval_seconds))
     autopilot = None
     if settings.autopilot_interval_seconds > 0:
         autopilot = asyncio.create_task(_autopilot_loop(settings.autopilot_interval_seconds))
@@ -224,6 +245,8 @@ async def lifespan(app: FastAPI):
         autopilot.cancel()
     if discovery:
         discovery.cancel()
+    if task_reminders:
+        task_reminders.cancel()
     
     # Close database connections
     try:
@@ -632,6 +655,7 @@ _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], requ
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.tasks", prefix="/api/v1", tags=["tasks"], required=True)
+_include_router("api.routes.tasks", prefix="/api/v1/public", tags=["tasks"], attr="public_router", required=True)
 _include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
