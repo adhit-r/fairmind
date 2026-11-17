@@ -668,3 +668,12 @@ def test_notifier_shows_messages_for_its_laptop_once(env):
     assert again["messages"] == [] and again["history"][0]["shownAt"]
     st = c.get("/api/v1/shadow-ai/agent").json()
     assert st["notifiers"] == 2 and st["hasNotifierSecret"] and st["events"][0]["shownAt"]
+
+
+def test_agent_status_problems_are_real_failures_only():
+    p = agent.status_problem
+    assert p({"severity": "1", "message": "Extensions disabled: cannot start extension manager (/private/tmp/x/osquery.em)"}) is None
+    assert p({"severity": "0", "message": "Event publisher not enabled: endpointsecurity_fim: EndpointSecurity is disabled via configuration"}) is None
+    assert p({"severity": "0", "message": "Event publisher not enabled: endpointsecurity: EndpointSecurity is disabled via configuration"}) is None
+    assert p({"severity": "1", "message": "EndpointSecurity client could not start: not permitted"}) == "EndpointSecurity client could not start: not permitted"
+    assert p({"severity": "2", "message": "TLS request failed for /var/osquery/x"}) == "TLS request failed for"
