@@ -9,7 +9,7 @@ from sqlalchemy import text as sql
 
 from api.main import app
 from database.connection import db_manager
-from src.application.services.evidence_pack_service import canonical_bytes, verify_manifest
+from src.application.services.evidence_pack_service import canonical_bytes, manifest_digest, verify_manifest
 from tests.auth_helpers import auth_headers
 
 GOV = "/api/v1/ai-governance"
@@ -39,7 +39,7 @@ def test_pack_hash_matches_verify_manifest_and_tampering_is_caught():
     pack = _pack(client, sid)
     detail = client.get(f"{GOV}/packs/{pack['id']}").json()
     manifest = detail["manifest"]
-    assert manifest["version"] == 1 and manifest["frameworks"] == ["EUAIA", "ISO42001"]
+    assert manifest["version"] == 2 and manifest["frameworks"] == ["EUAIA", "ISO42001"]
     system = manifest["systems"][0]
     assert system["system"]["id"] == sid and len(system["evidence"]) == 1 and len(system["chainHead"]) == 64
     assert {f["key"] for f in system["clauseMap"]["frameworks"]} <= {"EUAIA", "ISO42001"}
@@ -55,6 +55,52 @@ def test_pack_hash_matches_verify_manifest_and_tampering_is_caught():
     manifest["systems"][0]["evidence"][0]["hash"] = "0" * 64
     tampered = verify_manifest(manifest, detail["manifestHash"])
     assert not tampered["intact"] and not tampered["hashMatches"] and not tampered["systems"][0]["chainIntact"]
+
+
+def _browser_round_trip(manifest: dict) -> dict:
+    """JSON.parse then JSON.stringify, as a browser saves a file: 0.0 comes back as 0."""
+    return json.loads(json.dumps(manifest), parse_float=lambda v: int(float(v)) if float(v).is_integer() else float(v))
+
+
+def test_pack_carries_records_and_decisions_and_survives_a_browser_round_trip():
+    client = _client("pack-detail")
+    sid = _system_with_attestation(client)
+    req = client.post(f"{GOV}/approval/system/{sid}/request", json={}).json()["request"]
+    assert client.post(f"{GOV}/approval-requests/{req['id']}/decision", json={"decision": "approved", "notes": "Fairness gap accepted until Q4"}).status_code == 200
+    detail = client.get(f"{GOV}/packs/{_pack(client, sid)['id']}").json()
+    system = detail["manifest"]["systems"][0]
+
+    record = system["evidence"][0]
+    assert record["type"] == "data_governance" and record["title"] and json.loads(record["content"])
+    seal = system["seals"][0]
+    assert seal["notes"] == "Fairness gap accepted until Q4" and seal["decisionId"] and seal["gate"]["verdict"] and "effectiveTier" in seal["gate"]
+
+    # open checks carry confidence 0.0; the browser writes 0, and the pack still verifies
+    assert any(c["state"] == "open" for c in system["gate"]["checks"])
+    with_float = {**detail["manifest"], "probe": 0.0}
+    assert verify_manifest(_browser_round_trip(with_float), manifest_digest(with_float))["intact"]
+    assert not verify_manifest(_browser_round_trip({**with_float, "version": 1}), manifest_digest({**with_float, "version": 1}))["intact"]
+
+    record["title"] = "edited"
+    result = verify_manifest(detail["manifest"], detail["manifestHash"])
+    assert not result["intact"] and result["systems"][0]["entriesNotMatchingHash"] == [record["id"]] and result["systems"][0]["chainIntact"]
+
+
+def test_plan_attestations_for_organisation_controls_are_hashed_into_the_pack():
+    client = _client("pack-org")
+    sid = _system_with_attestation(client)
+    with db_manager.SessionLocal() as session:
+        org_id = session.execute(sql("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": sid}).scalar()
+        session.execute(
+            sql("INSERT INTO plan_attestations (id, org_id, task_key, statement, reference, attested_by, created_at) "
+                "VALUES (:id, :org, 'control:FMC-GOV-01', 'Board approved the AIMS scope', 'Board minutes', 'owner', '2026-11-03T10:00:00+00:00')"),
+            {"id": str(uuid.uuid4()), "org": org_id},
+        )
+        session.commit()
+    detail = client.get(f"{GOV}/packs/{_pack(client, sid)['id']}").json()
+    [attestation] = detail["manifest"]["organisation"]["attestations"]
+    assert attestation["task_key"] == "control:FMC-GOV-01" and attestation["reference"] == "Board minutes"
+    assert verify_manifest(detail["manifest"], detail["manifestHash"])["hashMatches"]
 
 
 def test_share_token_public_fetch_wrong_token_expiry_and_revoke():

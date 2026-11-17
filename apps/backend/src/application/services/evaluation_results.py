@@ -8,10 +8,13 @@ no rule has no results yet.
 """
 
 import json
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from src.application.services.fairness_run_service import _record_time
 
 # Attribute names the fairness engine treats as India-specific (see fairness_run_service.ATTRIBUTE_HINTS).
 INDIA_ATTRIBUTES = ("caste", "religion", "region", "state", "district", "language")
@@ -89,8 +92,47 @@ def _rollup(systems: List[dict]) -> str:
     return "passed" if "passed" in statuses else "insufficient"
 
 
+# the gate check each rule's evidence type feeds; a rule's result goes stale only when a change reopens that check
+RULE_CHECK = {"fairness_test": "fairness", "monitoring": "monitoring", "environmental_impact": "environmental"}
+ANY_CHANGE = "*"
+
+
+def _changed_at(db: Session, org_id: str) -> Dict[str, Dict[str, datetime]]:
+    """Per system, its newest material change (ANY_CHANGE) and the newest change that reopened each check."""
+    rows = db.execute(
+        text(
+            "SELECT c.system_id, c.reopens_json, c.created_at FROM governance_system_changes c JOIN governance_ai_systems s ON s.id = c.system_id "
+            "WHERE s.org_id = :org_id AND c.material"
+        ),
+        {"org_id": org_id},
+    ).fetchall()
+    out: Dict[str, Dict[str, datetime]] = {}
+    for sid, reopens_json, raw in rows:
+        at = _record_time({"createdAt": raw})
+        if at is None:
+            continue
+        newest = out.setdefault(sid, {})
+        for key in [ANY_CHANGE, *json.loads(reopens_json or "[]")]:
+            if key not in newest or at > newest[key]:
+                newest[key] = at
+    return out
+
+
+def _stale(row, changed: Dict[str, Dict[str, datetime]], check: str = ANY_CHANGE) -> bool:
+    """An engine run goes stale at any material change; a rule result only at a change that reopens its check."""
+    at = changed.get(row["system_id"], {}).get(check)
+    if at is None:
+        return False
+    filed = _record_time({"createdAt": row["created_at"]})
+    return filed is None or filed < at
+
+
 def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
-    """Latest result per AI system for every evaluation that has a rule, and the organisation-wide status."""
+    """Latest result per AI system for every evaluation that has a rule, and the organisation-wide status.
+
+    A result filed before the change that reopened its check (any material change, for an engine run) no longer
+    counts: that system reads as not run.
+    """
     rows = (
         db.execute(
             text(
@@ -104,11 +146,12 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
         .mappings()
         .all()
     )
+    changed = _changed_at(db, org_id)
     out: Dict[str, Dict[str, Any]] = {}
     for ev_id, (evidence_type, rule) in RULES.items():
         latest: Dict[str, dict] = {}
         for row in rows:
-            if row["evidence_type"] != evidence_type or row["system_id"] in latest:
+            if row["evidence_type"] != evidence_type or row["system_id"] in latest or _stale(row, changed, RULE_CHECK[evidence_type]):
                 continue
             try:
                 verdict = rule(json.loads(row["content_json"] or "{}"))
@@ -125,10 +168,10 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
                 }
         systems = sorted(latest.values(), key=lambda s: s["at"], reverse=True)
         out[ev_id] = {"status": _rollup(systems), "systems": systems, "latestAt": systems[0]["at"] if systems else None}
-    return {**_engine_runs(db, org_id), **out}
+    return {**_engine_runs(db, org_id, changed), **out}
 
 
-def _engine_runs(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
+def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime]]) -> Dict[str, Dict[str, Any]]:
     """Latest engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router)."""
     from src.application.services.eval_engines import REGISTRY
 
@@ -142,6 +185,8 @@ def _engine_runs(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
     ).mappings().all()
     latest: Dict[str, Dict[str, dict]] = {ev: {} for ev in REGISTRY}
     for row in rows:
+        if _stale(row, changed):
+            continue
         content = json.loads(row["content_json"] or "{}")
         ev_id = content.get("evaluationId")
         if ev_id not in latest or row["system_id"] in latest[ev_id]:
@@ -159,6 +204,11 @@ def _engine_runs(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
         systems = sorted(by_system.values(), key=lambda s: s["at"], reverse=True)
         out[ev_id] = {"status": _rollup(systems), "systems": systems, "latestAt": systems[0]["at"] if systems else None}
     return out
+
+
+def system_result(res: Dict[str, Dict[str, Any]], evaluation_id: str, system_id: str) -> Optional[Dict[str, Any]]:
+    """One system's own latest result for one evaluation, or None when it has none: never another system's."""
+    return next((x for x in (res.get(evaluation_id) or {}).get("systems", []) if x["systemId"] == system_id), None)
 
 
 def passed(res: Dict[str, Dict[str, Any]]) -> List[str]:

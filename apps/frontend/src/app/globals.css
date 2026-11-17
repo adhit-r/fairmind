@@ -159,7 +159,7 @@ button.fm-cel:focus-visible { outline: 2px solid var(--fm-ink); outline-offset: 
 .fm-cel.estimated::before { -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; }
 .fm-cel.attested { box-shadow: inset 0 0 0 1px var(--fm-ink); }
 /* Partially satisfies is half filled, not hatched: hatch means attested, and grids can show both legends. */
-.fm-cel.r2 { box-shadow: inset 0 -6px 0 var(--fm-ink), inset 0 0 0 1px var(--fm-ink); }
+.fm-cel.r2, .fm-cel.partial { box-shadow: inset 0 -6px 0 var(--fm-ink), inset 0 0 0 1px var(--fm-ink); }
 .fm-cel.planned,
 .fm-cel.r1 { box-shadow: inset 0 0 0 1px var(--fm-ink); }
 .fm-cel.open { box-shadow: inset 0 0 0 1.5px var(--fm-brand); }

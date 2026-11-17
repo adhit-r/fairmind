@@ -946,3 +946,13 @@ def test_compliance_frameworks_come_from_the_pack_catalogue(authenticated_org_da
     assert body["ISO42001"]["controls"] == sorted(FRAMEWORK_KEYS["ISO42001"])
     assert body["NISTRMF"]["name"] == FRAMEWORKS["NISTRMF"].name
     assert body["ISO42001"]["priority"] == "P0"
+
+
+def test_evidence_summary_missing_signals_follow_the_release_gate():
+    from api.routes.ai_governance import _summarize_evidence
+
+    assert _summarize_evidence([], "s")["missingSignals"] == [
+        "fairness evidence", "data governance evidence", "human oversight evidence", "monitoring evidence",
+    ]
+    records = [{"type": "Policy", "confidence": 0.3}, {"type": "monitoring_snapshot", "confidence": 0.9, "linkedEntityCount": 1}, {"type": "audit_log"}]
+    assert _summarize_evidence(records, "s")["missingSignals"] == ["fairness evidence", "data governance evidence"]

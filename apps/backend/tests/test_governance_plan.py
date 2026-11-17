@@ -58,7 +58,7 @@ def test_discovery_reads_the_description_asks_the_rest_and_builds_a_plan_from_th
     chosen = {"ISO42001", "INDAI", "RBIFREEAI"}
     for t in view["tasks"]:
         assert t["requirements"] and {r["framework"] for r in t["requirements"]} <= chosen, t["key"]
-        assert t["state"] in ("todo", "needs_you", "agent", "review", "proven")
+        assert t["state"] in ("todo", "needs_you", "agent", "review", "attested", "proven")
     assert not any(t["controlId"] in ("FMC-AGT-01", "FMC-AGT-02", "FMC-SLF-01") for t in view["tasks"])
     assert [t["priority"] for t in view["tasks"]] == list(range(1, len(view["tasks"]) + 1))
     scope = _task(view, "FMC-GOV-01")
@@ -69,9 +69,10 @@ def test_discovery_reads_the_description_asks_the_rest_and_builds_a_plan_from_th
 
     assert client.post(f"{PLAN}/tasks/control:FMC-GOV-01/attest", json={"statement": "short"}).status_code == 422
     view = client.post(f"{PLAN}/tasks/control:FMC-GOV-01/attest", json={"statement": "Board approved the AI governance scope on 3 Nov", "reference": "Board minutes 2026-11-03"}).json()
-    assert _task(view, "FMC-GOV-01")["state"] == "proven" and _task(view, "FMC-GOV-01")["attestation"]["reference"] == "Board minutes 2026-11-03"
+    # a statement alone, with no completed run, is attested, not proven
+    assert _task(view, "FMC-GOV-01")["state"] == "attested" and _task(view, "FMC-GOV-01")["attestation"]["reference"] == "Board minutes 2026-11-03"
     assert _task(view, "FMC-GOV-02")["state"] == "needs_you"
-    assert view["changes"][0]["summary"].startswith("1 proven: AIMS scope")
+    assert view["changes"][0]["summary"].startswith("1 attested: AIMS scope")
 
     system = _system(tmp_database, org_id, name="Loan scorer")
     _store(tmp_database, org_id, system, "fairness_test", _fairness(True), "2026-11-01T10:00:00")
@@ -109,3 +110,22 @@ def test_with_a_provider_the_model_reads_the_description(tmp_database, monkeypat
     assert [c["value"] for c in disc["next"]["controls"] if c["id"] == "FMC-GOV-02"] == ["established"]
     assert [c["value"] for c in disc["next"]["controls"] if c["id"] == "FMC-INC-01"] == [None]  # an invalid level is dropped
     assert not any(c["id"] == "FMC-AGT-01" for c in disc["map"]["outOfScope"])  # agents are in scope now
+
+
+def test_a_passing_evaluation_does_a_system_task_and_an_attested_check_reads_attested(tmp_database):
+    org_id, client = _org(tmp_database)
+    for key, value in (("about", ABOUT), ("value_chain", "deployer"), ("maturity", {}), ("people", {}), ("frameworks", ["ISO42001"])):
+        _answer(client, key, value)
+    assert client.post(f"{PLAN}/generate").status_code == 200
+    system = _system(tmp_database, org_id, name="Support chatbot")
+    assert _task(client.get(PLAN).json(), "FMC-TST-01")["systems"][0]["detail"] == "not started"
+
+    _store(tmp_database, org_id, system, "evaluation_run", {"evaluationId": "EV-TST-04", "status": "failed"}, "2026-11-01T10:00:00")
+    assert _task(client.get(PLAN).json(), "FMC-TST-01")["systems"][0]["detail"] == "test failed"
+    _store(tmp_database, org_id, system, "evaluation_run", {"evaluationId": "EV-TST-04", "status": "passed"}, "2026-11-01T11:00:00")
+    _store(tmp_database, org_id, system, "human_oversight", {"statement": "Reviewers sign off each release"}, "2026-11-01T11:00:00")
+    view = client.get(PLAN).json()
+    testing = _task(view, "FMC-TST-01")
+    assert testing["systems"][0]["detail"] == "tested" and testing["state"] == "proven"
+    oversight = _task(view, "FMC-OVS-01")
+    assert oversight["systems"][0]["detail"] == "attested" and oversight["state"] == "attested"  # as the clause map reads it

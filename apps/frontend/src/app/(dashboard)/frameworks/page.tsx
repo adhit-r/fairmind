@@ -91,6 +91,8 @@ export default function FrameworksPage() {
                         <tbody>
                           {inUse.map((r) => {
                             const f = used.get(r.key)!
+                            // the same rule as the queue this number links to: a requirement nothing reaches shows in the bar as not tracked
+                            const untracked = f.states.none ?? 0
                             const work = NEEDS_WORK.reduce((a, s) => a + (f.states[s as keyof typeof f.states] ?? 0), 0)
                             const failing = f.states.fails ?? 0
                             return (
@@ -100,7 +102,7 @@ export default function FrameworksPage() {
                                     <span>
                                       <Link href={href(r.key)}>{r.name}</Link>
                                       <small>
-                                        {f.tracked} of {r.active} requirements checked per system
+                                        {f.tracked - untracked} of {r.active} requirements checked per system
                                       </small>
                                     </span>
                                   </span>
@@ -144,7 +146,7 @@ export default function FrameworksPage() {
                         <tr>
                           <th scope="col">Framework</th>
                           <th scope="col">Kind</th>
-                          <th scope="col">Covered by installed packs</th>
+                          <th scope="col">Covered by completed pack work</th>
                           <th scope="col"><span className="sr-only">Actions</span></th>
                         </tr>
                       </thead>

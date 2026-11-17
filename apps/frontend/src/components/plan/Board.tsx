@@ -12,9 +12,10 @@ export const COLUMNS: Array<{ key: TaskState; label: string; hint: string }> = [
   { key: 'needs_you', label: 'Needs you', hint: 'Ready for its owner' },
   { key: 'agent', label: 'Agent working', hint: 'Running now' },
   { key: 'review', label: 'In review', hint: 'Waiting for an approver' },
+  { key: 'attested', label: 'Attested', hint: 'A person stated it; nothing measured' },
   { key: 'proven', label: 'Proven', hint: 'Evidence is on file' },
 ]
-const STATE_DOT: Record<TaskState, string> = { todo: 'bg-[#c3c6cc]', needs_you: 'bg-[var(--fm-brand)]', agent: 'bg-[#378ADD]', review: 'bg-[#EF9F27]', proven: 'bg-[#1D9E75]' }
+const STATE_DOT: Record<TaskState, string> = { todo: 'bg-[#c3c6cc]', needs_you: 'bg-[var(--fm-brand)]', agent: 'bg-[#378ADD]', review: 'bg-[#EF9F27]', attested: 'bg-[#9FD8C4]', proven: 'bg-[#1D9E75]' }
 const STATE_LABEL = Object.fromEntries(COLUMNS.map((c) => [c.key, c.label])) as Record<TaskState, string>
 
 function owner(t: PlanTask) {

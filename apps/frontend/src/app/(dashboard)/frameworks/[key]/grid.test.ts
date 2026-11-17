@@ -57,6 +57,16 @@ test('untracked requirements are hidden, then shown with a blank reason', () => 
   assert.equal(untracked.blank, NOT_TRACKED)
 })
 
+test('a requirement whose cells are all null is untracked, like a missing one', () => {
+  const nulls = { ...fw, requirements: [...fw.requirements, { key: 'FW|1.2', cells: [null, null] }] }
+  const hidden = systemGrid(journey, nulls, false)
+  assert.deepEqual(hidden.matrix.groups.flatMap((g) => g.rows.map((r) => r.key)), ['FW|1.1', 'FW|2.1'])
+  assert.equal(hidden.tracked, 2)
+  const row = systemGrid(journey, nulls, true).matrix.groups[0].rows[1]
+  assert.equal(row.blank, NOT_TRACKED)
+  assert.equal(row.count, undefined)
+})
+
 test('columns run Org, then systems by tier from Critical down, with cells in that order', () => {
   const { matrix } = systemGrid(journey, fw, false)
   assert.deepEqual(matrix.colGroups.map((g) => g.label), ['Org', 'Critical', 'Low'])

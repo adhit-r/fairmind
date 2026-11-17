@@ -477,12 +477,13 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     by_key = {f["key"]: f for f in out["frameworks"]}
     assert [f["key"] for f in out["frameworks"]][:3] == ["EUAIA", "ISO42001", "NISTRMF"]
     eu = {c["control"]: c for c in by_key["EUAIA"]["clauses"]}
-    assert eu["Art 10"]["state"] == "proven" and any(ch["check"] == "fairness" for ch in eu["Art 10"]["checks"])
+    # fairness only supports Art 10, so a proven fairness check makes it partial, not proven
+    assert eu["Art 10"]["state"] == "partial" and any(ch["check"] == "fairness" for ch in eu["Art 10"]["checks"])
     assert eu["Art 14"]["state"] == "attested" and eu["Art 72"]["state"] == "open"
     controls = [c["control"] for c in by_key["EUAIA"]["clauses"]]
     assert controls.index("Art 10") < controls.index("Art 12") < controls.index("Art 53") < controls.index("Art 72")
     counts = by_key["EUAIA"]["counts"]
-    assert counts["total"] == counts["proven"] + counts["attested"] + counts["open"] and counts["proven"] >= 1
+    assert counts["total"] == counts["proven"] + counts["partial"] + counts["attested"] + counts["open"] and counts["partial"] >= 1
     only_nist = clause_map(gate, frameworks=["NISTRMF"])
     assert [f["key"] for f in only_nist["frameworks"]] == ["NISTRMF"]
     assert {c["control"] for c in only_nist["frameworks"][0]["clauses"]} >= {"MEASURE 2.11", "MAP 3.5", "MANAGE 4.1"}
@@ -491,10 +492,10 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     order = [f["key"] for f in out["frameworks"]]
     assert order.index("RBIFREEAI") == order.index("INDAI") + 1
     rbi_clauses = {c["control"]: c for c in rbi["clauses"]}
-    assert rbi_clauses["Sutra 4"]["title"] == "Fairness and equity" and rbi_clauses["Sutra 4"]["state"] == "proven"
+    assert rbi_clauses["Sutra 4"]["title"] == "Fairness and equity" and rbi_clauses["Sutra 4"]["state"] == "partial"
     assert any(ch["check"] == "fairness" and ch["state"] == "proven" for ch in rbi_clauses["Sutra 4"]["checks"])
     assert rbi_clauses["Sutra 2"]["state"] == "attested" and rbi_clauses["Rec 15"]["state"] == "open"
-    assert rbi["counts"]["total"] == len(rbi["clauses"]) and rbi["counts"]["proven"] >= 1
+    assert rbi["counts"]["total"] == len(rbi["clauses"]) and rbi["counts"]["partial"] >= 1
     for alias in ("rbi_free_ai", "RBI FREE-AI", "RBIFREEAI"):
         assert [f["key"] for f in clause_map(gate, frameworks=framework_keys([alias]))["frameworks"]] == ["RBIFREEAI"]
 
@@ -608,3 +609,41 @@ def test_fairness_metrics_match_the_hand_calculation():
     # Ten rows per group cannot show the gap is real; two hundred rows can.
     assert all(small["checks"].values())
     assert not any(large["checks"].values())
+
+
+def _eval_run(evaluation_id, status, at):
+    return {"id": f"{evaluation_id}-{at}", "type": "evaluation_run", "confidence": 1.0, "metadata": {"provenance_class": "measured"},
+            "timestamp": f"2026-11-06T{at}:00+00:00", "content": {"evaluationId": evaluation_id, "status": status}}
+
+
+def test_a_failed_evaluation_run_stands_until_that_evaluation_passes_again():
+    gate = lambda evidence: release_gate("low", evidence, include_environmental=False)  # noqa: E731
+    check = lambda g, key: next(c for c in g["checks"] if c["key"] == key)  # noqa: E731
+    # (a) a newer pass of another evaluation of the same control does not clear the failure
+    other = gate([_eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-USE-01", "passed", "10:05")])
+    assert check(other, "fairness")["fails"] is True and other["verdict"] != "go"
+    assert any("EV-FAI-05 failed" in r for r in other["reasons"])
+    # (b) nor does a newer attestation of the check
+    attestation = {"id": "att", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T10:05:00+00:00"}
+    attested = gate([_eval_run("EV-OVS-01", "failed", "10:00"), attestation])
+    assert check(attested, "human_oversight")["fails"] is True and attested["verdict"] != "go"
+    # a newer pass of the same evaluation does
+    again = gate([_eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-FAI-05", "passed", "10:05")])
+    assert "fails" not in check(again, "fairness") and not any("failed" in r for r in again["reasons"])
+
+
+def test_an_environmental_run_never_shadows_the_assessment():
+    gate = release_gate("high", [_eval_run("EV-ENV-01", "failed", "10:00")], environmental_assessed={"provenance_class": "tool_estimated", "confidence": 0.85})
+    env = next(c for c in gate["checks"] if c["key"] == "environmental")
+    assert (env["state"], env["confidence"], env["evidenceClass"], env["evidenceId"]) == ("proven", 0.85, "tool_estimated", None) and "fails" not in env
+    # the run still reaches its clauses through the clause map
+    assert [r["evaluationId"] for r in gate["evaluations"]] == ["EV-ENV-01"]
+
+
+def test_the_clause_map_keeps_every_evaluation_of_a_control():
+    gate = release_gate("medium", [_eval_run("EV-SEC-01", "failed", "10:00"), _eval_run("EV-SEC-02", "passed", "10:05")])
+    assert sorted((r["evaluationId"], r["status"]) for r in gate["evaluations"]) == [("EV-SEC-01", "failed"), ("EV-SEC-02", "passed")]
+    from src.application.services.clause_map_service import clause_map
+
+    reached = [c for fw in clause_map(gate)["frameworks"] for c in fw["clauses"] if any(ch["check"] == "EV-SEC-01" for ch in c["checks"])]
+    assert reached and all(c["cell"] == "fails" and c["state"] != "proven" for c in reached)

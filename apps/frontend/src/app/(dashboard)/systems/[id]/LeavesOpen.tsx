@@ -15,20 +15,22 @@ export function JourneyFeed({ fw, onChange }: { fw: string; onChange: (fw: strin
   return null
 }
 
-/** Requirements of the confirmed frameworks this system leaves open or fails: failures first, then those the organisation does not hold, capped. */
+/** Requirements of the confirmed frameworks this system leaves open or fails: failures first, then open ones the organisation does not hold,
+ *  then those nothing reaches, capped. */
 export function leavesOpen(clauseMap: ClauseMap | null, journeys: Journey[]): { n: number; groups: MatrixGroup[]; more: { n: number; href: string } } {
   // An unscoped map (no confirmed frameworks) is the whole catalogue: nothing to leave open yet.
   const fws = clauseMap?.scoped ? clauseMap.frameworks : []
   const org = new Map(journeys.map((j) => [j.key, new Map(j.groups.flatMap((g) => g.requirements.map((r) => [r.key, r.status === 'covered' || r.status === 'tested'])))]))
   const all = fws.flatMap((f, fi) =>
     f.clauses
-      .filter((c) => c.cell === 'open' || c.cell === 'fails')
+      // a clause nothing reaches (cell none) is open too: no release check or evaluation speaks to it
+      .filter((c) => c.state === 'open' || c.cell === 'fails')
       .map((c, i) => {
         const held = org.get(f.key)?.get(c.key)
-        return { f, fi, i, c, fails: c.cell === 'fails', held: !!held, known: org.has(f.key) }
+        return { f, fi, i, c, fails: c.cell === 'fails', none: c.cell === 'none', held: !!held, known: org.has(f.key) }
       }),
   )
-  const ranked = [...all].sort((a, b) => +b.fails - +a.fails || +a.held - +b.held || a.fi - b.fi || a.i - b.i)
+  const ranked = [...all].sort((a, b) => +b.fails - +a.fails || +a.none - +b.none || +a.held - +b.held || a.fi - b.fi || a.i - b.i)
   const shown = ranked.slice(0, CAP).sort((a, b) => a.fi - b.fi || +b.fails - +a.fails || a.i - b.i)
   const hidden = ranked.slice(CAP)
   const groups: MatrixGroup[] = []
@@ -40,7 +42,7 @@ export function leavesOpen(clauseMap: ClauseMap | null, journeys: Journey[]): { 
       code: r.c.control,
       label: r.c.title,
       title: [r.c.control, r.c.title, r.c.group].filter(Boolean).join(' · '),
-      cells: [r.c.cell, r.held ? 'atorg' : null],
+      cells: [r.fails ? 'fails' : 'open', r.held ? 'atorg' : null],
       blank: [undefined, r.known ? ORG_BLANK : 'Organisation status not loaded'],
     })
   }

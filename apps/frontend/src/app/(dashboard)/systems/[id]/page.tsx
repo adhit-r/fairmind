@@ -45,7 +45,7 @@ import { TargetPanel } from './TargetPanel'
 import { RequirementsTab } from './RequirementsTab'
 import { RecordTab } from './RecordTab'
 import { LeavesOpen } from './LeavesOpen'
-import { VerdictExplainer, stepLine, stepTitle, tierOverride } from './VerdictExplainer'
+import { HASH_PANEL, VerdictExplainer, stepLine, stepTitle, tierOverride } from './VerdictExplainer'
 import { RetiredCard, VersionsCard } from './Lifecycle'
 import { useRetirement, useSystemChanges } from '@/lib/api/hooks/useLifecycle'
 
@@ -93,7 +93,7 @@ function SystemFileBody({ id }: { id: string }) {
   const file = useSystemFile(id)
   const changes = useSystemChanges(id)
   const retirement = useRetirement(id)
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
+  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
   const ap = useAutopilot(id, `${gate?.confidence ?? ''}-${evidence?.totalEvidence ?? 0}-${approval?.decisions.length ?? 0}`)
   const { confirm: confirmApplicability, acceptOverride } = useApplicability()
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
@@ -190,10 +190,21 @@ function SystemFileBody({ id }: { id: string }) {
     switch (step.action) {
       case 'fairness_run': return <Button label="Run the test" variant="secondary" onClick={() => setPanel({ kind: 'fairness' })} />
       case 'monitoring_snapshot': return <Button label="Record a snapshot" variant="secondary" onClick={() => setPanel({ kind: 'monitoring' })} />
+      case 'evaluation_run': return <Button label="Run an evaluation" variant="secondary" onClick={() => open('/evaluations')} />
       case 'attest': return isAttestable(step.check) ? <Button label="Attest" variant="secondary" onClick={() => setPanel({ kind: 'attest', check: step.check as AttestableCheck })} /> : null
       case 'environmental_assessment': return <Button label="Open assessment" variant="secondary" href={`/environment?system=${encodeURIComponent(id)}`} />
-      case 'evidence_upload': return <Button label="Record evidence" variant="secondary" href={`/evidence?system=${encodeURIComponent(id)}`} />
+      case 'evidence_upload': return <Button label="Record evidence" variant="secondary" href={`/evidence?system=${encodeURIComponent(id)}&check=${step.check}`} />
     }
+  }
+
+  // The explainer's in-page links open the matching panel; a decision opens only while a request waits for one,
+  // and with none yet the link requests it.
+  const openFromExplainer = (href: string) => {
+    const kind = HASH_PANEL[href]
+    if (kind && (kind !== 'decide' || (status === 'pending' && req))) return setPanel({ kind })
+    setPanel(null)
+    if (kind === 'decide' && canRequest && !retired) return void act('request', file.requestDecision)
+    if (!href.startsWith('#')) open(href)
   }
 
   const retired = retirement.data?.retired ?? null
@@ -280,7 +291,17 @@ function SystemFileBody({ id }: { id: string }) {
           {evidence && <MetadataListItem label="Linked"><Text type="body">{evidence.linkedEvidence} of {evidence.totalEvidence} to controls</Text></MetadataListItem>}
           {evidence && <MetadataListItem label="Review state"><Text type="body">{READINESS_LABEL[evidence.decisionReadiness] ?? evidence.decisionReadiness}</Text></MetadataListItem>}
           {evidence && evidence.missingSignals.length > 0 && <MetadataListItem label="Missing"><Text type="body">{evidence.missingSignals.join(', ')}</Text></MetadataListItem>}
-          <MetadataListItem label="Fairness"><Text type="body">{fairnessRuns.length ? `${fairnessRuns.length} run${fairnessRuns.length === 1 ? '' : 's'}, latest ${when(fairnessRuns[0].createdAt)}` : 'Not measured yet'}</Text></MetadataListItem>
+          <MetadataListItem label="Fairness"><Text type="body">{fairnessRuns.length ? `${fairnessRuns.length} run${fairnessRuns.length === 1 ? '' : 's'}, latest ${when(fairnessRuns[0].createdAt)}` : evaluationRuns.length ? 'No fairness test; see evaluations' : 'Not measured yet'}</Text></MetadataListItem>
+          <MetadataListItem label="Evaluations">
+            {evaluationRuns.length ? (
+              <Text type="body">
+                {/* the endpoint returns the newest 20 runs */}
+                {evaluationRuns.length >= 20 ? '20+' : evaluationRuns.length} run{evaluationRuns.length === 1 ? '' : 's'}, latest{' '}
+                <Link href={`/compliance/evaluations/${encodeURIComponent(evaluationRuns[0].evaluationId)}`}>{evaluationRuns[0].evaluationId}</Link>{' '}
+                {evaluationRuns[0].status} on {when(evaluationRuns[0].createdAt)}
+              </Text>
+            ) : <Text type="body">None run</Text>}
+          </MetadataListItem>
           <MetadataListItem label="Monitoring"><Text type="body">{monitoringRuns.length ? `${monitoringRuns[0].allChecksPass === false ? 'Drifting' : 'Stable'} on ${when(monitoringRuns[0].createdAt)}` : 'None recorded'}</Text></MetadataListItem>
           <MetadataListItem label="Environmental"><Text type="body">{env.loading ? 'Checking' : env.data ? `Assessed${envStatus ? `, ${String(envStatus).replace(/_/g, ' ')}` : ''}` : 'No assessment yet'}</Text></MetadataListItem>
           <MetadataListItem label="Audit reports"><Text type="body">{reports.length ? `${reports.length}, latest ${when(reports[0].createdAt)}` : 'None generated'}</Text></MetadataListItem>
@@ -297,12 +318,12 @@ function SystemFileBody({ id }: { id: string }) {
   const drawerBody = (() => {
     if (!panel) return null
     switch (panel.kind) {
-      case 'fairness': return <FairnessRunPanel inspect={file.inspectCsv} run={file.runFairness} />
+      case 'fairness': return <FairnessRunPanel inspect={file.inspectCsv} run={file.runFairness} onDecide={!retired && ((status === 'pending' && req) || canRequest) ? () => openFromExplainer('#decision') : undefined} decideLabel={canRequest ? (status === 'rejected' ? 'Request a new decision' : 'Request release decision') : undefined} />
       case 'monitoring': return <MonitoringRunPanel inspect={file.inspectCsv} run={file.runMonitoring} hasBaseline={fairnessRuns.length > 0} />
       case 'watch': return <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} save={file.saveMonitoringPolicy} />
       case 'target': return <TargetPanel systemId={id} />
       case 'analyses': return <StoredAnalyses systemId={id} sources={['judge', 'advanced']} />
-      case 'explain': return gate ? <VerdictExplainer gate={gate} onAttest={(c) => isAttestable(c) && setPanel({ kind: 'attest', check: c })} onOpen={(href) => { setPanel(null); if (!href.startsWith('#')) open(href) }} /> : null
+      case 'explain': return gate ? <VerdictExplainer gate={gate} onAttest={(c) => isAttestable(c) && setPanel({ kind: 'attest', check: c })} onOpen={openFromExplainer} /> : null
       case 'attest': return (
         <AttestPanel
           key={panel.check}
@@ -493,8 +514,9 @@ function SystemFileBody({ id }: { id: string }) {
             if (step.action === 'request_release') return void act('request', file.requestDecision)
             if (step.action === 'fairness_run') return setPanel({ kind: 'fairness' })
             if (step.action === 'monitoring_snapshot') return setPanel({ kind: 'monitoring' })
+            if (step.action === 'evaluation_run') return open('/evaluations')
             if (step.action === 'environmental_assessment') return router.push(`/environment?system=${encodeURIComponent(id)}`)
-            return router.push(`/evidence?system=${encodeURIComponent(id)}`)
+            return router.push(`/evidence?system=${encodeURIComponent(id)}&check=${step.check}`)
           }}
         />
       </section>

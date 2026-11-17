@@ -7,7 +7,8 @@
     fairmind monitor --system <id> --file decisions.csv --attributes gender [--prediction approved] [--score score]
     fairmind systems
     fairmind verify pack.json                   offline: recompute the pack hash and chain heads; exit 0 intact, 1 not
-    fairmind verify "<share link>" [--api URL]  fetch the pack behind an auditor link, then verify it locally
+    fairmind verify "<share link>" [--api URL]  fetch the pack behind an auditor link (from the link's own site
+                                                unless --api or FAIRMIND_API_URL is set), then verify it locally
     fairmind clause-map --system <id> [--frameworks EUAIA,ISO42001]   the gate read per framework clause
     fairmind system get <id> | create --name N [--risk-tier T --stage S --workspace W --owner O]
     fairmind pack create|list|show|download|share|revoke   inspection packs
@@ -22,6 +23,7 @@
 
 Configuration comes from flags or the environment: FAIRMIND_API_URL (default
 http://localhost:8010) and FAIRMIND_API_KEY, a key minted at POST /api/v1/auth/api-keys.
+Auditor links are printed on FAIRMIND_SITE_URL when set, otherwise on the API address's origin.
 With --local, FAIRMIND_TARGET_AUTH is the model's own key; it is sent only to the model.
 Exit code 3 means the command itself failed (network, auth, bad input).
 """
@@ -260,10 +262,33 @@ def cmd_systems(args: argparse.Namespace, factory: ClientFactory, out: Callable[
 # ---------------------------------------------------------------------------
 
 CANONICAL_FORM = (
-    'Canonical form: sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()). '
+    'Canonical form: sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()); '
+    'from manifest version 2 every float with an integral value is written as an integer first. '
     'Chain head per system: h = sha256("fairmind-evidence-chain-v1"); for each evidence entry in order, '
-    'h = sha256(f"{h}:{entry.hash}"). The file is {"manifest": {...}, "manifestHash": "..."}.'
+    'h = sha256(f"{h}:{entry.hash}"). From version 2 each entry hash is also recomputed: sha256 of json.dumps('
+    '{id, type, title, source, content, confidence as float, status, metadata, created_at}, sort_keys=True, '
+    'separators=(",", ":")). The file is {"manifest": {...}, "manifestHash": "..."}.'
 )
+
+
+def _integral_floats_as_ints(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {k: _integral_floats_as_ints(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_integral_floats_as_ints(v) for v in value]
+    return value
+
+
+def _entry_hash(entry: Dict[str, Any]) -> str:
+    confidence = entry.get("confidence")
+    fields = {
+        "id": entry.get("id"), "type": entry.get("type"), "title": entry.get("title"), "source": entry.get("source"), "content": entry.get("content"),
+        "confidence": None if confidence is None else float(confidence), "status": entry.get("status"), "metadata": entry.get("metadata"),
+        "created_at": entry.get("createdAt"),
+    }
+    return hashlib.sha256(json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
 def _chain_head(entries: Sequence[Dict[str, Any]]) -> str:
@@ -278,15 +303,19 @@ def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
     manifest, expected = document.get("manifest"), document.get("manifestHash")
     if not isinstance(manifest, dict) or not isinstance(expected, str):
         raise CliError('Not an inspection pack: expected {"manifest": {...}, "manifestHash": "..."}')
-    actual = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    v2 = isinstance(manifest.get("version"), int) and manifest["version"] >= 2
+    actual = hashlib.sha256(json.dumps(_integral_floats_as_ints(manifest) if v2 else manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
     systems = []
     for item in manifest.get("systems", []):
+        entries = item.get("evidence", [])
         try:
-            recomputed = _chain_head(item.get("evidence", []))
-        except (KeyError, TypeError) as exc:
+            recomputed = _chain_head(entries)
+            bad = [e.get("id") for e in entries if not hmac.compare_digest(str(e.get("hash")), _entry_hash(e))] if v2 else []
+        except (KeyError, TypeError, AttributeError, ValueError) as exc:
             raise CliError(f"Malformed evidence entry: {exc!r}") from exc
         system = item.get("system") or {}
-        systems.append({"name": system.get("name") or system.get("id"), "evidence": len(item.get("evidence", [])), "intact": hmac.compare_digest(str(item.get("chainHead")), recomputed)})
+        chain_ok = hmac.compare_digest(str(item.get("chainHead")), recomputed)
+        systems.append({"name": system.get("name") or system.get("id"), "evidence": len(entries), "chainOk": chain_ok, "entriesNotMatchingHash": bad, "intact": chain_ok and not bad})
     hash_ok = hmac.compare_digest(expected, actual)
     return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "intact": hash_ok and all(s["intact"] for s in systems)}
 
@@ -297,7 +326,9 @@ def _fetch_shared(link: str, args: argparse.Namespace, factory: ClientFactory) -
     pack_id = parts.path.rstrip("/").rsplit("/", 1)[-1]
     if not token or not pack_id:
         raise CliError("Not a share link: expected .../verify/<pack id>?t=<token>")
-    with _client(args, factory) as client:
+    # The link's own site serves the API under /api/proxy. No API key is sent: the token is the credential.
+    base = (args.api or os.environ.get("FAIRMIND_API_URL") or f"{parts.scheme}://{parts.netloc}/api/proxy").rstrip("/")
+    with factory(base, {"Accept": "application/json", "User-Agent": f"fairmind-cli/{__version__}"}) as client:
         shared = _call(client, "GET", f"/api/v1/public/packs/{pack_id}", params={"t": token})
     return {"manifest": shared["manifest"], "manifestHash": shared["manifestHash"]}
 
@@ -322,7 +353,9 @@ def cmd_verify(args: argparse.Namespace, factory: ClientFactory, out: Callable[[
         if not result["hashOk"]:
             out(f"  recorded       {result['expected']}")
         for s in result["systems"]:
-            out(f"  {'ok' if s['intact'] else 'BROKEN':<9}{s['name']}  {s['evidence']} evidence records, chain head {'matches' if s['intact'] else 'does not match'}")
+            out(f"  {'ok' if s['intact'] else 'BROKEN':<9}{s['name']}  {s['evidence']} evidence records, chain head {'matches' if s['chainOk'] else 'does not match'}")
+            if s["entriesNotMatchingHash"]:
+                out(f"           records that do not match their hash: {', '.join(map(str, s['entriesNotMatchingHash']))}")
         out("")
         out("Pack intact" if result["intact"] else "Pack does NOT verify: it was changed after it was built")
     return EXIT_GO if result["intact"] else EXIT_NO_GO
@@ -331,6 +364,13 @@ def cmd_verify(args: argparse.Namespace, factory: ClientFactory, out: Callable[[
 # ---------------------------------------------------------------------------
 # packs, findings, remediation, approvals, reports, evaluations
 # ---------------------------------------------------------------------------
+
+def _share_link(client: httpx.Client, share: Dict[str, Any]) -> str:
+    """The auditor link: on FAIRMIND_SITE_URL when set, otherwise on the API address's origin."""
+    api = urlparse(str(client.base_url))
+    site = os.environ.get("FAIRMIND_SITE_URL") or f"{api.scheme}://{api.netloc}"
+    return f"{site.rstrip('/')}/verify/{share['packId']}?t={share['token']}"
+
 
 def _show(out: Callable[[str], None], args: argparse.Namespace, data: Any, summary: Callable[[Any], str]) -> int:
     out(json.dumps(data, indent=2) if args.json else summary(data))
@@ -368,7 +408,7 @@ def cmd_pack(args: argparse.Namespace, factory: ClientFactory, out: Callable[[st
             out(f"Saved {target}; check it with: fairmind verify {target}")
             return EXIT_GO
         if args.action == "share":
-            return _show(out, args, _call(client, "POST", f"{pid}/share"), lambda s: f"Auditor token (shown once): {s['token']}\n  expires {s['expiresAt']}\n  link: <FairMind site>/verify/{s['packId']}?t={s['token']}")
+            return _show(out, args, _call(client, "POST", f"{pid}/share"), lambda s: f"Auditor token (shown once): {s['token']}\n  expires {s['expiresAt']}\n  link: {_share_link(client, s)}")
         return _show(out, args, _call(client, "DELETE", f"{pid}/share"), lambda s: f"Share link for {s['packId']} revoked")
 
 
@@ -431,8 +471,7 @@ def cmd_clause_map(args: argparse.Namespace, factory: ClientFactory, out: Callab
     def text(c: Dict[str, Any]) -> str:
         lines = [f"Gate {VERDICT_WORD.get(c['verdict'], c['verdict'])}, confidence {c['confidence']:.2f}"]
         for fw in c["frameworks"]:
-            n = fw["counts"]
-            lines.append(f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n['attested']} attested, {n['open']} open of {n['total']} clauses")
+            lines.append(_counts(fw))
             open_clauses = [cl["control"] for cl in fw["clauses"] if cl["state"] == "open"]
             if open_clauses:
                 lines.append(f"  open: {', '.join(open_clauses)}")
@@ -646,7 +685,7 @@ def _hint(eval_id: str, system: str, step: Dict[str, Any], local: bool) -> str:
 
 def _counts(fw: Dict[str, Any]) -> str:
     n = fw["counts"]
-    return f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n['attested']} attested, {n['open']} open of {n['total']} clauses"
+    return f"{fw['name']} ({fw['key']}): {n['proven']} proven, {n.get('partial', 0)} partial, {n['attested']} attested, {n['open']} open of {n['total']} clauses"
 
 
 def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[str], None]) -> int:
@@ -712,13 +751,13 @@ def cmd_audit(args: argparse.Namespace, factory: ClientFactory, out: Callable[[s
             lines += ["", f"Pack {pack['id']}  {pack['title']}", f"  hash {pack['manifestHash']}"]
             if args.share:
                 share = report["share"] = _call(client, "POST", f"{GOV}/packs/{pack['id']}/share")
-                lines += [f"  auditor token (shown once): {share['token']}", f"  expires {share['expiresAt']}", f"  link: <FairMind site>/verify/{share['packId']}?t={share['token']}"]
+                lines += [f"  auditor token (shown once): {share['token']}", f"  expires {share['expiresAt']}", f"  link: {_share_link(client, share)}"]
         after = report["after"] = _framework(client, args.system, key) if args.run else fw
     still = [c for c in after["clauses"] if c["state"] == "open"]
     lines += ["", ("After the runs, " if args.run else "") + _counts(after)]
     lines += [f"  still open: {c['control']} (waits on {_waits_on(c)})" for c in still]
     if still and any(r["status"] == "passed" for r in report["runs"]):
-        lines.append("  A passing evaluation is hashed into the pack as evidence; its clause closes only when its gate check has evidence.")
+        lines.append("  A passing evaluation is hashed into the pack as evidence; it closes the clauses its common control maps to, so a clause it tests outside that map stays open.")
     out(json.dumps(report, indent=2, default=str) if args.json else "\n".join(lines))
     return EXIT_NO_GO if still else EXIT_GO
 

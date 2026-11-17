@@ -8,14 +8,15 @@ import type { Journey, ReqStatus } from '@/lib/api/hooks/usePacks'
 export type ReqState = CellState | 'none'
 
 /** Weakest first: the state "all systems" shows is the first one any system has. */
-export const WEAKEST_FIRST: ReqState[] = ['fails', 'stale', 'open', 'planned', 'estimated', 'attested', 'proven', 'atorg', 'none']
+export const WEAKEST_FIRST: ReqState[] = ['fails', 'stale', 'open', 'planned', 'estimated', 'partial', 'attested', 'proven', 'atorg', 'none']
 /** States that put a requirement on the work queue. */
 export const NEEDS_WORK: ReqState[] = ['fails', 'stale', 'open']
 /** The order the legend and the state bar read in. */
-export const BAR_ORDER: ReqState[] = ['proven', 'attested', 'estimated', 'planned', 'open', 'fails', 'stale']
+export const BAR_ORDER: ReqState[] = ['proven', 'partial', 'attested', 'estimated', 'planned', 'open', 'fails', 'stale', 'none']
 
 export const STATE_LABEL: Record<ReqState, string> = {
   proven: 'Proven',
+  partial: 'Partial',
   attested: 'Attested',
   estimated: 'Estimated',
   planned: 'Planned',

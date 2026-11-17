@@ -55,6 +55,8 @@ from src.application.services.fairness_run_service import (
     FairnessRunError,
     confirm_attributes,
     effective_tier,
+    evaluation_status,
+    gate_check,
     gate_explain,
     inspect_csv,
     path_forward,
@@ -161,11 +163,18 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     second person. ``explain`` and ``path`` say why the verdict is what it is and what would move it.
     """
     reopened = reopened_since(db, system_id)
-    records = drop_superseded(_fetch_evidence_records(db, system_id), {k: at for k, (at, _) in reopened.items()})
+    on_file = _fetch_evidence_records(db, system_id)
+    records = drop_superseded(on_file, {k: at for k, (at, _) in reopened.items()})
+    kept = {id(r) for r in records}
+    # an evaluation run goes stale at any material change, so its check is reopened by the newest one
+    stale_runs = {gate_check(r) for r in on_file if evaluation_status(r) and id(r) not in kept}
+    newest_change = max(reopened.values()) if reopened else None
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
     applicability, stage = _system_applicability(db, system_id)
     tier = effective_tier(risk_tier, applicability)
     from src.application.services.environmental_service import system_environmental_gate_enabled
+
+    from api.routes.system_targets import _row as _target_row
 
     with_env = system_environmental_gate_enabled(db, system_id)
     assessed = _environmental_assessed(db, system_id) if with_env else None
@@ -185,9 +194,10 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     )
     gate["reasons"] += tier_reasons(risk_tier, applicability)
     for check in gate["checks"]:
-        if check["key"] in reopened and check["state"] == "open":
-            check["reopenedBy"] = reopened[check["key"]][1]
-            gate["reasons"].append(f"Change {reopened[check['key']][1]} reopened {check['label'].lower()}")
+        change = reopened.get(check["key"]) or (newest_change if check["key"] in stale_runs else None)
+        if change and check["state"] == "open":
+            check["reopenedBy"] = change[1]
+            gate["reasons"].append(f"Change {change[1]} reopened {check['label'].lower()}")
     _apply_policy_rules(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
@@ -195,6 +205,7 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
         approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
+        model_target=_target_row(db, system_id) is not None,
     )
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
@@ -518,7 +529,7 @@ def get_estate_gates(
     return out
 
 
-WEAKEST_FIRST = ("fails", "stale", "open", "planned", "estimated", "attested", "proven")
+WEAKEST_FIRST = ("fails", "stale", "open", "none", "planned", "estimated", "partial", "attested", "proven")  # none: nothing reaches the clause
 
 
 def _weakness(state: str) -> int:
@@ -603,7 +614,8 @@ def get_framework_systems(
         "unconfirmed": unconfirmed,
         "notInScope": not_in_scope,
         "requirements": [
-            {"key": key, "cells": [{"state": by_key[key]["cell"], "checks": by_key[key]["checks"]} if key in by_key else None for by_key in clauses]}
+            # a clause nothing reaches for a system has no cell, so the screen falls back to organisation coverage
+            {"key": key, "cells": [{"state": by_key[key]["cell"], "checks": by_key[key]["checks"]} if by_key.get(key, {}).get("cell", "none") != "none" else None for by_key in clauses]}
             for key in tracked_requirements(framework_key)
         ],
     }

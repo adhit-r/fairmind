@@ -73,3 +73,69 @@ def test_release_regression_reads_the_systems_stored_results(tmp_database):
     assert _run(client, system, 1.0).json()["status"] == "failed"
     latest = release()
     assert latest["status"] == "failed" and latest["metrics"]["failed"] == 1
+
+
+def _findings(engine, system):
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        return conn.execute(
+            text("SELECT title, severity, status FROM governance_risks WHERE system_id = :id AND source = 'fairmind.eval_engines' ORDER BY created_at"),
+            {"id": system},
+        ).fetchall()
+
+
+def test_a_failed_run_opens_one_finding_and_a_passing_run_resolves_it(tmp_database):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    assert _run(client, system, 1.0).json()["status"] == "failed"  # a second failure does not open a second finding
+    [(title, severity, status)] = _findings(tmp_database, system)
+    assert title.startswith("EV-DAT-01 ") and title.endswith(" failed") and (severity, status) == ("high", "open")
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    assert [r.status for r in _findings(tmp_database, system)] == ["resolved"]
+
+
+def test_a_material_change_makes_earlier_results_stale(tmp_database):
+    from database.governance_models import GovernanceSystemChange
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    with tmp_database.begin() as conn:
+        conn.execute(GovernanceSystemChange.__table__.insert().values(
+            system_id=system, org_id=str(org_id), number=1, parts_json='["model"]', reopens_json='["fairness", "monitoring"]',
+            material=True, recorded_by="owner", seal="x",
+        ))
+    assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["results"]["status"] == "not_run"
+    release = client.post(f"{PACKS}/evaluations/EV-REL-01/runs", data={"system_id": system, "params": '{"required": "EV-DAT-01"}'}).json()
+    assert release["status"] == "insufficient"  # the pass was for the system before the change
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["results"]["status"] == "passed"
+
+
+def test_a_systems_file_lists_its_runs_of_every_evaluation(tmp_database):
+    org_id, client = _org(tmp_database)
+    system, other = _system(tmp_database, org_id), _system(tmp_database, org_id)
+    _run(client, system, 0.0)
+    _run(client, system, 1.0)
+    _run(client, other, 0.0)
+    runs = client.get(f"{PACKS}/systems/{system}/evaluation-runs").json()
+    assert [(r["evaluationId"], r["status"], r["systemId"]) for r in runs] == [("EV-DAT-01", "failed", system), ("EV-DAT-01", "passed", system)]
+    foreign_org, foreign = _org(tmp_database)
+    assert foreign.get(f"{PACKS}/systems/{system}/evaluation-runs").json() == []
+
+
+def test_a_change_makes_a_rule_result_stale_only_when_it_reopens_that_check(tmp_database):
+    from tests.test_packs_routes import _change, _store
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _store(tmp_database, org_id, system, "environmental_impact", {"total_kwh": 12.0}, "2026-11-01T10:00:00+00:00")
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    _change(tmp_database, org_id, system, ["fairness", "data_governance"])
+    status = lambda ev: client.get(f"{PACKS}/evaluations/{ev}").json()["results"]["status"]  # noqa: E731
+    assert status("EV-DAT-01") == "not_run"  # an engine run goes stale at any material change
+    assert status("EV-ENV-01") == "passed"  # the change did not reopen environmental impact, as the gate reads it
+    _change(tmp_database, org_id, system, ["environmental"], number=2)
+    assert status("EV-ENV-01") == "not_run"

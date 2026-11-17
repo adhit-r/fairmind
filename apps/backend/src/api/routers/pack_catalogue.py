@@ -273,11 +273,17 @@ class Coverage:
 
     tested_by None: what the packs' evaluations could test once they pass (for what-if counts).
     tested_by a list of evaluation ids with a passing result: what is tested now.
+    done_workflows None: what the packs' workflows could cover (for what-if counts).
+    done_workflows a list of workflow ids with a done, unrejected run: what installed packs cover now.
     """
 
-    def __init__(self, pack_ids: Iterable[str], tested_by: Optional[Iterable[str]] = None):
+    def __init__(self, pack_ids: Iterable[str], tested_by: Optional[Iterable[str]] = None, done_workflows: Optional[Iterable[str]] = None):
         ids = [p for p in pack_ids if p in PACKS]
-        self.covered = frozenset().union(*(_C.pack_covers[p] for p in ids))
+        if done_workflows is None:
+            self.covered = frozenset().union(*(_C.pack_covers[p] for p in ids))
+        else:
+            mine = set().union(*(_C.pack_workflows[p] for p in ids))
+            self.covered = frozenset().union(*(_C.covers[w] for w in done_workflows if w in mine))
         if tested_by is None:
             self.tested = frozenset().union(*(_C.pack_tests[p] for p in ids))
         else:

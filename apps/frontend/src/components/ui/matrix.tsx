@@ -7,7 +7,7 @@ import type { GateCheck } from '@/lib/api/hooks/useSystemFile'
 import { cn } from '@/lib/utils'
 
 /** The state of one requirement or check for one system. */
-export type CellState = 'proven' | 'estimated' | 'attested' | 'planned' | 'open' | 'fails' | 'stale' | 'atorg'
+export type CellState = 'proven' | 'estimated' | 'partial' | 'attested' | 'planned' | 'open' | 'fails' | 'stale' | 'atorg'
 /** A state, a crosswalk relation strength (3 satisfies, 2 partially satisfies, 1 supports, 0 none), or blank. */
 export type Cell = CellState | 0 | 1 | 2 | 3 | null
 export type CellKind = '' | CellState | 'r1' | 'r2' | 'r3'
@@ -40,10 +40,11 @@ export type MatrixProps = {
   legendLabels?: Partial<Record<CellState, string>>
 }
 
-const ORDER: Kind[] = ['proven', 'estimated', 'attested', 'planned', 'open', 'fails', 'stale', 'atorg', 'r3', 'r2', 'r1']
+const ORDER: Kind[] = ['proven', 'estimated', 'partial', 'attested', 'planned', 'open', 'fails', 'stale', 'atorg', 'r3', 'r2', 'r1']
 export const KIND_LABEL: Record<Kind, string> = {
   proven: 'proven',
   estimated: 'estimated',
+  partial: 'partial',
   attested: 'attested',
   planned: 'planned',
   open: 'open',
@@ -58,6 +59,7 @@ export const KIND_LABEL: Record<Kind, string> = {
 export const KIND_TITLE: Record<Kind, string> = {
   proven: 'Proven: measured evidence at 0.70 or above',
   estimated: 'Estimated: a tool estimate, or a measurement below 0.70',
+  partial: 'Partial: proven through a link that only supports or partly satisfies this',
   attested: 'Attested: a named person signed it',
   planned: 'Planned: no evidence yet',
   open: 'Open: nothing current on file',

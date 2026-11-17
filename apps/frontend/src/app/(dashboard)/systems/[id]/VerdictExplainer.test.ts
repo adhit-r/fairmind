@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { GatePathStep, ReleaseGate } from '@/lib/api/hooks/useSystemFile'
-import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, goPath, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
+import { HASH_PANEL, STEP_LINK, arithmetic, attestationNote, bandRange, bestOption, confidenceShort, goPath, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
 
 const step = (check: GatePathStep['check'], action: GatePathStep['action'], evidenceClass: GatePathStep['evidenceClass'], counts: number, gain: number): GatePathStep => ({ check, action, evidenceClass, counts, gain, note: null })
 
@@ -152,4 +152,9 @@ test('a tier raised above the suggestion says above, never below', () => {
   const raised = { ...medium.explain!, tier: 'high', tierSource: { ...medium.explain!.tierSource!, suggestedTier: 'medium' as const, tierBelowSuggestion: false } }
   assert.equal(tierLine(raised), 'Tier High, above the Medium suggested by rule T3, confirmed by reviewer-1 on 7 Nov 2026.')
   assert.equal(tierOverride(raised), null)
+})
+
+test('every in-page explainer link opens a system-file panel', () => {
+  const hashes = [...Object.values(STEP_LINK).map((l) => l.href), '#onboard', '#decision'].filter((h) => h.startsWith('#'))
+  assert.deepEqual(hashes.filter((h) => !HASH_PANEL[h]), [])
 })

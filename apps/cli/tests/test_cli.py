@@ -34,7 +34,7 @@ def run_cli(argv, handler, env=None, monkeypatch=None):
     seen = {}
     printed = []
     if monkeypatch is not None:
-        for key in ("FAIRMIND_API_URL", "FAIRMIND_API_KEY"):
+        for key in ("FAIRMIND_API_URL", "FAIRMIND_API_KEY", "FAIRMIND_SITE_URL"):
             monkeypatch.delenv(key, raising=False)
         for key, value in (env or {}).items():
             monkeypatch.setenv(key, value)
@@ -196,6 +196,44 @@ def test_verify_catches_a_tampered_manifest_field(tmp_path):
     doc["manifest"]["systems"][0]["gate"]["verdict"] = "no_go"
     code, text, _ = run_cli(["verify", _write(tmp_path, doc)], _no_network)
     assert code == EXIT_NO_GO and "MISMATCH" in text and "does NOT verify" in text
+
+
+def test_verify_v2_recomputes_entry_hashes_and_survives_a_browser_round_trip(tmp_path):
+    import hashlib
+
+    from fairmind_cli.main import _entry_hash
+
+    record = {"id": "e1", "type": "evaluation_run", "title": "EV-FAI-05 Fairness: passed", "source": "fairmind.eval_engines",
+              "content": '{"status": "passed"}', "confidence": 1.0, "status": "collected", "metadata": "{}", "createdAt": "2026-01-01"}
+    record["hash"] = _entry_hash(record)
+    head = hashlib.sha256(f"{hashlib.sha256(b'fairmind-evidence-chain-v1').hexdigest()}:{record['hash']}".encode()).hexdigest()
+    manifest = {"version": 2, "title": "Q3", "systems": [{"system": {"id": "s1", "name": "Chat"}, "gate": {"confidence": 0.0}, "evidence": [record], "chainHead": head}]}
+    ints = json.loads(json.dumps(manifest).replace("1.0", "1").replace("0.0", "0"))  # what JSON.stringify writes
+    digest = hashlib.sha256(json.dumps(ints, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    code, text, _ = run_cli(["verify", _write(tmp_path, {"manifest": manifest, "manifestHash": digest})], _no_network)
+    assert code == EXIT_GO and "Pack intact" in text
+    code, _, _ = run_cli(["verify", _write(tmp_path, {"manifest": ints, "manifestHash": digest})], _no_network)
+    assert code == EXIT_GO
+
+    record["title"] = "EV-FAI-05 Fairness: failed"
+    code, text, _ = run_cli(["verify", _write(tmp_path, {"manifest": manifest, "manifestHash": digest})], _no_network)
+    assert code == EXIT_NO_GO and "do not match their hash: e1" in text
+
+
+def test_verify_link_fetches_from_the_link_site_without_the_key_and_share_prints_a_real_link(monkeypatch):
+    doc = _pack_document()
+
+    def handler(request):
+        if request.url.path.endswith("/share"):
+            return httpx.Response(200, json={"packId": "pk-1", "token": "tok", "expiresAt": "2026-12-01"})
+        assert str(request.url).startswith("https://acme.example/api/proxy/api/v1/public/packs/pk-1") and request.url.params["t"] == "tok"
+        assert "Authorization" not in request.headers
+        return httpx.Response(200, json={**doc, "id": "pk-1"})
+
+    code, text, _ = run_cli(["verify", "https://acme.example/verify/pk-1?t=tok"], handler, env={"FAIRMIND_API_KEY": "k"}, monkeypatch=monkeypatch)
+    assert code == EXIT_GO and "Pack intact" in text
+    code, text, _ = run_cli(["pack", "share", "pk-1", "--api", "https://api.acme.example"], handler, env={"FAIRMIND_SITE_URL": "https://acme.example/"}, monkeypatch=monkeypatch)
+    assert "link: https://acme.example/verify/pk-1?t=tok" in text
 
 
 def test_verify_rejects_a_file_that_is_not_a_pack(tmp_path, capsys):

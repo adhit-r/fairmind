@@ -47,6 +47,7 @@ const DECISION_WORD: Record<DecisionState, string> = {
 const WORD: Record<CellState, string> = {
   proven: 'Proven',
   estimated: 'Estimated',
+  partial: 'Partial',
   attested: 'Attested',
   planned: 'Planned',
   open: 'Nothing on file',

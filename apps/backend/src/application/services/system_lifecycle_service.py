@@ -18,7 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.application.services.fairness_run_service import GATE_CHECKS, _record_time
+from src.application.services.fairness_run_service import GATE_CHECKS, _record_time, evaluation_status, gate_check
 
 # part key, label, the gate checks it reopens (in gate order)
 PARTS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
@@ -31,7 +31,6 @@ PARTS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
 )
 PART_KEYS = tuple(p[0] for p in PARTS)
 _CHECK_ORDER = [c[0] for c in GATE_CHECKS]
-_CHECK_TYPES = {key: types for key, _, types in GATE_CHECKS}
 
 REASONS = ("replaced", "not_needed", "failed_review", "rule_changed")
 
@@ -117,16 +116,19 @@ def reopened_since(db: Session, system_id: str) -> Dict[str, Tuple[datetime, int
 
 
 def drop_superseded(records: List[Dict[str, Any]], since: Dict[str, datetime]) -> List[Dict[str, Any]]:
-    """Evidence filed before the change that reopened its check no longer counts; undated evidence goes with it."""
+    """Evidence filed before the change that reopened its check no longer counts; undated evidence goes with it.
+
+    An evaluation run goes stale at the newest material change of any kind, as evaluation_results reads it.
+    """
     if not since:
         return records
+    newest = max(since.values())
     kept = []
     for record in records:
-        kind = str(record.get("evidenceType") or record.get("type") or "").lower()
-        check = next((c for c, types in _CHECK_TYPES.items() if kind in types), None)
-        if check in since:
+        cut = newest if evaluation_status(record) else since.get(gate_check(record))
+        if cut is not None:
             at = _record_time(record)
-            if at is None or at < since[check]:
+            if at is None or at < cut:
                 continue
         kept.append(record)
     return kept

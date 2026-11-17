@@ -38,6 +38,7 @@ const checkName = (key: GateCheck['key'], gate: ReleaseGate) => (gate.checks.fin
 
 const ACTION_TITLE: Record<GatePathStep['action'], (check: string) => string> = {
   fairness_run: () => 'Run a fairness test',
+  evaluation_run: (check) => `Run a catalogue evaluation for ${check}`,
   environmental_assessment: () => 'Run an environmental assessment',
   monitoring_snapshot: () => 'Record a monitoring snapshot',
   attest: (check) => `Attest ${check}`,
@@ -129,9 +130,18 @@ export function tierOverride(explain: GateExplain | undefined) {
 
 export const STEP_LINK: Record<Exclude<GatePathStep['action'], 'attest'>, { label: string; href: string }> = {
   fairness_run: { label: 'Open the test', href: '#first-verdict' },
+  evaluation_run: { label: 'Open evaluations', href: '/evaluations' },
   monitoring_snapshot: { label: 'Open monitoring', href: '#operate' },
   environmental_assessment: { label: 'Open assessment', href: '/ai-governance' },
   evidence_upload: { label: 'Record evidence', href: '/evidence?view=artifacts' },
+}
+
+/** The system-file drawer panel each in-page link opens; the explainer hands these to onOpen. */
+export const HASH_PANEL: Record<string, 'fairness' | 'monitoring' | 'tier' | 'decide'> = {
+  '#first-verdict': 'fairness',
+  '#operate': 'monitoring',
+  '#onboard': 'tier',
+  '#decision': 'decide',
 }
 
 function StepAction({ step, primary, onAttest, onOpen }: { step: GatePathStep; primary: boolean; onAttest?: (check: GateCheck['key']) => void; onOpen?: (href: string) => void }) {
@@ -140,8 +150,10 @@ function StepAction({ step, primary, onAttest, onOpen }: { step: GatePathStep; p
     primary ? 'bg-[var(--fm-ink)] text-white' : 'border border-[var(--fm-line)] bg-white font-medium text-[var(--fm-ink2)] hover:border-[var(--fm-ink)] hover:text-[var(--fm-ink)]',
   )
   if (step.action === 'attest') return onAttest ? <button type="button" onClick={() => onAttest(step.check)} className={cls}>Attest</button> : null
-  const { label, href } = STEP_LINK[step.action]
-  if (href.startsWith('#')) return <a href={href} className={cls}>{label}</a>
+  const { label, href: base } = STEP_LINK[step.action]
+  // The uploader preselects the evidence type the gate counts for this check.
+  const href = step.action === 'evidence_upload' ? `${base}&check=${step.check}` : base
+  if (href.startsWith('#') && !onOpen) return <a href={href} className={cls}>{label}</a>
   if (onOpen) return <button type="button" onClick={() => onOpen(href)} className={cls}>{label}</button>
   return <Link href={href} className={cls}>{label}</Link>
 }
@@ -175,7 +187,7 @@ function StepRow({ step, n, primary, gate, tag, onAttest, onOpen }: StepRowProps
  * the confidence arithmetic, the tier's row of the decision matrix and the cheapest honest steps up.
  * `onOpen` navigates to another page with this system selected; without it, plain links are used.
  */
-export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { gate: ReleaseGate; compact?: boolean; onAttest?: (check: GateCheck['key']) => void; onOpen?: (href: string) => void }) {
+export function VerdictExplainer({ gate, compact = false, onAttest, onOpen, decideLabel = 'Act on it in Decision' }: { gate: ReleaseGate; compact?: boolean; onAttest?: (check: GateCheck['key']) => void; onOpen?: (href: string) => void; decideLabel?: string }) {
   if (compact) {
     const summary = pathSummary(gate)
     return (
@@ -184,7 +196,8 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
           Release gate after this run: <span className={cn('font-semibold', VERDICT_TONE[gate.verdict])}>{VERDICT_LABEL[gate.verdict]}</span>
         </span>
         {summary && <span className="text-[12.5px] text-[var(--fm-ink2)]">{summary}</span>}
-        <a href="#decision" className="ml-auto text-[12.5px] font-semibold text-[var(--fm-ink)] underline-offset-2 hover:underline">Act on it in Decision</a>
+        {/* only a caller that can act on the decision gets the link: no section on the page carries #decision */}
+        {onOpen && <button type="button" onClick={() => onOpen('#decision')} className="ml-auto text-[12.5px] font-semibold text-[var(--fm-ink)] underline-offset-2 hover:underline">{decideLabel}</button>}
       </div>
     )
   }
@@ -297,7 +310,9 @@ export function VerdictExplainer({ gate, compact = false, onAttest, onOpen }: { 
         <div className="grid gap-1 border-t border-[var(--fm-line)] pt-3 text-[12px] text-[var(--fm-ink2)]">
           <p>
             {tierLine(explain)}{' '}
-            <a href="#onboard" className="font-medium text-[var(--fm-ink)] underline-offset-2 hover:underline">{explain.tierSource ? 'Change' : 'Confirm'}</a>
+            {onOpen
+              ? <button type="button" onClick={() => onOpen('#onboard')} className="font-medium text-[var(--fm-ink)] underline-offset-2 hover:underline">{explain.tierSource ? 'Change' : 'Confirm'}</button>
+              : <a href="#onboard" className="font-medium text-[var(--fm-ink)] underline-offset-2 hover:underline">{explain.tierSource ? 'Change' : 'Confirm'}</a>}
           </p>
           {explain.tierNote && <p className={override?.pending ? 'text-[#a14d00]' : undefined}>{explain.tierNote}</p>}
         </div>

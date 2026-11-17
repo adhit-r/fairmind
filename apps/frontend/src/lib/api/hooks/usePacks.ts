@@ -369,8 +369,11 @@ export function usePackNames() {
 }
 export const useBundles = () => useOrgResource<Bundle[]>(API_ENDPOINTS.packs.bundles)
 export const useJourneys = () => useOrgResource<JourneySummary[]>(API_ENDPOINTS.packs.journeys)
-export const useJourney = (frameworkKey: string | undefined) =>
-  useOrgResource<Journey>(frameworkKey ? API_ENDPOINTS.packs.journey(frameworkKey) : null)
+/** With systemId, each evaluation's result is that system's own latest result, not the organisation-wide one. */
+export const useJourney = (frameworkKey: string | undefined, systemId?: string) =>
+  useOrgResource<Journey>(
+    frameworkKey ? `${API_ENDPOINTS.packs.journey(frameworkKey)}${systemId ? `?system=${encodeURIComponent(systemId)}` : ''}` : null,
+  )
 /** The evaluation catalogue; filters are optional and applied by the server. */
 export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string } = {}) {
   const qs = new URLSearchParams()

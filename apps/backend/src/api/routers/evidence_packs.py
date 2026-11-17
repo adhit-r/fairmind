@@ -119,7 +119,7 @@ def create_pack(
             raise HTTPException(status_code=404, detail="AI system not found")
         systems.append({"id": system.id, "name": system.name, "riskTier": system.risk_tier, "gate": _gate_payload(db, system_id, system.risk_tier)})
     frameworks = list(dict.fromkeys(body.frameworks))
-    manifest = build_manifest(db, title=body.title.strip(), frameworks=frameworks, systems=systems, created_by=_authenticated_actor(current_user))
+    manifest = build_manifest(db, org_id=str(org_id), title=body.title.strip(), frameworks=frameworks, systems=systems, created_by=_authenticated_actor(current_user))
     pack_id = str(uuid.uuid4())
     db.execute(
         text(

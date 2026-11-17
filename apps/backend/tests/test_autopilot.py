@@ -105,3 +105,18 @@ def test_a_failing_fetch_is_recorded_and_the_step_stays_on_the_route(monkeypatch
     assert out["ran"] and all(r["status"] == "failed" and r["detail"] == "The data URL answered 503" for r in out["ran"])
     assert [e["status"] for e in out["events"]] == ["failed"] * len(out["ran"])
     assert client.delete(f"{base}/data-sources/monitoring").json()["sources"]["monitoring"] is None
+
+
+def test_only_a_measured_snapshot_keeps_monitoring_off_the_due_list():
+    from sqlalchemy import text
+
+    from database.connection import db_manager
+
+    client = _client()
+    sid = _system(client)
+    attested = {"evidence_type": "monitoring", "title": "Drift monitoring: completed", "source": "fairmind.workflows", "status": "collected"}
+    assert client.post(f"{ROOT}/systems/{sid}/evidence", json=attested).status_code == 200
+    with db_manager.SessionLocal() as session:
+        assert autopilot._monitoring_due(session, sid)  # a workflow attestation is not a snapshot
+        session.execute(text("UPDATE governance_evidence SET source = 'fairmind.monitoring' WHERE system_id = :s"), {"s": sid})
+        assert not autopilot._monitoring_due(session, sid)

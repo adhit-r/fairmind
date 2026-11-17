@@ -179,3 +179,24 @@ def test_failed_job_and_missing_file_raise(tmp_path, monkeypatch):
         fm.run_evaluation("s1", "EV-SEC-01", live=True)
     with pytest.raises(FairMindError, match="No such file"):
         fm.run_evaluation("s1", "EV-DAT-01", {"train": tmp_path / "missing.csv"})
+
+
+def test_verify_pack_v2_recomputes_entry_hashes_and_accepts_integral_floats():
+    import hashlib
+
+    from fairmind.client import _entry_hash, _integral_floats_as_ints, verify_pack
+
+    record = {"id": "e1", "type": "evaluation_run", "title": "EV-FAI-05 Fairness: passed", "source": "fairmind.eval_engines",
+              "content": '{"status": "passed"}', "confidence": 1.0, "status": "collected", "metadata": "{}", "createdAt": "2026-01-01"}
+    record["hash"] = _entry_hash(record)
+    head = hashlib.sha256(f"{hashlib.sha256(b'fairmind-evidence-chain-v1').hexdigest()}:{record['hash']}".encode()).hexdigest()
+    manifest = {"version": 2, "title": "Q3", "systems": [{"system": {"id": "s1", "name": "Chat"}, "gate": {"confidence": 0.0}, "evidence": [record], "chainHead": head}]}
+    ints = json.loads(json.dumps(manifest).replace("1.0", "1").replace("0.0", "0"))  # what JSON.stringify writes
+    digest = lambda m: hashlib.sha256(json.dumps(m, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()  # noqa: E731
+    assert verify_pack({"manifest": manifest, "manifestHash": digest(ints)})["intact"]
+    assert verify_pack({"manifest": ints, "manifestHash": digest(ints)})["intact"]
+
+    # an edited record with a recomputed manifest hash but its old entry hash is caught
+    record["content"] = '{"status": "failed"}'
+    result = verify_pack({"manifest": manifest, "manifestHash": digest(_integral_floats_as_ints(manifest))})
+    assert result["hashOk"] and not result["intact"] and result["systems"][0]["entriesNotMatchingHash"] == ["e1"]

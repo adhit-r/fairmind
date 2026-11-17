@@ -300,6 +300,14 @@ def test_generic_evidence_upload_cannot_forge_an_applicability_record():
             forged = client.post(url, json=payload)
             assert forged.status_code == 422 and forged.json()["detail"] == detail, (url, forged.text)
     assert client.get(f"{GOV}/systems/{sid}/evidence").json() == []
+    # only the evaluation engines write runs: an uploaded one would read as measured in the clause map
+    run = {"evaluationId": "EV-TST-01", "status": "passed"}
+    for url, payload in [
+        (f"{GOV}/systems/{sid}/evidence", {"evidence_type": "evaluation_run", "title": "x", "content": run}),
+        *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": "evaluation_run", "content": run, "confidence": 1.0}) for route in ("collect", "collect-v2", "upload")),
+    ]:
+        assert client.post(url, json=payload).status_code == 422, url
+    assert client.get(f"{GOV}/systems/{sid}/evidence").json() == []
 
     # The seal names the record the system file points at, not the newest row of that type.
     record = client.put(f"{GOV}/systems/{sid}/applicability", json={"answers": CREDIT_EU, "tier": "high", "frameworks": ["EUAIA"]}).json()["applicability"]

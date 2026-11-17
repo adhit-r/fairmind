@@ -256,11 +256,15 @@ def _route(db: Session, system) -> Dict[str, Any]:
 
 
 def _monitoring_due(db: Session, system_id: str) -> bool:
-    """No monitoring snapshot inside the system's cadence: the gate would read monitoring as stale or open."""
+    """No measured monitoring snapshot inside the system's cadence: the gate would read monitoring as stale, open or attested.
+    A workflow attestation or manual upload is not a snapshot, so only FairMind's own measured ones count."""
     hours = _monitoring_policy(db, system_id)["cadenceHours"]
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     return db.execute(
-        text("SELECT 1 FROM governance_evidence WHERE system_id = :s AND evidence_type = 'monitoring' AND created_at >= :since LIMIT 1"),
+        text(
+            "SELECT 1 FROM governance_evidence WHERE system_id = :s AND evidence_type = 'monitoring' "
+            "AND source = 'fairmind.monitoring' AND created_at >= :since LIMIT 1"
+        ),
         {"s": system_id, "since": since},
     ).fetchone() is None
 

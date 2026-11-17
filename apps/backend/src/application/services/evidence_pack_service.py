@@ -1,10 +1,15 @@
 """Inspection packs: a hashed manifest an auditor can verify offline.
 
 The manifest freezes, per system, the release gate, the clause map for the chosen
-frameworks, every evidence record's hash and the latest decision seals. Canonical form:
+frameworks, every evidence record with the fields its hash covers, and every decision seal
+with the gate it saw and the approver's notes; and, for the organisation, the plan
+attestations people made for organisation-level controls. Canonical form:
 ``json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()``;
+from version 2 every float with an integral value is written as an integer first, so a pack
+re-saved by a browser (``JSON.stringify`` writes 0.0 as 0) still verifies.
 ``manifest_hash`` is its SHA-256. The chain head of each system is recomputed from its
-entries with the same fold as ``decision_seal_service.chain_head``.
+entries with the same fold as ``decision_seal_service.chain_head``, and each entry's hash
+from its fields with ``decision_seal_service.entry_hash``.
 """
 
 from __future__ import annotations
@@ -16,33 +21,50 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.application.services.clause_map_service import clause_map
-from src.application.services.decision_seal_service import chain_head, evidence_entries, list_seals
+from src.application.services.decision_seal_service import chain_head, entry_hash, evidence_records, list_seals
 
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 SHARE_TTL = timedelta(days=30)
-LATEST_SEALS = 5
+
+
+def _integral_floats_as_ints(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {k: _integral_floats_as_ints(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_integral_floats_as_ints(v) for v in value]
+    return value
 
 
 def canonical_bytes(manifest: Dict[str, Any]) -> bytes:
-    return json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    # Version 1 packs were hashed before the integer rule; they keep their own form.
+    value = _integral_floats_as_ints(manifest) if manifest.get("version", 1) >= 2 else manifest
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 def manifest_digest(manifest: Dict[str, Any]) -> str:
     return hashlib.sha256(canonical_bytes(manifest)).hexdigest()
 
 
-def build_manifest(db: Session, *, title: str, frameworks: List[str], systems: List[Dict[str, Any]], created_by: Optional[str]) -> Dict[str, Any]:
+def build_manifest(
+    db: Session, *, org_id: str, title: str, frameworks: List[str], systems: List[Dict[str, Any]], created_by: Optional[str]
+) -> Dict[str, Any]:
     """systems: [{"id", "name", "riskTier", "gate"}], gate being the release gate payload."""
     out: List[Dict[str, Any]] = []
     for system in systems:
         gate = system["gate"]
-        entries = evidence_entries(db, system["id"])
+        entries = evidence_records(db, system["id"])
         seals = [
-            {k: seal[k] for k in ("id", "decision", "chainHead", "evidenceCount", "sealedBy", "createdAt", "verification")}
-            for seal in list_seals(db, system["id"])[:LATEST_SEALS]
+            {
+                **{k: seal[k] for k in ("id", "decisionId", "decision", "chainHead", "evidenceCount", "gate", "sealedBy", "createdAt", "verification")},
+                "notes": db.execute(text("SELECT notes FROM governance_approval_decisions WHERE id = :id"), {"id": seal["decisionId"]}).scalar(),
+            }
+            for seal in list_seals(db, system["id"])
         ]
         out.append({
             "system": {"id": system["id"], "name": system["name"], "riskTier": system["riskTier"]},
@@ -52,9 +74,14 @@ def build_manifest(db: Session, *, title: str, frameworks: List[str], systems: L
             "chainHead": chain_head(entries),
             "seals": seals,
         })
+    attestations = db.execute(
+        text("SELECT task_key, statement, reference, attested_by, created_at FROM plan_attestations WHERE org_id = :org ORDER BY created_at"),
+        {"org": org_id},
+    ).mappings().all()
     return {
         "version": MANIFEST_VERSION,
         "title": title,
+        "organisation": {"attestations": [dict(r) for r in attestations]},
         "frameworks": frameworks,
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "createdBy": created_by,
@@ -69,6 +96,8 @@ def verify_manifest(manifest: Dict[str, Any], expected_hash: str) -> Dict[str, A
     for item in manifest.get("systems", []):
         entries = item.get("evidence", [])
         recomputed = chain_head(entries)
+        # Version 1 entries carry only the hash; from version 2 each one carries the fields it covers.
+        bad = [e.get("id") for e in entries if not hmac.compare_digest(str(e.get("hash")), entry_hash(e))] if manifest.get("version", 1) >= 2 else []
         systems.append({
             "id": (item.get("system") or {}).get("id"),
             "name": (item.get("system") or {}).get("name"),
@@ -76,9 +105,10 @@ def verify_manifest(manifest: Dict[str, Any], expected_hash: str) -> Dict[str, A
             "chainHead": item.get("chainHead"),
             "recomputedChainHead": recomputed,
             "chainIntact": hmac.compare_digest(str(item.get("chainHead")), recomputed),
+            "entriesNotMatchingHash": bad,
         })
     hash_ok = hmac.compare_digest(str(expected_hash), actual)
-    return {"intact": hash_ok and all(s["chainIntact"] for s in systems), "hashMatches": hash_ok, "expectedHash": expected_hash, "actualHash": actual, "systems": systems}
+    return {"intact": hash_ok and all(s["chainIntact"] and not s["entriesNotMatchingHash"] for s in systems), "hashMatches": hash_ok, "expectedHash": expected_hash, "actualHash": actual, "systems": systems}
 
 
 def new_share_token() -> Dict[str, str]:
