@@ -68,7 +68,7 @@ OPERATORS = (
 # PostgreSQL 18's frozen assurance catalog is measured with this between 010 and 011.
 PG18_RECONCILIATION = "upgrade_paths/010_to_011_drift_reconciliation.sql"
 # Idempotent, run on every setup after the ORM tables exist (015 alters runtime tables).
-# 014_neon_cleanup.sql drops tables and is an operator step, so it is not here.
+# 014_neon_cleanup.sql drops tables and 025_catalogue_run_backfill.sql writes data; both are operator steps, so they are not here.
 ALWAYS = (
     "014_workflow_versions.sql",
     "015_org_scope_legacy_tables.sql",

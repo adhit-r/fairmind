@@ -903,9 +903,12 @@ def create_evidence_mapping(
 ):
     service = _service(db)
     _require_mutation(membership, service)
-    mapping, created = service.create_evidence_mapping(
-        membership.org_id, evidence_id, request.control_assessment_id, request.rationale
-    )
+    try:
+        mapping, created = service.create_evidence_mapping(
+            membership.org_id, evidence_id, request.control_assessment_id, request.rationale
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
     if mapping is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Evidence or control assessment not found"

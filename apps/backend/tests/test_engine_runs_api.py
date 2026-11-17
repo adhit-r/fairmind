@@ -139,3 +139,126 @@ def test_a_change_makes_a_rule_result_stale_only_when_it_reopens_that_check(tmp_
     assert status("EV-ENV-01") == "passed"  # the change did not reopen environmental impact, as the gate reads it
     _change(tmp_database, org_id, system, ["environmental"], number=2)
     assert status("EV-ENV-01") == "not_run"
+
+
+def _assigned_control(engine, client, org_id, system):
+    from database.governance_models import GovernanceControlDefinition, GovernanceFrameworkVersion
+
+    with engine.begin() as conn:
+        conn.execute(GovernanceFrameworkVersion.__table__.insert().values(
+            id="iso-v", framework_key="iso-42001", name="ISO/IEC 42001", version_label="2023", source_hash="h", status="active"))
+        conn.execute(GovernanceControlDefinition.__table__.insert().values(
+            id="iso-c", framework_version_id="iso-v", external_id="A.6.2.4", title="Verification and validation",
+            statement="Verify and validate the AI system", frequency="Annual", active=1))
+    gov = f"/api/v1/ai-governance/organizations/{org_id}"
+    assignment = client.post(f"{gov}/systems/{system}/framework-assignments", json={"frameworkVersionId": "iso-v"}).json()["id"]
+    [control] = client.get(f"{gov}/framework-assignments/{assignment}/controls").json()
+
+    def link(member, evidence_id):
+        return member.post(f"{gov}/evidence/{evidence_id}/control-mappings", json={"controlAssessmentId": control["id"]})
+
+    def accept(evidence_id):
+        mapping = link(client, evidence_id)
+        assert mapping.status_code == 201 and mapping.json()["state"] == "candidate"
+        review = client.post(f"{gov}/evidence-mappings/{mapping.json()['id']}/review", json={"state": "accepted", "reviewVersion": 0})
+        assert review.status_code == 200, review.text
+
+    def missing():
+        return client.get(f"{gov}/framework-assignments/{assignment}/readiness").json()["missingEvidence"]
+
+    return gov, link, accept, missing
+
+
+def test_a_catalogue_run_supports_a_control_only_while_its_evaluation_still_passes(tmp_database):
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, link, accept, missing = _assigned_control(tmp_database, client, org_id, system)
+
+    passed = _run(client, system, 0.0).json()
+    _, foreign = _org(tmp_database)
+    assert link(foreign, passed["id"]).status_code == 403  # not a member of this organisation
+    assert missing() == 1
+    accept(passed["id"])
+    assert missing() == 0  # a candidate counts only once a reviewer accepts it
+
+    failed = _run(client, system, 1.0).json()
+    assert link(client, failed["id"]).status_code == 422  # a failed run proves nothing
+    assert missing() == 1  # the evaluation now fails, as the release gate reads it
+    runs = client.get(f"{gov}/systems/{system}/evidence-runs").json()
+    assert [(r["evidenceId"], r["result"], r["sourceType"], r["sourceIdentifier"]) for r in runs] == [
+        (failed["id"], "failed", "fairmind_evaluation", "EV-DAT-01"), (passed["id"], "passed", "fairmind_evaluation", "EV-DAT-01")]
+    assert runs[0]["suiteName"].startswith("EV-DAT-01 ") and len(runs[0]["contentHash"]) == 64
+    assert [r["status"] for r in client.get(f"{PACKS}/systems/{system}/evaluation-runs").json()] == ["failed", "passed"]
+
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    assert missing() == 0  # passing again restores the accepted mapping
+
+
+def test_a_material_change_takes_a_mapped_catalogue_run_off_its_control(tmp_database):
+    from tests.test_packs_routes import _change
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _, _, accept, missing = _assigned_control(tmp_database, client, org_id, system)
+    accept(_run(client, system, 0.0).json()["id"])
+    assert missing() == 0
+    _change(tmp_database, org_id, system, ["fairness"])
+    assert missing() == 1
+
+
+def test_a_passport_run_with_limitations_can_still_be_mapped(tmp_database):
+    import uuid
+
+    from database.governance_models import GovernanceEvidence, GovernanceEvidenceRun
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    _, link, _, _ = _assigned_control(tmp_database, client, org_id, system)
+    run_id, evidence_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with tmp_database.begin() as conn:
+        workspace = conn.exec_driver_sql("SELECT workspace_id FROM governance_ai_systems WHERE id = %s", (system,)).scalar()
+        conn.execute(GovernanceEvidenceRun.__table__.insert().values(
+            id=run_id, org_id=str(org_id), system_id=system, workspace_id=workspace, passport_id="p", schema_version="1.0.0",
+            capability_state="validated", assurance_source="customer_supplied", source_type="ci", source_identifier="suite",
+            run_id="r1", content_hash="a" * 64, result="passed_with_limitations"))
+        conn.execute(GovernanceEvidence.__table__.insert().values(
+            id=evidence_id, system_id=system, org_id=str(org_id), evidence_type="evidence_run", status="collected", source_run_id=run_id))
+    assert link(client, evidence_id).status_code == 201
+
+
+def test_policy_evidence_facts_leave_catalogue_reruns_out(tmp_database):
+    from sqlalchemy.orm import Session
+
+    from src.application.services.policy_service import PolicyService
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    assert _run(client, system, 0.0).json()["status"] == "passed"
+    with Session(tmp_database) as db:
+        facts = PolicyService(db).system_facts(str(org_id), {"id": system})
+    assert (facts["evidence.total"], facts["evidence.failed"]) == (0, 0)
+
+
+def test_the_backfill_gives_an_earlier_catalogue_run_its_run_row(tmp_database):
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, _, accept, missing = _assigned_control(tmp_database, client, org_id, system)
+    passed = _run(client, system, 0.0).json()
+    with tmp_database.begin() as conn:  # as a run stored before catalogue runs got a run row
+        conn.execute(text("UPDATE governance_evidence SET source_run_id = NULL WHERE id = :id"), {"id": passed["id"]})
+        conn.execute(text("DELETE FROM governance_evidence_runs WHERE evidence_id = :id"), {"id": passed["id"]})
+    assert client.get(f"{gov}/systems/{system}/evidence-runs").json() == []
+    sql = (Path(__file__).resolve().parents[1] / "migrations" / "025_catalogue_run_backfill.sql").read_text()
+    for _ in range(2):  # idempotent
+        with tmp_database.begin() as conn:
+            conn.exec_driver_sql(sql)
+    [run] = client.get(f"{gov}/systems/{system}/evidence-runs").json()
+    assert (run["evidenceId"], run["result"], run["sourceIdentifier"]) == (passed["id"], "passed", "EV-DAT-01")
+    assert run["suiteName"].startswith("EV-DAT-01 ") and len(run["contentHash"]) == 64
+    accept(passed["id"])
+    assert missing() == 0

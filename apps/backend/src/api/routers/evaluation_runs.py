@@ -25,6 +25,7 @@ Mounted under /api/v1/packs beside the packs router and sharing its organisation
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -38,7 +39,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import bindparam, text
+from sqlalchemy import bindparam, insert, text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import CLOSED_RISK_STATUSES, _ensure_tables, _risk_score, _utc_now_iso
@@ -47,10 +48,11 @@ from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _mem
 from api.routes.pack_catalogue import EVALUATIONS
 from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
+from database.governance_models import GovernanceEvidenceRun
 from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
 from src.application.services.eval_engines.behaviour import CallError, Live
 from src.application.services.eval_engines.platform import load_export
-from src.application.services.governance_assurance_service import OrgMembership
+from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, OrgMembership
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -60,6 +62,7 @@ EVIDENCE_TYPE = "evaluation_run"
 STALE_AFTER = timedelta(minutes=5)  # a running job that has not reported for this long died with its worker
 RUNNER_GONE_S = 60  # a runner that has not asked for prompts for this long has stopped
 RUNNER_ANSWER_S = TIMEOUT_S + 30  # the runner's own call to the system, plus its round trips to FairMind
+RUN_RESULT = {"passed": "passed", "failed": "failed", "insufficient": "insufficient_data"}
 PLATFORM = "claude_managed_agents"  # ponytail: the one connector; take it from the form when a second platform lands
 
 
@@ -194,12 +197,29 @@ async def create_run(
 def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluation_id: str, outcome: Dict[str, Any]) -> str:
     now = _utc_now_iso()
     evidence_id = str(uuid.uuid4())
-    content = {"evaluationId": evaluation_id, **outcome}
+    content = json.dumps({"evaluationId": evaluation_id, **outcome}, default=str)
+    # The run row lists the run under Evidence > Evaluation runs and lets a reviewer map it to a control.
+    # It is no Evidence Passport, so it has no passport revision; only a passed result can support a control.
+    run_pk = str(uuid.uuid4())
+    workspace_id = db.execute(
+        text("SELECT workspace_id FROM governance_ai_systems WHERE id = :id AND org_id = :org"), {"id": system_id, "org": org_id}
+    ).scalar_one()
+    db.execute(
+        insert(GovernanceEvidenceRun.__table__).values(
+            id=run_pk, org_id=org_id, system_id=system_id, workspace_id=workspace_id, passport_id=evidence_id,
+            schema_version=CATALOGUE_RUN_SCHEMA, capability_state="insufficient_data" if outcome["status"] == "insufficient" else "validated",
+            assurance_source="fairmind_internal", source_type="fairmind_evaluation", source_identifier=evaluation_id,
+            run_id=evidence_id, content_hash=hashlib.sha256(content.encode()).hexdigest(),
+            result=RUN_RESULT.get(outcome["status"], "unknown"),
+            provenance_json=json.dumps({"evaluation": {"suite": {"name": f"{evaluation_id} {EVALUATIONS[evaluation_id].name}"}}}),
+            captured_at=now, evidence_id=evidence_id, created_at=now,
+        )
+    )
     db.execute(
         text(
             "INSERT INTO governance_evidence "
-            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
-            "VALUES (:id, :system_id, :org_id, :type, :title, :source, :content, :confidence, 'collected', :by, :metadata, :now, :now)"
+            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, source_run_id, captured_at, created_at) "
+            "VALUES (:id, :system_id, :org_id, :type, :title, :source, :content, :confidence, 'collected', :by, :metadata, :run, :now, :now)"
         ),
         {
             "id": evidence_id,
@@ -208,7 +228,8 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             "type": EVIDENCE_TYPE,
             "title": f"{evaluation_id} {EVALUATIONS[evaluation_id].name}: {outcome['status']}",
             "source": "fairmind.eval_engines",
-            "content": json.dumps(content, default=str),
+            "content": content,
+            "run": run_pk,
             # Measured by the engine from the data itself; an insufficient run measured nothing.
             "confidence": 0.0 if outcome["status"] == "insufficient" else 1.0,
             "by": user_id,

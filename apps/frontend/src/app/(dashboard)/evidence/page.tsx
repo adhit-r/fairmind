@@ -342,6 +342,7 @@ function EvidenceEvaluations() {
           error={evaluationState.error || assignments.error || assessmentState.error}
           canReview={roleKnown ? canReview : null}
           onReview={mappingReview.reviewMapping}
+          onMap={mappingReview.createMapping}
           onRefresh={async () => {
             await Promise.all([evaluationState.refresh(), assignments.refresh(), assessmentState.refresh()])
           }}
