@@ -220,10 +220,11 @@ def is_expired(expires_at: Optional[str]) -> bool:
 
 def clause_frameworks() -> List[Dict[str, str]]:
     """Frameworks the clause map can speak to (the lead four first), as {key, name}."""
-    from src.application.services.clause_map_service import CHECK_CONTROLS, LEAD_FRAMEWORKS, _catalogue
+    from src.application.services.clause_map_service import CHECK_CONTROLS, LEAD_FRAMEWORKS, _catalogue, evaluation_links
 
     cat = _catalogue()
     keys = {e["requirement"]["framework"] for control in CHECK_CONTROLS.values() for e in cat["by_control"].get(control, [])}
+    keys |= {cat["active"][k]["framework"] for ev in cat["evaluations"] for k in evaluation_links(ev)}  # evaluation runs reach these too
     order = {k: i for i, k in enumerate(LEAD_FRAMEWORKS)}
     rows = [{"key": k, "name": cat["frameworks"].get(k, {}).get("name", k)} for k in keys]
     return sorted(rows, key=lambda r: (order.get(r["key"], len(order)), r["name"]))

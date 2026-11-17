@@ -16,7 +16,7 @@ from api.routes.ai_governance import _ensure_tables, _load_json_value, _utc_now_
 from src.application.services import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
-from src.application.services.clause_map_service import GATE_CONTROLS, _catalogue
+from src.application.services.clause_map_service import GATE_CONTROLS, RELATION_RANK, _catalogue
 from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, PROVEN_CLASSES, evaluation_status, gate_check
 from src.application.services.llm_runtime import grok_cli
 from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
@@ -455,10 +455,11 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "engine": ev.engine,
         "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
         "codeLocation": ev.codeLocation,
-        "commonControl": ev.commonControl,  # the clause map reaches clauses through this control's crosswalk
+        "commonControl": ev.commonControl,
+        # every requirement the evaluation counts toward (clause_map_service.reach), strongest relation first
         "tests": [
-            {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}
-            for k in ev.tests
+            {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title, "relation": r}
+            for k, r in sorted(cat.EVALUATION_LINKS[ev.id].items(), key=lambda kr: (RELATION_RANK[kr[1]], kr[0]))
         ],
         "installed": pack_id in installed,
         # None when FairMind does not read this evaluation's results yet; else its status and latest result per system.
@@ -675,8 +676,9 @@ def get_journey(
                         "pack": cat.EVALUATION_PACK[eid],
                         "installed": cat.EVALUATION_PACK[eid] in installed,
                         "result": result(eid),
+                        "relation": relation,
                     }
-                    for eid in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
+                    for eid, relation in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
                 ],
             }
         )

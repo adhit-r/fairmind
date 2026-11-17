@@ -2,8 +2,9 @@
 
 Each gate check corresponds to one of the catalogue's common controls; the catalogue's
 crosswalk says which clause of which framework that control satisfies, supports or
-aligns with. Catalogue evaluation runs reach clauses the same way, through their
-evaluation's common control. The clause map joins them: for every framework, every
+aligns with. A catalogue evaluation run reaches clauses through ``evaluation_links``: its
+common control's crosswalk links plus the requirements the evaluation tests directly. The
+clause map joins them: for every framework, every
 active clause, each carrying the state of the checks behind it. A clause is proven only
 through a "Satisfies" link; proof through a weaker link makes it partial.
 """
@@ -14,7 +15,7 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 CATALOGUE_PATH = Path(__file__).resolve().parents[2] / "api" / "routers" / "pack_catalogue_data" / "catalogue.json"
 
@@ -39,7 +40,27 @@ FRAMEWORK_ALIASES: Dict[str, str] = {
 # the frameworks a decision record is usually read against, in display order; the rest follow alphabetically
 LEAD_FRAMEWORKS = ("EUAIA", "ISO42001", "NISTRMF", "INDAI", "RBIFREEAI")
 
-RELATION_RANK = {"Satisfies": 0, "Partially satisfies": 1, "Supports": 2, "Aligns with": 3}
+# "Tests": an evaluation names the requirement directly; it can move a clause to partial, never prove it alone
+TESTS = "Tests"
+RELATION_RANK = {"Satisfies": 0, "Partially satisfies": 1, TESTS: 2, "Supports": 3, "Aligns with": 4}
+
+
+def reach(tests: Iterable[str], control_links: Iterable[Tuple[str, str]]) -> Dict[str, str]:
+    """What an evaluation counts toward: requirement key -> strongest relation.
+
+    ``control_links`` are (requirement key, relation) crosswalk links of the evaluation's common control, capped at
+    Supports for a clause the evaluation does not test; each requirement it tests directly joins at TESTS. So a clause
+    is proven only through a Satisfies link the evaluation also tests. The one rule the clause map, journeys, the evaluation
+    catalogue and ``fairmind audit`` share (docs/ai-governance/evaluation-evidence-counts.md).
+    """
+    tests = set(tests)
+    out: Dict[str, str] = {}
+    # a crosswalk link to a clause the evaluation does not test supports it at most: only a tested clause can be proven
+    capped = ((k, r if k in tests or RELATION_RANK[r] >= RELATION_RANK["Supports"] else "Supports") for k, r in control_links)
+    for key, relation in [*capped, *((k, TESTS) for k in tests)]:
+        if key not in out or RELATION_RANK[relation] < RELATION_RANK[out[key]]:
+            out[key] = relation
+    return out
 
 
 def _natural(control: str) -> List[Any]:
@@ -54,6 +75,7 @@ def _catalogue() -> Dict[str, Any]:
     frameworks = {f["key"]: f for f in data["frameworks"]}
     by_control: Dict[str, List[Dict[str, Any]]] = {}
     by_framework: Dict[str, List[Dict[str, Any]]] = {}
+    active = {r["key"]: r for r in data["requirements"] if r.get("active", True)}
     for req in data["requirements"]:
         if req.get("active", True):
             by_framework.setdefault(req["framework"], []).append(req)
@@ -62,7 +84,7 @@ def _catalogue() -> Dict[str, Any]:
         if req and req.get("active", True):
             by_control.setdefault(entry["commonControl"], []).append({**entry, "requirement": req})
     # raw lists for GET /packs/controls
-    return {"frameworks": frameworks, "by_control": by_control, "by_framework": by_framework,
+    return {"frameworks": frameworks, "by_control": by_control, "by_framework": by_framework, "active": active,
             "evaluations": {e["id"]: e for e in data["evaluations"]}, "commonControls": data["commonControls"], "crosswalk": data["crosswalk"]}
 
 
@@ -70,6 +92,16 @@ def evaluation_control(content: Any) -> Optional[str]:
     """The common control of the catalogue evaluation an evaluation_run record's content names."""
     ev = _catalogue()["evaluations"].get(str((content or {}).get("evaluationId") or "")) if isinstance(content, dict) else None
     return ev.get("commonControl") if ev else None
+
+
+def evaluation_links(evaluation_id: str) -> Dict[str, str]:
+    """Active requirement key -> relation for every clause one catalogue evaluation counts toward."""
+    cat = _catalogue()
+    ev = cat["evaluations"].get(evaluation_id)
+    if not ev:
+        return {}
+    links = reach(ev.get("tests", []), ((l["key"], l["relation"]) for l in cat["by_control"].get(ev.get("commonControl"), [])))
+    return {k: r for k, r in links.items() if k in cat["active"]}
 
 
 # a clause cell is as good as its best-evidenced check, unless one of them fails; "none": no check reaches it
@@ -130,9 +162,9 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
     """Every active clause of each requested framework (every framework something reaches when none are requested).
 
     A gate check left out of the organisation's gate reaches its clauses as "not in gate", which proves nothing;
-    ``gate["evaluations"]`` (newest passed or failed run per non-gate control) reaches clauses through its control, proving
-    only those its evaluation tests. ``gate["attestedControls"]`` ({control: {statement, by, at, source, confidence}}, done
-    workflow runs and plan attestations) reaches the clauses of controls no gate check speaks to, as attested.
+    ``gate["evaluations"]`` (each evaluation's newest passed or failed run) reaches clauses through ``evaluation_links``.
+    ``gate["attestedControls"]`` ({control: {statement, by, at, source, confidence}}, done workflow runs and plan
+    attestations) reaches the clauses of controls no gate check speaks to, as attested.
     """
     from src.application.services.fairness_run_service import GATE_CHECKS  # function-level: that module imports this one
 
@@ -140,6 +172,7 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
     checks = {c["key"]: c for c in gate.get("checks", [])}
     labels = {key: label for key, label, _ in GATE_CHECKS}
     entries: List[tuple] = []  # (control, check entry without relation)
+    run_entries: List[tuple] = []  # (evaluation id, run entry without relation)
     for check_key, control in CHECK_CONTROLS.items():
         check = checks.get(check_key)
         if not check:
@@ -150,16 +183,14 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             "evidenceId": check.get("evidenceId"), "evidenceClass": check.get("evidenceClass"), "cell": cell_state(check),
             **{flag: True for flag in ("stale", "fails") if check.get(flag)},
         }))
-    tested: Dict[str, set] = {}  # evaluation id -> the clauses it actually tests
     for run in gate.get("evaluations", []):
         ev = cat["evaluations"].get(run["evaluationId"], {})
-        tested[run["evaluationId"]] = set(ev.get("tests") or [])
         entry = {
             "check": run["evaluationId"], "label": f"{run['evaluationId']} {ev.get('name', '')}".strip(), "state": run["state"],
             "confidence": run["confidence"], "evidenceId": run.get("evidenceId"), "evidenceClass": run["evidenceClass"],
             **({"fails": True} if run["status"] == "failed" else {}),
         }
-        entries.append((run["control"], {**entry, "cell": cell_state(entry)}))
+        run_entries.append((run["evaluationId"], {**entry, "cell": cell_state(entry)}))
     # organisation work and workflow runs for controls no gate check reaches: a person's statement, so attested at most
     for control, att in (gate.get("attestedControls") or {}).items():
         if control not in GATE_CONTROLS:
@@ -179,10 +210,12 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             req = link["requirement"]
             if frameworks and req["framework"] not in frameworks:
                 continue
-            relation = link["relation"]
-            # an evaluation proves only the clauses it tests; through the rest of its control's crosswalk it supports at most
-            if entry["check"] in tested and req["key"] not in tested[entry["check"]] and RELATION_RANK.get(relation, 9) < RELATION_RANK["Supports"]:
-                relation = "Supports"
+            clause(framework(req["framework"]), req)["checks"].append({**entry, "relation": link["relation"]})
+    for evaluation_id, entry in run_entries:
+        for key, relation in evaluation_links(evaluation_id).items():
+            req = cat["active"][key]
+            if frameworks and req["framework"] not in frameworks:
+                continue
             clause(framework(req["framework"]), req)["checks"].append({**entry, "relation": relation})
     # seed every active clause, so a clause nothing reaches still counts as open
     for fw_key in frameworks or list(per_framework):

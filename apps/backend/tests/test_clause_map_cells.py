@@ -184,3 +184,41 @@ def test_attested_controls_reach_clauses_no_gate_check_does():
     clauses = {c["control"]: c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"]}
     assert (clauses["5.2"]["state"], clauses["5.2"]["cell"]) == ("attested", "attested")
     assert not any(ch["check"] == "FMC-FAI-01" for c in clauses.values() for ch in c["checks"])
+
+
+def test_a_direct_test_link_moves_its_clause_to_partial_and_a_satisfies_link_proves():
+    def iso(evidence):
+        gate = release_gate("medium", evidence, now=NOW, include_environmental=False)
+        return {c["control"]: c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"]}
+
+    # EV-DAT-01 names A.6.2.6 directly; its common control does not reach it
+    clause = iso([_evaluation("EV-DAT-01", "passed")])["A.6.2.6"]
+    assert clause["state"] == "partial" and [ch["relation"] for ch in clause["checks"] if ch["check"] == "EV-DAT-01"] == ["Tests"]
+    # a Satisfies link proves only a clause the evaluation also tests: EV-TST-01 tests A.6.2.4, EV-OFF-08 does not
+    assert iso([_evaluation("EV-TST-01", "passed")])["A.6.2.4"]["state"] == "proven"
+    assert iso([_evaluation("EV-OFF-08", "passed")])["A.6.2.4"]["state"] == "partial"
+    # a fairness evaluation counts in the gate check and also through its own links
+    gate = release_gate("medium", [_evaluation("EV-FAI-05", "passed")], now=NOW, include_environmental=False)
+    nist = {c["control"]: c for c in clause_map(gate, frameworks=["NISTRMF"])["frameworks"][0]["clauses"]}
+    assert any(ch["check"] == "EV-FAI-05" for ch in nist["MEASURE 2.11"]["checks"])
+
+
+def test_one_rule_for_the_clause_map_journeys_and_the_evaluation_catalogue():
+    from src.api.routers import pack_catalogue as pc
+    from src.application.services.clause_map_service import evaluation_links
+
+    for eid in pc.EVALUATIONS:
+        gate = release_gate("medium", [_evaluation(eid, "passed")], now=NOW, include_environmental=False)
+        reached = {c["key"] for fw in clause_map(gate)["frameworks"] for c in fw["clauses"] if any(ch["check"] == eid for ch in c["checks"])}
+        assert reached == set(evaluation_links(eid)) == set(pc.EVALUATION_LINKS[eid]) == pc._C.tests[eid], eid
+        assert all(eid in [e for e, _ in pc.REQUIREMENT_EVALUATIONS[k]] for k in reached), eid
+
+
+def test_a_failing_csv_fairness_run_still_counts_after_a_later_passing_evaluation():
+    csv = _record("fairness_test", 0.95, "measured", passes=False, ts="2026-11-05T00:00:00+00:00")
+    gate = release_gate("low", [csv, _evaluation("EV-FAI-05", "passed")], environmental_assessed=True, now=NOW)
+    fairness = next(c for c in gate["checks"] if c["key"] == "fairness")
+    assert fairness["fails"] is True and gate["verdict"] != "go"
+    # a newer passing CSV run clears it
+    fixed = _record("fairness_test", 0.95, "measured", passes=True, ts="2026-11-06T12:00:00+00:00")
+    assert "fails" not in next(c for c in release_gate("low", [csv, fixed, _evaluation("EV-FAI-05", "passed")], now=NOW)["checks"] if c["key"] == "fairness")

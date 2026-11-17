@@ -14,6 +14,8 @@ from typing import Dict, Iterable, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from src.application.services.clause_map_service import RELATION_RANK, reach
+
 DATA_FILE = Path(__file__).parent / "pack_catalogue_data" / "catalogue.json"
 
 StepKind = Literal[
@@ -185,6 +187,7 @@ class Catalogue:
         self.patterns = _index([Pattern(**p) for p in raw["patterns"]], "id", "pattern")
         self.packs = _index([Pack(**p) for p in raw["packs"]], "id", "pack")
         self.bundles = _index([Bundle(**b) for b in raw["bundles"]], "id", "bundle")
+        self.crosswalk = raw.get("crosswalk", [])
         self._check()
         self._derive()
 
@@ -227,7 +230,14 @@ class Catalogue:
         self.supports = {
             w.id: frozenset(m.key for m in w.mappings if m.relation == "Supports") & active for w in self.workflows.values()
         }
-        self.tests = {e.id: frozenset(e.tests) & active for e in self.evaluations.values()}
+        control_links: Dict[str, List[tuple]] = {}
+        for entry in self.crosswalk:
+            control_links.setdefault(entry["commonControl"], []).append((entry["key"], entry["relation"]))
+        # what each evaluation counts toward, by the one rule the clause map uses (clause_map_service.reach)
+        self.evaluation_links = {
+            e.id: {k: r for k, r in reach(e.tests, control_links.get(e.commonControl, [])).items() if k in active} for e in self.evaluations.values()
+        }
+        self.tests = {e: frozenset(links) for e, links in self.evaluation_links.items()}
         self.pack_workflows = {p.id: [w for pid in p.patterns for w in self.patterns[pid].workflows] for p in self.packs.values()}
         self.pack_evaluations = {p.id: [e for pid in p.patterns for e in self.patterns[pid].evaluations] for p in self.packs.values()}
         self.workflow_pack = {w: p for p, ws in self.pack_workflows.items() for w in ws}
@@ -245,10 +255,12 @@ class Catalogue:
             for m in w.mappings:
                 if m.key in active:
                     self.requirement_workflows.setdefault(m.key, []).append((w.id, m.relation))
-        self.requirement_evaluations: Dict[str, List[str]] = {}
+        self.requirement_evaluations: Dict[str, List[tuple]] = {}  # requirement -> [(evaluation id, relation)], strongest first
         for e in self.evaluations.values():
-            for key in self.tests[e.id]:
-                self.requirement_evaluations.setdefault(key, []).append(e.id)
+            for key, relation in self.evaluation_links[e.id].items():
+                self.requirement_evaluations.setdefault(key, []).append((e.id, relation))
+        for links in self.requirement_evaluations.values():
+            links.sort(key=lambda link: RELATION_RANK[link[1]])
 
 
 def load(raw: dict) -> Catalogue:
@@ -266,6 +278,7 @@ PACK_WORKFLOWS, PACK_EVALUATIONS = _C.pack_workflows, _C.pack_evaluations
 WORKFLOW_PACK, EVALUATION_PACK = _C.workflow_pack, _C.evaluation_pack
 PACK_TOUCHED, PACK_DONE = _C.pack_touched, _C.pack_done
 REQUIREMENT_WORKFLOWS, REQUIREMENT_EVALUATIONS = _C.requirement_workflows, _C.requirement_evaluations
+EVALUATION_LINKS = _C.evaluation_links
 
 
 class Coverage:

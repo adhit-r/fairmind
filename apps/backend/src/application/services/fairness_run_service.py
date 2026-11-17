@@ -728,6 +728,7 @@ def release_gate(
             assessment = environmental_assessed if isinstance(environmental_assessed, dict) else {"provenance_class": "tool_estimated", "confidence": 0.85}
             matching = [{"evidenceType": "environmental", "confidence": assessment["confidence"], "metadata": {"provenance_class": assessment["provenance_class"]}}]
         state, confidence, evidence_id, detail, evidence_class = "open", 0.0, None, None, None
+        record = None
         stale_for = None
         if key == "monitoring" and monitoring_cadence_hours:
             times = [t for r in matching if _provenance(r) in PROVEN_CLASSES and float(r.get("confidence") or 0.0) >= 0.70 for t in [_record_time(r)] if t]
@@ -757,6 +758,15 @@ def release_gate(
             if evaluation_status(r) == "failed":
                 detail = {**(detail or {}), "evaluationId": evaluation_id, "all_checks_pass": False}
                 reasons.append(f"Evaluation {evaluation_id} failed, which counts against {label.lower()}")
+        if key == "fairness":
+            # a measured CSV fairness failure stands until a newer CSV run passes, as an evaluation failure does,
+            # so a later passing evaluation of another kind cannot hide it
+            runs_csv = [r for r in matching if not evaluation_status(r) and _provenance(r) in PROVEN_CLASSES
+                        and isinstance(r.get("content"), dict) and r["content"].get("all_checks_pass") is not None]
+            newest_csv = max(runs_csv, key=lambda r: _record_time(r) or _NO_TIME, default=None)
+            if newest_csv and newest_csv is not record and newest_csv["content"]["all_checks_pass"] is False:
+                detail = {**(detail or {}), "all_checks_pass": False}
+                reasons.append("Measured fairness checks fail on at least one attribute")
         checks.append({
             "key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "evidenceClass": evidence_class, "detail": detail,
             **({"stale": True} if stale_for is not None else {}),
@@ -775,11 +785,11 @@ def release_gate(
     missing = [c["label"] for c in checks if c["state"] == "open" and not c.get("stale")]
     if missing:
         reasons.append(f"Nothing on file for: {', '.join(missing)}")
-    # the newest passed or failed run of each evaluation no gate check counts; the clause map reads these
+    # the newest passed or failed run of each catalogue evaluation; the clause map reads these through evaluation_links
     runs: Dict[str, Dict[str, Any]] = {}
     for r in sorted((r for r in evidence if evaluation_status(r)), key=lambda r: _record_time(r) or _NO_TIME):
         control = evaluation_control(r.get("content"))
-        if control and gate_check(r) is None:
+        if r["content"].get("evaluationId") in _catalogue()["evaluations"]:
             evidence_class, confidence, state = _weigh(r)
             runs[r["content"].get("evaluationId")] = {"control": control, "evaluationId": r["content"].get("evaluationId"), "status": evaluation_status(r), "evidenceId": r.get("id"),
                              "evidenceClass": evidence_class, "confidence": round(confidence, 2), "state": state}
