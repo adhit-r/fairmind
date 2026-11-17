@@ -89,7 +89,6 @@ def test_reminders_go_once_per_due_date_and_the_link_stops_them(org):
     from fastapi.testclient import TestClient
     from sqlalchemy.orm import sessionmaker
 
-    from api.main import app
     from api.routes.tasks import sweep_task_reminders
 
     clients, ids, _, engine = org
@@ -121,7 +120,7 @@ def test_reminders_go_once_per_due_date_and_the_link_stops_them(org):
     assert sweep() == 1 and outbox[-1][2] == ["Connect the runner"]  # a new due date is reminded again
 
     q = {k: v[0] for k, v in parse_qs(urlsplit(link).query).items()}
-    public = TestClient(app)
+    public = TestClient(editor.app)  # the same app the signed-in clients use, with the test database
     url = "/api/v1/public/task-reminders/unsubscribe"
     assert public.get(url, params=q).status_code == 200  # opening the link only asks
     assert public.post(url, params={**q, "t": "0" * 64}).status_code == 404
