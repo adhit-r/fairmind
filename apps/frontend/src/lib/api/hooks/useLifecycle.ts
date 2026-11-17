@@ -76,7 +76,14 @@ export function useSystemChanges(systemId: string | undefined) {
     await q.refresh()
     return res.data
   }
-  return { ...q, record }
+  /** Name the accountable owner; the backend records it as a minor "docs or owner" change. */
+  const setOwner = async (owner: string) => {
+    const res = await apiClient.patch<{ owner: string; change: SystemChange | null }>(`${GOV}/systems/${systemId}`, { owner }, { enableRetry: false })
+    if (!res.success || !res.data) throw new Error(res.error || 'Could not change the owner')
+    await q.refresh()
+    return res.data
+  }
+  return { ...q, record, setOwner }
 }
 
 /** The retirement on file, or the closing tasks for the chosen reason and the suggested retention. */
