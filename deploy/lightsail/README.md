@@ -70,7 +70,8 @@ Update: `git pull && docker compose up -d --build`, or let the instance do it (b
 ### Automatic deploys
 
 A timer on the instance checks `main` every 5 minutes and, when it has moved since the last good
-deploy, fast-forwards and runs `docker compose up -d --build`. It pulls rather than being pushed to,
+deploy, fast-forwards and runs `docker compose up -d --build`. A deploy counts only once the backend
+answers its health check and the backend, frontend and tunnel are all running (within 3 minutes). It pulls rather than being pushed to,
 so the instance still takes no inbound traffic and GitHub holds no key to it. A failed build or
 migration leaves the running containers alone and is tried again on the next run. Install once:
 
