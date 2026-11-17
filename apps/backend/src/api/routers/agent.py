@@ -309,10 +309,10 @@ def log(body: LogRequest, db: Session = Depends(get_db)):
     sets: Dict[str, Any] = {"last_seen": now.isoformat()}
     seen: List[tuple] = []  # (kind, service, detail)
     state = db.execute(text("SELECT models_json, accounts_json, name FROM governance_agent_nodes WHERE id = :id"), {"id": node[0]}).fetchone()
-    if body.log_type == "status":
-        errors = [str(d.get("message") or "") for d in body.data if str(d.get("severity")) in ("1", "2") or "endpointsecurity" in str(d.get("message") or "").lower()]
-        if errors:
-            sets["problem"] = errors[-1][:500]
+    if body.log_type == "status" and body.data:
+        # The latest batch decides: a batch with no problem in it clears an old one, so a fixed laptop stops showing.
+        problems = [m for d in body.data if (m := status_problem(d))]
+        sets["problem"] = problems[-1] if problems else None
     else:
         for line in body.data:
             deco = line.get("decorations") or {}
@@ -358,6 +358,19 @@ def log(body: LogRequest, db: Session = Depends(get_db)):
     db.execute(text("DELETE FROM governance_agent_events WHERE node_id = :n AND at < :cut"), {"n": node[0], "cut": (now - timedelta(days=KEEP_DAYS)).isoformat()})
     db.commit()
     return {"node_invalid": False}
+
+
+def status_problem(line: Dict[str, Any]) -> Optional[str]:
+    """A status line that means the agent cannot see what it should, or None. Only errors count, plus Endpoint
+    Security refusing to start; warnings such as extensions being off, and features switched off in the flags,
+    are not problems. Paths are dropped, since they describe the laptop's own files."""
+    msg = str(line.get("message") or "").strip()
+    low = msg.lower()
+    if "disabled via configuration" in low or "endpointsecurity_fim" in low:
+        return None
+    if "endpointsecurity" in low or str(line.get("severity")) == "2":
+        return re.sub(r"\(?/[^\s)]+\)?", "", msg).strip()[:300] or None
+    return None
 
 
 def _owner(path: str) -> Optional[str]:
