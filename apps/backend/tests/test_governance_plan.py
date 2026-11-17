@@ -54,6 +54,8 @@ def test_discovery_reads_the_description_asks_the_rest_and_builds_a_plan_from_th
     assert client.post(f"{PLAN}/generate").status_code == 409  # frameworks not confirmed yet
     _answer(client, "frameworks", ["ISO42001", "INDAI", "RBIFREEAI"])
     view = client.post(f"{PLAN}/generate").json()
+    # the suggestions stay readable after the plan is generated (the Frameworks page offers them)
+    assert [f["key"] for f in view["discovery"]["suggested"]] == ["ISO42001", "INDAI", "RBIFREEAI", "OWASPLLM"]
     assert view["status"] == "active" and view["tasks"]
     chosen = {"ISO42001", "INDAI", "RBIFREEAI"}
     for t in view["tasks"]:

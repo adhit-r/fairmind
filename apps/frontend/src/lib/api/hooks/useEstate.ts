@@ -35,6 +35,9 @@ export interface FrameworkSystems {
   systems: Array<{ id: string; name: string; riskTier: SystemRecord['riskTier'] }>
   unconfirmed: number
   notInScope: number
+  /** Systems in scope because they inherit the plan's choice of this framework. */
+  inherited?: number
+  followedByPlan?: boolean
   requirements: Array<{ key: string; cells: Array<{ state: CellState; checks: FrameworkCellCheck[] } | null> }>
 }
 
@@ -53,7 +56,18 @@ export interface Controls {
 /** Per framework some system confirmed: how many systems, and its tracked requirements counted by weakest state. */
 export interface EstateFrameworks {
   unconfirmed: number
-  frameworks: Array<{ key: string; systems: number; tracked: number; states: Partial<Record<CellState | 'none', number>> }>
+  /** Frameworks the organisation chose in its plan; systems that have not confirmed their own inherit them. */
+  plan?: string[]
+  frameworks: Array<{
+    key: string
+    systems: number
+    tracked: number
+    states: Partial<Record<CellState | 'none', number>>
+    /** plan: chosen in the plan; system: only confirmed on systems. */
+    source?: 'plan' | 'system'
+    inherited?: number
+    confirmed?: number
+  }>
 }
 
 export const useEstateFrameworks = () => useOrgResource<EstateFrameworks>(API_ENDPOINTS.aiGovernance.estateFrameworks)

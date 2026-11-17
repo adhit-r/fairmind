@@ -11,14 +11,15 @@ import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { useOrg } from '@/context/OrgContext'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import { useFrameworkSystems } from '@/lib/api/hooks/useEstate'
-import { useEvidencePacks } from '@/lib/api/hooks/useEvidencePacks'
 import { useJourney } from '@/lib/api/hooks/usePacks'
-import { Glyph, Legend, NEEDS_WORK, STATE_LABEL, WEAKEST_FIRST, cellIndex, requirementHref, stateFor, type ReqState } from '../parts'
+import { GROUP_LABEL, Glyph, Legend, NEEDS_WORK, READINESS_LABEL, READINESS_OF, READINESS_ORDER, STATE_LABEL, WEAKEST_FIRST, cellIndex, groupOf, readinessCounts, requirementHref, stateFor, type ReqState } from '../parts'
 import { MatrixView } from './MatrixView'
+import { PrepareAudit } from './PrepareAudit'
 import { TaskForm, initials, personName, useAssignees } from '@/components/tasks/TaskForm'
 import { useTasks } from '@/lib/api/hooks/useTasks'
 
@@ -34,7 +35,11 @@ function ClauseView() {
   const params = useParams<{ key: string }>()
   const key = decodeURIComponent(params.key)
   const router = useRouter()
-  const { selectedOrg } = useOrg()
+  const search = useSearchParams()
+  const tabParam = search.get('tab')
+  const tab = tabParam === 'systems' || tabParam === 'all' || tabParam === 'audit' ? tabParam : 'requirements'
+  const setTab = (t: string) => router.replace(`/frameworks/${encodeURIComponent(key)}${t === 'requirements' ? '' : `?tab=${t}`}`)
+  useOrg()
   const journey = useJourney(key)
   const fw = useFrameworkSystems(key)
   const tasks = useTasks({ subject_type: 'requirement', status: 'open' })
@@ -48,11 +53,8 @@ function ClauseView() {
         : 'Nobody yet'
   // An open task on a requirement for a system: the queue shows who has it instead of an Assign button.
   const taskFor = useMemo(() => new Map((tasks.data?.tasks ?? []).map((t) => [`${t.subject.id}@${t.systemId}`, t])), [tasks.data])
-  const { create } = useEvidencePacks()
   const [system, setSystem] = useState<number | 'all'>('all')
   const [groupPick, setGroupPick] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
 
   const j = journey.data
   const f = fw.data
@@ -95,14 +97,9 @@ function ClauseView() {
   )
   const queued = queue.reduce((a, q) => a + q.items.length, 0)
 
-  const exportPack = async () => {
-    setBusy(true)
-    setExportError(null)
-    const res = await create({ title: `${short} inspection pack`, frameworks: [key], systemIds: systems.map((s) => s.id) })
-    setBusy(false)
-    if (res.success && res.data) router.push(`/evidence/packs/${res.data.id}`)
-    else setExportError(res.error || 'Could not create the inspection pack')
-  }
+  const allReqs = groups.flatMap((g) => g.reqs)
+  const readiness = readinessCounts(allReqs.reduce<Partial<Record<ReqState, number>>>((m, r) => ({ ...m, [r.state]: (m[r.state] ?? 0) + 1 }), {}))
+  const attention = allReqs.filter((r) => READINESS_OF[r.state] === 'attention')
 
   if ((journey.loading && !j) || (fw.loading && !f)) {
     return (
@@ -130,48 +127,110 @@ function ClauseView() {
         </Text>
         <HStack gap={3} hAlign="between" vAlign="end" wrap="wrap">
           <VStack gap={1}>
+            <span className="fx-eyebrow">{[GROUP_LABEL[groupOf(j)], j.version].filter(Boolean).join(' · ')}</span>
             <Heading level={1}>{name}</Heading>
-            <Text color="secondary">{[j.binding || j.type, j.version].filter(Boolean).join(' · ')}</Text>
+            <Text color="secondary">
+              {f?.followedByPlan ? 'Chosen in your plan' : systems.length ? 'Confirmed on systems, not in your plan' : 'You do not follow this framework'}
+              {' · '}
+              {systems.length} system{systems.length === 1 ? '' : 's'} in scope
+              {(f?.inherited ?? 0) > 0 ? `, ${f?.inherited} not assessed yet` : ''}
+            </Text>
           </VStack>
           <HStack gap={2}>
-            <Button variant="secondary" label="Matrix view" href={`/frameworks/${encodeURIComponent(key)}?view=matrix`} />
-            <Button label={busy ? 'Exporting' : 'Export for an auditor'} onClick={exportPack} isDisabled={busy || !systems.length} />
+            <Button variant="secondary" label="Matrix" href={`/frameworks/${encodeURIComponent(key)}?view=matrix`} />
+            <Button variant="primary" label="Prepare audit pack" onClick={() => setTab('audit')} />
           </HStack>
         </HStack>
-        <ul className="fx-scope" aria-label="Scope">
-          {selectedOrg && (
-            <li>
-              Organisation <b>{selectedOrg.name}</b>
-            </li>
-          )}
-          <li>
-            Systems in scope <b>{systems.length ? systems.map((s) => s.name).join(', ') : 'None yet'}</b>
-          </li>
-          <li>
-            Covered by completed pack work <b>{j.coveredInstalled} of {j.active}</b>
-          </li>
-          {(f?.unconfirmed ?? 0) > 0 && (
-            <li>
-              Not confirmed{' '}
-              <b>
-                {f?.unconfirmed} system{f?.unconfirmed === 1 ? '' : 's'}
-              </b>{' '}
-              · <Link href="/systems">Confirm</Link>
-            </li>
-          )}
-        </ul>
       </VStack>
 
-      {exportError && <Banner status="error" title="Export failed" description={exportError} />}
       {!systems.length && (
         <Banner
           status="info"
-          title={`No system has confirmed ${short}`}
-          description="The map shows what completed workflows of installed packs cover at organisation level. Confirm the framework on a system to see where that system stands on each requirement."
+          title={`You do not follow ${short}`}
+          description="Follow it from Frameworks and every AI system you have not assessed is in scope. Until then, the map shows only what installed packs cover at organisation level."
         />
       )}
 
-      <div className="fx-cols">
+      <section className="fm-card" aria-label="Readiness">
+        <div className="fx-summary">
+          {READINESS_ORDER.map((r) => (
+            <div key={r} className={`fx-sbox r-${r}`}>
+              <b>{readiness[r]}</b>
+              <span>{r === 'met' ? 'Met, by evidence or attestation' : r === 'attention' ? 'Need attention: failing or out of date' : READINESS_LABEL[r]}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <TabList value={tab} onChange={setTab} hasDivider aria-label={`${short} views`}>
+        <Tab value="requirements" label="Requirements" />
+        <Tab value="systems" label={`Systems ${systems.length}`} />
+        <Tab value="all" label={`All requirements ${allReqs.length}`} />
+        <Tab value="audit" label="Audit and packs" />
+      </TabList>
+
+      {tab === 'audit' ? (
+        <PrepareAudit
+          frameworkKey={key}
+          name={short}
+          systems={systems.map((s) => ({ id: s.id, name: s.name }))}
+          counts={readiness}
+          attention={attention.map((r) => ({ control: r.control, title: r.title }))}
+          notAssessed={f?.inherited ?? 0}
+        />
+      ) : tab === 'systems' ? (
+        <section className="fm-card" aria-label="Systems in scope" style={{ padding: 0 }}>
+          <div className="fx-scroll">
+            <table className="fx-table">
+              <thead>
+                <tr><th scope="col">System</th><th scope="col">Tier</th><th scope="col">Where it stands</th></tr>
+              </thead>
+              <tbody>
+                {systems.map((sys, i) => {
+                  const st: Partial<Record<ReqState, number>> = {}
+                  for (const r of allReqs) {
+                    const s2 = stateFor(cells.get(r.key), r.status, i)
+                    st[s2] = (st[s2] ?? 0) + 1
+                  }
+                  const c = readinessCounts(st)
+                  return (
+                    <tr key={sys.id}>
+                      <td><Link href={`/systems/${encodeURIComponent(sys.id)}`}>{sys.name}</Link></td>
+                      <td>{sys.riskTier}</td>
+                      <td style={{ minWidth: 320 }}><span className="fx-counts" style={{ marginTop: 0 }}><span><b>{c.met} of {allReqs.length}</b> met</span><span>{c.progress} in progress</span>{c.attention > 0 && <span className="warn">{c.attention} need attention</span>}<span>{c.notstarted} not started</span></span></td>
+                    </tr>
+                  )
+                })}
+                {systems.length === 0 && <tr><td colSpan={3}>No system is in scope.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : tab === 'all' ? (
+        <section className="fm-card" aria-label="All requirements" style={{ padding: 0 }}>
+          <div className="fx-scroll">
+            <table className="fx-table">
+              <thead>
+                <tr><th scope="col">ID</th><th scope="col">Requirement</th><th scope="col">Group</th><th scope="col">Status</th></tr>
+              </thead>
+              <tbody>
+                {groups.flatMap((g) => g.reqs.map((r) => {
+                  const ready = READINESS_OF[r.state]
+                  return (
+                    <tr key={r.key}>
+                      <td className="num"><Link href={requirementHref(key, r.control)}>{r.control}</Link></td>
+                      <td><Link href={requirementHref(key, r.control)}>{r.title}</Link></td>
+                      <td>{g.name}</td>
+                      <td><span className="fx-state"><i className={`fx-rk r-${ready}`} aria-hidden="true" />{READINESS_LABEL[ready]}</span></td>
+                    </tr>
+                  )
+                }))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : (
+            <div className="fx-cols">
         <VStack gap={5}>
           <section className="fm-card fx-map" aria-labelledby="fx-map-title" style={{ padding: 0 }}>
             <div className="fx-pad">
@@ -344,6 +403,7 @@ function ClauseView() {
           )}
         </aside>
       </div>
+      )}
     </VStack>
   )
 }
