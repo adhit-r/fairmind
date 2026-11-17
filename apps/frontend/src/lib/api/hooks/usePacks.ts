@@ -152,7 +152,7 @@ export interface JourneyRequirement {
   title: string
   status: ReqStatus
   workflows: Array<{ id: string; name: string; relation: string; stage: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
-  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean; result: ResultStatus | null }>
+  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean; result: ResultStatus | null; relation: string }>
 }
 
 export interface Journey {
@@ -192,7 +192,8 @@ export interface EvaluationRow {
   /** FairMind computes this evaluation itself from files you upload. */
   runnable: boolean
   codeLocation: string | null
-  tests: Array<{ key: string; framework: string; control: string; title: string }>
+  /** Every requirement the evaluation counts toward, strongest relation first. */
+  tests: Array<{ key: string; framework: string; control: string; title: string; relation: string }>
   installed: boolean
   /** Null when FairMind does not record results for this evaluation yet. */
   results: EvaluationResults | null

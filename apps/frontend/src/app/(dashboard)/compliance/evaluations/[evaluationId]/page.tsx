@@ -503,7 +503,7 @@ export default function EvaluationPage() {
           ['Pass when', e.threshold],
           ['Applies to', e.appliesTo],
           ['Pack', e.pack.name],
-          ['Requirements it tests', `${e.tests.length}`],
+          ['Counts toward', `${e.tests.length} ${e.tests.length === 1 ? 'requirement' : 'requirements'}`],
         ] as const).map(([k, v]) => (
           <div key={k} className="flex flex-col gap-0.5">
             <dt className={LABEL}>{k}</dt>

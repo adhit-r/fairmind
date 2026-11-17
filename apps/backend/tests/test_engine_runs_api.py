@@ -1,6 +1,7 @@
 """Evaluation runs through the API: run, store as evidence, read back on the evaluations list."""
 
 import io
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -321,3 +322,35 @@ def test_the_backfill_gives_an_earlier_catalogue_run_its_run_row(tmp_database):
     assert run["suiteName"].startswith("EV-DAT-01 ") and len(run["contentHash"]) == 64
     accept(passed["id"])
     assert missing() == 0
+
+
+def test_a_passed_llm_output_bias_run_turns_fairness_green_and_moves_iso_clauses(tmp_database):
+    """EV-FAI-05 stored the way live and runner jobs store it, read back through the system's gate and clause map."""
+    from sqlalchemy.orm import Session
+    from api.routes.evaluation_runs import _store_run
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id, name="Support assistant")
+    gov = "/api/v1/ai-governance"
+
+    def iso():
+        fw = next(f for f in client.get(f"{gov}/systems/{system}/clause-map").json()["frameworks"] if f["key"] == "ISO42001")
+        return {c["control"]: c for c in fw["clauses"]}
+
+    assert iso()["A.5.4"]["state"] == iso()["A.6.2.4"]["state"] == "open"
+    with Session(bind=tmp_database) as db:
+        for eid in ("EV-FAI-05", "EV-SEC-01"):
+            _store_run(db, str(org_id), str(uuid.uuid4()), system, eid, {"status": "passed", "summary": "within threshold", "source": "runner"})
+        db.commit()
+    fairness = next(c for c in client.get(f"{gov}/systems/{system}/gate").json()["checks"] if c["key"] == "fairness")
+    assert (fairness["state"], fairness["evidenceClass"], fairness["confidence"]) == ("proven", "measured", 1.0)
+    clauses = iso()
+    assert clauses["A.5.4"]["state"] == clauses["A.7.4"]["state"] == clauses["A.6.2.4"]["state"] == "partial"
+    assert any(ch["check"] == "EV-SEC-01" for ch in clauses["A.6.2.4"]["checks"])
+    # the journey and the evaluation catalogue name the same evaluations for the clause
+    journey = client.get(f"{PACKS}/journeys/ISO42001").json()
+    row = next(r for g in journey["groups"] for r in g["requirements"] if r["key"] == "ISO42001|A.6.2.4")
+    assert {"EV-SEC-01": "Supports", "EV-OFF-08": "Supports", "EV-TST-01": "Satisfies"}.items() <= {e["id"]: e["relation"] for e in row["evaluations"]}.items()
+    assert row["status"] == "tested"
+    sec = client.get(f"{PACKS}/evaluations/EV-SEC-01").json()
+    assert {"key": "ISO42001|A.6.2.4", "relation": "Supports"}.items() <= next(t for t in sec["tests"] if t["key"] == "ISO42001|A.6.2.4").items()
