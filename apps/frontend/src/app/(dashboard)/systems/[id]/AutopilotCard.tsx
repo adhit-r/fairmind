@@ -15,6 +15,7 @@ const CLASS_LABEL: Record<string, string> = { measured: 'measured', tool_estimat
 const ACTION_TEXT: Record<AutopilotStep['action'], (label: string) => string> = {
   fairness_run: () => 'Re-run the fairness test',
   monitoring_snapshot: () => 'Take a monitoring snapshot',
+  evaluation_run: (label) => `Run a catalogue evaluation for ${label.toLowerCase()}`,
   environmental_assessment: () => 'Run an environmental assessment',
   attest: (label) => `Attest ${label.toLowerCase()}`,
   evidence_upload: (label) => `Record ${label.toLowerCase()} evidence`,

@@ -118,7 +118,7 @@ def render_clause_map(cmap: Dict[str, Any]) -> str:
     lines = [f"Gate {VERDICT_WORD.get(cmap['verdict'], cmap['verdict'])}, confidence {cmap['confidence']:.2f}"]
     for fw in cmap["frameworks"]:
         c = fw["counts"]
-        lines.append(f"{fw['name']} ({fw['key']}): {c['proven']} proven, {c['attested']} attested, {c['open']} open of {c['total']} clauses")
+        lines.append(f"{fw['name']} ({fw['key']}): {c['proven']} proven, {c.get('partial', 0)} partial, {c['attested']} attested, {c['open']} open of {c['total']} clauses")
         open_clauses = [cl["control"] for cl in fw["clauses"] if cl["state"] == "open"]
         if open_clauses:
             lines.append(f"  open: {', '.join(open_clauses)}")

@@ -72,9 +72,11 @@ def test_framework_systems_keep_only_confirmed_systems_in_scope():
     assert body["systems"] == [{"id": critical, "name": "Collections", "riskTier": "critical"}, {"id": high, "name": "Underwriting", "riskTier": "high"}]
     assert (body["unconfirmed"], body["notInScope"]) == (1, 1)
     assert [r["key"] for r in body["requirements"]] == tracked_requirements("EUAIA")
+    reached = [req for req in body["requirements"] if req["cells"][0] is not None]
+    assert reached and len(reached) < len(body["requirements"])  # a requirement no check reaches has no cell
     for req in body["requirements"]:
-        assert len(req["cells"]) == 2 and all(cell["state"] == "open" for cell in req["cells"])
-        assert all({"check", "label", "relation", "confidence", "evidenceId", "evidenceClass"} <= set(ch) for cell in req["cells"] for ch in cell["checks"])
+        assert len(req["cells"]) == 2 and all(cell is None or cell["state"] == "open" for cell in req["cells"])
+        assert all({"check", "label", "relation", "confidence", "evidenceId", "evidenceClass"} <= set(ch) for cell in req["cells"] if cell for ch in cell["checks"])
 
     assert client.get(f"{AIG}/frameworks/NOT-A-FRAMEWORK/systems").status_code == 404
 
@@ -108,4 +110,5 @@ def test_estate_frameworks_count_each_confirmed_framework_once_per_system():
     assert (rows["EUAIA"]["systems"], rows["ISO42001"]["systems"]) == (1, 2)
     for key, row in rows.items():
         assert row["tracked"] == len(tracked_requirements(key))
-        assert row["states"] == {"open": row["tracked"]}  # nothing is evidenced yet, so every tracked one is open
+        # nothing is evidenced yet: every requirement a check reaches is open, the rest are reached by nothing
+        assert set(row["states"]) == {"open", "none"} and sum(row["states"].values()) == row["tracked"]

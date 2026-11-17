@@ -10,7 +10,7 @@ export type DataPurpose = 'fairness' | 'monitoring'
 
 export interface AutopilotStep {
   check: string
-  action: 'fairness_run' | 'monitoring_snapshot' | 'environmental_assessment' | 'attest' | 'evidence_upload' | 'request_release'
+  action: 'fairness_run' | 'evaluation_run' | 'monitoring_snapshot' | 'environmental_assessment' | 'attest' | 'evidence_upload' | 'request_release'
   label: string
   evidenceClass: 'measured' | 'tool_estimated' | 'manual' | null
   gain: number

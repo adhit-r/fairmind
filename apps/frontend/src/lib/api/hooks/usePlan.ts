@@ -6,7 +6,7 @@ import { apiClient } from '../api-client'
 
 const PLAN = '/api/v1/plan'
 
-export type TaskState = 'todo' | 'needs_you' | 'agent' | 'review' | 'proven'
+export type TaskState = 'todo' | 'needs_you' | 'agent' | 'review' | 'attested' | 'proven'
 export type Options = Record<string, string>
 
 export interface Question {

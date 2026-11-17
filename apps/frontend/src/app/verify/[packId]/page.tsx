@@ -36,6 +36,8 @@ function AuditorView() {
   const { packId } = useParams<{ packId: string }>()
   const token = useSearchParams().get('t')
   const [pack, setPack] = useState<PublicPack | null>(null)
+  // The response exactly as the server wrote it: JSON.stringify would turn 0.0 into 0 and the saved file would not verify.
+  const [raw, setRaw] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,8 +49,12 @@ function AuditorView() {
     fetch(`${API_BASE}/api/v1/public/packs/${encodeURIComponent(packId)}?t=${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' }, referrerPolicy: 'no-referrer' })
       .then(async (res) => {
         if (cancelled) return
-        if (res.ok) setPack(await res.json())
-        else setError(REASONS[res.status] || 'The pack could not be loaded. Try again shortly.')
+        if (res.ok) {
+          const body = await res.text()
+          if (cancelled) return
+          setRaw(body)
+          setPack(JSON.parse(body))
+        } else setError(REASONS[res.status] || 'The pack could not be loaded. Try again shortly.')
       })
       .catch(() => !cancelled && setError('The pack could not be loaded. Check your connection and try again.'))
     return () => {
@@ -58,6 +64,7 @@ function AuditorView() {
 
   if (error) return <Notice title="This pack cannot be shown" body={error} alert />
   if (!pack) return <Notice title="Loading the inspection pack" body="Checking the link and fetching the manifest." />
+  const apiAddress = new URL(API_BASE, window.location.href).href.replace(/\/$/, '')
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,7 +84,7 @@ pipx install ./apps/cli
 fairmind verify pack.json
 
 # or let the CLI fetch this pack from its link, then check it locally
-fairmind verify "<this page's address>" --api <FairMind API address>`}</pre>
+fairmind verify "${window.location.href}" --api ${apiAddress}`}</pre>
         <p className="mt-3 text-sm text-[var(--fm-ink2)]">
           The command recomputes the SHA-256 of the canonical manifest and each system&apos;s evidence chain head, prints what it found, and exits 0 only when both match.
         </p>
@@ -85,7 +92,7 @@ fairmind verify "<this page's address>" --api <FairMind API address>`}</pre>
           type="button"
           className="mt-3 inline-flex h-9 items-center rounded-full border border-[var(--fm-line)] bg-white px-3.5 text-[12.5px] font-medium text-[var(--fm-ink2)] hover:border-[var(--fm-ink)] hover:text-[var(--fm-ink)]"
           onClick={() => {
-            const url = URL.createObjectURL(new Blob([JSON.stringify({ manifest: pack.manifest, manifestHash: pack.manifestHash }, null, 2)], { type: 'application/json' }))
+            const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }))
             const a = document.createElement('a')
             a.href = url
             a.download = 'pack.json'

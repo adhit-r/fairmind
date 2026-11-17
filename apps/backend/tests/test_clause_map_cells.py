@@ -7,7 +7,7 @@ from src.application.services.clause_map_service import (
     clause_map,
     tracked_requirements,
 )
-from src.application.services.fairness_run_service import release_gate
+from src.application.services.fairness_run_service import path_forward, release_gate
 
 NOW = datetime(2026, 11, 7, tzinfo=timezone.utc)
 
@@ -50,9 +50,10 @@ def test_a_clause_with_one_failing_check_fails():
     clauses = [c for fw in clause_map(gate)["frameworks"] for c in fw["clauses"]]
     both = [c for c in clauses if {ch["check"] for ch in c["checks"]} == {"human_oversight", "monitoring"}]
     assert both and all(c["cell"] == "fails" for c in both)
-    assert all(c["state"] == "proven" for c in both)  # the clause state the panel and packs read is unchanged
+    assert all(c["state"] == "partial" for c in both)  # a failing check never leaves a proven clause
     oversight_only = [c for c in clauses if {ch["check"] for ch in c["checks"]} == {"human_oversight"}]
-    assert oversight_only and all(c["cell"] == "proven" for c in oversight_only)
+    assert oversight_only and all(c["cell"] == ("proven" if c["checks"][0]["relation"] == "Satisfies" else "partial") for c in oversight_only)
+    assert all(c["cell"] == c["state"] for c in oversight_only)  # the grid cell says what the clause state says
     monitoring = next(ch for c in both for ch in c["checks"] if ch["check"] == "monitoring")
     assert monitoring["fails"] is True and monitoring["evidenceClass"] == "measured"
 
@@ -62,7 +63,7 @@ def test_clause_cell_is_the_best_check():
     clauses = [c for fw in clause_map(gate)["frameworks"] for c in fw["clauses"]]
     for c in clauses:
         cells = {ch["cell"] for ch in c["checks"]}
-        assert c["cell"] == ("attested" if "attested" in cells else "open")
+        assert c["cell"] == ("attested" if "attested" in cells else "open" if cells else "none")
 
 
 def test_tracked_requirements_match_the_clause_map():
@@ -70,3 +71,79 @@ def test_tracked_requirements_match_the_clause_map():
     eu = next(fw for fw in clause_map(gate, frameworks=["EUAIA"])["frameworks"])
     assert tracked_requirements("EUAIA") == [c["key"] for c in eu["clauses"]]
     assert tracked_requirements("NOPE") == []
+
+
+def _evaluation(evaluation_id, status, ts="2026-11-06T00:00:00+00:00"):
+    return {"id": f"{evaluation_id}-{status}", "type": "evaluation_run", "confidence": 0.0 if status == "insufficient" else 1.0, "metadata": {"provenance_class": "measured"},
+            "timestamp": ts, "content": {"evaluationId": evaluation_id, "status": status}}
+
+
+def test_a_catalogue_evaluation_counts_for_the_check_its_control_maps_to():
+    passed = release_gate("medium", [_evaluation("EV-FAI-05", "passed")], now=NOW)
+    fairness = next(c for c in passed["checks"] if c["key"] == "fairness")
+    assert (fairness["state"], fairness["evidenceClass"], fairness["confidence"]) == ("proven", "measured", 1.0) and "fails" not in fairness
+    # a failing run is measured but fails: never a plain go, as a failing fairness test
+    failed = release_gate("low", [_evaluation("EV-FAI-05", "failed")], environmental_assessed=True, now=NOW)
+    assert next(c for c in failed["checks"] if c["key"] == "fairness")["fails"] is True
+    assert failed["verdict"] != "go" and any("EV-FAI-05 failed" in r for r in failed["reasons"])
+    # an insufficient run measured nothing
+    assert next(c for c in release_gate("medium", [_evaluation("EV-MON-01", "insufficient")], now=NOW)["checks"] if c["key"] == "monitoring")["state"] == "open"
+    # the path points at the catalogue evaluation, not only a CSV fairness run
+    chat = [(s["check"], s["action"]) for o in path_forward("medium", [], now=NOW, model_target=True)["options"] for s in o["steps"]]
+    assert ("fairness", "evaluation_run") in chat and ("fairness", "fairness_run") not in chat
+    assert path_forward("high", [], now=NOW, model_target=True)["ceiling"]["confidence"] == 0.97  # 1.0 * 4 + 0.85, no CSV run counted
+
+
+def test_the_clause_map_reads_every_active_clause_by_relation_strength():
+    gate = release_gate("medium", [_evaluation("EV-FAI-05", "passed"), _evaluation("EV-TST-01", "passed")], now=NOW, include_environmental=False)
+    iso = clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]
+    clauses = {c["control"]: c for c in iso["clauses"]}
+    assert iso["counts"]["total"] == len(tracked_requirements("ISO42001")) == 65
+    assert sum(iso["counts"][s] for s in ("proven", "partial", "attested", "open")) == 65
+    # fairness only supports A.5.4, so the proven check makes it partial
+    assert clauses["A.5.4"]["state"] == "partial"
+    # a run of a control outside the gate reaches its clauses too
+    assert any(ch["check"] == "EV-TST-01" for c in iso["clauses"] for ch in c["checks"])
+    # environmental is out of this gate: 4.1 stays, open, reached by nothing in the gate
+    assert (clauses["4.1"]["state"], clauses["4.1"]["cell"]) == ("open", "none") and clauses["4.1"]["checks"][0]["cell"] == "not in gate"
+    assert clauses["5.2"]["checks"] == [] and clauses["5.2"]["state"] == "open"
+
+
+def test_a_failed_or_unmeasured_run_never_proves_its_clause():
+    def iso(evidence):
+        gate = release_gate("medium", evidence, now=NOW, include_environmental=False)
+        return {c["control"]: c for c in clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]["clauses"]}
+
+    # a failed run measured a failure: the clause stays open, so the audit names it
+    clause = iso([_evaluation("EV-TST-01", "failed")])["A.6.2.4"]
+    assert (clause["state"], clause["cell"]) == ("open", "fails")
+    # a failing gate check reaches its clause the same way
+    clause = iso([_evaluation("EV-FAI-05", "failed")])["A.5.4"]
+    assert (clause["state"], clause["cell"]) == ("open", "fails")
+    # a run that is not measured is attested at most, and keeps its real class
+    clause = iso([{**_evaluation("EV-TST-01", "passed"), "metadata": {"provenance_class": "manual"}}])["A.6.2.4"]
+    entry = next(ch for ch in clause["checks"] if ch["check"] == "EV-TST-01")
+    assert (clause["state"], entry["state"], entry["evidenceClass"], entry["cell"]) == ("attested", "attested", "manual", "attested")
+    assert entry["confidence"] <= 0.30
+
+
+def test_a_material_change_drops_an_older_evaluation_run():
+    from src.application.services.system_lifecycle_service import drop_superseded
+
+    run = _evaluation("EV-FAI-05", "passed")
+    assert drop_superseded([run], {"fairness": datetime(2026, 11, 7, tzinfo=timezone.utc)}) == []
+    # any material change makes an earlier run stale, as evaluation_results reads it; a later run still counts
+    assert drop_superseded([run], {"monitoring": datetime(2026, 11, 7, tzinfo=timezone.utc)}) == []
+    assert drop_superseded([run], {"fairness": datetime(2026, 11, 5, tzinfo=timezone.utc)}) == [run]
+    # an attestation keeps the per-check rule
+    oversight = {"evidenceType": "human_oversight", "timestamp": "2026-11-06T00:00:00+00:00"}
+    assert drop_superseded([oversight], {"monitoring": datetime(2026, 11, 7, tzinfo=timezone.utc)}) == [oversight]
+
+
+def test_a_partial_clause_never_draws_a_proven_cell():
+    # ISO 42001 has no Satisfies link to a gate control: a proven fairness run makes its clauses partial, cell included
+    gate = release_gate("medium", [_evaluation("EV-FAI-05", "passed")], now=NOW, include_environmental=False)
+    iso = clause_map(gate, frameworks=["ISO42001"])["frameworks"][0]
+    partial = [c for c in iso["clauses"] if c["state"] == "partial"]
+    assert partial and all(c["cell"] == "partial" for c in partial)
+    assert iso["counts"]["proven"] == 0 == sum(1 for c in iso["clauses"] if c["cell"] == "proven")

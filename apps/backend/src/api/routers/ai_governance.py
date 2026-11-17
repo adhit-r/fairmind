@@ -34,6 +34,7 @@ from src.application.services.governance_assurance_service import (
     OrgMembership,
     member_user_matches,
 )
+from src.application.services.fairness_run_service import evaluation_status, gate_check, gate_checks
 
 
 def _caller_org(request: Request) -> str:
@@ -987,7 +988,7 @@ def _build_ai_system_payload(db: Session, row: Any) -> Dict[str, Any]:
     system = _serialize_ai_system_row(row)
     risk_summary = _fetch_stored_risk_summary(db, system["id"])
     evidence_records = _fetch_evidence_records(db, system["id"])
-    evidence_summary = _summarize_evidence(evidence_records, system["id"])
+    evidence_summary = _summarize_evidence(evidence_records, system["id"], db)
     remediation_tasks = _fetch_remediation_tasks(db, system["id"])
     remediation_summary = _summarize_remediation_tasks(remediation_tasks, system["id"])
     approval_request = _fetch_latest_system_approval(db, system["id"])
@@ -1069,9 +1070,21 @@ def _reject_record_only_type(evidence_type: str) -> None:
     """Only the applicability routes write these types; every generic evidence write refuses them."""
     if evidence_type in RECORD_ONLY_EVIDENCE_TYPES:
         raise HTTPException(status_code=422, detail="Record the tier and rules on the system file, not as uploaded evidence")
+    # only the evaluation engines write runs (evaluation_runs._store_run); an uploaded one would read as measured
+    if str(evidence_type or "").lower() == "evaluation_run":
+        raise HTTPException(status_code=422, detail="Evaluation runs are recorded by running the evaluation, not as uploaded evidence")
 
 
-def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[str, Any]:
+def _missing_gate_evidence(records: List[Dict[str, Any]]) -> List[str]:
+    """The release gate's checks with no evidence it counts, so the file and the gate agree: by evidence type, or a
+    measured evaluation run through its evaluation's control. Environmental is left out: it is read from the
+    assessment, and an organisation may drop it from its gate."""
+    covered = {gate_check(r) for r in records if evaluation_status(r) in (None, "passed", "failed")}
+    return [f"{key.replace('_', ' ')} evidence" for key, _, _ in gate_checks(include_environmental=False) if key not in covered]
+
+
+def _summarize_evidence(records: List[Dict[str, Any]], system_id: str, db: Optional[Session] = None) -> Dict[str, Any]:
+    """With ``db``, missing signals skip evidence a material change superseded, as the gate does."""
     records = [r for r in records if r.get("type") not in RECORD_ONLY_EVIDENCE_TYPES]
     if not records:
         return {
@@ -1084,11 +1097,7 @@ def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[s
             "metadataSources": [],
             "workflowState": "empty",
             "decisionReadiness": "needs_evidence",
-            "missingSignals": [
-                "collect monitoring evidence",
-                "collect compliance evidence",
-                "collect validation evidence",
-            ],
+            "missingSignals": _missing_gate_evidence([]),
             "recommendedNextStep": "Collect the first evidence artifact to begin governance review.",
         }
 
@@ -1116,12 +1125,12 @@ def _summarize_evidence(records: List[Dict[str, Any]], system_id: str) -> Dict[s
     avg_confidence = round(confidence_sum / total, 3) if total else 0.0
     workflow_state = "review_ready" if linked_evidence > 0 else "collecting"
     decision_readiness = "review_ready" if linked_evidence > 0 and total >= 1 else "needs_linking"
-    missing_signals = []
-    type_set = set(evidence_types)
-    if "audit_log" not in type_set:
-        missing_signals.append("audit or trace evidence")
-    if "monitoring" not in type_set and "monitoring_snapshot" not in type_set:
-        missing_signals.append("monitoring evidence")
+    counted = records
+    if db is not None:
+        from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
+
+        counted = drop_superseded(records, {k: at for k, (at, _) in reopened_since(db, system_id).items()})
+    missing_signals = _missing_gate_evidence(counted)
     if linked_evidence == 0:
         missing_signals.append("link evidence to a risk, policy, or approval request")
 
@@ -2662,7 +2671,7 @@ def get_evidence_summary(
     _ensure_tables(db)
     _require_evidence_system_access(db, system_id, current_user)
     records = _fetch_evidence_records(db, system_id)
-    return _summarize_evidence(records, system_id)
+    return _summarize_evidence(records, system_id, db)
 
 
 @router.get("/evidence/{system_id}")

@@ -29,10 +29,11 @@ from sqlalchemy.orm import Session
 
 from api.routes import llm
 from api.routes.ai_governance import _ensure_tables
-from api.routes.pack_catalogue import WORKFLOW_PACK, WORKFLOWS
+from api.routes.pack_catalogue import EVALUATIONS, WORKFLOW_PACK, WORKFLOWS
 from api.routes.packs import _ai_row, _is_installed, _manager, _member, _stored_connection
 from database.connection import get_db
-from src.application.services.clause_map_service import CHECK_CONTROLS, _catalogue
+from src.application.services import evaluation_results
+from src.application.services.clause_map_service import GATE_CONTROLS, _catalogue
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter()
@@ -96,14 +97,13 @@ CONTROL_DEPENDS = {
 }
 AGENT_CONTROLS = {"FMC-AGT-01", "FMC-AGT-02"}  # in scope only when the organisation runs agents
 EXCLUDED_CONTROLS = {"FMC-SLF-01"}  # FairMind's own agent: FairMind's job, not the customer's
-GATE_CONTROLS = {control: check for check, control in CHECK_CONTROLS.items()}
 # The approver named in a control's first workflow, read for the role that should own the task; first match wins.
 ROLE_KEYWORDS = [
     ("head of ai governance", "head_ai_governance"), ("top management", "exec_sponsor"), ("executive", "exec_sponsor"),
     ("ai policy owner", "ai_policy_owner"), ("internal auditor", "internal_audit"), ("legal", "legal"), ("dpo", "dpo"),
     ("ciso", "ciso"), ("security", "ciso"), ("risk", "risk_owner"),
 ]
-STATES = ["todo", "needs_you", "agent", "review", "proven"]
+STATES = ["todo", "needs_you", "agent", "review", "attested", "proven"]
 MATURITY_WEIGHT = {"none": 6, "partial": 3, "established": 0, None: 3}
 
 
@@ -468,6 +468,7 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
     autopilot_on = {r[0] for r in db.execute(text("SELECT system_id FROM system_autopilot WHERE org_id = :org AND mode = 'run'"), {"org": org_id}).fetchall()}
     sources = {(r[0], r[1]) for r in db.execute(text("SELECT system_id, purpose FROM system_data_sources WHERE org_id = :org"), {"org": org_id}).fetchall()}
     in_scope, _ = _scope_controls(resolved_frameworks, {"ai_types": {"value": next((f["value"] for f in disc["facts"] if f["key"] == "ai_types"), [])}})
+    evals = evaluation_results.results(db, org_id)
 
     tasks = []
     for control in in_scope:
@@ -497,10 +498,17 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
             kind = "org"
         else:
             kind = "system"
+            ev_ids = [e.id for e in EVALUATIONS.values() if e.commonControl == cid]
             for s in systems:
                 mine = [r for r in control_runs if r["ai_system_id"] == s["id"]]
                 done = any(r["status"] == "done" for r in mine)
                 detail = "done" if done else ("waiting for approval" if any(r["status"] == "waiting" for r in mine) else "running" if any(r["status"] in ("queued", "running") for r in mine) else "not started")
+                # an evaluation of this control with a passing latest result on the system also does the task there
+                tests = {r["status"] for e in ev_ids if (r := evaluation_results.system_result(evals, e, s["id"]))}
+                if not done and "passed" in tests:
+                    done, detail = True, "tested"
+                elif detail == "not started" and "failed" in tests:
+                    detail = "test failed"
                 system_rows.append({"id": s["id"], "name": s["name"], "done": done, "detail": detail, "agent": False})
 
         attestation = attestations.get(key)
@@ -513,6 +521,12 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
             running = by == "agent" or any(r["detail"] == "running" for r in system_rows)
             waiting = any(r["detail"] == "waiting for approval" for r in system_rows)
         proven = total > 0 and done_count == total
+        # a gate task is proven only where every system's check is; one only attested makes the task attested, as in the clause map.
+        # An org task closed by a person's statement alone, with no completed run, is attested too.
+        attested = proven and (
+            (kind == "gate" and any(r["detail"] == "attested" for r in system_rows))
+            or (kind == "org" and not any(r["status"] == "done" for r in control_runs))
+        )
 
         role = _role_for(cid)
         if kind in ("gate", "inventory", "system"):
@@ -545,7 +559,7 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
             "progress": {"done": done_count, "total": total}, "systems": system_rows,
             "actions": [{"id": w.id, "name": w.name, "scope": w.scope, "approver": w.approver, "installed": _is_installed(db, org_id, WORKFLOW_PACK[w.id])} for w in workflows],
             "attestation": attestation,
-            "_flags": {"proven": proven, "running": running, "waiting": waiting, "empty": total == 0},
+            "_flags": {"proven": proven, "attested": attested, "running": running, "waiting": waiting, "empty": total == 0},
             "score": 3 * len(binding) + len(reqs) + (8 if kind == "gate" else 0) + MATURITY_WEIGHT.get(level, 3) - 2 * [k for k, _ in LANES].index(CONTROL_LANE.get(cid, "build")),
         })
 
@@ -555,7 +569,7 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
     for t in tasks:
         f = t.pop("_flags")
         if f["proven"]:
-            t["state"] = "proven"
+            t["state"] = "attested" if f["attested"] else "proven"
         elif f["waiting"]:
             t["state"] = "review"
         elif f["running"]:
@@ -574,7 +588,7 @@ def _tasks(db: Session, org_id: str, plan: Dict[str, Any], disc: Dict[str, Any])
 
 
 def _record_changes(db: Session, plan: Dict[str, Any], tasks: List[Dict[str, Any]]) -> None:
-    """Compare with the last read; log tasks added, dropped and newly proven, and keep the new snapshot."""
+    """Compare with the last read; log tasks added, dropped and newly proven or attested, and keep the new snapshot."""
     now = {t["key"]: t["state"] for t in tasks}
     before = plan["snapshot"] or {}
     if now == before:
@@ -583,7 +597,8 @@ def _record_changes(db: Session, plan: Dict[str, Any], tasks: List[Dict[str, Any
     added = [k for k in now if k not in before]
     dropped = [k for k in before if k not in now]
     proven = [k for k in now if now[k] == "proven" and before.get(k) not in (None, "proven")]
-    moved = [k for k in now if k in before and now[k] != before[k] and k not in proven]
+    attested = [k for k in now if now[k] == "attested" and before.get(k) not in (None, "attested")]
+    moved = [k for k in now if k in before and now[k] != before[k] and k not in proven and k not in attested]
     parts = []
     if before and added:
         parts.append(f"{len(added)} new: {', '.join(names[k] for k in added[:3])}")
@@ -591,13 +606,15 @@ def _record_changes(db: Session, plan: Dict[str, Any], tasks: List[Dict[str, Any
         parts.append(f"{len(dropped)} no longer needed")
     if proven:
         parts.append(f"{len(proven)} proven: {', '.join(names[k] for k in proven[:3])}")
+    if attested:
+        parts.append(f"{len(attested)} attested: {', '.join(names[k] for k in attested[:3])}")
     if moved:
         parts.append(f"{len(moved)} moved")
     summary = "Plan created with " + f"{len(tasks)} tasks" if not before else "; ".join(parts) or "Plan updated"
     db.execute(
         text("INSERT INTO plan_changes (id, org_id, summary, detail_json, created_at) VALUES (:id, :org, :summary, :detail, :now)"),
         {"id": str(uuid.uuid4()), "org": plan["org_id"], "summary": summary[:1000],
-         "detail": json.dumps({"added": added, "dropped": dropped, "proven": proven, "moved": moved}), "now": _now()},
+         "detail": json.dumps({"added": added, "dropped": dropped, "proven": proven, "attested": attested, "moved": moved}), "now": _now()},
     )
     plan["snapshot"] = now
     _save_plan(db, plan)

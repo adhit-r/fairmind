@@ -25,6 +25,7 @@ from fairness_library.metrics import (
     _compute_eo_diff,
     _compute_eopp_diff,
 )
+from src.application.services.clause_map_service import GATE_CONTROLS, _catalogue, evaluation_control
 from src.domain.environmental.confidence import ESTIMATED_THRESHOLD, MEASURED_THRESHOLD, band_from_score, cap_confidence_for_provenance
 from src.domain.environmental.decision_matrix import DECISION_MATRIX, get_recommendation
 
@@ -614,6 +615,27 @@ GATE_CHECKS = (
 
 
 
+EVALUATION_RUN = "evaluation_run"  # a catalogue evaluation run; it counts for the check its evaluation's common control maps to
+
+
+def gate_check(record: Dict[str, Any]) -> Optional[str]:
+    """The gate check a record speaks to: by evidence type, or for an evaluation run through its evaluation's common control."""
+    kind = str(record.get("evidenceType") or record.get("type") or "").lower()
+    if kind == EVALUATION_RUN:
+        # an environmental run would shadow the assessment the environmental check reads, so it counts nowhere in the gate
+        check = GATE_CONTROLS.get(evaluation_control(record.get("content")))
+        return None if check == "environmental" else check
+    return next((key for key, _, types in GATE_CHECKS if kind in types), None)
+
+
+def evaluation_status(record: Dict[str, Any]) -> Optional[str]:
+    """passed, failed or insufficient for an evaluation run; None for any other record."""
+    if str(record.get("evidenceType") or record.get("type") or "").lower() != EVALUATION_RUN:
+        return None
+    content = record.get("content")
+    return str(content.get("status")) if isinstance(content, dict) else "insufficient"
+
+
 def gate_checks(include_environmental: bool = True) -> tuple:
     """The checks the gate weighs. An organisation may leave environmental impact out of its release gate."""
     return GATE_CHECKS if include_environmental else tuple(c for c in GATE_CHECKS if c[0] != "environmental")
@@ -626,6 +648,14 @@ PROVEN_CLASSES = {"measured", "tool_estimated"}
 def _provenance(record: Dict[str, Any]) -> str:
     meta = record.get("metadata") or {}
     return str(meta.get("provenance_class") or meta.get("provenance") or "manual").lower()
+
+
+def _weigh(record: Dict[str, Any]) -> tuple:
+    """(evidence class, capped confidence, state) for one record: proven only when measured or tool-estimated at 0.70 or more."""
+    prov = _provenance(record)
+    raw = float(record.get("confidence") or 0.0)
+    confidence = cap_confidence_for_provenance(raw, prov) if prov in PROVEN_CLASSES else min(cap_confidence_for_provenance(raw, "manual"), ATTESTATION_CONFIDENCE)
+    return prov, confidence, "proven" if prov in PROVEN_CLASSES and confidence >= 0.70 else "attested"
 
 
 STALE_AFTER_CADENCES = 1.5  # a snapshot older than this many cadences no longer proves monitoring
@@ -690,8 +720,10 @@ def release_gate(
     """
     checks: List[Dict[str, Any]] = []
     reasons: List[str] = []
+    # an insufficient evaluation run measured nothing, so it counts nowhere
+    evidence = [r for r in evidence if evaluation_status(r) in (None, "passed", "failed")]
     for key, label, types in gate_checks(include_environmental):
-        matching = [r for r in evidence if str(r.get("evidenceType") or r.get("type") or "").lower() in types]
+        matching = [r for r in evidence if gate_check(r) == key]
         if key == "environmental" and environmental_assessed and not matching:
             assessment = environmental_assessed if isinstance(environmental_assessed, dict) else {"provenance_class": "tool_estimated", "confidence": 0.85}
             matching = [{"evidenceType": "environmental", "confidence": assessment["confidence"], "metadata": {"provenance_class": assessment["provenance_class"]}}]
@@ -706,20 +738,29 @@ def release_gate(
                     reasons.append(f"Latest monitoring snapshot is {_span(age_hours)} old; the cadence is {_span(monitoring_cadence_hours)}")
         if matching and stale_for is None:
             record = max(matching, key=lambda r: (_record_time(r) or _NO_TIME, float(r.get("confidence") or 0.0)))
-            prov = evidence_class = _provenance(record)
-            raw = float(record.get("confidence") or 0.0)
-            confidence = cap_confidence_for_provenance(raw, prov) if prov in PROVEN_CLASSES else min(cap_confidence_for_provenance(raw, "manual"), ATTESTATION_CONFIDENCE)
-            state = "proven" if prov in PROVEN_CLASSES and confidence >= 0.70 else "attested"
+            evidence_class, confidence, state = _weigh(record)
             evidence_id = record.get("id")
             content = record.get("content") or {}
-            if key in ("fairness", "monitoring") and prov in PROVEN_CLASSES and isinstance(content, dict):
+            status = evaluation_status(record)
+            if status:
+                # a measured catalogue evaluation: passed proves the check, failed counts like a failing fairness test
+                detail = {"all_checks_pass": status == "passed", "evaluationId": content.get("evaluationId")}
+            elif key in ("fairness", "monitoring") and evidence_class in PROVEN_CLASSES and isinstance(content, dict):
                 detail = {"all_checks_pass": content.get("all_checks_pass"), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
                 if content.get("all_checks_pass") is False:
                     reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
+        # each evaluation's newest run: a failure stands until that evaluation passes again, whatever record is newest
+        latest_runs: Dict[str, Dict[str, Any]] = {}
+        for r in sorted((r for r in matching if evaluation_status(r)), key=lambda r: _record_time(r) or _NO_TIME):
+            latest_runs[str((r.get("content") or {}).get("evaluationId"))] = r
+        for evaluation_id, r in latest_runs.items():
+            if evaluation_status(r) == "failed":
+                detail = {**(detail or {}), "evaluationId": evaluation_id, "all_checks_pass": False}
+                reasons.append(f"Evaluation {evaluation_id} failed, which counts against {label.lower()}")
         checks.append({
             "key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "evidenceClass": evidence_class, "detail": detail,
             **({"stale": True} if stale_for is not None else {}),
-            # detail exists only for measured or tool-estimated fairness and monitoring records
+            # detail exists only for measured or tool-estimated fairness and monitoring records, and evaluation runs
             **({"fails": True} if detail and detail["all_checks_pass"] is False else {}),
         })
 
@@ -734,6 +775,14 @@ def release_gate(
     missing = [c["label"] for c in checks if c["state"] == "open" and not c.get("stale")]
     if missing:
         reasons.append(f"Nothing on file for: {', '.join(missing)}")
+    # the newest passed or failed run of each evaluation no gate check counts; the clause map reads these
+    runs: Dict[str, Dict[str, Any]] = {}
+    for r in sorted((r for r in evidence if evaluation_status(r)), key=lambda r: _record_time(r) or _NO_TIME):
+        control = evaluation_control(r.get("content"))
+        if control and gate_check(r) is None:
+            evidence_class, confidence, state = _weigh(r)
+            runs[r["content"].get("evaluationId")] = {"control": control, "evaluationId": r["content"].get("evaluationId"), "status": evaluation_status(r), "evidenceId": r.get("id"),
+                             "evidenceClass": evidence_class, "confidence": round(confidence, 2), "state": state}
     return {
         "verdict": verdict,
         "confidence": overall,
@@ -744,6 +793,7 @@ def release_gate(
         "attested": sum(1 for c in checks if c["state"] == "attested"),
         "open": len(open_checks),
         "approvalStatus": approval_status,
+        "evaluations": list(runs.values()),
     }
 
 
@@ -813,15 +863,20 @@ def gate_explain(risk_tier: str, applicability: Optional[Dict[str, Any]], includ
 
 # What FairMind can record today for each check, and the confidence its route gives. Environmental is never
 # attested here: an environmental attestation shadows any later assessment in release_gate.
+# A catalogue evaluation run is the measured route for a model a CSV fairness run or snapshot cannot describe, such as a chat model.
 CHECK_ACTIONS = {
-    "fairness": ("fairness_run",),
-    "data_governance": ("evidence_upload", "attest"),
-    "human_oversight": ("evidence_upload", "attest"),
-    "monitoring": ("monitoring_snapshot", "attest"),
+    "fairness": ("fairness_run", "evaluation_run"),
+    "data_governance": ("evaluation_run", "evidence_upload", "attest"),
+    "human_oversight": ("evaluation_run", "evidence_upload", "attest"),
+    "monitoring": ("monitoring_snapshot", "evaluation_run", "attest"),
     "environmental": ("environmental_assessment",),
 }
-ACTION_CLASS = {"fairness_run": "measured", "monitoring_snapshot": "measured", "environmental_assessment": "tool_estimated", "attest": "manual", "evidence_upload": "manual"}
+ACTION_CLASS = {
+    "fairness_run": "measured", "monitoring_snapshot": "measured", "evaluation_run": "measured", "environmental_assessment": "tool_estimated",
+    "attest": "manual", "evidence_upload": "manual",
+}
 ACTION_NOTES = {
+    "evaluation_run": "a catalogue evaluation run against the system",
     "environmental_assessment": "also required before anyone can approve",
     "monitoring_snapshot": "needs shadow or live decisions",
     "evidence_upload": "an uploaded document",  # the step's counts already carries the manual cap
@@ -834,6 +889,12 @@ def _synthetic(check: str, action: str, now: datetime) -> Optional[Dict[str, Any
     """The record an action would add, stamped now so release_gate reads it as the newest. An assessment adds none: the gate counts it through ``environmental_assessed``."""
     if action == "environmental_assessment":
         return None
+    if action == "evaluation_run":
+        # any catalogue evaluation of the check's control; the gate counts a passing run at the 1.0 _store_run gives it
+        control = next(c for c, k in GATE_CONTROLS.items() if k == check)
+        evaluation_id = next(e for e, ev in _catalogue()["evaluations"].items() if ev.get("commonControl") == control)
+        return {"id": None, "evidenceType": EVALUATION_RUN, "confidence": 1.0, "metadata": {"provenance_class": "measured"}, "timestamp": now.isoformat(),
+                "content": {"evaluationId": evaluation_id, "status": "passed"}}
     confidence, provenance = {"fairness_run": (0.85, "measured"), "monitoring_snapshot": (0.85, "measured"), "attest": (ATTESTATION_CONFIDENCE, "manual"), "evidence_upload": (1.0, "manual")}[action]
     evidence_type = "fairness_test" if check == "fairness" else check
     return {"id": None, "evidenceType": evidence_type, "confidence": confidence, "metadata": {"provenance_class": provenance}, "timestamp": now.isoformat(), "content": {}}
@@ -849,8 +910,12 @@ def path_forward(
     approval_blockers: Iterable[Dict[str, Any]] = (),
     now: Optional[datetime] = None,
     include_environmental: bool = True,
+    model_target: bool = False,
 ) -> Dict[str, Any]:
     """The fewest, strongest steps to the next verdict, each priced by re-running the real release_gate.
+
+    ``model_target``: FairMind calls the system as a model (a stored target, such as a chat model), so fairness is
+    priced through a catalogue evaluation run; otherwise through a CSV fairness run, the route the autopilot reruns.
 
     Read on evidence alone, as the reviewer deciding a request reads it. At most one action per check, and an
     action is kept only when it alone raises its check: a proven check gets none, an attested one gets no
@@ -886,6 +951,8 @@ def path_forward(
         if check["state"] == "proven":
             continue
         for action in CHECK_ACTIONS[key]:
+            if key == "fairness" and action == ("fairness_run" if model_target else "evaluation_run"):
+                continue
             if (action == "attest" and check["state"] != "open") or (action == "monitoring_snapshot" and not monitored):
                 continue
             after = next(c["confidence"] for c in run(((key, action),))["checks"] if c["key"] == key)

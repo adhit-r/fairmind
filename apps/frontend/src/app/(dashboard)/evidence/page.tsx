@@ -1,7 +1,7 @@
 'use client'
 
 import '@/astryx/pages/evidence.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
@@ -86,6 +86,16 @@ function EvidenceList() {
   const [adding, setAdding] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
   const [selected, setSelected] = useState<Evidence | null>(null)
+
+  // A system file's "Record evidence" step links here with ?check=: open the uploader once, set for that check.
+  const check = useSearchParams().get('check')
+  const openedForCheck = useRef(false)
+  useEffect(() => {
+    if (check && hasSystem && canReview && !openedForCheck.current) {
+      openedForCheck.current = true
+      setAdding(true)
+    }
+  }, [check, hasSystem, canReview])
 
   useEffect(() => {
     setSearch('')
@@ -256,6 +266,7 @@ function EvidenceList() {
             onCollect={handleCollect}
             onClose={() => setAdding(false)}
             externalUrlsEnabled={EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}
+            initialCheck={check}
           />
         </div>
       </Dialog>

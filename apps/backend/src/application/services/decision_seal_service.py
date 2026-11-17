@@ -27,16 +27,29 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
-def _row_hash(row: Any) -> str:
+def entry_hash(record: Dict[str, Any]) -> str:
+    """SHA-256 over an evidence record's stable fields, as evidence_records returns them."""
+    confidence = record.get("confidence")
     return _digest({
-        "id": row[0], "type": row[1], "title": row[2], "source": row[3], "content": row[4],
-        "confidence": None if row[5] is None else float(row[5]), "status": row[6], "metadata": row[7], "created_at": str(row[8]),
+        "id": record.get("id"), "type": record.get("type"), "title": record.get("title"), "source": record.get("source"), "content": record.get("content"),
+        "confidence": None if confidence is None else float(confidence), "status": record.get("status"), "metadata": record.get("metadata"),
+        "created_at": record.get("createdAt"),
     })
 
 
-def evidence_entries(db: Session, system_id: str) -> List[Dict[str, Any]]:
+def evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]:
+    """Every evidence record with the fields its hash covers (content and metadata as stored text), so a reader can recompute it."""
     rows = db.execute(text(_EVIDENCE_SQL), {"system_id": system_id}).fetchall()
-    return [{"id": r[0], "type": r[1], "hash": _row_hash(r), "createdAt": str(r[8])} for r in rows]
+    records = [
+        {"id": r[0], "type": r[1], "title": r[2], "source": r[3], "content": r[4], "confidence": None if r[5] is None else float(r[5]),
+         "status": r[6], "metadata": r[7], "createdAt": str(r[8])}
+        for r in rows
+    ]
+    return [{**rec, "hash": entry_hash(rec)} for rec in records]
+
+
+def evidence_entries(db: Session, system_id: str) -> List[Dict[str, Any]]:
+    return [{k: rec[k] for k in ("id", "type", "hash", "createdAt")} for rec in evidence_records(db, system_id)]
 
 
 def chain_head(entries: List[Dict[str, Any]]) -> str:

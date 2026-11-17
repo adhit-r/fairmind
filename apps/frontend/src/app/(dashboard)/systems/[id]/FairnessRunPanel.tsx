@@ -122,10 +122,15 @@ export function FairnessRunPanel({
   inspect,
   run,
   onDone,
+  onDecide,
+  decideLabel,
 }: {
   inspect: (file: File) => Promise<CsvInspection>
   run: (file: File, mapping: FairnessMapping, confirmation: AttributeConfirmation) => Promise<FairnessRunResult>
   onDone?: (result: FairnessRunResult) => void
+  /** Opens the release decision beside the gate, or requests one; the compact verdict's link calls it. Without it there is no link. */
+  onDecide?: () => void
+  decideLabel?: string
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -425,7 +430,7 @@ export function FairnessRunPanel({
           <div className="text-[11.5px] text-[var(--fm-ink3)]">
             Thresholds: impact ratio at or above {result.result.thresholds.disparate_impact_ratio} (four-fifths rule), gaps at or below {result.result.thresholds.gap}. A check fails only when its value crosses the threshold and the difference is statistically significant: permutation p-value below {result.result.thresholds.alpha.toPrecision(2)}, Bonferroni-adjusted for {result.result.thresholds.tests} tests. Intervals are 95% bootstrap.
           </div>
-          <VerdictExplainer gate={result.gate} compact />
+          <VerdictExplainer gate={result.gate} compact onOpen={onDecide} decideLabel={decideLabel} />
           <div>
             <button type="button" onClick={() => void pick(null)} className="text-[12.5px] font-medium text-[var(--fm-ink2)] underline-offset-2 hover:underline">Run another file</button>
           </div>

@@ -6,6 +6,7 @@ POST /evaluations/{id}/runs          multipart: system_id, params (JSON), source
                                      mode=live runs an evaluation's alternate behaviour test
 GET  /evaluations/{id}/runs          recent runs, optionally for one AI system
 GET  /evaluation-runs/{evidence_id}  one run in full
+GET  /systems/{system_id}/evaluation-runs   recent runs of every evaluation for one AI system
 GET  /evaluation-jobs/{job_id}       a behaviour test in progress
 GET  /evaluation-jobs/{job_id}/prompts   for a runner: the job and the prompts waiting for the system's answer
 POST /evaluation-jobs/{job_id}/answers   for a runner: the system's answers to those prompts
@@ -37,10 +38,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes.ai_governance import CLOSED_RISK_STATUSES, _ensure_tables, _risk_score, _utc_now_iso
 from api.routes import llm, platform_connections
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS
@@ -215,6 +216,31 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             "now": now,
         },
     )
+    # A failed run opens one finding for this evaluation on this system; a passing run resolves it.
+    finding = {"sys": system_id, "source": "fairmind.eval_engines", "tag": f'%"evaluationId": "{evaluation_id}"%', "closed": list(CLOSED_RISK_STATUSES), "now": now}
+    where = "WHERE system_id = :sys AND source = :source AND metadata_json LIKE :tag AND status NOT IN :closed"
+    if outcome["status"] == "passed":
+        db.execute(text(f"UPDATE governance_risks SET status = 'resolved', updated_at = :now {where}").bindparams(bindparam("closed", expanding=True)), finding)
+    elif outcome["status"] == "failed" and not db.execute(text(f"SELECT id FROM governance_risks {where}").bindparams(bindparam("closed", expanding=True)), finding).fetchone():
+        db.execute(
+            text(
+                "INSERT INTO governance_risks "
+                "(id, system_id, title, severity, status, description, mitigation, likelihood, risk_score, source, categories_json, metadata_json, created_at, updated_at) "
+                "VALUES (:id, :sys, :title, 'high', 'open', :description, :mitigation, 'likely', :score, :source, :categories, :metadata, :now, :now)"
+            ),
+            {
+                "sys": system_id,
+                "source": finding["source"],
+                "now": now,
+                "id": str(uuid.uuid4()),
+                "title": f"{evaluation_id} {EVALUATIONS[evaluation_id].name} failed",
+                "description": outcome.get("summary") or "The evaluation run failed.",
+                "mitigation": "Fix what the run found, then run the evaluation again; a passing run resolves this finding.",
+                "score": _risk_score("high", "likely"),
+                "categories": json.dumps(["evaluation"]),
+                "metadata": json.dumps({"evaluationId": evaluation_id, "evidenceId": evidence_id}),
+            },
+        )
     db.commit()
     return evidence_id
 
@@ -470,3 +496,14 @@ def get_run(evidence_id: str, m: OrgMembership = Depends(_member), db: Session =
     if not row:
         raise HTTPException(status_code=404, detail="Run not found")
     return _run_json(row, full=True)
+
+
+@router.get("/systems/{system_id}/evaluation-runs")
+def list_system_runs(system_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    """The system's recent catalogue runs, every evaluation, newest first: what its system file shows."""
+    _ensure_tables(db)
+    rows = db.execute(
+        text(_RUN_COLS + "WHERE s.org_id = :org AND e.evidence_type = :type AND e.system_id = :sys ORDER BY e.created_at DESC LIMIT 20"),
+        {"org": m.org_id, "type": EVIDENCE_TYPE, "sys": system_id},
+    ).mappings().all()
+    return [_run_json(r, full=False) for r in rows]

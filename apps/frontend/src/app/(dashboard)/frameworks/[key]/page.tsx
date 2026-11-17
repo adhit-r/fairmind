@@ -23,7 +23,8 @@ import { TaskForm, initials, personName, useAssignees } from '@/components/tasks
 import { useTasks } from '@/lib/api/hooks/useTasks'
 
 /** Why a requirement is on the work queue, from the checks behind its cell. */
-function reason(state: ReqState, checks: Array<{ label: string; stale?: true; fails?: true }>): string {
+function reason(state: ReqState, all: Array<{ label: string; cell?: string; stale?: true; fails?: true }>): string {
+  const checks = all.filter((c) => c.cell !== 'not in gate')
   if (state === 'fails') return `Failing check: ${checks.find((c) => c.fails)?.label ?? checks[0]?.label ?? 'a release check'}`
   if (state === 'stale') return `Stale evidence: ${checks.find((c) => c.stale)?.label ?? checks[0]?.label ?? 'a release check'}`
   return checks[0] ? `No current evidence for ${checks[0].label}` : 'No current evidence'
@@ -147,7 +148,7 @@ function ClauseView() {
             Systems in scope <b>{systems.length ? systems.map((s) => s.name).join(', ') : 'None yet'}</b>
           </li>
           <li>
-            Covered by installed packs <b>{j.coveredInstalled} of {j.active}</b>
+            Covered by completed pack work <b>{j.coveredInstalled} of {j.active}</b>
           </li>
           {(f?.unconfirmed ?? 0) > 0 && (
             <li>
@@ -166,7 +167,7 @@ function ClauseView() {
         <Banner
           status="info"
           title={`No system has confirmed ${short}`}
-          description="The map shows what installed packs cover at organisation level. Confirm the framework on a system to see where that system stands on each requirement."
+          description="The map shows what completed workflows of installed packs cover at organisation level. Confirm the framework on a system to see where that system stands on each requirement."
         />
       )}
 

@@ -26,13 +26,14 @@ export function requirementsGrid(journey: Journey, clauseMap: ClauseMap | null):
     label: g.name,
     rows: g.requirements.map((r) => {
       const clause = clauses.get(r.key)
+      const state = clause && clause.cell !== 'none' ? clause.cell : null
       return {
         key: r.key,
         code: r.control,
         label: r.title,
         title: `${r.control} · ${r.title} · ${g.name}`,
-        cells: [r.status === 'covered' || r.status === 'tested' ? 'atorg' : null, ...packs.map((p) => bestRelation(r.workflows, p.pack)), clause?.cell ?? null],
-        blank: [ORG_BLANK, ...packs.map(() => 'No workflow of this pack maps here'), clause ? 'No state recorded for this system' : NOT_TRACKED],
+        cells: [r.status === 'covered' || r.status === 'tested' ? 'atorg' : null, ...packs.map((p) => bestRelation(r.workflows, p.pack)), state],
+        blank: [ORG_BLANK, ...packs.map(() => 'No workflow of this pack maps here'), state ? 'No state recorded for this system' : NOT_TRACKED],
       }
     }),
   }))
@@ -127,7 +128,7 @@ export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ k
         {found && cell?.col === 'state' && (
           <>
             <DrawerBlock label="This system">
-              <CellMeaning cell={clause?.cell ?? null} />
+              <CellMeaning cell={clause && clause.cell !== 'none' ? clause.cell : null} />
             </DrawerBlock>
             <DrawerBlock label="Release checks behind it">
               {clause?.checks.length ? (

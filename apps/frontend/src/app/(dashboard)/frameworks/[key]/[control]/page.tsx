@@ -11,7 +11,7 @@ import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { classLabel } from '@/components/ui/matrix'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
-import { useControls, useFrameworkSystems } from '@/lib/api/hooks/useEstate'
+import { useControls, useFrameworkSystems, type FrameworkCellCheck } from '@/lib/api/hooks/useEstate'
 import { useJourney, useJourneys } from '@/lib/api/hooks/usePacks'
 import { Glyph, STATE_LABEL, cellIndex, flatRequirements, orgState, requirementHref, type ReqState } from '../../parts'
 
@@ -22,15 +22,21 @@ const STRONG = new Set(['Satisfies', 'Partially satisfies'])
 /** What the decision column says for a state. */
 const DECISION: Record<ReqState, string> = {
   proven: 'Current evidence proves this on the system.',
+  partial: 'Proven through a link that only supports or partly satisfies this; nothing proves it in full.',
   attested: 'A person attested to this; no measured evidence yet.',
   estimated: 'Estimated from related evidence; nothing measures it directly.',
   planned: 'Planned, with no evidence yet.',
   open: 'No current evidence for the checks that satisfy this.',
   fails: 'A check behind this fails.',
   stale: 'The evidence behind this is out of date.',
-  atorg: 'No system gate tracks this; installed packs cover it at organisation level.',
+  atorg: 'No system gate tracks this; completed workflows of installed packs cover it at organisation level.',
   none: 'Nothing tracks this yet.',
 }
+
+const NOT_IN_GATE = "Not in this organisation's gate"
+/** A check's glyph state and label: a check the organisation left out of its gate draws as nothing tracked. */
+const checkView = (c: FrameworkCellCheck, fallback: ReqState): { st: ReqState; label: string } =>
+  c.cell === 'not in gate' ? { st: 'none', label: NOT_IN_GATE } : { st: (c.cell ?? fallback) as ReqState, label: STATE_LABEL[(c.cell ?? fallback) as ReqState] }
 
 const Arrow = () => (
   <div className="fx-gut" aria-hidden="true">
@@ -45,20 +51,20 @@ function Trace() {
   const key = decodeURIComponent(params.key)
   const control = decodeURIComponent(params.control)
   const systemId = useSearchParams().get('system')
-  const journey = useJourney(key)
-  const journeys = useJourneys()
   const fw = useFrameworkSystems(key)
+  const systems = fw.data?.systems ?? []
+  const si = Math.max(0, systems.findIndex((s) => s.id === systemId))
+  const system = systems[si] ?? null
+  const journey = useJourney(key, system?.id)
+  const journeys = useJourneys()
   const controls = useControls()
 
   const j = journey.data
   const reqs = useMemo(() => (j ? flatRequirements(j) : []), [j])
   const at = reqs.findIndex((r) => r.control === control)
   const req = at >= 0 ? reqs[at] : null
-  const systems = fw.data?.systems ?? []
   const cells = useMemo(() => cellIndex(fw.data ?? null), [fw.data])
   const row = req ? cells.get(req.key) ?? [] : []
-  const si = Math.max(0, systems.findIndex((s) => s.id === systemId))
-  const system = systems[si] ?? null
   const cell = system ? row[si] ?? null : null
   const state: ReqState = cell ? (cell.state as ReqState) : req ? orgState(req.status) : 'none'
 
@@ -190,11 +196,11 @@ function Trace() {
           <div>
             <h3>Proof: checks, workflows and evaluations</h3>
             {checks.map((c) => {
-              const st = (c.cell ?? (c.fails ? 'fails' : c.stale ? 'stale' : c.evidenceId ? 'proven' : 'open')) as ReqState
+              const { st, label } = checkView(c, c.fails ? 'fails' : c.stale ? 'stale' : c.evidenceId ? 'proven' : 'open')
               return (
                 <div key={c.check} className={`fx-node${dashed(st)}`}>
                   <span className="t">
-                    <Glyph state={st} label={STATE_LABEL[st]} />
+                    <Glyph state={st} label={label} />
                     {c.label}
                   </span>
                   <span className="s">
@@ -213,14 +219,14 @@ function Trace() {
               </Link>
             ))}
             {req.evaluations.map((e) => (
-              <div key={e.id} className={`fx-node${e.result && e.result !== 'not_run' ? '' : ' dash'}`}>
+              <Link key={e.id} className={`fx-node${e.result && e.result !== 'not_run' ? '' : ' dash'}`} href={`/compliance/evaluations/${encodeURIComponent(e.id)}`}>
                 <span className="t">
                   {e.result === 'passed' && <Glyph state="proven" label="Passed" />}
                   {e.result === 'failed' && <Glyph state="fails" label="Failed" />}
                   {e.name}
                 </span>
                 <span className="s">Evaluation · {e.result ? RESULT_LABEL[e.result] : e.installed ? 'Not run' : 'Its pack is not installed'}</span>
-              </div>
+              </Link>
             ))}
             {!checks.length && !req.workflows.length && !req.evaluations.length && (
               <div className="fx-node dash">
@@ -267,7 +273,7 @@ function Trace() {
               </thead>
               <tbody>
                 {checks.map((c) => {
-                  const st = (c.cell ?? 'open') as ReqState
+                  const { st, label } = checkView(c, 'open')
                   return (
                     <tr key={c.check}>
                       <td>{c.label}</td>
@@ -277,7 +283,7 @@ function Trace() {
                       <td>
                         <span className="fx-state">
                           <Glyph state={st} />
-                          {STATE_LABEL[st]}
+                          {label}
                           {c.stale ? ' · stale' : ''}
                         </span>
                       </td>

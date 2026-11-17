@@ -75,7 +75,7 @@ def test_clause_map_passes_frameworks(client):
     }
     result = call(client, "clause_map", {"system_id": "s1", "frameworks": ["EUAIA"]})
     client.clause_map.assert_called_once_with("s1", ["EUAIA"])
-    assert "EU AI Act (EUAIA): 1 proven, 0 attested, 1 open of 2 clauses" in result.content[0].text and "open: Art 14" in result.content[0].text
+    assert "EU AI Act (EUAIA): 1 proven, 0 partial, 0 attested, 1 open of 2 clauses" in result.content[0].text and "open: Art 14" in result.content[0].text
 
 
 def test_run_fairness_test(client):

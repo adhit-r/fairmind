@@ -5,6 +5,7 @@ import { useOrg } from '@/context/OrgContext'
 import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
 import type { CellState } from '@/components/ui/matrix'
+import { withOrg, type EngineRun } from './usePacks'
 
 const GOV = '/api/v1/ai-governance'
 
@@ -142,7 +143,7 @@ export interface GateExplain {
 
 export interface GatePathStep {
   check: GateCheck['key']
-  action: 'fairness_run' | 'environmental_assessment' | 'monitoring_snapshot' | 'attest' | 'evidence_upload'
+  action: 'fairness_run' | 'evaluation_run' | 'environmental_assessment' | 'monitoring_snapshot' | 'attest' | 'evidence_upload'
   evidenceClass: 'measured' | 'tool_estimated' | 'manual'
   counts: number
   gain: number
@@ -341,15 +342,16 @@ export interface DecisionSeal {
 export interface ClauseMapFramework {
   key: string
   name: string
-  counts: { proven: number; attested: number; open: number; total: number }
+  counts: { proven: number; partial?: number; attested: number; open: number; total: number }
   clauses: Array<{
     key: string
     control: string
     title: string
     group: string | null
-    state: 'proven' | 'attested' | 'open'
-    /** The grid state derived on the server from the contributing checks' class, result and freshness. */
-    cell: CellState
+    /** proven only through a check that satisfies the clause; partial when the proof comes through a weaker link. */
+    state: 'proven' | 'partial' | 'attested' | 'open'
+    /** The grid state derived on the server from the contributing checks' class, result and freshness; none when nothing reaches the clause. */
+    cell: CellState | 'none'
     checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string; evidenceClass?: GateCheck['evidenceClass']; stale?: true; fails?: true }>
   }>
 }
@@ -376,6 +378,8 @@ export interface SystemFile {
   reports: AuditReport[]
   gate: ReleaseGate | null
   fairnessRuns: FairnessRunSummary[]
+  /** Catalogue evaluation runs for this system, every evaluation, newest first. */
+  evaluationRuns: EngineRun[]
   monitoringRuns: MonitoringRunSummary[]
   monitoringPolicy: MonitoringPolicy | null
   seals: DecisionSeal[]
@@ -394,7 +398,7 @@ export interface SystemFileView {
 /** System file state keyed by organisation and system. */
 export type SystemFileState = EvaluationScopeState<SystemFileView>
 
-const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
+const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], evaluationRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
 const PENDING: SystemFileView = { file: EMPTY_FILE, loading: true, error: null }
 
 export const systemFileScopeKey = (organizationId: string | null | undefined, systemId: string | undefined) =>
@@ -412,8 +416,9 @@ export const systemFileAwaitsOrg = (orgsLoading: boolean, organizationId: string
 
 type Get = <T>(path: string) => Promise<ApiResponse<T>>
 
-/** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope. */
-export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void) {
+/** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope.
+ *  The packs routes are scoped by `orgId`; without one the file has no evaluation runs. */
+export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void, orgId?: string | null) {
   const write = (next: (v: SystemFileView) => SystemFileView) => update((s) => writeEvaluationScopeState(s, scopeKey, next(s.value)))
   write((v) => ({ ...v, loading: true }))
   const sys = await get<SystemRecord>(`${GOV}/systems/${systemId}`)
@@ -422,7 +427,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     return
   }
   const q = `system_id=${encodeURIComponent(systemId)}`
-  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
+  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
     get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
     get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
     get<RemediationStatus>(`${GOV}/remediation?${q}`),
@@ -430,6 +435,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     get<AuditReport[]>(`${GOV}/reports?${q}`),
     get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
     get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
+    orgId ? get<EngineRun[]>(withOrg(`/api/v1/packs/systems/${encodeURIComponent(systemId)}/evaluation-runs`, orgId)) : Promise.resolve<ApiResponse<EngineRun[]>>({ success: true, data: [] }),
     get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
     get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
     get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
@@ -444,6 +450,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     reports: unwrap(reports, []),
     gate: unwrap(gate, null),
     fairnessRuns: unwrap(fairnessRuns, []),
+    evaluationRuns: unwrap(evaluationRuns, []),
     monitoringRuns: unwrap(monitoringRuns, []),
     monitoringPolicy: unwrap(monitoringPolicy, null),
     seals: unwrap(seals, []),
@@ -462,8 +469,8 @@ export function useSystemFile(systemId: string | undefined) {
 
   const refresh = useCallback(async () => {
     if (!systemId || awaitsOrg) return
-    await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState)
-  }, [awaitsOrg, scopeKey, systemId])
+    await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState, selectedOrg?.id)
+  }, [awaitsOrg, scopeKey, systemId, selectedOrg?.id])
 
   useEffect(() => {
     setState((s) => enterSystemFileScope(s, scopeKey))

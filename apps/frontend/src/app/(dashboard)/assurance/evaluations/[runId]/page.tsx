@@ -142,10 +142,10 @@ export default function AssuranceEvaluationDetailPage({ params }: PageProps) {
     <div className="mx-auto w-full max-w-[1320px] space-y-5 text-[var(--fm-ink)]">
       <header className="border-b border-[var(--fm-line)] pb-4 pt-1">
         <FramedIcon
-          href="/tests"
+          href="/evaluations"
           icon={IconArrowLeft}
-          label="Back to Evaluation Runs"
-          text="Back to Evaluation Runs"
+          label="Back to evaluations"
+          text="Back to evaluations"
           className="mb-4 w-auto"
         />
         <div className="flex items-start gap-3">

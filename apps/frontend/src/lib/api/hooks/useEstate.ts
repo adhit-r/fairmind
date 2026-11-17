@@ -16,14 +16,15 @@ export interface EstateGate {
 }
 
 export interface FrameworkCellCheck {
-  check: GateCheck['key']
+  /** A gate check key, or an evaluation id such as EV-DAT-01. */
+  check: string
   label: string
   relation: string
   confidence: number
   evidenceId: string | null
   evidenceClass: GateCheck['evidenceClass']
-  /** This check's own cell, as the server derived it. */
-  cell?: CellState
+  /** This check's own cell, as the server derived it; "not in gate" for a check the organisation left out of its gate. */
+  cell?: CellState | 'not in gate'
   stale?: true
   fails?: true
 }
@@ -52,7 +53,7 @@ export interface Controls {
 /** Per framework some system confirmed: how many systems, and its tracked requirements counted by weakest state. */
 export interface EstateFrameworks {
   unconfirmed: number
-  frameworks: Array<{ key: string; systems: number; tracked: number; states: Partial<Record<CellState, number>> }>
+  frameworks: Array<{ key: string; systems: number; tracked: number; states: Partial<Record<CellState | 'none', number>> }>
 }
 
 export const useEstateFrameworks = () => useOrgResource<EstateFrameworks>(API_ENDPOINTS.aiGovernance.estateFrameworks)

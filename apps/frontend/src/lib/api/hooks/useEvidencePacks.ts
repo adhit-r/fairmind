@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiClient } from '../api-client'
-import type { GateCheck } from './useSystemFile'
+import type { ClauseMapFramework, GateCheck } from './useSystemFile'
 
 const GOV = '/api/v1/ai-governance'
 
@@ -23,27 +23,39 @@ export interface PackSummary {
   share: PackShare
 }
 
+/** Version 1 packs carry neither the sealed gate, the decision id nor the approver's notes. */
 export interface PackSeal {
   id: string
+  decisionId?: string
   decision: 'approved' | 'rejected'
   chainHead: string
   evidenceCount: number
+  gate?: { verdict?: string | null; riskTier?: string | null; effectiveTier?: string | null; reasons?: string[]; applicabilityEvidenceId?: string | null }
   sealedBy: string | null
   createdAt: string
+  notes?: string | null
   verification: { status: 'intact' | 'broken'; changed: string[]; missing: string[]; addedSince: number }
 }
 
-export interface PackClauseFramework {
-  key: string
-  name: string
-  counts: { proven: number; attested: number; open: number; total: number }
+/** From version 2 each record carries the fields its hash covers; content and metadata are the stored JSON text. */
+export interface PackEvidence {
+  id: string
+  type: string
+  hash: string
+  createdAt: string
+  title?: string | null
+  source?: string | null
+  content?: string
+  confidence?: number | null
+  status?: string | null
+  metadata?: string | null
 }
 
 export interface PackSystemEntry {
   system: { id: string; name: string; riskTier: string }
   gate: { verdict: 'go' | 'conditional_go' | 'no_go' | null; confidence: number | null; checks: GateCheck[]; reasons: string[] }
-  clauseMap: { frameworks: PackClauseFramework[] }
-  evidence: Array<{ id: string; type: string; hash: string; createdAt: string }>
+  clauseMap: { frameworks: ClauseMapFramework[] }
+  evidence: PackEvidence[]
   chainHead: string
   seals: PackSeal[]
 }
@@ -138,11 +150,11 @@ export function useEvidencePack(packId: string | undefined) {
     return res
   }, [packId, refresh])
 
-  /** The pack as {manifest, manifestHash}, the file `fairmind verify` reads. */
+  /** The pack as {manifest, manifestHash}, the file `fairmind verify` reads. Saved as the server's own bytes: re-serialising in the browser would change the numbers the hash covers. */
   const download = useCallback(async () => {
-    const res = await apiClient.get<{ manifest: PackManifest; manifestHash: string }>(`${GOV}/packs/${packId}/download`)
+    const res = await apiClient.get<Blob>(`${GOV}/packs/${packId}/download`, { responseType: 'blob' })
     if (!res.success || !res.data) return false
-    const url = URL.createObjectURL(new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' }))
+    const url = URL.createObjectURL(res.data)
     const link = document.createElement('a')
     link.href = url
     link.download = `inspection-pack-${packId}.json`
