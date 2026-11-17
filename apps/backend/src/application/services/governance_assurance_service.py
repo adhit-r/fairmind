@@ -74,6 +74,9 @@ class OrgMembership:
     permissions: tuple[str, ...]
 
 
+CATALOGUE_RUN_SCHEMA = "fairmind-catalogue-1"  # schema_version of a catalogue evaluation run (evaluation_runs._store_run); no Passport
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -380,9 +383,10 @@ class GovernanceAssuranceService:
             GovernanceEvidenceRun.__table__,
             GovernanceEvidence.__table__,
         )
-        if not self.db.execute(
-            select(assignments.c.id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
-        ).scalar_one_or_none():
+        system_id = self.db.execute(
+            select(assignments.c.system_id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
+        ).scalar_one_or_none()
+        if not system_id:
             return None
         rows = self.db.execute(
             select(
@@ -416,6 +420,7 @@ class GovernanceAssuranceService:
                     mappings.c.reviewed_at,
                     mappings.c.created_at.label("mapping_created_at"),
                     mappings.c.updated_at.label("mapping_updated_at"),
+                    runs.c.id.label("run_pk"),
                     runs.c.source_type,
                     runs.c.source_identifier,
                     runs.c.captured_at.label("run_captured_at"),
@@ -439,6 +444,7 @@ class GovernanceAssuranceService:
                 )
 
         policy_evidence = self._policy_evidence(org_id, assignment_id)
+        outdated = self._outdated_catalogue_runs(org_id, system_id)
         result = []
         for row in rows:
             policy_items = policy_evidence.get(row["external_id"], [])
@@ -456,7 +462,7 @@ class GovernanceAssuranceService:
                 ),
                 reverse=True,
             )
-            accepted = [item for item in linked_evidence if item["state"] == "accepted"]
+            accepted = [item for item in linked_evidence if item["state"] == "accepted" and item["run_pk"] not in outdated]
             latest = linked_evidence[0] if linked_evidence else None
             latest_accepted = accepted[0] if accepted else None
 
@@ -652,9 +658,12 @@ class GovernanceAssuranceService:
         assessment = self.db.execute(select(assessments).where(assessments.c.id == assessment_id, assessments.c.org_id == org_id)).mappings().one_or_none()
         if not artifact or not assessment or artifact["system_id"] != assessment["system_id"] or not artifact["source_run_id"]:
             return None, False
-        run = self.db.execute(select(runs.c.id).where(runs.c.id == artifact["source_run_id"], runs.c.org_id == org_id)).scalar_one_or_none()
-        if not run:
+        run_row = self.db.execute(select(runs.c.id, runs.c.result, runs.c.schema_version).where(runs.c.id == artifact["source_run_id"], runs.c.org_id == org_id)).one_or_none()
+        if not run_row:
             return None, False
+        run = run_row.id
+        if run_row.schema_version == CATALOGUE_RUN_SCHEMA and run_row.result != "passed":
+            raise ValueError("Only a passed run can support a control")
         existing = self.db.execute(select(mappings.c.id).where(mappings.c.evidence_id == run, mappings.c.control_assessment_id == assessment_id)).scalar_one_or_none()
         if existing:
             return self._mapping(existing), False
@@ -704,13 +713,36 @@ class GovernanceAssuranceService:
             "reviewHistory": json.loads(row["review_history_json"] or "[]"),
         }
 
+    def _outdated_catalogue_runs(self, org_id: str, system_id: str) -> set[str]:
+        """Catalogue runs that no longer support a control, by the latest-run rule the release gate reads:
+        the evaluation's newest pass or fail on this system failed, or a material change came after the run."""
+        from src.application.services.fairness_run_service import _record_time
+        from src.application.services.system_lifecycle_service import reopened_since
+
+        runs = GovernanceEvidenceRun.__table__
+        rows = self.db.execute(
+            select(runs.c.id, runs.c.source_identifier, runs.c.result, runs.c.captured_at)
+            .where(runs.c.org_id == org_id, runs.c.system_id == system_id, runs.c.schema_version == CATALOGUE_RUN_SCHEMA,
+                   runs.c.result.in_(("passed", "failed")))
+            .order_by(runs.c.captured_at, runs.c.created_at)
+        ).all()
+        latest = {row.source_identifier: row.result for row in rows}
+        cut = max((at for at, _ in reopened_since(self.db, system_id).values()), default=None)
+
+        def before_cut(raw: str | None) -> bool:  # undated goes with it, as in drop_superseded
+            at = _record_time({"createdAt": raw})
+            return at is None or at < cut
+
+        return {row.id for row in rows if latest[row.source_identifier] == "failed" or (cut is not None and before_cut(row.captured_at))}
+
     def readiness(self, org_id: str, assignment_id: str, include_policy: bool = True) -> dict | None:
         """Control counts for an assignment. Policy rules read it with include_policy=False, since
         counting their own outcomes as evidence would make a rule depend on itself."""
         assignments, assessments = GovernanceFrameworkAssignment.__table__, GovernanceControlAssessment.__table__
-        if not self.db.execute(
-            select(assignments.c.id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
-        ).scalar_one_or_none():
+        system_id = self.db.execute(
+            select(assignments.c.system_id).where(assignments.c.id == assignment_id, assignments.c.org_id == org_id)
+        ).scalar_one_or_none()
+        if not system_id:
             return None
         controls, mappings, evidence_runs = (
             GovernanceControlDefinition.__table__,
@@ -731,8 +763,9 @@ class GovernanceAssuranceService:
             )
         ).mappings()
         evidence_by_assessment: dict[str, list[str]] = {}
+        outdated = self._outdated_catalogue_runs(org_id, system_id)
         for row in self.db.execute(
-            select(mappings.c.control_assessment_id, evidence_runs.c.captured_at, evidence_runs.c.created_at)
+            select(mappings.c.control_assessment_id, evidence_runs.c.id, evidence_runs.c.captured_at, evidence_runs.c.created_at)
             .join(evidence_runs, evidence_runs.c.id == mappings.c.evidence_id)
             .where(
                 mappings.c.org_id == org_id,
@@ -740,7 +773,8 @@ class GovernanceAssuranceService:
                 evidence_runs.c.result == "passed",
             )
         ).mappings():
-            evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["captured_at"] or row["created_at"])
+            if row["id"] not in outdated:
+                evidence_by_assessment.setdefault(row["control_assessment_id"], []).append(row["captured_at"] or row["created_at"])
         policy_evidence = self._policy_evidence(org_id, assignment_id) if include_policy else {}
         counts = {
             "applicable": 0,

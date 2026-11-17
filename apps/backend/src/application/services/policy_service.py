@@ -47,7 +47,7 @@ from database.governance_models import (
     OrgPolicyVersion,
 )
 from database.models import OrganizationMember, User
-from src.application.services.governance_assurance_service import GovernanceAssuranceService
+from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService
 
 SEVERITIES = ("low", "medium", "high", "critical")
 ENFORCEMENTS = ("block", "warn")
@@ -752,7 +752,10 @@ class PolicyService:
         ev = GovernanceEvidenceRun.__table__.c
         runs = list(
             self.db.execute(
-                select(ev.result, ev.source_type, ev.expires_at).where(ev.org_id == org_id, ev.system_id == system_id)
+                # Catalogue runs are append-only reruns; the evidence.* facts keep their Passport-only meaning.
+                select(ev.result, ev.source_type, ev.expires_at).where(
+                    ev.org_id == org_id, ev.system_id == system_id, ev.schema_version != CATALOGUE_RUN_SCHEMA
+                )
             ).mappings()
         )
         now = _now()
