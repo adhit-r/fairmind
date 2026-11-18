@@ -220,3 +220,17 @@ button.fl-node { cursor: pointer; display: flex; flex-direction: column; justify
 .dv-plan button.on { background: var(--color-text-primary); color: var(--color-background-card); }
 .dv-plan button:disabled { cursor: not-allowed; opacity: .6; }
 @media (max-width: 720px) { .dv-conns { grid-template-columns: minmax(0, 1fr); } }
+/* Found: every item discovery found, whatever was decided */
+.dv-found { display: flex; flex-direction: column; gap: 16px; }
+.dv-found-wrap { overflow-x: auto; border-radius: var(--radius-container); background: var(--color-background-card); box-shadow: var(--fm-shadow, 0 1px 2px rgba(21,23,26,.05), 0 4px 16px rgba(21,23,26,.04)); }
+.dv-found-table { width: 100%; min-width: 860px; border-collapse: collapse; font-size: 13px; color: var(--color-text-primary); }
+.dv-found-table th { text-align: left; font-weight: 500; font-size: 12px; color: var(--color-text-secondary); padding: 10px 14px; border-bottom: 1px solid var(--color-border); }
+.dv-found-table td { padding: 12px 14px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.dv-found-table tr:last-child td { border-bottom: 0; }
+.dv-found-table td b { font-weight: 600; }
+.dv-found-src { display: inline-flex; align-items: center; gap: 8px; }
+.dv-linkbtn { all: unset; cursor: pointer; text-decoration: underline; font-size: 13px; }
+.dv-linkbtn:focus-visible { outline: 2px solid var(--color-border-focus, currentColor); outline-offset: 2px; }
+.dv-flow-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.dv-flow-link:focus-visible { outline: 2px solid var(--color-border-focus, currentColor); outline-offset: 2px; }
+.dv-found-table td:nth-child(4) { white-space: nowrap; }
