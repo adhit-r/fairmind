@@ -186,16 +186,19 @@ async def _run_agent(db: Session, org_id: str, task_id: str) -> None:
     db.execute(text("UPDATE org_tasks SET status = 'in_progress', updated_at = :now WHERE id = :id"), {"id": task_id, "now": _now()})
     db.commit()
     purpose = autopilot.AGENT_ACTIONS[action]
-    if not autopilot._sources(db, system_id)[purpose]:
-        status, note = "blocked", f"I need a {purpose} data source on this system before I can run this. Add one on the system's Autopilot tab."
-    else:
-        try:
-            evidence_id, detail = await autopilot.RUNNERS[action](db, org_id, system_id)
-            autopilot._event(db, org_id, system_id, purpose, action, "done", detail, AGENT_ACTOR, evidence_id)
-            status, note = "done", f"Done. {detail} Evidence {evidence_id} is on the system."
-        except autopilot.AutopilotError as exc:
-            db.rollback()
-            status, note = "blocked", f"I could not run this: {exc}"
+    with autopilot._system_lock(db.get_bind(), system_id) as got:  # never overlaps an autopilot run on the system
+        if not got:
+            status, note = "blocked", f"I could not run this: {autopilot.RUN_IN_PROGRESS}. Run the task again when it is done."
+        elif not autopilot._sources(db, system_id)[purpose]:
+            status, note = "blocked", f"I need a {purpose} data source on this system before I can run this. Add one on the system's Autopilot tab."
+        else:
+            try:
+                evidence_id, detail = await autopilot.RUNNERS[action](db, org_id, system_id)
+                autopilot._event(db, org_id, system_id, purpose, action, "done", detail, AGENT_ACTOR, evidence_id)
+                status, note = "done", f"Done. {detail} Evidence {evidence_id} is on the system."
+            except autopilot.AutopilotError as exc:
+                db.rollback()
+                status, note = "blocked", f"I could not run this: {exc}"
     now = _now()
     db.execute(
         text("UPDATE org_tasks SET status = :s, updated_at = :now, completed_at = :done WHERE id = :id"),

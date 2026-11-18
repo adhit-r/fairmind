@@ -8,16 +8,17 @@ import type { Journey, ReqStatus } from '@/lib/api/hooks/usePacks'
 export type ReqState = CellState | 'none'
 
 /** Weakest first: the state "all systems" shows is the first one any system has. */
-export const WEAKEST_FIRST: ReqState[] = ['fails', 'stale', 'open', 'planned', 'estimated', 'partial', 'attested', 'proven', 'atorg', 'none']
+export const WEAKEST_FIRST: ReqState[] = ['fails', 'stale', 'open', 'planned', 'estimated', 'partial', 'attested', 'excluded', 'proven', 'atorg', 'none']
 /** States that put a requirement on the work queue. */
 export const NEEDS_WORK: ReqState[] = ['fails', 'stale', 'open']
 /** The order the legend and the state bar read in. */
-export const BAR_ORDER: ReqState[] = ['proven', 'partial', 'attested', 'estimated', 'planned', 'open', 'fails', 'stale', 'none']
+export const BAR_ORDER: ReqState[] = ['proven', 'partial', 'attested', 'excluded', 'estimated', 'planned', 'open', 'fails', 'stale', 'none']
 
 export const STATE_LABEL: Record<ReqState, string> = {
   proven: 'Proven',
   partial: 'Partial',
   attested: 'Attested',
+  excluded: 'Excluded',
   estimated: 'Estimated',
   planned: 'Planned',
   open: 'Open',
@@ -102,9 +103,9 @@ export function StateBar({ states }: { states: Partial<Record<ReqState, number>>
 export type Readiness = 'met' | 'progress' | 'attention' | 'notstarted'
 export const READINESS_ORDER: Readiness[] = ['met', 'progress', 'attention', 'notstarted']
 export const READINESS_LABEL: Record<Readiness, string> = { met: 'Met', progress: 'In progress', attention: 'Needs attention', notstarted: 'Not started' }
-/** Met: proven by evidence or attested by a person. Needs attention: failing or out of date. */
+/** Met: proven by evidence, attested by a person, or excluded with a justification. Needs attention: failing or out of date. */
 export const READINESS_OF: Record<ReqState, Readiness> = {
-  proven: 'met', attested: 'met',
+  proven: 'met', attested: 'met', excluded: 'met',
   partial: 'progress', estimated: 'progress', planned: 'progress', atorg: 'progress',
   fails: 'attention', stale: 'attention',
   open: 'notstarted', none: 'notstarted',

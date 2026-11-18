@@ -138,3 +138,66 @@ def test_only_a_measured_snapshot_keeps_monitoring_off_the_due_list():
         assert autopilot._monitoring_due(session, sid)  # a workflow attestation is not a snapshot
         session.execute(text("UPDATE governance_evidence SET source = 'fairmind.monitoring' WHERE system_id = :s"), {"s": sid})
         assert not autopilot._monitoring_due(session, sid)
+
+
+def test_a_run_in_progress_answers_409_and_starts_no_second_run(monkeypatch):
+    from database.connection import db_manager
+
+    client = _client()
+    sid = _system(client)
+    base = f"{ROOT}/systems/{sid}"
+    started = []
+
+    async def record(bind, system_id, actor, **kw):
+        started.append(system_id)
+
+    monkeypatch.setattr(autopilot, "_run_later", record)
+    with autopilot._system_lock(db_manager.engine, sid) as got:  # another worker's run holds the system
+        assert got
+        for call in (lambda: client.post(f"{base}/autopilot/run"), lambda: client.put(f"{base}/autopilot", json={"mode": "run"})):
+            res = call()
+            assert res.status_code == 409 and res.json()["detail"] == autopilot.RUN_IN_PROGRESS
+    assert not started and client.get(f"{base}/autopilot").json()["mode"] == "off"
+    assert client.post(f"{base}/autopilot/run").status_code == 200 and started == [sid]  # released, so the next run starts
+
+
+def test_the_sweep_skips_a_system_whose_run_is_in_progress(monkeypatch):
+    import asyncio
+
+    from database.connection import db_manager
+
+    client = _client()
+    busy, free = _system(client), _system(client)
+    monkeypatch.setattr(autopilot, "_run_later", lambda *a, **kw: None)  # turning the mode on starts nothing here
+    for sid in (busy, free):
+        assert client.put(f"{ROOT}/systems/{sid}/autopilot", json={"mode": "run"}).status_code == 200
+    swept = []
+
+    async def record(db, system_id, actor, **kw):
+        swept.append(system_id)
+        return []
+
+    monkeypatch.setattr(autopilot, "run_steps", record)
+    with autopilot._system_lock(db_manager.engine, busy) as got:
+        assert got
+        asyncio.run(autopilot.sweep(db_manager.SessionLocal))
+    assert free in swept and busy not in swept
+    with autopilot._system_lock(db_manager.engine, busy) as again:
+        assert again  # leaving the block released it
+
+
+def test_a_requested_run_that_loses_the_lock_leaves_a_skipped_event():
+    import asyncio
+
+    from sqlalchemy import text
+
+    from database.connection import db_manager
+
+    client = _client()
+    sid = _system(client)
+    with autopilot._system_lock(db_manager.engine, sid) as got:
+        assert got
+        asyncio.run(autopilot._run_later(db_manager.engine, sid, "someone", only="fairness_run"))
+    with db_manager.SessionLocal() as session:
+        rows = session.execute(text("SELECT action, status, detail FROM autopilot_events WHERE system_id = :s"), {"s": sid}).fetchall()
+    assert [tuple(r) for r in rows] == [("fairness_run", "skipped", autopilot.RUN_IN_PROGRESS)]

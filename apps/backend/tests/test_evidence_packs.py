@@ -110,7 +110,9 @@ def test_pack_carries_the_statement_of_applicability_risks_remediation_links_pol
     from src.application.services.framework_catalog_service import FrameworkCatalogService
     from src.application.services.governance_assurance_service import GovernanceAssuranceService
 
-    client = _client("pack-soa")
+    org = str(uuid.uuid4())
+    client = _client("pack-soa", auth_headers(org_id=org))
+    approver = _client("pack-soa-approver", auth_headers(org_id=org))
     sid = _system_with_attestation(client)
     with db_manager.SessionLocal() as session:
         org_id = session.execute(sql("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": sid}).scalar()
@@ -131,7 +133,10 @@ def test_pack_carries_the_statement_of_applicability_risks_remediation_links_pol
         ):
             session.execute(table.__table__.insert().values(**values))
         session.commit()
-    treated = client.patch(f"{GOV}/risks/{risk_id}", json={"status": "accepted", "rationale": "Filter retrain is scheduled", "owner": "risk-lead"})
+    # Acceptance takes two people: one proposes, a different one approves
+    proposed = client.patch(f"{GOV}/risks/{risk_id}", json={"status": "accepted", "rationale": "Filter retrain is scheduled", "owner": "risk-lead"})
+    assert proposed.status_code == 200, proposed.text
+    treated = approver.post(f"{GOV}/risks/{risk_id}/acceptance/approve")
     assert treated.status_code == 200, treated.text
 
     detail = client.get(f"{GOV}/packs/{_pack(client, sid)['id']}").json()
@@ -142,6 +147,7 @@ def test_pack_carries_the_statement_of_applicability_risks_remediation_links_pol
     assert [r["status"] for r in system["risks"]] == ["accepted"] and system["remediation"][0]["owner"] == "ml-lead"
     decision = system["risks"][0]["decision"]
     assert (decision["decision"], decision["rationale"], decision["owner"]) == ("accepted", "Filter retrain is scheduled", "risk-lead")
+    assert (decision["proposedBy"], decision["approvedBy"]) == (treated.json()["proposedBy"], treated.json()["approvedBy"])
     assert system["controlLinks"][0]["entity_id"] == "ISO42001|A.7.2"
     [policy] = org["policies"]
     assert (policy["version"], policy["approver"], [v["version"] for v in policy["versions"]]) == (2, "ceo", [1])
@@ -196,3 +202,28 @@ def test_a_user_without_access_cannot_include_a_system_or_read_the_pack():
     assert outsider.get(f"{GOV}/packs").json() == []
     unknown = owner.post(f"{GOV}/packs", json={"title": "Bad", "frameworks": ["NOPE"], "system_ids": [sid]})
     assert unknown.status_code == 422
+
+
+def test_pack_csv_has_a_row_per_record_matching_the_json_pack():
+    import csv
+    import io
+
+    client = _client("pack-csv")
+    sid = _system_with_attestation(client)
+    pack = _pack(client, sid)
+    system = client.get(f"{GOV}/packs/{pack['id']}").json()["manifest"]["systems"][0]
+    res = client.get(f"{GOV}/packs/{pack['id']}/download", params={"format": "csv"})
+    assert res.status_code == 200 and res.headers["content-type"].startswith("text/csv") and ".csv" in res.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(res.content.decode("utf-8-sig"))))
+    by_section = lambda name: [r for r in rows if r["section"] == name]
+    [evidence] = by_section("evidence")
+    assert (evidence["id"], evidence["hash"], evidence["system_id"]) == (system["evidence"][0]["id"], system["evidence"][0]["hash"], sid)
+    assert len(by_section("clauses")) == sum(len(fw["clauses"]) for fw in system["clauseMap"]["frameworks"])
+    assert len(by_section("gate_checks")) == len(system["gate"]["checks"]) and by_section("gate")[0]["chainHead"] == system["chainHead"]
+
+
+def test_pack_csv_cells_that_would_run_as_spreadsheet_formulas_are_quoted():
+    from src.application.services.evidence_pack_service import manifest_csv
+
+    out = manifest_csv({"organisation": {"attestations": [{"statement": "=HYPERLINK(1)", "n": -1, "ok": True}]}, "systems": []})
+    assert out.splitlines()[1].endswith("'=HYPERLINK(1),-1,true")

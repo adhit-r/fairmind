@@ -2848,6 +2848,26 @@ def update_remediation_task(
     return _serialize_remediation_task_row(updated_row)
 
 
+RISK_ACCEPTANCE_PENDING = "acceptance_pending"
+_RISK_FOR_TREATMENT_SQL = "SELECT system_id, title, severity, likelihood, status, metadata_json FROM governance_risks WHERE id = :id"
+
+
+def _record_risk_decision(db: Session, system_id: str, org_id: str, record: Dict[str, Any], actor: str, now: str) -> None:
+    """The treatment decision is also an evidence record, so a later decision seal hashes it."""
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :org_id, 'risk_acceptance', :title, 'fairmind.risks', :content, :confidence, 'collected', :by, :metadata, :now, :now)"
+        ),
+        {
+            "id": str(uuid.uuid4()), "system_id": system_id, "org_id": org_id,
+            "title": f"Risk {record['decision']}: {record['title']}", "content": json.dumps(record), "confidence": ATTESTATION_CONFIDENCE,
+            "by": actor, "metadata": json.dumps({"provenance_class": "manual", "computed_at": now}), "now": now,
+        },
+    )
+
+
 @router.patch("/risks/{risk_id}")
 def treat_risk(
     risk_id: str,
@@ -2856,9 +2876,10 @@ def treat_risk(
     db: Session = Depends(get_db),
 ):
     """A person accepts or mitigates an open finding, with the reason and the residual risk (ISO/IEC 42001 6.1.3, 8.3).
-    The decision is also an evidence record, so a later decision seal hashes it. A closed risk no longer blocks release."""
+    Mitigation is recorded at once. Acceptance needs two people: this records it as pending, and a different person
+    approves it (POST /risks/{id}/acceptance/approve) before the risk is accepted. A closed risk no longer blocks release."""
     _ensure_tables(db)
-    row = db.execute(text("SELECT system_id, title, severity, likelihood, status FROM governance_risks WHERE id = :id"), {"id": risk_id}).fetchone()
+    row = db.execute(text(_RISK_FOR_TREATMENT_SQL), {"id": risk_id}).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Risk not found")
     membership = _require_system_access(db, str(row[0]), current_user, mutate=True)
@@ -2868,13 +2889,33 @@ def treat_risk(
     if not rationale:
         raise HTTPException(status_code=422, detail="Say why the risk is accepted or mitigated")
     actor, now = _authenticated_actor(current_user), _utc_now_iso()
+    owner = (request.owner or "").strip() or None
+    if request.status == "accepted":
+        if row[4] == RISK_ACCEPTANCE_PENDING:
+            raise HTTPException(status_code=409, detail="An acceptance of this risk is already waiting for approval")
+        pending = {
+            "rationale": rationale, "owner": owner, "proposedBy": actor, "proposedById": str(current_user.user_id),
+            "proposedAt": now, "previousStatus": row[4],
+        }
+        metadata = {**_load_json_value(row[5], {}), "pendingAcceptance": pending}
+        # Guarded: a passing run may have resolved the risk since the read above.
+        if not db.execute(
+            text("UPDATE governance_risks SET status = :pending, metadata_json = :metadata, updated_at = :now WHERE id = :id AND status = :was"),
+            {"pending": RISK_ACCEPTANCE_PENDING, "metadata": json.dumps(metadata), "now": now, "id": risk_id, "was": row[4]},
+        ).rowcount:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This risk changed meanwhile; reload it")
+        db.commit()
+        return {"riskId": risk_id, "title": row[1], "status": RISK_ACCEPTANCE_PENDING, **{k: v for k, v in pending.items() if k != "previousStatus"}}
     record = {
         "riskId": risk_id, "title": row[1], "decision": request.status, "rationale": rationale,
-        "owner": (request.owner or "").strip() or None, "residualSeverity": row[2], "residualLikelihood": row[3],
+        "owner": owner, "residualSeverity": row[2], "residualLikelihood": row[3],
         "decidedBy": actor, "decidedAt": now,
     }
+    if row[4] == RISK_ACCEPTANCE_PENDING:  # mitigating instead settles the pending acceptance and drops it
+        _settle_pending(db, risk_id, row, request.status, now)
     # Guarded: a passing run may have resolved the risk since the read above.
-    if not db.execute(
+    elif not db.execute(
         text("UPDATE governance_risks SET status = :status, updated_at = :now WHERE id = :id AND status NOT IN :closed").bindparams(
             bindparam("closed", expanding=True)
         ),
@@ -2882,20 +2923,78 @@ def treat_risk(
     ).rowcount:
         db.rollback()
         raise HTTPException(status_code=409, detail="This risk is already closed")
-    db.execute(
-        text(
-            "INSERT INTO governance_evidence "
-            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
-            "VALUES (:id, :system_id, :org_id, 'risk_acceptance', :title, 'fairmind.risks', :content, :confidence, 'collected', :by, :metadata, :now, :now)"
-        ),
-        {
-            "id": str(uuid.uuid4()), "system_id": str(row[0]), "org_id": membership.org_id,
-            "title": f"Risk {request.status}: {row[1]}", "content": json.dumps(record), "confidence": ATTESTATION_CONFIDENCE,
-            "by": actor, "metadata": json.dumps({"provenance_class": "manual", "computed_at": now}), "now": now,
-        },
-    )
+    _record_risk_decision(db, str(row[0]), membership.org_id, record, actor, now)
     db.commit()
     return record
+
+
+def _pending_acceptance(db: Session, risk_id: str, current_user: TokenData) -> tuple:
+    row = db.execute(text(_RISK_FOR_TREATMENT_SQL), {"id": risk_id}).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Risk not found")
+    membership = _require_system_access(db, str(row[0]), current_user, mutate=True)
+    pending = _load_json_value(row[5], {}).get("pendingAcceptance")
+    if row[4] != RISK_ACCEPTANCE_PENDING or not isinstance(pending, dict):
+        raise HTTPException(status_code=409, detail="No acceptance of this risk is waiting for approval")
+    return row, membership, pending
+
+
+def _without_pending(metadata_json: Any) -> str:
+    """The risk's metadata with its pending acceptance taken out, once the risk leaves acceptance_pending."""
+    return json.dumps({k: v for k, v in _load_json_value(metadata_json, {}).items() if k != "pendingAcceptance"})
+
+
+def _settle_pending(db: Session, risk_id: str, row: Any, status: str, now: str) -> None:
+    """Guarded on the pending row as read: a run that resolved it, or another person's approve or withdraw, wins."""
+    if not db.execute(
+        text(
+            "UPDATE governance_risks SET status = :status, metadata_json = :metadata, updated_at = :now "
+            "WHERE id = :id AND status = :pending AND metadata_json = :was"
+        ),
+        {"status": status, "metadata": _without_pending(row[5]), "now": now, "id": risk_id, "pending": RISK_ACCEPTANCE_PENDING, "was": row[5]},
+    ).rowcount:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This risk changed meanwhile; reload it")
+
+
+@router.post("/risks/{risk_id}/acceptance/approve")
+def approve_risk_acceptance(
+    risk_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The second person approves a pending acceptance. Only now is the risk accepted and the decision recorded, with both names."""
+    _ensure_tables(db)
+    row, membership, pending = _pending_acceptance(db, risk_id, current_user)
+    if str(pending.get("proposedById")) == str(current_user.user_id):
+        raise HTTPException(status_code=403, detail="A different person must approve an acceptance you proposed")
+    actor, now = _authenticated_actor(current_user), _utc_now_iso()
+    record = {
+        "riskId": risk_id, "title": row[1], "decision": "accepted", "rationale": pending.get("rationale"),
+        "owner": pending.get("owner"), "residualSeverity": row[2], "residualLikelihood": row[3],
+        "decidedBy": actor, "decidedAt": now,
+        "proposedBy": pending.get("proposedBy"), "proposedAt": pending.get("proposedAt"), "approvedBy": actor, "approvedAt": now,
+    }
+    _settle_pending(db, risk_id, row, "accepted", now)
+    _record_risk_decision(db, str(row[0]), membership.org_id, record, actor, now)
+    db.commit()
+    return record
+
+
+@router.post("/risks/{risk_id}/acceptance/withdraw")
+def withdraw_risk_acceptance(
+    risk_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The proposer or anyone else who may change the system withdraws a pending acceptance; the risk goes back to how it was."""
+    _ensure_tables(db)
+    row, _, pending = _pending_acceptance(db, risk_id, current_user)
+    previous = pending.get("previousStatus")
+    status = previous if previous and previous not in CLOSED_RISK_STATUSES and previous != RISK_ACCEPTANCE_PENDING else "open"
+    _settle_pending(db, risk_id, row, status, _utc_now_iso())
+    db.commit()
+    return {"riskId": risk_id, "status": status}
 
 
 # ---------------------------------------------------------------------------

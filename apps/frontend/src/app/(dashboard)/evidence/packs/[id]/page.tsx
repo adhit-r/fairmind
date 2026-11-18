@@ -58,23 +58,24 @@ export default function InspectionPackPage() {
   if (!pack) return <p role="alert" className="text-sm text-[#b4232c]">{error || 'Pack not found'}</p>
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="fm-print flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <Link href="/evidence/packs" className="text-xs font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]">Inspection packs</Link>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--fm-ink)]">{pack.title}</h1>
           <p className="mt-1 text-sm text-[var(--fm-ink2)]">Built {formatDate(pack.createdAt)}{pack.createdBy ? ` by ${pack.createdBy}` : ''}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
           <Button variant="outline" onClick={() => void run(async () => ({ success: await download() }))} disabled={busy}>Download JSON</Button>
+          <Button variant="outline" onClick={() => void run(async () => ({ success: await download('csv') }))} disabled={busy}>Download CSV</Button>
           <Button onClick={createLink} disabled={busy}>{pack.share.shared ? 'Replace auditor link' : 'Create auditor link'}</Button>
           {pack.share.shared && <Button variant="outline" onClick={revokeLink} disabled={busy}>Revoke link</Button>}
         </div>
       </div>
 
-      {actionError && <p role="alert" className="text-sm text-[#b4232c]">{actionError}</p>}
+      {actionError && <p role="alert" className="text-sm text-[#b4232c] print:hidden">{actionError}</p>}
 
-      <Card className="p-5">
+      <Card className="p-5 print:hidden">
         <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-ink3)]">Auditor link</div>
         {link ? (
           <div className="mt-2 flex flex-col gap-2">

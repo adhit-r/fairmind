@@ -380,6 +380,34 @@ def test_audit_runs_what_it_can_then_packs_shares_and_names_what_stays_open(tmp_
     assert "EV-DAT-06" in text and "EV-TST-05" not in text
 
 
+def test_audit_strict_fails_on_partial_and_excluded_clauses_count_as_closed(monkeypatch):
+    excluded = {**_clause("A.10.4", "A.10.4", "excluded"), "justification": "No customers use the system."}
+    clauses = [_clause("A.7.2", "A.7.2", "partial"), excluded]
+
+    def handler(request):
+        if request.url.path == "/api/v1/organizations":
+            return httpx.Response(200, json={"organizations": [{"id": "org-1"}]})
+        if request.url.path.endswith("/clause-map"):
+            return httpx.Response(200, json=_iso(clauses))
+        return httpx.Response(200, json=[])
+
+    code, text, _ = run_cli(["audit", "ISO42001", "--system", "sys-1", "--api-key", "k"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_GO and "excluded: A.10.4 (No customers use the system.)" in text
+    code, _, _ = run_cli(["audit", "ISO42001", "--system", "sys-1", "--strict", "--api-key", "k"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_NO_GO
+
+
+def test_soa_saves_the_csv(tmp_path, monkeypatch):
+    target = tmp_path / "soa.csv"
+
+    def handler(request):
+        assert request.url.path == "/api/v1/ai-governance/systems/sys-1/soa/ISO42001"
+        return httpx.Response(200, text="clause_key,control\nISO42001|4.1,4.1\n", headers={"content-type": "text/csv"})
+
+    code, text, _ = run_cli(["soa", "iso42001", "--system", "sys-1", "--output", str(target), "--api-key", "k"], handler, monkeypatch=monkeypatch)
+    assert code == EXIT_GO and target.read_text().startswith("clause_key,control") and str(target) in text
+
+
 def test_audit_names_the_frameworks_it_has_when_the_key_is_wrong(monkeypatch, capsys):
     code, _, _ = run_cli(["audit", "ISO9001", "--system", "sys-1", "--api-key", "k"], lambda r: httpx.Response(200, json=_iso([])), monkeypatch=monkeypatch)
     assert code == EXIT_ERROR and "ISO42001, EUAIA" in capsys.readouterr().err

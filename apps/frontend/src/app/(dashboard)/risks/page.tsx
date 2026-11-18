@@ -4,9 +4,12 @@ import Link from 'next/link'
 import { useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useRisks, type Risk, type RiskSummary, type SuggestedRisk } from '@/lib/api/hooks/useRisks'
+import { isOpenRisk, useRisks, type PendingAcceptance, type Risk, type RiskSummary, type SuggestedRisk } from '@/lib/api/hooks/useRisks'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
+import { useSession } from '@/context/SessionContext'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { riskAssessmentSchema, type RiskAssessmentFormData } from '@/lib/validations/schemas'
 import { useToast } from '@/hooks/use-toast'
 import { BTN, BTN_P, LABEL, MUTED, Pill, cap } from '@/components/packs/parts'
@@ -89,8 +92,7 @@ function AssessForm({ system, onSubmit, onCancel }: { system: AISystemSummary; o
 }
 
 type Treat = (riskId: string, body: { status: 'accepted' | 'mitigated'; rationale: string }) => Promise<void>
-
-const CLOSED = ['accepted', 'closed', 'resolved', 'mitigated']
+type Settle = (riskId: string, action: 'approve' | 'withdraw') => Promise<void>
 
 /** Accept or mark mitigated, with the reason: the risk owner's treatment decision. */
 function TreatForm({ risk, onTreat, onDone }: { risk: Risk; onTreat: Treat; onDone: () => void }) {
@@ -126,7 +128,11 @@ function TreatForm({ risk, onTreat, onDone }: { risk: Risk; onTreat: Treat; onDo
         onChange={(event) => setRationale(event.target.value)}
         className="w-full rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 py-2 text-[13.5px] outline-none focus:border-[var(--fm-ink)]"
       />
-      <p className={`text-[12px] ${MUTED}`}>Kept as a record on the system file, so the next release decision seals it. The finding then no longer blocks release.</p>
+      <p className={`text-[12px] ${MUTED}`}>
+        {status === 'accepted'
+          ? 'A different person must approve the acceptance. Then it is kept as a record on the system file, so the next release decision seals it, and the finding no longer blocks release.'
+          : 'Kept as a record on the system file, so the next release decision seals it. The finding then no longer blocks release.'}
+      </p>
       {error && <p role="alert" className={errorText}>{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={saving || !rationale.trim()} className={BTN_P}>{saving ? 'Recording' : 'Record decision'}</button>
@@ -136,9 +142,55 @@ function TreatForm({ risk, onTreat, onDone }: { risk: Risk; onTreat: Treat; onDo
   )
 }
 
-function FindingRow({ risk, onTreat }: { risk: Risk; onTreat: Treat }) {
+/** An acceptance waiting for a second person: anyone else may approve it, and either person may withdraw it. */
+function PendingAcceptanceBox({ risk, pending, onSettle }: { risk: Risk; pending: PendingAcceptance; onSettle: Settle }) {
+  const { user } = useSession()
+  const mine = Boolean(user && (user.id === pending.proposedById || user.email === pending.proposedBy))
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const settle = async (action: 'approve' | 'withdraw') => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onSettle(risk.id, action)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not record the decision')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="grid gap-2 rounded-[10px] bg-[var(--fm-bg)] p-3 lg:col-span-2">
+      <p className="text-[12.5px] text-[var(--fm-ink2)]">
+        <span className="font-semibold text-[var(--fm-ink)]">Acceptance waiting for approval.</span>{' '}
+        Proposed by {pending.proposedBy} on {when(pending.proposedAt)}{pending.owner ? `, owner ${pending.owner}` : ''}: {pending.rationale}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {mine ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>
+                  <Button size="sm" disabled>Approve</Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>A different person must approve an acceptance you proposed</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <Button size="sm" disabled={busy} onClick={() => void settle('approve')}>Approve</Button>
+        )}
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void settle('withdraw')}>Withdraw</Button>
+      </div>
+      {error && <p role="alert" className={errorText}>{error}</p>}
+    </div>
+  )
+}
+
+function FindingRow({ risk, onTreat, onSettle }: { risk: Risk; onTreat: Treat; onSettle: Settle }) {
   const byPerson = risk.source === 'manual_assessment'
   const [treating, setTreating] = useState(false)
+  const pending = risk.status === 'acceptance_pending' ? risk.metadata?.pendingAcceptance : undefined
   return (
     <li className="grid gap-3 border-t border-[var(--fm-line)] py-3.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
       <div className="min-w-0">
@@ -148,7 +200,7 @@ function FindingRow({ risk, onTreat }: { risk: Risk; onTreat: Treat }) {
         </div>
         {risk.description && <p className={`mt-1 line-clamp-2 text-[12.5px] ${MUTED}`}>{risk.description}</p>}
         <p className={`mt-1 text-[12px] ${MUTED}`}>
-          {[cap(risk.status), byPerson ? 'Recorded by a person' : 'Raised by FairMind', when(risk.timestamp)].filter(Boolean).join(' · ')}
+          {[cap(risk.status.replace(/_/g, ' ')), byPerson ? 'Recorded by a person' : 'Raised by FairMind', when(risk.timestamp)].filter(Boolean).join(' · ')}
         </p>
       </div>
       <Link
@@ -160,7 +212,8 @@ function FindingRow({ risk, onTreat }: { risk: Risk; onTreat: Treat }) {
       >
         Create task
       </Link>
-      {!CLOSED.includes(risk.status) && !treating && (
+      {pending && <PendingAcceptanceBox risk={risk} pending={pending} onSettle={onSettle} />}
+      {isOpenRisk(risk) && !pending && !treating && (
         <button type="button" className={`${BTN} lg:col-start-2`} onClick={() => setTreating(true)}>Accept or mitigate</button>
       )}
       {treating && <TreatForm risk={risk} onTreat={onTreat} onDone={() => setTreating(false)} />}
@@ -184,7 +237,7 @@ function SuggestionRow({ item }: { item: SuggestedRisk }) {
 export default function FindingsPage() {
   const { selectedSystem, loading: systemsLoading, error: systemsError, refreshSystems } = useSystemContext()
   const hasSystem = Boolean(selectedSystem.id)
-  const { data: risks, suggested, summary, loading, error, assessRisks, treatRisk } = useRisks(selectedSystem.id)
+  const { data: risks, suggested, summary, loading, error, assessRisks, treatRisk, settleAcceptance } = useRisks(selectedSystem.id)
   const { toast } = useToast()
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -308,7 +361,7 @@ export default function FindingsPage() {
           )
         ) : (
           <ul className="mt-3">
-            {risks.map((risk) => <FindingRow key={risk.id} risk={risk} onTreat={treatRisk} />)}
+            {risks.map((risk) => <FindingRow key={risk.id} risk={risk} onTreat={treatRisk} onSettle={settleAcceptance} />)}
           </ul>
         )}
       </section>
