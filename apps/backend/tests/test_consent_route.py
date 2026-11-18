@@ -18,6 +18,7 @@ def _configure(monkeypatch, state_items):
 
     def handler(req: httpx.Request):
         if req.url.path.endswith("/consent-state"):
+            assert req.url.params.get("purposes") == "all"  # else Olai omits undecided purposes
             return httpx.Response(200, json={"items": state_items})
         return httpx.Response(201, json={"token": "pt_abc", "expiresAt": "x"})
 
