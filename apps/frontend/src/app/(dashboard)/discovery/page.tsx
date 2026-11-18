@@ -15,6 +15,7 @@ import { SourceMark, where } from '@/astryx/DiscoveryParts'
 import { CandidatePanel, WaitingList } from '@/astryx/DiscoveryReview'
 import { useCandidates, type Candidate } from '@/astryx/data/review'
 import { DiscoveryFlow } from '@/astryx/DiscoveryFlow'
+import { FoundList, SHOWS, type Show } from '@/astryx/FoundList'
 import {
   HEALTH_LABEL,
   LANES,
@@ -98,7 +99,7 @@ function Areas({ d, lane, onLane }: { d: D; lane: LaneKey | null; onLane: (l: La
   )
 }
 
-function Flow({ d }: { d: D }) {
+function Flow({ d, onShow }: { d: D; onShow: (s: Show) => void }) {
   const n = (s: string) => d.discovered.filter((a) => a.status === s).length
   const [reg, wait, ign] = [n('promoted'), n('new'), n('ignored')]
   if (reg + wait + ign === 0) return null
@@ -119,9 +120,9 @@ function Flow({ d }: { d: D }) {
           {ign > 0 && <span style={{ flex: ign, background: 'var(--color-border)' }} />}
         </div>
         <div className="dv-legend">
-          <span><i className="dv-key" style={{ background: 'var(--color-text-primary)' }} /><b>{reg}</b> registered</span>
-          <span><i className="dv-key" style={{ background: 'var(--color-text-warning)' }} /><b>{wait}</b> waiting for you</span>
-          <span><i className="dv-key" style={{ background: 'var(--color-border)' }} /><b>{ign}</b> ignored</span>
+          <span><i className="dv-key" style={{ background: 'var(--color-text-primary)' }} /><button type="button" className="dv-flow-link" onClick={() => onShow('registered')}><b>{reg}</b> registered</button></span>
+          <span><i className="dv-key" style={{ background: 'var(--color-text-warning)' }} /><button type="button" className="dv-flow-link" onClick={() => onShow('waiting')}><b>{wait}</b> waiting for you</button></span>
+          <span><i className="dv-key" style={{ background: 'var(--color-border)' }} /><button type="button" className="dv-flow-link" onClick={() => onShow('ignored')}><b>{ign}</b> ignored</button></span>
         </div>
       </VStack>
     </section>
@@ -282,12 +283,17 @@ function DiscoveryView() {
   const router = useRouter()
   const params = useSearchParams()
   const v = params.get('view')
-  const view = v === 'sources' || v === 'flow' || v === 'waiting' ? v : 'overview'
+  // ?view=waiting is the old address of Found's waiting filter
+  const view = v === 'sources' || v === 'flow' ? v : v === 'found' || v === 'waiting' ? 'found' : 'overview'
   const d = useDiscovery()
   const c = useCandidates()
+  const asked = (v === 'waiting' ? 'waiting' : params.get('show')) as Show | null
+  // anything waiting opens on what needs a decision; otherwise on everything found
+  const show: Show = asked && SHOWS.includes(asked) ? asked : c.candidates.length ? 'waiting' : 'all'
+  const showFound = (s: Show) => router.replace(`/discovery?view=found&show=${s}`)
   const picked = params.get('c')
-  const selected = view === 'waiting' ? (c.candidates.find((x) => x.id === picked)?.id ?? c.candidates[0]?.id ?? null) : null
-  const openCandidate = (id: string) => router.replace(`/discovery?view=waiting&c=${encodeURIComponent(id)}`)
+  const selected = view === 'found' && show === 'waiting' ? (c.candidates.find((x) => x.id === picked)?.id ?? c.candidates[0]?.id ?? null) : null
+  const openCandidate = (id: string) => router.replace(`/discovery?view=found&show=waiting&c=${encodeURIComponent(id)}`)
   const changed = () => void Promise.all([c.refresh(), d.refresh()])
   const [lane, setLane] = useState<LaneKey | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -342,7 +348,7 @@ function DiscoveryView() {
 
         <TabList value={view} onChange={(t) => router.replace(t === 'overview' ? '/discovery' : `/discovery?view=${t}`)} hasDivider aria-label="Discovery view">
           <Tab value="overview" label="Overview" />
-          <Tab value="waiting" label={`Waiting${waiting ? ` ${waiting}` : ''}`} />
+          <Tab value="found" label={`Found ${d.loading ? '' : d.discovered.length}${waiting ? ` · ${waiting} waiting` : ''}`} />
           <Tab value="flow" label="Flow" />
           <Tab value="sources" label={`Sources${failing ? ` · ${failing} failing` : ''}`} />
         </TabList>
@@ -361,19 +367,31 @@ function DiscoveryView() {
           d.integrations.length === 0 ? (
             <EmptyState title="No sources connected" description="Connect a source and its reads appear here as a flow into your inventory." actions={<Button variant="primary" label="Connect a source" href="/discovery/connect" />} />
           ) : (
-            <DiscoveryFlow d={d} onReview={() => router.replace('/discovery?view=waiting')} />
+            <DiscoveryFlow d={d} onReview={() => showFound('waiting')} />
           )
-        ) : view === 'waiting' ? (
-          c.loading ? (
-            <Skeleton height={320} />
-          ) : c.error ? (
-            <EmptyState title="What is waiting could not load" description={c.error} actions={<Button label="Try again" onClick={() => void c.refresh()} />} />
-          ) : (
-            <div className="dv-split">
-              <WaitingList candidates={c.candidates} selected={selected} onPick={openCandidate} />
-              {selected ? <CandidatePanel key={selected} id={selected} onChanged={changed} /> : <EmptyState title="Nothing waiting" description="Connectors on a schedule keep looking." />}
-            </div>
-          )
+        ) : view === 'found' ? (
+          <FoundList discovered={d.discovered} waiting={waiting} show={show} onShow={showFound}>
+            {c.loading ? (
+              <Skeleton height={320} />
+            ) : c.error ? (
+              <EmptyState title="What is waiting could not load" description={c.error} actions={<Button label="Try again" onClick={() => void c.refresh()} />} />
+            ) : waiting === 0 ? (
+              <EmptyState
+                title="Nothing waiting for you"
+                description={
+                  d.discovered.length
+                    ? `All ${d.discovered.length} found item${d.discovered.length === 1 ? ' is' : 's are'} decided. Sources on a schedule keep looking; anything new lands here first.`
+                    : 'Sources on a schedule keep looking; anything they find lands here first.'
+                }
+                actions={d.discovered.length ? <Button label={`See all ${d.discovered.length} found`} onClick={() => showFound('all')} /> : undefined}
+              />
+            ) : (
+              <div className="dv-split">
+                <WaitingList candidates={c.candidates} selected={selected} onPick={openCandidate} />
+                {selected && <CandidatePanel key={selected} id={selected} onChanged={changed} />}
+              </div>
+            )}
+          </FoundList>
         ) : view === 'sources' ? (
           <Sources
             d={d}
@@ -387,7 +405,7 @@ function DiscoveryView() {
         ) : (
           <>
             <Areas d={d} lane={lane} onLane={setLane} />
-            <Flow d={d} />
+            <Flow d={d} onShow={showFound} />
             <WaitingList
               candidates={c.candidates.filter((x) => inLane(x, lane))}
               onPick={openCandidate}

@@ -32,7 +32,7 @@ export default function HomePage() {
                 ? 'Loading your registered AI systems.'
                 : error
                   ? 'Your AI systems could not be loaded; the board below says why.'
-                  : `${systems.length} registered AI system${systems.length === 1 ? '' : 's'}, each against its release checks and release decision.`}
+                  : `${systems.length} AI system${systems.length === 1 ? '' : 's'}: what is proven, what is missing and what needs you.`}
             </Text>
           </VStack>
           <HStack gap={2}>

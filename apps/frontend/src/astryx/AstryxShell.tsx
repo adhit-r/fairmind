@@ -23,18 +23,19 @@ import { DEMO_FLAG } from '@/lib/api/api-client'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useAIProvider, useRuns } from '@/lib/api/hooks/usePacks'
 import { useNeedsYou } from './data/needsYou'
-import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
+import { useDiscovery } from './data/discovery'
 import { useRisks } from '@/lib/api/hooks/useRisks'
 import { useShadowAI } from './data/review'
 import { fairmindTheme } from './theme'
 import { ALL, NAV, SETTINGS, groupOf, isOn, type Place } from './nav'
 
 /** Live counts for the menu, read from the API. A count the API cannot give is left out, never guessed. */
-function useNavCounts(): Partial<Record<NonNullable<Place['count']>, number>> {
+function useNavCounts(): Partial<Record<NonNullable<Place['count']> | 'waiting', number>> {
   const { systems } = useSystemContext()
   const needsYou = useNeedsYou()
   const runs = useRuns().data ?? []
-  const { discovered, loading: discoveryLoading } = useIntegrations()
+  const { discovered, loading: discoveryLoading } = useDiscovery()
+  const waiting = discovered.filter((a) => a.status === 'new').length
   const { summary: risks } = useRisks()
   const shadow = useShadowAI()
   return {
@@ -42,13 +43,16 @@ function useNavCounts(): Partial<Record<NonNullable<Place['count']>, number>> {
     ...(needsYou.loading ? {} : { needs: needsYou.items.length }),
     systems: systems.length,
     runs: runs.filter((r) => r.status === 'running' || r.status === 'queued').length,
-    ...(discoveryLoading ? {} : { found: discovered.length }),
+    // Discovery shows what waits for a decision when anything does, else everything found; only waiting is hot.
+    ...(discoveryLoading ? {} : { found: waiting || discovered.length, waiting }),
     ...(risks ? { findings: risks.open } : {}),
     ...(shadow.data ? { shadow: shadow.data.findings.filter((f) => f.status === 'open').length } : {}),
   }
 }
 
 const HOT: Array<NonNullable<Place['count']>> = ['needs', 'found', 'findings', 'shadow']
+// The count that decides whether a menu item is hot: Discovery is hot only while something waits.
+const hotKey = (k: NonNullable<Place['count']>) => (k === 'found' ? 'waiting' : k)
 
 function OrgName() {
   const { organizations, selectedOrg, selectOrg } = useOrg()
@@ -212,7 +216,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
       </Link>
       {NAV.map((g) => {
         const Icon = g.icon
-        const hot = g.places.some((p) => p.count && HOT.includes(p.count) && (counts[p.count] ?? 0) > 0)
+        const hot = g.places.some((p) => p.count && HOT.includes(p.count) && (counts[hotKey(p.count)] ?? 0) > 0)
         return (
           <Link key={g.key} href={g.places[0].href} className="fm-sb" aria-current={group === g ? 'true' : undefined}>
             <span className="ic">
@@ -248,7 +252,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
         {group.places.map((p) => {
           const Icon = p.icon
           const n = p.count ? counts[p.count] : undefined
-          const hot = !!p.count && HOT.includes(p.count) && (n ?? 0) > 0
+          const hot = !!p.count && HOT.includes(p.count) && (counts[hotKey(p.count)] ?? 0) > 0
           return (
             <Item
               key={p.href}

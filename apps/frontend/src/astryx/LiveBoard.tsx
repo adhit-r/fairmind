@@ -171,10 +171,67 @@ export function LiveBoard() {
     )
   }
 
+  // A system with nothing on file and no decision asked for would be a row of empty cells: it is listed once above the board instead.
+  const blank = (gate: EstateGate) => COLS.every((c) => ['open', 'planned'].includes(stateOf(gate, c)))
+  const empty = rows.filter((r) => blank(r.gate))
+  const shown = rows.filter((r) => !blank(r.gate))
+  const pending = rows.filter((r) => r.gate.approvalStatus === 'pending')
+  const noEvidence = (gate: EstateGate) => gate.checks.every((c) => checkCell(c) === 'open')
+
   const sel = open ? stateOf(open.gate, open.col) : null
   const selCheck = open && open.col.key !== 'decision' ? open.gate.checks.find((c) => c.key === open.col.key) : undefined
 
   return (
+    <>
+    {(pending.length > 0 || empty.length > 0) && (
+      <div className={`fm-board-cards${pending.length && empty.length ? ' two' : ''}`}>
+        {pending.length > 0 && (
+          <section className="fm-card" aria-labelledby="bd-needs">
+            <VStack gap={2}>
+              <span className="fm-board-eyebrow need">Needs you · {pending.length}</span>
+              <Heading level={2} id="bd-needs">
+                {pending.length === 1 ? `${pending[0].system.name} is waiting for a release decision` : `${pending.length} systems are waiting for a release decision`}
+              </Heading>
+              {pending.some((r) => noEvidence(r.gate)) && (
+                <Text color="secondary">
+                  {pending.length === 1 ? 'Nothing has been tested on it yet, so a decision would rest on no evidence.' : 'Some have nothing tested yet, so a decision would rest on no evidence.'} Run a first evaluation before you decide.
+                </Text>
+              )}
+              <VStack gap={1}>
+                {pending.map((r) => (
+                  <Link key={r.system.id} href={`/systems/${encodeURIComponent(r.system.id)}`}>
+                    Open {r.system.name}
+                  </Link>
+                ))}
+              </VStack>
+            </VStack>
+          </section>
+        )}
+        {empty.length > 0 && (
+          <section className="fm-card" aria-labelledby="bd-empty">
+            <VStack gap={3}>
+              <span className="fm-board-eyebrow">Nothing on file yet · {empty.length}</span>
+              <Heading level={2} id="bd-empty">
+                {empty.length === 1 ? `${empty[0].system.name} has no evidence yet` : `${empty.length} systems have no evidence yet`}
+              </Heading>
+              <ul className="fm-board-names">
+                {empty.map((r) => (
+                  <li key={r.system.id}>
+                    <Link href={`/systems/${encodeURIComponent(r.system.id)}`}>{r.system.name}</Link>
+                  </li>
+                ))}
+              </ul>
+              <ol className="fm-board-steps">
+                <li>Name an owner and confirm the risk tier on each. <Link href="/systems">AI systems</Link></li>
+                <li>Confirm which frameworks apply. <Link href="/frameworks">Frameworks</Link></li>
+                <li>Run a first evaluation. <Link href="/evaluations">Evaluations</Link></li>
+              </ol>
+              <Text type="supporting">A system moves onto the board below as soon as it has a result or a decision is asked for.</Text>
+            </VStack>
+          </section>
+        )}
+      </div>
+    )}
     <section className="fm-board" aria-label="Every system against every release check">
       <header className="fm-board-top">
         <div className="fm-board-live" role="status">
@@ -200,6 +257,11 @@ export function LiveBoard() {
           </span>
         </div>
       </header>
+      {shown.length === 0 ? (
+        <div className="fm-board-pad">
+          <Text color="secondary">No system has a result yet. Each one appears here with its first evidence.</Text>
+        </div>
+      ) : (
       <div className="fm-board-scroll">
         <table>
           <thead>
@@ -226,7 +288,7 @@ export function LiveBoard() {
           </thead>
           <tbody>
             {SECTIONS.map((sec) => {
-              const mine = rows.filter((r) => sectionOf(r.gate) === sec.key)
+              const mine = shown.filter((r) => sectionOf(r.gate) === sec.key)
               if (!mine.length) return null
               return (
                 <Fragment key={sec.key}>
@@ -268,6 +330,7 @@ export function LiveBoard() {
           </tbody>
         </table>
       </div>
+      )}
       <footer className="fm-board-key">
         <span>
           <i className="cell proven">
@@ -352,5 +415,6 @@ export function LiveBoard() {
         )}
       </Drawer>
     </section>
+    </>
   )
 }
