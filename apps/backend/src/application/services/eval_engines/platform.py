@@ -47,7 +47,8 @@ def load_export(raw: bytes) -> Dict[str, Any]:
         servers = doc.get("mcpServers") or doc.get("servers")
         mcp = [{"name": n, "url": (s or {}).get("url") or "", **{k: s[k] for k in ("command", "args", "headers", "env") if k in (s or {})}}
                for n, s in servers.items()]
-        return {"agents": [{"id": "export", "name": "Exported MCP configuration", "mcp_servers": mcp, "tools": []}]}
+        # An MCP client file names servers only: no tools, permission policies or system prompt, so the agent carries none.
+        return {"agents": [{"id": "export", "name": "Exported MCP configuration", "mcp_servers": mcp}]}
     if isinstance(doc, dict) and isinstance(doc.get("config"), dict) and doc["config"].get("type") in ("cloud", "self_hosted"):
         return {"environments": [doc]}
     if isinstance(doc, dict) and isinstance(doc.get("memories"), list):
@@ -141,22 +142,35 @@ def _agents_or_raise(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
     return _live(snap, "agents")
 
 
+def _unread(agents: List[Dict[str, Any]], field: str) -> List[str]:
+    """Agents whose configuration carries no `field` at all: it was not read, which is not the same as read and empty."""
+    return [_name(a) for a in agents if field not in a]
+
+
 # --- EV-DEV-01 system prompts of every agent ------------------------------------------------------
 
 def system_prompts(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Judge]) -> Dict[str, Any]:
     agents = _agents_or_raise(snap)
     if not agents:
         return result("insufficient", "The platform has no active agents, so there is no system prompt to check.", {"agents": 0})
+    unread = _unread(agents, "system")
     rows, failing = [], []
     for agent in agents:
+        if "system" not in agent:
+            continue
         text = agent.get("system") or ""
         clauses = clause_rows(text, params) if text.strip() else [{"clause": "system prompt", "present": False, "matched": ""}]
         rows += [{"agent": _name(agent), **r} for r in clauses]
         if not all(r["present"] for r in clauses):
             failing.append(_name(agent))
-    metrics = {"agents": len(agents), "agentsMissingClauses": len(failing), "coverage": round(1 - len(failing) / len(agents), 4)}
+    read = len(agents) - len(unread)
+    metrics = {"agents": len(agents), "agentsMissingClauses": len(failing), "coverage": round(1 - len(failing) / read, 4) if read else None,
+               "unread": len(unread)}
     if failing:
         return result("failed", f"{len(failing)} of {len(agents)} agents lack a required clause: {', '.join(failing[:6])}.", metrics, rows)
+    if unread:
+        return result("insufficient", f"{len(unread)} of {len(agents)} agents carry no system prompt field, so their prompts were not read: "
+                      f"{', '.join(unread[:6])}.", metrics, rows)
     return result("passed", f"Every one of the {len(agents)} agents defines its role and scope and treats input as untrusted.", metrics, rows)
 
 
@@ -268,8 +282,12 @@ def tool_scope(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Jud
     agents = _agents_or_raise(snap)
     work = [(a, [t["tool"] for t in tools(a) if t["enabled"]]) for a in agents]
     work = [(a, names) for a, names in work if names]
-    metrics: Dict[str, Any] = {"agents": len(agents), "agentsWithTools": len(work)}
+    unread = _unread(agents, "tools")
+    metrics: Dict[str, Any] = {"agents": len(agents), "agentsWithTools": len(work), "unread": len(unread)}
+    not_read = f"{len(unread)} of {len(agents)} agents carry no tool list, so their tools were not read: {', '.join(unread[:6])}."
     if not work:
+        if unread:
+            return result("insufficient", not_read, metrics)
         return result("passed", f"None of the {len(agents)} agents has a tool enabled.", metrics)
     if judge is None:
         return result("insufficient", "Judging tools against each agent's purpose needs your model; set one under Settings, AI provider.", metrics)
@@ -295,6 +313,8 @@ def tool_scope(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Jud
     if open_:
         reason = f"{', '.join(unknown[:4])} states no purpose" if unknown else "the model gave no verdict on some tools"
         return result("insufficient", f"No tool was judged unneeded, but {len(open_)} could not be judged: {reason}.", metrics, rows)
+    if unread:
+        return result("insufficient", f"The {len(rows)} enabled tools that were read fit their agent's purpose, but {not_read}", metrics, rows)
     return result("passed", f"All {len(rows)} enabled tools fit their agent's stated purpose.", metrics, rows)
 
 
@@ -320,11 +340,16 @@ def approval_gates(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional
                 rows.append({"agent": _name(agent), "tool": t["tool"], "policy": t["policy"], "gated": t["policy"] == "always_ask", "effect": note})
     ungated = [r for r in rows if not r["gated"]]
     rows.sort(key=lambda r: r["gated"])
-    metrics = {"agents": len(agents), "highRiskTools": len(rows), "ungated": len(ungated), "gatedShare": round(1 - len(ungated) / len(rows), 4) if rows else 1.0}
+    unread = _unread(agents, "tools")
+    metrics = {"agents": len(agents), "highRiskTools": len(rows), "ungated": len(ungated), "gatedShare": round(1 - len(ungated) / len(rows), 4) if rows else 1.0,
+               "unread": len(unread)}
     if not agents:
         return result("insufficient", "The platform has no active agents.", metrics)
     if ungated:
         return result("failed", f"{len(ungated)} of {len(rows)} enabled high-risk tools run without a person approving them; set always_ask.", metrics, rows)
+    if unread:
+        return result("insufficient", f"{len(unread)} of {len(agents)} agents carry no tool list, so their tools and permission policies "
+                      f"were not read: {', '.join(unread[:6])}.", metrics, rows)
     if not rows:
         return result("passed", f"None of the {len(agents)} agents has a high-risk tool enabled ({', '.join(patterns)}).", metrics)
     return result("passed", f"All {len(rows)} enabled high-risk tools wait for a person to approve each call.", metrics, rows)
