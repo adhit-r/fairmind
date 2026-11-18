@@ -38,7 +38,14 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:3000"
-    
+
+    # Olai consent management (https://olai.axonome.xyz). Unset = consent check off.
+    # The key needs the principal-token and state:read scopes.
+    olai_base_url: str = ""
+    olai_api_key: Optional[str] = None
+    olai_tenant_id: str = ""
+    olai_collection_point_id: str = ""
+
     # Security
     secret_key: str = secrets.token_urlsafe(32)
     jwt_secret: str = secrets.token_urlsafe(32)

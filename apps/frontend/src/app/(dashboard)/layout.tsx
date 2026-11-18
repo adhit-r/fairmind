@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { ConsentCheck } from '@/components/auth/ConsentCheck'
 import { SystemContextProvider, useSystemContext } from '@/components/workflow/SystemContext'
 import { OrgProvider } from '@/context/OrgContext'
 import { NeedsYouProvider } from '@/astryx/data/needsYou'
@@ -35,6 +36,7 @@ export default function DashboardLayout({
   return (
     <SessionProvider>
       <AuthGuard>
+        <ConsentCheck />
         <OrgProvider>
           <SystemContextProvider>
             <NeedsYouProvider>
