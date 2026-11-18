@@ -30,7 +30,8 @@ async def consent_status(user: TokenData = Depends(get_current_active_user)):
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(
                 f"{api}/principals/{quote(user.user_id, safe='')}/consent-state",
-                params={"collectionPointId": s.olai_collection_point_id},
+                # purposes=all: without it Olai lists only purposes the person already decided on.
+                params={"collectionPointId": s.olai_collection_point_id, "purposes": "all"},
                 headers=headers,
             )
             r.raise_for_status()
