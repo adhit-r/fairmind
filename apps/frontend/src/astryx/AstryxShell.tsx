@@ -144,9 +144,12 @@ function Me() {
         <Text weight="semibold" maxLines={1}>
           {name}
         </Text>
-        <Text type="supporting" color="secondary" maxLines={1}>
-          {user.role ?? user.email}
-        </Text>
+        {/* The account's platform role is not the org role shown above it, so show who is signed in, not a second role. */}
+        {user.username && (
+          <Text type="supporting" color="secondary" maxLines={1}>
+            {user.email}
+          </Text>
+        )}
       </span>
       <Button label="Sign out" variant="ghost" size="sm" onClick={() => logout().finally(() => router.push('/login'))} />
     </div>
