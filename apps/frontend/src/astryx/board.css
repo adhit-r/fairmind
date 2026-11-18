@@ -48,3 +48,5 @@
 .fm-board-names a { display: inline-block; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--color-border); font-size: 12px; color: var(--color-text-primary); text-decoration: none; }
 .fm-board-names a:hover { background: var(--color-overlay-hover); }
 .fm-board-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.fm-board-act a:not(.fm-board-names a) { color: var(--color-text-primary); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--color-border-strong, currentColor); }
+.fm-board-act a:not(.fm-board-names a):hover { text-decoration-color: currentColor; }
