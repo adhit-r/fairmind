@@ -15,8 +15,11 @@ from config.settings import settings
 router = APIRouter(prefix="/consent", tags=["consent"])
 
 
-def _undecided(items: list) -> bool:
-    return any(i.get("basis") == "consent" and i.get("status") in ("none", "expired") for i in items)
+def _undecided(items: list, asked: set) -> bool:
+    return any(
+        i.get("purposeKey") in asked and i.get("basis") == "consent" and i.get("status") in ("none", "expired")
+        for i in items
+    )
 
 
 @router.get("/status")
@@ -35,7 +38,13 @@ async def consent_status(user: TokenData = Depends(get_current_active_user)):
                 headers=headers,
             )
             r.raise_for_status()
-            if not _undecided(r.json().get("items", [])):
+            # purposes=all spans the whole organisation; only the point's own purposes can be answered there.
+            cp = await client.get(
+                f"{api}/collection-points/{quote(s.olai_tenant_id, safe='')}/{quote(s.olai_collection_point_id, safe='')}"
+            )
+            cp.raise_for_status()
+            asked = {p.get("key") for p in cp.json().get("purposes", [])}
+            if not _undecided(r.json().get("items", []), asked):
                 return {"required": False}
             t = await client.post(
                 f"{api}/principal-tokens",
