@@ -404,3 +404,50 @@ def test_mcp_auth_vault_scope_header_local_and_unread_vaults():
     assert run("EV-SEC-19", {"agents": [hdr], "vaults": []})["metrics"]["unauthenticated"] == 0
     unread = run("EV-SEC-19", {"agents": [a]})
     assert unread["status"] == "insufficient" and unread["metrics"]["unread"] == 1
+
+
+# --- an MCP client file: servers only, so tools and system prompt were not read -----------------------
+
+MCP_ONLY = {"mcpServers": {"remote": {"url": "https://mcp.ok.com/mcp?token=x"},
+                           "git": {"command": "uvx", "args": ["mcp-server-git"], "env": {"AWS_ACCESS_KEY_ID": AWS}}}}
+
+
+@known_answer("EV-SEC-06", "EV-AGT-01", "EV-DEV-01")
+def test_mcp_only_file_leaves_tools_and_system_prompt_unread_not_empty():
+    # The file cannot express tools, permission policies or a system prompt: absent is not empty, so no verdict.
+    for eid in ("EV-SEC-06", "EV-AGT-01", "EV-DEV-01"):
+        out = run(eid, MCP_ONLY)
+        assert out["status"] == "insufficient", (eid, out["summary"])
+        assert out["metrics"]["unread"] == 1 and "not read" in out["summary"]
+    assert run("EV-AGT-01", MCP_ONLY, judge=judge_unneeded())["status"] == "insufficient"
+    assert run("EV-DEV-01", MCP_ONLY)["metrics"]["coverage"] is None
+
+
+@known_answer("EV-SEC-18", "EV-SEC-19", "EV-DEV-02")
+def test_mcp_only_file_server_checks_still_read_the_servers():
+    # EV-SEC-18, register *.ok.com: mcp.ok.com covered; git has no URL, so local:git is unregistered. 2 servers, 1 shadow.
+    shadow = run("EV-SEC-18", MCP_ONLY, {"approved_mcp_hosts": "*.ok.com"})
+    assert shadow["status"] == "failed" and (shadow["metrics"]["mcpServers"], shadow["metrics"]["shadowServers"]) == (2, 1)
+    assert shadow["detail"][0]["host"] == "local:git"
+    # EV-SEC-19: remote has a URL but no vaults were read (1 unread); git is a local process (not counted).
+    auth = run("EV-SEC-19", MCP_ONLY)
+    assert auth["status"] == "insufficient" and (auth["metrics"]["mcpServers"], auth["metrics"]["unread"], auth["metrics"]["unauthenticated"]) == (2, 1, 0)
+    # EV-DEV-02: scanned fields are the agent name, remote name+url, git name+url ("")+command+args[0]+env = 8.
+    # Inline secrets: token in the remote URL query (1) and the AWS key in git's env (1).
+    cred = run("EV-DEV-02", MCP_ONLY)
+    assert cred["status"] == "failed" and (cred["metrics"]["fieldsScanned"], cred["metrics"]["inlineSecrets"]) == (8, 2)
+    assert AWS not in json.dumps(cred)
+
+
+@known_answer("EV-SEC-06", "EV-DEV-01")
+def test_unread_agent_does_not_hide_a_failure_and_blocks_a_pass():
+    bare = {"id": "a2", "name": "Bare", "mcp_servers": []}  # no tools, no system field
+    ungated = run("EV-SEC-06", {"agents": [agent(tools=[toolset(bash="always_allow")]), bare]})
+    assert ungated["status"] == "failed" and ungated["metrics"]["unread"] == 1
+    gated = run("EV-SEC-06", {"agents": [agent(tools=[toolset(bash="always_ask")]), bare]})
+    assert gated["status"] == "insufficient" and "Bare" in gated["summary"]
+    assert run("EV-DEV-01", {"agents": [agent(system="You are a helper."), bare]})["status"] == "failed"
+    partial = run("EV-DEV-01", {"agents": [agent(system=FULL), bare]})
+    assert partial["status"] == "insufficient" and partial["metrics"]["coverage"] == 1.0
+    # a present but null system prompt was read: it is missing, so it fails
+    assert run("EV-DEV-01", {"agents": [{**bare, "system": None}]})["status"] == "failed"
