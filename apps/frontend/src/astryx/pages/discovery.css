@@ -234,3 +234,4 @@ button.fl-node { cursor: pointer; display: flex; flex-direction: column; justify
 .dv-flow-link { all: unset; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .dv-flow-link:focus-visible { outline: 2px solid var(--color-border-focus, currentColor); outline-offset: 2px; }
 .dv-found-table td:nth-child(4) { white-space: nowrap; }
+.dv-found-table td a { color: var(--color-text-primary); text-decoration: underline; text-underline-offset: 3px; }

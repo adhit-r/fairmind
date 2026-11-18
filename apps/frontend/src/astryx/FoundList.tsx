@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import { Text } from '@astryxdesign/core/Text'
+import Link from 'next/link'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { detail, SourceMark } from '@/astryx/DiscoveryParts'

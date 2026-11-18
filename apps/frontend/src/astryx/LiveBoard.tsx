@@ -15,6 +15,7 @@ import { Token } from '@astryxdesign/core/Token'
 import { VStack } from '@astryxdesign/core/Layout'
 import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
+import { useNeedsYou } from '@/astryx/data/needsYou'
 import type { GateCheck } from '@/lib/api/hooks/useSystemFile'
 import { checkCell, classLabel, KIND_TITLE, type CellState } from '@/components/ui/matrix'
 
@@ -90,6 +91,8 @@ type Open = { system: AISystemSummary; gate: EstateGate; col: Col }
 export function LiveBoard() {
   const { systems, loading: systemsLoading } = useSystemContext()
   const gates = useEstateGates()
+  // The menu's Needs you counts everything waiting on a person; the release card counts decisions only.
+  const inbox = useNeedsYou()
   const [open, setOpen] = useState<Open | null>(null)
   const [checkedAt, setCheckedAt] = useState<Date | null>(null)
 
@@ -179,6 +182,7 @@ export function LiveBoard() {
   const noEvidence = (gate: EstateGate) => gate.checks.every((c) => checkCell(c) === 'open')
 
   const sel = open ? stateOf(open.gate, open.col) : null
+  const others = inbox.loading ? 0 : Math.max(0, inbox.items.length - pending.length)
   const selCheck = open && open.col.key !== 'decision' ? open.gate.checks.find((c) => c.key === open.col.key) : undefined
 
   return (
@@ -186,9 +190,9 @@ export function LiveBoard() {
     {(pending.length > 0 || empty.length > 0) && (
       <div className={`fm-board-cards${pending.length && empty.length ? ' two' : ''}`}>
         {pending.length > 0 && (
-          <section className="fm-card" aria-labelledby="bd-needs">
+          <section className="fm-card fm-board-act" aria-labelledby="bd-needs">
             <VStack gap={2}>
-              <span className="fm-board-eyebrow need">Needs you · {pending.length}</span>
+              <span className="fm-board-eyebrow need">Release decision · {pending.length}</span>
               <Heading level={2} id="bd-needs">
                 {pending.length === 1 ? `${pending[0].system.name} is waiting for a release decision` : `${pending.length} systems are waiting for a release decision`}
               </Heading>
@@ -203,12 +207,13 @@ export function LiveBoard() {
                     Open {r.system.name}
                   </Link>
                 ))}
+                {others > 0 && <Link href="/needs-you">{`${others} more ${others === 1 ? 'thing waits' : 'things wait'} for you on Needs you`}</Link>}
               </VStack>
             </VStack>
           </section>
         )}
         {empty.length > 0 && (
-          <section className="fm-card" aria-labelledby="bd-empty">
+          <section className="fm-card fm-board-act" aria-labelledby="bd-empty">
             <VStack gap={3}>
               <span className="fm-board-eyebrow">Nothing on file yet · {empty.length}</span>
               <Heading level={2} id="bd-empty">
@@ -222,9 +227,9 @@ export function LiveBoard() {
                 ))}
               </ul>
               <ol className="fm-board-steps">
-                <li>Name an owner and confirm the risk tier on each. <Link href="/systems">AI systems</Link></li>
-                <li>Confirm which frameworks apply. <Link href="/frameworks">Frameworks</Link></li>
-                <li>Run a first evaluation. <Link href="/evaluations">Evaluations</Link></li>
+                <li><Link href="/systems">Name an owner and confirm the risk tier</Link> on each system</li>
+                <li><Link href="/frameworks">Confirm which frameworks apply</Link></li>
+                <li><Link href="/evaluations">Run a first evaluation</Link></li>
               </ol>
               <Text type="supporting">A system moves onto the board below as soon as it has a result or a decision is asked for.</Text>
             </VStack>
