@@ -26,6 +26,9 @@ import {
   createAgent,
   downloadScript,
   getAgent,
+  getBrowserStatus,
+  newBrowserSettings,
+  setBrowserBanner,
   newAgentSecret,
   newNotifierSecret,
   setAgentRules,
@@ -46,6 +49,8 @@ import {
   type AgentEvent,
   type AgentRule,
   type AgentStatus,
+  type BrowserSettings,
+  type BrowserStatus,
   type EdgeModel,
   type Reading,
   type ScriptStatus,
@@ -730,10 +735,11 @@ function StoryCards({ stories, showing, onShow }: { stories: Story[]; showing: s
 }
 
 /** Which places the connected sources watch, as a bar of segments, one per Discovery area. */
-function CoverageStrip({ kinds }: { kinds: string[] }) {
+function CoverageStrip({ kinds, browsers }: { kinds: string[]; browsers: number }) {
   const lanes = LANES.filter((l) => l.key !== 'code' && l.key !== 'cloud')
   const on = new Set(kinds.map((k) => SOURCES[k as IntegrationKind]?.lane).filter(Boolean))
   const seen = lanes.filter((l) => on.has(l.key))
+  const labels = [...seen.map((l) => l.label), ...(browsers ? ['Browsers'] : [])]
   return (
     <div className="sh-strip">
       <Text size="sm" weight="semibold" color="secondary">
@@ -744,7 +750,7 @@ function CoverageStrip({ kinds }: { kinds: string[] }) {
           <i key={l.key} className={on.has(l.key) ? 'f' : undefined} />
         ))}
       </span>
-      <Text size="sm">{seen.length ? seen.map((l) => l.label).join(', ') : 'No sources yet'}</Text>
+      <Text size="sm">{labels.length ? labels.join(', ') : 'No sources yet'}</Text>
       {seen.length < lanes.length && (
         <Text size="sm" color="secondary">
           Not yet: {lanes.filter((l) => !on.has(l.key)).map((l) => l.label).join(', ')}
@@ -779,9 +785,10 @@ function seatCell(r: EvidenceRow): { cls: string; label: string } {
 
 function signedInCell(r: EvidenceRow): { cls: string; label: string } {
   if (!r.signedIn) return { cls: 'none', label: 'Not reported' }
-  return r.signedIn.class === 'work'
-    ? { cls: 'co', label: `Company account, on ${r.signedIn.laptops.join(', ')}` }
-    : { cls: 'pe', label: `Account outside your company domains, on ${r.signedIn.laptops.join(', ')}` }
+  const on = r.signedIn.laptops.length ? `on ${r.signedIn.laptops.join(', ')}` : ''
+  const browsers = r.signedIn.browsers?.length ? `in ${r.signedIn.browsers.join(', ')}` : ''
+  const where = [on, browsers].filter(Boolean).join(' and ')
+  return r.signedIn.class === 'work' ? { cls: 'co', label: `Company account, ${where}` } : { cls: 'pe', label: `Account outside your company, ${where}` }
 }
 
 /** Each AI tool against each kind of evidence, as squares. */
@@ -1154,6 +1161,108 @@ function AgentCard() {
   )
 }
 
+/** The browser extension: which account AI sites in Chrome and Edge are signed in with, compared in the browser. */
+function BrowserCard() {
+  const [st, setSt] = useState<BrowserStatus | null>(null)
+  const [made, setMade] = useState<BrowserSettings | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    getBrowserStatus()
+      .then(setSt)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the browser extension'))
+  }, [])
+  async function act(fn: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (!st) return error ? <Banner status="error" title="Browser extension" description={error} /> : null
+  return (
+    <section className="fm-card" aria-labelledby="browser-title">
+      <VStack gap={3}>
+        <HStack hAlign="between" vAlign="start" wrap="wrap" gap={2}>
+          <div>
+            <Heading level={3} id="browser-title">
+              Browser extension
+            </Heading>
+            <Text size="sm" color="secondary">
+              For Chrome and Edge, force-installed by your device management. On AI sites it checks which account is signed in. The address is compared in the browser; only work or personal reaches FairMind.
+            </Text>
+          </div>
+          {st.hasToken && <span className="dv-chip">{st.browsers ? `${st.browsers} ${st.browsers === 1 ? 'browser' : 'browsers'} reporting, last ${ago(st.lastReportAt)}` : 'No browser has reported yet'}</span>}
+        </HStack>
+        {error && <Banner status="error" title="Not done" description={error} />}
+        {!st.ready ? (
+          <Text size="sm" color="secondary">
+            Set your company domains in the laptop script card first. The extension compares with the same ones.
+          </Text>
+        ) : (
+          <>
+            <Text size="sm">
+              Company domains: {st.domains.join(', ')}. A company address on a ChatGPT or Claude workspace that is not yours counts as another account, once your workspace IDs are set on those tools in Approved tools.
+            </Text>
+            <Text size="sm" color="secondary">
+              Who the person is: the address your device management fills in, else the browser&apos;s signed-in profile, else a company account seen on another AI site.
+            </Text>
+            <HStack hAlign="between" vAlign="center" wrap="wrap" gap={2}>
+              <VStack gap={0}>
+                <Text size="sm">Banner on AI sites signed in with another account</Text>
+                <Text size="sm" color="secondary">
+                  Goes out with the next settings you create.
+                </Text>
+              </VStack>
+              <Selector
+                label="Banner on AI sites"
+                isLabelHidden
+                size="sm"
+                value={st.banner ? 'on' : 'off'}
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'on', label: 'On, once a day' },
+                ]}
+                onChange={(v: string) => void act(async () => setSt(await setBrowserBanner(v === 'on')))}
+              />
+            </HStack>
+            {made && (
+              <Banner
+                status="success"
+                title="Settings, shown once"
+                description="They hold the browser token. Push them to Chrome and Edge with your device management. Any earlier browser token has stopped working."
+                endContent={
+                  <HStack gap={2} wrap="wrap">
+                    <Button size="sm" variant="secondary" label="Policy for Chrome and Edge" onClick={() => saveFile('fairmind-browser-policy.json', JSON.stringify(made.policy, null, 2))} />
+                    <Button size="sm" variant="ghost" label="Google Admin settings" onClick={() => saveFile('fairmind-browser-google-admin.json', JSON.stringify(made.googleAdmin, null, 2))} />
+                  </HStack>
+                }
+              />
+            )}
+            <HStack>
+              <Button
+                variant="secondary"
+                label={st.hasToken ? 'Create new settings' : 'Create settings'}
+                isDisabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    setMade(await newBrowserSettings())
+                    setSt(await getBrowserStatus())
+                  })
+                }
+              />
+            </HStack>
+          </>
+        )}
+      </VStack>
+    </section>
+  )
+}
+
 function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: string) => void }) {
   const [q, setQ] = useState('')
   const { data, error } = useLaptops(q)
@@ -1166,6 +1275,7 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
       <VStack gap={4}>
         <LaptopScriptCard />
         <AgentCard />
+        <BrowserCard />
         <EmptyState
           title="No laptops yet"
           description="Run the laptop script, or connect Jamf, Intune, Defender for Endpoint, CrowdStrike, Fleet or Chrome Enterprise, to see which AI tools are on each laptop."
@@ -1177,6 +1287,7 @@ function LaptopsTab({ picked, onPick }: { picked: string | null; onPick: (id: st
     <VStack gap={4}>
       <LaptopScriptCard />
       <AgentCard />
+      <BrowserCard />
       <div className="dv-split">
       <section className="fm-card dv-wlist" aria-label="Laptops">
         <div className="dv-wlist-hd">
@@ -1253,7 +1364,7 @@ function ShadowView() {
           <Heading level={1}>Shadow AI</Heading>
           <Text color="secondary">AI used outside what you approved, worked out by comparing your connected sources with each other. It never reads prompts or file contents.</Text>
         </VStack>
-        {data && <CoverageStrip kinds={data.coverage.sourceKinds ?? []} />}
+        {data && <CoverageStrip kinds={data.coverage.sourceKinds ?? []} browsers={data.coverage.browsers ?? 0} />}
         <TabList value={view} onChange={(t) => go(t)} hasDivider aria-label="Shadow AI view">
           <Tab value="open" label={`Open${open.length ? ` ${open.length}` : ''}`} />
           <Tab value="expected" label={`Expected${expected.length ? ` ${expected.length}` : ''}`} />

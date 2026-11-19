@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FairMind in this browser</title>
+<style>
+body{margin:0;width:380px;font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#15171a;background:#fff}
+main{padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px}
+h1{margin:0;font-size:16px;font-weight:600;display:flex;align-items:center;gap:10px}
+h1 i{width:20px;height:20px;border-radius:6px;background:#ff6b35;display:block}
+p{margin:0;color:#5a5f68}
+h2{margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6a707c}
+ul{margin:0;padding-left:18px;color:#3d4148}
+li{margin:2px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #ecece8}
+.row:first-of-type{border-top:0}
+.chip{font-size:12px;padding:2px 9px;border-radius:999px;background:#ebebe7;color:#5a5f68;white-space:nowrap;font-weight:500}
+.chip.work{background:#dcf3e8;color:#0d6b4f}
+.chip.personal{background:#ffe9df;color:#8a3a12}
+.never{padding:10px 12px;border-radius:12px;background:#f9f9f7;border:1px solid #ecece8}
+footer{font-size:12px;color:#6a707c;border-top:1px solid #ecece8;padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <h1><i aria-hidden="true"></i><span id="title">FairMind</span></h1>
+  <p id="intro">Not set up: your organisation installs FairMind's settings with its device management.</p>
+  <section aria-labelledby="today-h">
+    <h2 id="today-h">Today in this browser</h2>
+    <div id="today"></div>
+  </section>
+  <section aria-labelledby="checks-h">
+    <h2 id="checks-h">What it checks</h2>
+    <ul>
+      <li>On these AI sites only, whether you are signed in with a company account or another one. The address is compared here; only the answer is sent.</li>
+      <li>For ChatGPT and Claude, whether the workspace is your organisation's.</li>
+      <li>At most once a day per site, when you open it. Microsoft Copilot and DeepSeek report only that they were opened.</li>
+    </ul>
+  </section>
+  <section class="never" aria-labelledby="never-h">
+    <h2 id="never-h">What it never does</h2>
+    <ul>
+      <li>Read your prompts, replies or any other site</li>
+      <li>Read passwords, cookies or sign-in tokens</li>
+      <li>Send your personal email address anywhere</li>
+      <li>Block anything you do</li>
+    </ul>
+  </section>
+  <footer id="sent">Nothing sent today.</footer>
+</main>
+<script src="sites.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

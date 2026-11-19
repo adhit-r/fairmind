@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from api.routes import agent, discovery_review, integrations, laptop_reports, org_scope, shadow_ai, shadow_reading
+from api.routes import agent, browser_reports, discovery_review, integrations, laptop_reports, org_scope, shadow_ai, shadow_reading
 from database.connection import get_db
 from src.application.services import reviewer_notify
 from src.application.services.governance_assurance_service import OrgMembership
@@ -34,10 +34,11 @@ def env(monkeypatch):
             db.close()
 
     app = FastAPI()
-    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router, laptop_reports.router, agent.router):
+    for r in (integrations.router, discovery_review.router, shadow_ai.router, shadow_reading.router, laptop_reports.router, agent.router, browser_reports.router):
         app.include_router(r, prefix="/api/v1")
     app.include_router(discovery_review.public_router, prefix="/api/v1/public")
     app.include_router(laptop_reports.public_router, prefix="/api/v1/public")
+    app.include_router(browser_reports.public_router, prefix="/api/v1/public")
     app.include_router(agent.public_router, prefix="/api/v1/public")
     app.include_router(agent.notifier_router, prefix="/api/v1/public")
     app.dependency_overrides[get_db] = override_db
@@ -677,3 +678,48 @@ def test_agent_status_problems_are_real_failures_only():
     assert p({"severity": "0", "message": "Event publisher not enabled: endpointsecurity: EndpointSecurity is disabled via configuration"}) is None
     assert p({"severity": "1", "message": "EndpointSecurity client could not start: not permitted"}) == "EndpointSecurity client could not start: not permitted"
     assert p({"severity": "2", "message": "TLS request failed for /var/osquery/x"}) == "TLS request failed for"
+
+
+def test_browser_extension_reports_accounts(env):
+    c, factory, sent = env
+    assert c.get("/api/v1/shadow-ai/browser-extension").json()["ready"] is False
+    assert c.post("/api/v1/shadow-ai/browser-extension/token").status_code == 409
+    assert c.put("/api/v1/shadow-ai/laptop-script", json={"domains": "acme.com"}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/chatgpt", json={"status": "approved", "tenant_ids": ["ws-acme01"]}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/claude", json={"status": "approved"}).status_code == 200
+    assert c.put("/api/v1/shadow-ai/tools/deepseek", json={"status": "not_allowed"}).status_code == 200
+
+    got = c.post("/api/v1/shadow-ai/browser-extension/token").json()
+    token, policy = got["token"], got["policy"]
+    assert policy["url"].endswith("/api/v1/public/browser-report") and policy["token"] == token
+    assert "organisation" in policy and policy["domains"] == ["acme.com"] and policy["workspaces"] == {"chatgpt": ["ws-acme01"], "claude": []} and policy["banner"] is False
+    assert got["googleAdmin"]["domains"] == {"Value": ["acme.com"]}
+
+    def post(body, **extra):
+        return c.post("/api/v1/public/browser-report", content=json.dumps(body), headers={"Content-Type": "text/plain", **extra})
+
+    report = {"token": token, "person": "Arjun@acme.com", "browser": "chrome", "version": "1",
+              "sites": [{"site": "chatgpt", "class": "personal", "reason": "other_workspace"}, {"site": "claude", "class": "work"}, {"site": "deepseek", "class": "unknown"}, {"site": "nope", "class": "work"}]}
+    assert post({**report, "token": "fmbx_wrong_token_value_1234"}).status_code == 401
+    assert post({"token": token}).status_code == 422
+    assert post(report).json() == {"received": True}
+    assert post({**report, "sites": [{"site": "claude", "class": "work"}]}).status_code == 200  # merges per site, keeps chatgpt
+    assert post({**report, "browser": "edge", "sites": [{"site": "chatgpt", "class": "work"}]}).status_code == 200
+
+    body = c.get("/api/v1/shadow-ai").json()
+    by_key = {f["key"]: f for f in body["findings"]}
+    gpt = next(f for k, f in by_key.items() if k.startswith("personal:chatgpt:arjun"))
+    detail = gpt["evidence"][0]["detail"]
+    assert gpt["confidence"] == "confirmed" and "in Chrome, Edge" in detail and "workspace that is not your company's" in detail and "Browser extension" in detail
+    assert not any(k.startswith("personal:claude:") for k in by_key)
+    assert any(e["title"] == "Browsers" for e in by_key["not_allowed:deepseek"]["evidence"])
+    assert body["coverage"]["browsers"] == 2
+
+    rows = {x["service"]: x for x in c.get("/api/v1/shadow-ai/evidence", params={"person": "arjun@acme.com"}).json()["rows"]}
+    assert rows["chatgpt"]["signedIn"] == {"class": "personal", "laptops": [], "browsers": ["Chrome", "Edge"]}
+    assert rows["claude"]["signedIn"]["class"] == "work"
+
+    st = c.put("/api/v1/shadow-ai/browser-extension", json={"banner": True}).json()
+    assert st["banner"] is True and st["browsers"] == 2 and st["hasToken"] is True
+    assert c.post("/api/v1/shadow-ai/browser-extension/token").json()["token"] != token
+    assert post(report).status_code == 401  # the old token stops working

@@ -176,7 +176,7 @@ export interface ShadowAI {
     teams: string[]
     cells: Record<string, Record<string, { company: number; personal: number; unapproved: number }>>
   }
-  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number; sourceKinds: string[]; laptopScript?: boolean }
+  coverage: { proxyLogs: boolean; okta: boolean; entra: boolean; gateway: boolean; mcpRegistry: boolean; people: number; approvedTools: number; ssoTools: number; seatLists: string[]; laptops: number; sourceKinds: string[]; laptopScript?: boolean; browsers?: number }
 }
 
 export interface ToolStance {
@@ -237,7 +237,7 @@ export interface EvidenceRow {
   onLaptop: { laptops: string[]; sources: string[]; kinds: string[]; versions: string[] } | null
   traffic: { requests: number; sources: string[] } | null
   seat: { status: 'held' | 'none' | 'unknown'; source: string } | null
-  signedIn?: { class: 'work' | 'personal'; laptops: string[] } | null
+  signedIn?: { class: 'work' | 'personal'; laptops: string[]; browsers?: string[] } | null
 }
 
 export interface Evidence {
@@ -434,4 +434,20 @@ export async function agentSettings(os: 'macos' | 'windows') {
 
 export async function newNotifierSecret() {
   return unwrap(await apiClient.post<{ secret: string; config: string }>(`${S}/agent/notifier-secret`, {}))
+}
+
+/** The browser extension: whether it can be set up, browsers reporting, and the banner on AI sites. */
+export type BrowserStatus = { ready: boolean; hasToken: boolean; banner: boolean; domains: string[]; browsers: number; lastReportAt: string | null }
+export type BrowserSettings = { token: string; policy: Record<string, unknown>; googleAdmin: Record<string, unknown> }
+
+export async function getBrowserStatus() {
+  return unwrap(await apiClient.get<BrowserStatus>(`${S}/browser-extension`))
+}
+
+export async function setBrowserBanner(banner: boolean) {
+  return unwrap(await apiClient.put<BrowserStatus>(`${S}/browser-extension`, { banner }))
+}
+
+export async function newBrowserSettings() {
+  return unwrap(await apiClient.post<BrowserSettings>(`${S}/browser-extension/token`, {}))
 }

@@ -1,19 +1,20 @@
 ---
 title: Watch AI on company laptops
-description: Tell people first, then install the laptop script, the FairMind agent and the notifier with your device management.
+description: Tell people first, then install the laptop script, the FairMind agent, the notifier and the browser extension with your device management.
 ---
 
-Shadow AI reads three things on company laptops, each optional:
+Shadow AI reads four things on company laptops, each optional:
 
 | Part | What it is | How often |
 | --- | --- | --- |
 | Laptop script | A read-only script your device management runs | Once a day |
 | FairMind agent | osquery's official package, reporting to FairMind | As AI apps start on macOS, every minute on Windows |
 | FairMind notifier | A small app that shows the agent's messages to the person | Checks for messages every minute |
+| Browser extension | Checks which account AI sites in Chrome and Edge are signed in with | Once a day per site, when it is opened |
 
-The laptop script alone fills the **Laptops** tab. Add the agent to see apps as they start, and the notifier to tell people directly.
+The laptop script alone fills the **Laptops** tab. Add the agent to see apps as they start, the notifier to tell people directly, and the browser extension to see personal accounts on AI websites.
 
-<Callout title="Early access">On macOS, the laptop script and the notifier have run on real laptops, and the agent has run in user mode only, not yet as a root service with Full Disk Access. Nothing has been run on a real Windows laptop yet. The notifier is not signed yet, so install it on test laptops only.</Callout>
+<Callout title="Early access">On macOS, the laptop script and the notifier have run on real laptops, and the agent has run in user mode only, not yet as a root service with Full Disk Access. Nothing has been run on a real Windows laptop yet. The notifier is not signed yet, and the browser extension is not yet in the Chrome Web Store or Edge Add-ons, so install both on test laptops only.</Callout>
 
 ## 1. Tell people first
 
@@ -40,11 +41,16 @@ What is checked on your company laptop
   servers as they start.
 - {If you upload web proxy logs:} visits to AI services' websites, and how many requests each
   person made.
+- {If the browser extension is installed:} in Chrome and Edge, on AI sites only (ChatGPT, Claude,
+  Gemini, Perplexity), whether you are signed in with a company account or another one, and for
+  ChatGPT and Claude whether the workspace is {Organisation}'s. The address is compared in the
+  browser; only "company" or "other" is sent. For Microsoft Copilot and DeepSeek, only that you
+  opened them. At most once a day per site.
 
 What is never checked or sent
 - Your prompts, the replies, your files or your screen.
 - Your keystrokes, or your browsing beyond the AI services listed above.
-- Your personal email address, passwords or sign-in tokens.
+- Your personal email address, passwords, cookies or sign-in tokens.
 - Anything about apps that are not AI tools.
 
 Nothing is blocked. You can keep working as you do today.
@@ -59,9 +65,12 @@ What may happen
 - {If the notifier is installed:} the FairMind app in your menu bar or system tray shows these
   messages. Its "What FairMind checks on this laptop" page lists every check and every message it
   showed you.
+- {If the browser extension is installed:} the FairMind button in your browser's toolbar shows what
+  it checked today and what it sent. {If the banner is turned on:} on an AI site signed in with
+  another account, a short note at the top asks you to switch, at most once a day.
 
 How long it is kept
-Each laptop's latest daily report replaces the one before. Events from the agent, including messages
+Each laptop's latest daily report, and each browser's latest answer per site, replaces the one before. Events from the agent, including messages
 shown to you, are deleted after 30 days. The current list of laptops and findings is kept while
 {Organisation} uses FairMind.
 
@@ -130,6 +139,18 @@ Under **What the agent does**, set each event to **Log only**, **Tell you**, **T
 4. Check a laptop with `fairmind-notifier --once`. It prints how many messages are new and how many were shown before. The card shows how many laptops have it.
 
 The notifier sends only the laptop's serial number and the account name, and shows a message only to the account it is about.
+
+## 6. Install the browser extension (optional)
+
+1. In **Approved tools**, add your ChatGPT workspace ID and your Claude organisation ID to those tools, if you use them. A company address on another workspace then counts as another account.
+2. In **Browser extension**, choose whether people signed in with another account see a banner, then press **Create settings**. Download **Policy for Chrome and Edge**, and **Google Admin settings** if you manage Chrome there. They hold the browser token and are shown once; creating new settings stops the old token, and a banner change goes out only with new settings.
+3. With your device management, force-install the extension in Chrome and Edge (the `ExtensionInstallForcelist` policy) and give it the settings as its managed policy:
+   - **macOS** (Jamf, Intune): a configuration profile for the preference domain `com.google.Chrome.extensions.<extension ID>` and one for `com.microsoft.Edge.extensions.<extension ID>`, each holding the values from the policy file as top-level keys. Chrome and Edge on macOS do not read the `3rdparty` key. In Jamf, add `person` with the value `$EMAIL` so each laptop names its person.
+   - **Windows** (Intune, Group Policy): the values under `HKLM\Software\Policies\Google\Chrome\3rdparty\extensions\<extension ID>\policy` and `HKLM\Software\Policies\Microsoft\Edge\3rdparty\extensions\<extension ID>\policy`; lists and objects as JSON text.
+   - **Google Admin**: **Chrome browser › Apps & extensions**, add the extension as force-installed, and paste the Google Admin settings file into its policy.
+4. Without `person`, the extension names the person from the browser profile's account, or from a company account it sees on one of the AI sites. With no settings installed it does nothing.
+
+Each person can open the FairMind button in the toolbar to see what it checks and what it sent today. The card shows how many browsers report.
 
 ## Check it
 
