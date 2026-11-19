@@ -390,6 +390,7 @@ _PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
 _INVITATION_PREVIEW = re.compile(r"/api/v1/organizations/invitations/[^/]+")
 _OWNER_CHECK = re.compile(r"/api/v1/public/owner-check/[^/]+")
 _LAPTOP_REPORT = "/api/v1/public/laptop-report"
+_BROWSER_REPORT = "/api/v1/public/browser-report"
 _OSQUERY = ("/api/v1/public/osquery/enroll", "/api/v1/public/osquery/config", "/api/v1/public/osquery/log")
 _NOTIFIER = ("/api/v1/public/notifier/enroll", "/api/v1/public/notifier/messages", "/api/v1/public/notifier/ack")
 _TASK_REMINDERS_OFF = "/api/v1/public/task-reminders/unsubscribe"
@@ -481,6 +482,10 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # A laptop report carries the organisation's ingest token, not a user's; the route checks it.
         if request.method == "POST" and request.url.path == _LAPTOP_REPORT:
+            return await call_next(request)
+
+        # A browser report carries the organisation's browser token in its body; the route checks it.
+        if request.method == "POST" and request.url.path == _BROWSER_REPORT:
             return await call_next(request)
 
         # osquery enrols with the organisation's secret and then uses its own node key; the routes check both.

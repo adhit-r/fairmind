@@ -181,6 +181,8 @@ class Fleet:
         self.complete: Dict[str, bool] = {}
         raw: List[Dict[str, Any]] = []
         traffic: List[Dict[str, Any]] = []
+        browser: List[Dict[str, Any]] = []
+        self.visits: Dict[str, Dict[str, Set[str]]] = defaultdict(lambda: defaultdict(set))  # service -> person -> browsers
         for source, facts_json in rows:
             facts = json.loads(facts_json or "{}")
             for svc, held in (facts.get("seats") or {}).items():
@@ -190,18 +192,21 @@ class Fleet:
                 self.complete[svc] = self.complete.get(svc, True) and bool((facts.get("complete") or {}).get(svc))
             raw += [{**d, "source": source} for d in facts.get("devices") or []]
             traffic += [{**t, "source": source} for t in facts.get("traffic") or []]
+            browser += [{**a, "source": source} for a in facts.get("browser_accounts") or []]
+            for v in facts.get("browser_visits") or []:
+                self.visits[v["service"]][v["user"].lower()].add(v["browser"])
         self.laptops = merge_laptops(raw)
         by_key = {k: lt for lt in self.laptops for k in lt["keys"]}
-        # From the laptop script: which account each AI app is signed in with, and MCP servers in app settings.
-        self.accounts: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)  # service -> person -> class, laptops
+        # Which account each AI app or site is signed in with (laptop script, agent, browser extension), and MCP
+        # servers in app settings.
+        self.accounts: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)  # service -> person -> class, laptops, browsers
         self.mcp: Dict[str, Dict[str, Any]] = {}  # server name -> laptops, clients, commands
         for d in raw:
             lt = next((by_key[k] for k in _laptop_keys(d) if k in by_key), None)
             where = lt["name"] if lt else d.get("name") or "a laptop"
             for acc in d.get("accounts") or []:
                 if d.get("user"):
-                    e = self.accounts[acc["service"]].setdefault(d["user"].lower(), {"class": acc["class"], "laptops": set()})
-                    e["class"] = "personal" if "personal" in (e["class"], acc["class"]) else e["class"]
+                    e = self._account(acc["service"], d["user"], acc["class"], d["source"])
                     e["laptops"].add(where)
             for m in d.get("mcp") or []:
                 e = self.mcp.setdefault(m["name"], {"laptops": set(), "clients": set(), "commands": set()})
@@ -209,6 +214,13 @@ class Fleet:
                 e["clients"].add(m["client"])
                 if m.get("command"):
                     e["commands"].add(m["command"])
+        for a in browser:
+            e = self._account(a["service"], a["user"], a["class"], a["source"])
+            e["browsers"].add(a["browser"])
+            if a.get("reason") in ("personal_workspace", "other_workspace"):
+                e["workspace"] = True
+            self.visits[a["service"]][a["user"].lower()].add(a["browser"])
+        self.browsers = len({(a["user"], a["browser"]) for a in browser} | {(u, b) for by in self.visits.values() for u, bs in by.items() for b in bs})
         # service -> person as the source names them -> requests, laptops, sources
         self.traffic: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
         for t in traffic:
@@ -226,6 +238,12 @@ class Fleet:
                 for svc in lt["apps"]:
                     self.installs[u][svc].append(lt)
         self._local = {svc: {e.split("@")[0] for e in held} for svc, held in self.seats.items()}
+
+    def _account(self, svc: str, user: str, cls: str, source: str) -> Dict[str, Any]:
+        e = self.accounts[svc].setdefault(user.lower(), {"class": cls, "laptops": set(), "browsers": set(), "sources": set(), "workspace": False})
+        e["class"] = "personal" if "personal" in (e["class"], cls) else e["class"]
+        e["sources"].add(source)
+        return e
 
     def compared(self, svc: str) -> bool:
         """Whether a seat list for the service can be compared with who uses it."""
@@ -251,6 +269,13 @@ def _laptop_traffic(s: Any, t: Dict[str, Any]) -> Dict[str, str]:
         "source": "devices", "title": "Laptop traffic",
         "detail": f"{n} connection{'s' if n != 1 else ''} to {s.label}" + (f" from {shown}" if shown else "") + f", seen by {', '.join(sorted(hub_label(x) for x in t['sources']))}",
     }
+
+
+def _signed_in_detail(s: Any, a: Dict[str, Any]) -> str:
+    where = [f"on {', '.join(sorted(a['laptops'])[:3])}"] if a["laptops"] else []
+    where += [f"in {', '.join(sorted(a['browsers']))}"] if a["browsers"] else []
+    what = "a workspace that is not your company's" if a.get("workspace") else "an account outside your company domains"
+    return f"{s.label} {' and '.join(where)} is signed in with {what}, seen by {', '.join(sorted(hub_label(x) for x in a['sources']))}"
 
 
 _RANK = {"possible": 0, "likely": 1, "confirmed": 2}
@@ -331,15 +356,15 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
             if svc in by_svc and email and not fleet.holds(svc, email):
                 candidate(svc, who, email, "likely", [{"source": "devices", "title": "Laptops", "detail": _laptops_detail(by_svc[svc], svc)}, no_seat])
 
-    # Signed in with an account outside the company's domains, as the laptop script reports.
+    # Signed in with an account outside the company's domains or workspace, as the laptop script, the agent or the
+    # browser extension reports.
     for svc, by_who in fleet.accounts.items():
         s = _BY_KEY.get(svc)
         if not s or (stance.get(svc) or {}).get("status") not in ("approved", "limited"):
             continue
         for who, a in sorted(by_who.items()):
             if a["class"] == "personal":
-                where = ", ".join(sorted(a["laptops"])[:3])
-                candidate(svc, who, people.resolve(who), "confirmed", [{"source": "devices", "title": "Signed in", "detail": f"{s.label} on {where} is signed in with an account outside your company domains, seen by the laptop script"}])
+                candidate(svc, who, people.resolve(who), "confirmed", [{"source": "devices", "title": "Signed in", "detail": _signed_in_detail(s, a)}])
 
     for (svc, _), c in sorted(cands.items()):
         s = _BY_KEY[svc]
@@ -438,7 +463,8 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
             if (stance.get(svc) or {}).get("status") == "not_allowed":
                 installed[svc].append(lt)
     talked = {k for k in fleet.traffic if (stance.get(k) or {}).get("status") == "not_allowed"}
-    for key in sorted(set(seen) | set(installed) | talked):
+    opened = {k for k in fleet.visits if (stance.get(k) or {}).get("status") == "not_allowed"}
+    for key in sorted(set(seen) | set(installed) | talked | opened):
         s = _BY_KEY[key]
         evidence = [{"source": a["source"], "title": hub_label(a["source"]), "detail": _seen_detail(a)} for a in seen[key] if a["source"] not in LAPTOP_SOURCES]
         if installed[key]:
@@ -446,6 +472,10 @@ def detect(assets: List[Dict[str, Any]], people: People, stance: Dict[str, Dict[
         for t in fleet.traffic.get(key, {}).values():
             evidence.append(_laptop_traffic(s, t))
             break  # one line is enough; the evidence grid lists every person
+        if key in opened:
+            who = fleet.visits[key]
+            browsers = sorted({b for bs in who.values() for b in bs})
+            evidence.append({"source": "devices", "title": "Browsers", "detail": f"Opened in {', '.join(browsers)} by {len(who)} {'person' if len(who) == 1 else 'people'} in 30 days, seen by the browser extension"})
         out.append(_finding(f"not_allowed:{key}", "not_allowed", f"{s.label} is in use, and you do not allow it", "high", "confirmed", s.label, evidence, f"Ask the people using {s.label} to stop, and block it at your gateway.", service=key))
 
     # People consenting to an AI app on their own, for an app the organisation has not approved.
@@ -623,7 +653,11 @@ def evidence(
             if svc in _BY_KEY and mine(who):
                 prev = row(svc)["signedIn"]
                 cls = "personal" if a["class"] == "personal" or (prev and prev["class"] == "personal") else "work"
-                rows[svc]["signedIn"] = {"class": cls, "laptops": sorted(set((prev or {}).get("laptops", [])) | a["laptops"])}
+                rows[svc]["signedIn"] = {
+                    "class": cls,
+                    "laptops": sorted(set((prev or {}).get("laptops", [])) | a["laptops"]),
+                    "browsers": sorted(set((prev or {}).get("browsers", [])) | a["browsers"]),
+                }
     for a in assets:
         s = _service_of(a)
         if a["source"] != "proxy_logs" or not s:
@@ -729,10 +763,11 @@ def _current(db: Session, org: str) -> Dict[str, Any]:
     hub._ensure_tables()
     assets = [hub._asset_out(r) for r in db.execute(text(f"SELECT {hub._ASSET_COLS} FROM governance_discovered_assets WHERE org_id = :org"), {"org": org}).fetchall()]
     from api.routes.agent import agent_as_facts
+    from api.routes.browser_reports import reports_as_facts as browser_facts
     from api.routes.laptop_reports import reports_as_facts
 
     facts = list(db.execute(text("SELECT source, facts_json FROM governance_source_facts WHERE org_id = :org"), {"org": org}).fetchall())
-    facts += reports_as_facts(db, org) + agent_as_facts(db, org)
+    facts += reports_as_facts(db, org) + agent_as_facts(db, org) + browser_facts(db, org)
     people, fleet = People(facts), Fleet(facts)
     stance = _stance(db, org)
     kinds = {r[0] for r in db.execute(text("SELECT DISTINCT kind FROM governance_integrations WHERE org_id = :org"), {"org": org}).fetchall()}
@@ -790,6 +825,7 @@ def shadow_ai(http: Request, db: Session = Depends(get_db)):
             "sourceKinds": sorted(k),
             "laptopScript": "laptop_script" in k,
             "laptops": len(cur["fleet"].laptops),
+            "browsers": cur["fleet"].browsers,
         },
     }
 
