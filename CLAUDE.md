@@ -4,15 +4,24 @@ This file documents the project setup and conventions for Claude Code.
 
 ## Project Overview
 
-FairMind is a comprehensive AI bias detection and compliance platform for India-specific regulatory requirements (NITI Aayog guidelines, RBI regulations, and other frameworks).
+FairMind is an open-source agentic AI governance platform. Agents do the governance work; a person decides at every gate. Governance runs as workflows (collect, check, suggest, ask a person, act, verify, file evidence), FairMind runs the evaluations, and every step lands on a hash-chained ledger. It covers AI systems including LLM applications and AI agents.
+
+It helps a team prepare for review and shows an auditor the evidence. It does not certify compliance and never approves a release on its own. The framework catalogue holds 51 frameworks (38 with decomposed requirements). India frameworks (for example NITI Aayog, RBI, DPDP) are among them, not the product's whole scope. See `README.md` for current numbers and status.
 
 ## Repository Structure
 
-- **apps/backend/** - FastAPI backend for bias detection, compliance, and analytics
+- **apps/backend/** - FastAPI backend: governance, evaluations, release gate, evidence packs, catalogue
 - **apps/frontend/** - Next.js frontend dashboard
 - **apps/website/** - Marketing website (Astro)
-- **apps/ml/** - ML models and visualization utilities
-- **docs/** - Project documentation
+- **apps/docs/** - Documentation site (Fumadocs)
+- **apps/cli/** - `fairmind` CLI: release gate, fairness tests, monitoring, offline pack verification
+- **apps/sdk/** - Python SDK (`fairmind`)
+- **apps/mcp/** - MCP server (`fairmind-mcp`) for coding agents
+- **apps/eval-runner/** - Container image that runs one evaluation inside the sandbox
+- **apps/notifier/** - Small desktop app that shows the FairMind agent's messages (Rust)
+- **apps/blog-theme/** - Ghost theme for the blog
+- **apps/ml/** - MLflow config, pipelines and visualization utilities
+- **docs/** - Project documentation (see `docs/STATUS.md` for claim boundaries)
 
 ## Development Guidelines
 
@@ -30,12 +39,13 @@ FairMind is a comprehensive AI bias detection and compliance platform for India-
 - Testing: Playwright
 
 ### Key Features
-- Bias detection and remediation
-- India compliance automation (NITI Aayog, RBI, UIDAI)
-- Model monitoring and analytics
-- Dataset management and marketplace
-- Real-time compliance dashboard
-- Audit report generation
+- AI system registry and discovery (MLflow, GitHub, Hugging Face Hub)
+- Agentic governance workflows in packs, with human approval at each gate
+- Evaluations: 109 in the catalogue (fairness, security, data, agents, behaviour tests against live systems)
+- Release gate (five checks) in CI, SDK and MCP
+- Framework clause mapping across 51 frameworks (EU AI Act, ISO/IEC 42001, NIST AI RMF, India frameworks and more)
+- Hash-chained evidence ledger, inspection packs and offline verification
+- Monitoring snapshots and audit reports
 
 ## Common Tasks
 

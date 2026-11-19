@@ -36,8 +36,8 @@ One workflow run counts toward every framework it maps to. Run an AI risk assess
 | | |
 |---|---|
 | **90** agentic workflows | in **21 packs** across four pillars: Govern, Evaluate, Secure, Comply |
-| **109** evaluations | **61** produce a result inside FairMind today |
-| **51** frameworks | **539** requirements, linked through **29** common controls and **922** crosswalk entries |
+| **109** evaluations | each has an engine in FairMind: 104 in the engine registry, 5 that read stored runs |
+| **51** frameworks in the catalogue, **38** with decomposed requirements | **539** requirements, linked through **29** common controls and **922** crosswalk entries |
 
 FairMind helps a team get ready for review and shows an auditor the evidence. It does not certify compliance, and it never approves a release on its own.
 
@@ -53,7 +53,7 @@ FairMind helps a team get ready for review and shows an auditor the evidence. It
 |---|---|
 | **AI systems** | Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. Each system has one page that walks it through Onboard, Assess, Govern, Remediate and Operate. |
 | **Packs and workflows** | Install packs, start workflow runs, record step outputs, decide at gates. Draft and publish your own version of any workflow. |
-| **Evaluations** | Run all 109 evaluations: on uploaded files, against your live AI system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
+| **Evaluations** | Run any of the 109 evaluations, given the input it needs: on uploaded files, against your live AI system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
 | **Release gate** | Five checks (fairness, data governance, human oversight, monitoring, environmental) give `go`, `conditional_go` or `no_go`. Failing blocking policy rules force `no_go`. Approval is refused while critical findings are open. |
 | **Policies** | Write rules mapped to framework controls. Results are evaluated live and count as evidence for those controls. |
 | **Evidence for auditors** | Read the gate per framework clause, export inspection packs, share a read-only auditor link, and verify a pack offline with `fairmind verify`. |
@@ -119,7 +119,7 @@ Each evaluation has a metric and a pass rule from the catalogue. A run returns `
 
 ## Frameworks
 
-51 frameworks are in the catalogue. Among them:
+51 frameworks are in the catalogue; 38 of them have decomposed requirements so far (the other 13 are listed without requirements yet). Among them:
 
 - **AI management and risk:** ISO/IEC 42001, ISO/IEC 42005, ISO/IEC 23894, NIST AI RMF, NIST AI 600-1
 - **Agents and LLM security:** AIUC-1, OWASP Top 10 for LLM Applications, OWASP Top 10 for Agentic Applications, OWASP MCP Top 10, CSA AI Controls Matrix, CSA MAESTRO, MITRE ATLAS, Google SAIF
@@ -153,7 +153,7 @@ fairmind verify pack.json        # offline, no network
     api-key: ${{ secrets.FAIRMIND_API_KEY }}
 ```
 
-The [Python SDK](apps/sdk/README.md) (`pip install fairmind`) wraps the same calls, and the [MCP server](apps/mcp/README.md) (`pip install fairmind-mcp`, listed in the official MCP Registry as `io.github.adhit-r/fairmind`) gives Claude Code and other MCP clients nine tools: `list_systems`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation` and `run_evaluation`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
+The [Python SDK](apps/sdk/README.md) (`pip install fairmind`) wraps the same calls, and the [MCP server](apps/mcp/README.md) (`pip install fairmind-mcp`, listed in the official MCP Registry as `io.github.adhit-r/fairmind`) gives Claude Code and other MCP clients 19 tools: `list_systems`, `get_system`, `register_system`, `release_gate`, `clause_map`, `run_fairness_test`, `record_monitoring_snapshot`, `attest_check`, `list_evaluations`, `describe_evaluation`, `run_evaluation`, `create_evidence_pack`, `verify_evidence_pack`, `record_finding`, `list_findings`, `create_remediation_task`, `update_remediation_task`, `request_release_approval` and `generate_report`. Guides: [release gate in CI](apps/docs/content/docs/workflows/release-gate-in-ci.mdx), [SDK and MCP](apps/docs/content/docs/workflows/sdk-and-mcp.mdx), [inspection packs](apps/docs/content/docs/workflows/inspection-packs.mdx).
 
 ---
 
