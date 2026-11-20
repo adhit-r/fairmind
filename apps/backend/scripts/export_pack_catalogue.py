@@ -101,6 +101,11 @@ def engine_status(evaluations):
     from src.application.services import eval_engines
     from src.application.services.eval_engines import VALIDATED
 
+    # What a level claims. L4 is a hand-derived known-answer check run in FairMind's own tests, not an independent benchmark.
+    MATURITY_LABELS = {
+        "L1": "Engine with unit tests",
+        "L4": "Known-answer tested (not independently benchmarked)",
+    }
     where = {}
     for m in (eval_engines.data, eval_engines.model, eval_engines.ops, eval_engines.platform, eval_engines.behaviour, eval_engines.agentic, eval_engines.suites, eval_engines.assess):
         for e in m.ENGINES:
@@ -111,6 +116,7 @@ def engine_status(evaluations):
         if e["id"] in where:
             e["engine"], e["codeLocation"] = "Engine exists", where[e["id"]]
             e["maturity"] = "L4" if e["id"] in VALIDATED else "L1"  # L2 and above are not derivable from the code alone
+            e["maturityLabel"] = MATURITY_LABELS[e["maturity"]]
         else:
             e["engine"] = "Partial" if e["engine"] in ("Engine exists", "Partial") else "Not found"
 

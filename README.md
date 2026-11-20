@@ -107,6 +107,8 @@ FairMind helps a team get ready for review and shows an auditor the evidence. It
 
 Each evaluation has a metric and a pass rule from the catalogue. A run returns `passed`, `failed` or `insufficient` (the inputs cannot support a verdict), the metrics behind it and the detail per row or probe.
 
+Every evaluation's engine is checked against hand-derived known-answer cases in FairMind's own tests (catalogue maturity `L4`, "Known-answer tested"). None has been independently benchmarked.
+
 **On uploaded files.** Data drift, data poisoning, train-test leakage, personal data, RAG knowledge-base poisoning, label quality, task accuracy, calibration, out-of-distribution detection, multilingual parity, counterfactual flip rate, membership inference, verbatim reproduction, secrets in prompts and config, tool poisoning, model file and dependency scanning, runaway agent loops, cost against budget and more. No file engine makes a network call.
 
 **Against your live AI system.** Connect an OpenAI-compatible endpoint or any HTTP endpoint. FairMind sends probes and judges the answers with your own model: prompt injection, jailbreaks, system prompt leakage, harmful content, PII leakage, RAG faithfulness, robustness to typos and distractors, and uneven treatment between groups. Probes come from your CSV, or your model writes them from the system's intended use. Behaviour tests run as background jobs.

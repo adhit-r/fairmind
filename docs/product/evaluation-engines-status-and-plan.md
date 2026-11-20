@@ -30,7 +30,7 @@ The homepage table (`apps/website/src/components/home/EvalTable.astro`) reads th
 | Worker and sandbox (P1) | Not on main. S1 worker API is WIP (`task/p1-s1-worker-api`), S2, S4 and job lifecycle are unmerged branches; S3 input broker and S5 supervisor/signer not started |
 
 Each engine is therefore at most "runs in the API process from an upload or a live probe". None runs unattended in an
-isolated worker, and each is validated against a hand-derived known-answer fixture (L4). Public benchmarks are still open.
+isolated worker, and each is checked against a hand-derived known-answer fixture (L4, not an independent benchmark). Public benchmarks are still open.
 
 ### Maturity ladder used below
 
@@ -38,10 +38,10 @@ isolated worker, and each is validated against a hand-derived known-answer fixtu
 - **L1** engine code with unit tests
 - **L2** run through the API and stored as evidence on an AI system (DB tests green)
 - **L3** reachable and readable in the UI
-- **L4** validated: known-answer fixture or public benchmark reproduces the expected verdict
+- **L4** known-answer tested: a hand-derived fixture in FairMind's own tests reproduces the expected value and verdict. This is not an independent benchmark; a public benchmark result would be a separate, stronger claim and none is recorded yet
 - **L5** runs in the P1 worker sandbox, signed result
 
-Today: 109 runnable, all 109 at L4 (the 56 original registry engines, the 5 rules, the 23 Phase 1 and 2 engines and the 25 Phase 3 and 4 engines, each with known-answer, exact-threshold and failing cases; L2/L3 unverified in this session); 0 at L5.
+Today: 109 runnable, all 109 at L4, known-answer tested and none independently benchmarked (the 56 original registry engines, the 5 rules, the 23 Phase 1 and 2 engines and the 25 Phase 3 and 4 engines, each with known-answer, exact-threshold and failing cases; L2/L3 unverified in this session); 0 at L5.
 
 ## 3. Plan
 
