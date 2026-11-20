@@ -355,3 +355,59 @@ def test_confirming_a_framework_the_store_holds_assigns_its_newest_version_once(
     assert client.put(f"{GOV}/systems/{sid}/applicability", json={**body, "tier": "critical"}).status_code == 200
     with db_manager.SessionLocal() as session:
         assert session.execute(text("SELECT framework_version_id FROM governance_framework_assignments WHERE system_id = :id"), {"id": sid}).scalars().all() == [version_id]
+
+
+# --------------------------------------------------------------------------- Art 5 screen
+
+NO_ALL = {k: "no" for k in "abcdefgh"}
+
+
+def test_prohibited_questions_route():
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    out = client.get(f"{GOV}/applicability/prohibited-practices")
+    assert out.status_code == 200 and [q["key"] for q in out.json()["questions"]] == list("abcdefgh")
+
+
+@pytest.mark.usefixtures("environmental_gate_on")
+def test_indicated_screen_forces_no_go_until_a_person_clears_it_with_a_reason():
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    sid = _system(client)
+    assert client.get(f"{GOV}/systems/{sid}/prohibited-screen").json() == {"screen": None, "blocking": None}
+
+    put = client.put(f"{GOV}/systems/{sid}/prohibited-screen", json={"answers": {**NO_ALL, "c": "yes"}})
+    assert put.status_code == 200, put.text
+    assert put.json()["screen"]["outcome"] == "indicated" and put.json()["screen"]["screenedBy"] == "owner@test.invalid"
+    gate = put.json()["gate"]
+    assert gate["verdict"] == "no_go" and gate["prohibitedScreen"] == {"blocking": "indicated"}
+    assert "Art 5" in gate["reasons"][0]
+
+    assert client.post(f"{GOV}/systems/{sid}/prohibited-screen/clear", json={"reason": "too short"}).status_code == 422
+    cleared = client.post(f"{GOV}/systems/{sid}/prohibited-screen/clear", json={"reason": "Counsel found the exception in Art 5(1)(c) applies."})
+    assert cleared.status_code == 200, cleared.text
+    clearance = cleared.json()["screen"]["clearance"]
+    assert clearance["by"] == "owner@test.invalid" and clearance["selfReview"] is True
+    assert cleared.json()["gate"]["prohibitedScreen"] == {"blocking": None}
+    assert cleared.json()["gate"]["verdict"] != "no_go" or "Art 5" not in " ".join(cleared.json()["gate"]["reasons"])
+
+    again = client.put(f"{GOV}/systems/{sid}/prohibited-screen", json={"answers": {**NO_ALL, "c": "yes"}})
+    assert again.json()["screen"]["clearance"] is None  # a new screen drops the clearance
+    kinds = {e["evidence_type"] if "evidence_type" in e else e.get("evidenceType") for e in client.get(f"{GOV}/systems/{sid}/evidence").json()}
+    assert {"prohibited_practice_screen", "prohibited_practice_clearance"} <= kinds
+
+
+def test_unsure_screen_blocks_approval_and_a_clear_screen_does_not():
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    sid = _system(client)
+    unsure = client.put(f"{GOV}/systems/{sid}/prohibited-screen", json={"answers": {**NO_ALL, "f": "unsure"}}).json()
+    assert unsure["screen"]["outcome"] == "needs_legal_review" and unsure["gate"]["prohibitedScreen"] == {"blocking": "needs_legal_review"}
+    clear = client.put(f"{GOV}/systems/{sid}/prohibited-screen", json={"answers": NO_ALL}).json()
+    assert clear["screen"]["outcome"] == "clear" and clear["gate"]["prohibitedScreen"] == {"blocking": None}
+    assert client.post(f"{GOV}/systems/{sid}/prohibited-screen/clear", json={"reason": "Nothing to clear here at all."}).status_code == 409
+
+
+def test_screen_rejects_unknown_questions_and_needs_a_screen_to_clear():
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    sid = _system(client)
+    assert client.put(f"{GOV}/systems/{sid}/prohibited-screen", json={"answers": {"z": "no"}}).status_code == 422
+    assert client.put(f"{GOV}/systems/{sid}/prohibited-screen", json={"answers": {"a": "maybe"}}).status_code == 422
+    assert client.post(f"{GOV}/systems/{sid}/prohibited-screen/clear", json={"reason": "No screen was ever run."}).status_code == 409
