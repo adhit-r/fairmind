@@ -4702,3 +4702,49 @@ class OrgTaskEvent(Base):
     kind = Column(String(20), nullable=False)
     detail_json = Column(Text, nullable=False, default="{}")
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceAgentTrace(Base):
+    """One run of an AI system or agent, as its own code reported it; see api/routes/agent_traces.py."""
+
+    __tablename__ = "governance_agent_traces"
+    __table_args__ = (
+        UniqueConstraint("system_id", "trace_id", name="uq_governance_agent_traces_system_trace"),
+        Index("ix_governance_agent_traces_system_received", "system_id", "received_at"),
+    )
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False)
+    trace_id = Column(String, nullable=False)  # the caller's id for the run
+    name = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="running")  # running, ok or error
+    input = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)  # the reason the system stated for the whole run; not checked
+    started_at = Column(String, nullable=True)
+    ended_at = Column(String, nullable=True)
+    truncated = Column(Boolean, nullable=False, default=False)
+    received_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceAgentTraceStep(Base):
+    """One step of a trace: a model call, tool call, retrieval, memory read or write, or decision."""
+
+    __tablename__ = "governance_agent_trace_steps"
+
+    trace_pk = Column(String, ForeignKey("governance_agent_traces.id"), primary_key=True)
+    step_id = Column(String, primary_key=True)  # the caller's id, so a re-sent step updates
+    org_id = Column(String, nullable=False, index=True)
+    parent_id = Column(String, nullable=True)
+    seq = Column(Integer, nullable=False)  # arrival order within the trace
+    kind = Column(String, nullable=False)
+    name = Column(String, nullable=False, default="")
+    input = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="ok")
+    error = Column(Text, nullable=True)
+    started_at = Column(String, nullable=True)
+    ended_at = Column(String, nullable=True)

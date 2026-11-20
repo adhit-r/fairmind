@@ -487,6 +487,8 @@ export interface EngineSpec {
   live: '' | 'target' | 'agent'
   /** A second way to run the same evaluation, against the live system. */
   alternate?: EngineSpec | null
+  /** It can read the system's live runs of the last week instead of uploaded files. */
+  liveRuns?: boolean
 }
 
 /** A behaviour test running in the background. */
@@ -549,7 +551,7 @@ export interface EngineRun {
   summary: string
   metrics: Record<string, number | string | null>
   files: Record<string, string>
-  source: 'upload' | 'connection'
+  source: 'upload' | 'connection' | 'traces'
   createdAt: string
   createdBy: string | null
   params?: Record<string, unknown>
@@ -558,6 +560,48 @@ export interface EngineRun {
   judge?: { provider: string; model: string }
   target?: { kind: string; url?: string }
 }
+
+/** One step of a live run, as the system's own code reported it. `rationale` is the reason it stated; FairMind does not check it. */
+export interface TraceStep {
+  id: string
+  parentId: string | null
+  kind: 'llm' | 'tool' | 'retrieval' | 'memory' | 'decision' | 'other'
+  name: string
+  input: unknown
+  output: unknown
+  rationale: string | null
+  status: 'running' | 'ok' | 'error'
+  error: string | null
+  startedAt: string | null
+  endedAt: string | null
+}
+
+export interface Trace {
+  traceId: string
+  name: string | null
+  status: 'running' | 'ok' | 'error'
+  input: unknown
+  output: unknown
+  rationale: string | null
+  startedAt: string | null
+  endedAt: string | null
+  receivedAt: string
+  truncated: boolean
+  stepCount: number
+  rationaleCoverage: number | null
+  steps: TraceStep[]
+}
+
+/** Live runs for the Watch drawer: runs per day, the last run, and the latest evaluations that read them. */
+export interface LiveRunSummary {
+  lastRunAt: string | null
+  week: { runs: number; errors: number }
+  days: Array<{ date: string; runs: number; errors: number }>
+  evaluations: Array<{ evaluationId: string; evidenceId: string; status: EngineRun['status']; summary: string; metrics: Record<string, unknown>; createdAt: string }>
+}
+
+export const useTrace = (systemId: string | null, traceId: string | null) =>
+  useOrgResource<{ trace: Trace }>(systemId && traceId ? `/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}` : null)
 
 export const useEvaluation = (evaluationId: string | undefined) =>
   useOrgResource<EvaluationRow>(evaluationId ? API_ENDPOINTS.packs.evaluation(evaluationId) : null)

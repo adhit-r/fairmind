@@ -45,7 +45,8 @@ const ACTION_TITLE: Record<GatePathStep['action'], (check: string) => string> = 
   evidence_upload: (check) => `Upload ${check} evidence`,
 }
 
-export const stepTitle = (step: GatePathStep, gate: ReleaseGate) => ACTION_TITLE[step.action](checkName(step.check, gate))
+export const stepTitle = (step: GatePathStep, gate: ReleaseGate) =>
+  step.source === 'traces' ? 'Check tool calls on live runs' : ACTION_TITLE[step.action](checkName(step.check, gate))
 
 const CLASS_PILL: Record<GatePathStep['evidenceClass'], { label: string; tone: 'done' | 'info' | 'warn' | 'plain' }> = {
   measured: { label: 'Measured', tone: 'done' },

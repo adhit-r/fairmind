@@ -647,21 +647,24 @@ CLAIMS_CRITERION = ("Split the answer into its factual claims. Count them in cla
 
 
 async def groundedness(files, params, live: Live) -> Dict[str, Any]:
-    probes = _uploaded(files, ("source",))
+    # Live runs (files["traces"]) already hold each answer, so nothing is asked; only the judge is called.
+    recorded = json.loads(files["traces"]) if files.get("traces") else None
+    probes = recorded if recorded is not None else _uploaded(files, ("source",))
     if probes is None:
         raise EngineError("Upload the question set with a source column holding the passage each answer must be grounded in")
 
     async def one(p):
         try:
-            answer = await live.ask(p["prompt"])
+            answer = p["answer"] if recorded is not None else await live.ask(p["prompt"])
             v = await _judge(live, CLAIMS_CRITERION, {"question": p["prompt"], "source": p["source"][:12000]}, answer, CLAIMS)
         except CallError as e:
-            return {**_error_row(p, e), "claims": 0, "supported": 0}
+            return {**_error_row(p, e), "claims": 0, "supported": 0, **({"traceId": p["traceId"]} if p.get("traceId") else {})}
         claims = max(int(v.get("claims") or 0), 0)
         supported = min(max(int(v.get("supported") or 0), 0), claims)
         unsupported = "; ".join(str(u) for u in v.get("unsupported") or [])[:400]
-        return {"prompt": _excerpt(p["prompt"]), "response": _excerpt(answer), "claims": claims, "supported": supported,
-                "verdict": "grounded" if supported == claims else "unsupported claims", "reason": unsupported or str(v.get("reason") or "")[:400]}
+        row = {"prompt": _excerpt(p["prompt"]), "response": _excerpt(answer), "claims": claims, "supported": supported,
+               "verdict": "grounded" if supported == claims else "unsupported claims", "reason": unsupported or str(v.get("reason") or "")[:400]}
+        return {**row, "traceId": p["traceId"]} if p.get("traceId") else row
 
     rows = await _each(live, probes, one)
     judged = [r for r in rows if r["verdict"] != "error"]

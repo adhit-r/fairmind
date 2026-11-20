@@ -72,7 +72,7 @@ type Panel =
 const PANEL_TITLE: Record<Panel['kind'], string> = {
   fairness: 'Run a fairness test',
   monitoring: 'Record a monitoring snapshot',
-  watch: 'Monitoring cadence',
+  watch: 'Monitoring and live runs',
   target: 'Model connection',
   analyses: 'Stored analyses',
   explain: 'How the verdict was reached',
@@ -193,7 +193,9 @@ function SystemFileBody({ id }: { id: string }) {
     switch (step.action) {
       case 'fairness_run': return <Button label="Run the test" variant="secondary" onClick={() => setPanel({ kind: 'fairness' })} />
       case 'monitoring_snapshot': return <Button label="Record a snapshot" variant="secondary" onClick={() => setPanel({ kind: 'monitoring' })} />
-      case 'evaluation_run': return <Button label="Run an evaluation" variant="secondary" onClick={() => open('/evaluations')} />
+      case 'evaluation_run': return step.evaluationId && step.source === 'traces'
+        ? <Button label="Run on live runs" variant="secondary" onClick={() => open(`/compliance/evaluations/${encodeURIComponent(step.evaluationId as string)}?source=traces`)} />
+        : <Button label="Run an evaluation" variant="secondary" onClick={() => open('/evaluations')} />
       case 'attest': return isAttestable(step.check) ? <Button label="Attest" variant="secondary" onClick={() => setPanel({ kind: 'attest', check: step.check as AttestableCheck })} /> : null
       case 'environmental_assessment': return <Button label="Open assessment" variant="secondary" href={`/environment?system=${encodeURIComponent(id)}`} />
       case 'evidence_upload': return <Button label="Record evidence" variant="secondary" href={`/evidence?system=${encodeURIComponent(id)}&check=${step.check}`} />
@@ -311,6 +313,11 @@ function SystemFileBody({ id }: { id: string }) {
             ) : <Text type="body">None run</Text>}
           </MetadataListItem>
           <MetadataListItem label="Monitoring"><Text type="body">{monitoringRuns.length ? `${monitoringRuns[0].allChecksPass === false ? 'Drifting' : 'Stable'} on ${when(monitoringRuns[0].createdAt)}` : 'None recorded'}</Text></MetadataListItem>
+          <MetadataListItem label="Live runs">
+            {file.liveRuns?.lastRunAt
+              ? <Link onClick={() => setPanel({ kind: 'watch' })}>{`${file.liveRuns.week.runs.toLocaleString()} this week, last run ${when(file.liveRuns.lastRunAt)}`}</Link>
+              : <Text type="body">None sent</Text>}
+          </MetadataListItem>
           <MetadataListItem label="Environmental"><Text type="body">{env.loading ? 'Checking' : env.data ? `Assessed${envStatus ? `, ${String(envStatus).replace(/_/g, ' ')}` : ''}` : 'No assessment yet'}</Text></MetadataListItem>
           <MetadataListItem label="Audit reports"><Text type="body">{reports.length ? `${reports.length}, latest ${when(reports[0].createdAt)}` : 'None generated'}</Text></MetadataListItem>
         </MetadataList>
@@ -328,7 +335,7 @@ function SystemFileBody({ id }: { id: string }) {
     switch (panel.kind) {
       case 'fairness': return <FairnessRunPanel inspect={file.inspectCsv} run={file.runFairness} onDecide={!retired && ((status === 'pending' && req) || canRequest) ? () => openFromExplainer('#decision') : undefined} decideLabel={canRequest ? (status === 'rejected' ? 'Request a new decision' : 'Request release decision') : undefined} />
       case 'monitoring': return <MonitoringRunPanel inspect={file.inspectCsv} run={file.runMonitoring} hasBaseline={fairnessRuns.length > 0} />
-      case 'watch': return <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} save={file.saveMonitoringPolicy} />
+      case 'watch': return <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} live={file.liveRuns} save={file.saveMonitoringPolicy} />
       case 'target': return <TargetPanel systemId={id} />
       case 'analyses': return <StoredAnalyses systemId={id} sources={['judge', 'advanced']} />
       case 'explain': return gate ? <VerdictExplainer gate={gate} onAttest={(c) => isAttestable(c) && setPanel({ kind: 'attest', check: c })} onOpen={openFromExplainer} /> : null
@@ -512,7 +519,7 @@ function SystemFileBody({ id }: { id: string }) {
           <HStack gap={2} wrap="wrap">
             <Button label="Run a fairness test" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'fairness' })} />
             <Button label="Record a monitoring snapshot" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'monitoring' })} />
-            <Button label="Monitoring cadence" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'watch' })} />
+            <Button label="Monitoring and live runs" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'watch' })} />
             <Button label="Model connection" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'target' })} />
             <Button label="Stored analyses" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'analyses' })} />
             <Button label="Open plan" variant="secondary" size="sm" href={`/systems/${encodeURIComponent(id)}/plan`} />

@@ -200,3 +200,28 @@ def test_verify_pack_v2_recomputes_entry_hashes_and_accepts_integral_floats():
     record["content"] = '{"status": "failed"}'
     result = verify_pack({"manifest": manifest, "manifestHash": digest(_integral_floats_as_ints(manifest))})
     assert result["hashOk"] and not result["intact"] and result["systems"][0]["entriesNotMatchingHash"] == ["e1"]
+
+
+def test_record_trace_sends_only_what_was_given(monkeypatch):
+    monkeypatch.setenv("FAIRMIND_ORG_ID", "org1")
+    seen = {}
+
+    def handler(request):
+        seen["path"], seen["org"], seen["body"] = request.url.path, request.url.params["org_id"], json.loads(request.content)
+        return httpx.Response(200, json={"traceId": "run-1", "stepsReceived": 1, "truncated": False})
+
+    step = {"id": "s1", "kind": "tool", "name": "lookup_invoice", "rationale": "The customer asked about invoice 42"}
+    assert make(handler).record_trace("sys1", "run-1", [step], status="running")["stepsReceived"] == 1
+    assert seen == {"path": "/api/v1/packs/ai-systems/sys1/traces", "org": "org1", "body": {"traceId": "run-1", "steps": [step], "status": "running"}}
+
+
+def test_trace_ids_are_escaped_in_the_path(monkeypatch):
+    monkeypatch.setenv("FAIRMIND_ORG_ID", "org1")
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.raw_path.decode().split("?")[0]
+        return httpx.Response(200, json={"trace": {"traceId": "a b"}})
+
+    assert make(handler).trace("sys1", "a b")["traceId"] == "a b"
+    assert seen["path"] == "/api/v1/packs/ai-systems/sys1/traces/a%20b"

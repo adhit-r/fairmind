@@ -5,7 +5,7 @@ import { useOrg } from '@/context/OrgContext'
 import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
 import type { CellState } from '@/components/ui/matrix'
-import { withOrg, type EngineRun } from './usePacks'
+import { withOrg, type EngineRun, type LiveRunSummary } from './usePacks'
 
 const GOV = '/api/v1/ai-governance'
 
@@ -150,6 +150,9 @@ export interface GatePathStep {
   counts: number
   gain: number
   note: string | null
+  /** Set when the step names one evaluation: EV-MON-02 on live runs (source 'traces'). */
+  evaluationId?: string
+  source?: 'traces'
 }
 
 export interface GatePathOption {
@@ -404,6 +407,8 @@ export interface SystemFile {
   monitoringPolicy: MonitoringPolicy | null
   seals: DecisionSeal[]
   clauseMap: ClauseMap | null
+  /** Live runs the system's own code sends; null when there is no organisation to read them in. */
+  liveRuns: LiveRunSummary | null
 }
 
 function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
@@ -418,7 +423,7 @@ export interface SystemFileView {
 /** System file state keyed by organisation and system. */
 export type SystemFileState = EvaluationScopeState<SystemFileView>
 
-const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], evaluationRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
+const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], evaluationRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null, liveRuns: null }
 const PENDING: SystemFileView = { file: EMPTY_FILE, loading: true, error: null }
 
 export const systemFileScopeKey = (organizationId: string | null | undefined, systemId: string | undefined) =>
@@ -447,7 +452,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     return
   }
   const q = `system_id=${encodeURIComponent(systemId)}`
-  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
+  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, liveRuns] = await Promise.all([
     get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
     get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
     get<RemediationStatus>(`${GOV}/remediation?${q}`),
@@ -460,6 +465,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
     get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
     get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
+    orgId ? get<LiveRunSummary | null>(withOrg(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/summary`, orgId)) : Promise.resolve<ApiResponse<LiveRunSummary | null>>({ success: true, data: null }),
   ])
   const file: SystemFile = {
     system: sys.data,
@@ -475,6 +481,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     monitoringPolicy: unwrap(monitoringPolicy, null),
     seals: unwrap(seals, []),
     clauseMap: unwrap(clauseMap, null),
+    liveRuns: unwrap(liveRuns, null),
   }
   write(() => ({ file, loading: false, error: null }))
 }
