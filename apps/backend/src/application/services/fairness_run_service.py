@@ -893,6 +893,7 @@ ACTION_NOTES = {
     "monitoring_snapshot": "needs shadow or live decisions",
     "evidence_upload": "an uploaded document",  # the step's counts already carries the manual cap
 }
+LIVE_RUN_MONITORING = "EV-MON-02"  # tool-call anomalies: the monitoring evaluation that reads live runs
 _CLASS_ORDER = {"measured": 0, "tool_estimated": 1, "manual": 2}
 _CHECK_ORDER = {key: i for i, (key, _, _) in enumerate(GATE_CHECKS)}
 
@@ -923,8 +924,12 @@ def path_forward(
     now: Optional[datetime] = None,
     include_environmental: bool = True,
     model_target: bool = False,
+    live_runs: bool = False,
 ) -> Dict[str, Any]:
     """The fewest, strongest steps to the next verdict, each priced by re-running the real release_gate.
+
+    ``live_runs``: the system sent live runs this week, so the monitoring evaluation step names EV-MON-02 on them,
+    a monitoring evaluation that needs no upload.
 
     ``model_target``: FairMind calls the system as a model (a stored target, such as a chat model), so fairness is
     priced through a catalogue evaluation run; otherwise through a CSV fairness run, the route the autopilot reruns.
@@ -986,15 +991,18 @@ def path_forward(
             for b in blockers
         )
 
+    def step(key: str, action: str) -> Dict[str, Any]:
+        out = {"check": key, "action": action, "evidenceClass": ACTION_CLASS[action], "counts": counts[(key, action)],
+               "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(checks), 2), "note": ACTION_NOTES.get(action)}
+        if live_runs and key == "monitoring" and action == "evaluation_run":
+            out.update({"evaluationId": LIVE_RUN_MONITORING, "source": "traces", "note": "the tool calls in this week's live runs against the four weeks before"})
+        return out
+
     def option(kind: str, steps: tuple, gate: Dict[str, Any]) -> Dict[str, Any]:
         ordered = sorted(steps, key=lambda s: (_CLASS_ORDER[ACTION_CLASS[s[1]]], _CHECK_ORDER[s[0]]))
         return {
             "kind": kind,
-            "steps": [
-                {"check": key, "action": action, "evidenceClass": ACTION_CLASS[action], "counts": counts[(key, action)],
-                 "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(checks), 2), "note": ACTION_NOTES.get(action)}
-                for key, action in ordered
-            ],
+            "steps": [step(key, action) for key, action in ordered],
             "confidenceAfter": gate["confidence"], "verdictAfter": gate["verdict"], "approvalReady": ready(steps, gate),
         }
 

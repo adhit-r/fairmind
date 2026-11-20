@@ -10,6 +10,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Union
+from urllib.parse import quote
 
 import httpx
 
@@ -386,6 +387,44 @@ class FairMind:
             raise FairMindError("Not a share link: expected .../verify/<pack id>?t=<token>")
         shared = self.public_pack(pack_id, token)
         return verify_pack({"manifest": shared["manifest"], "manifestHash": shared["manifestHash"]})
+
+    # -- live traces ---------------------------------------------------------
+
+    def record_trace(
+        self,
+        system_id: str,
+        trace_id: str,
+        steps: Sequence[Dict[str, Any]] = (),
+        *,
+        name: Optional[str] = None,
+        status: Optional[Literal["running", "ok", "error"]] = None,
+        input: Any = None,
+        output: Any = None,
+        rationale: Optional[str] = None,
+        started_at: Optional[str] = None,
+        ended_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Record or extend a trace of one run; call it again with the same `trace_id` as the run goes on.
+
+        Each step is a dict: `kind` (llm, tool, retrieval, memory, decision or other), `name`, `input`,
+        `output`, `rationale` (the reason the system stated for the step), and optionally `id` (re-sending
+        the same id updates the step), `parentId`, `status`, `error`, `startedAt`, `endedAt`.
+        Fields left out, here or on a re-sent step, keep what an earlier call stored; the trace id cannot contain `/`.
+        """
+        body = {"traceId": trace_id, "steps": list(steps), "name": name, "status": status, "input": input, "output": output,
+                "rationale": rationale, "startedAt": started_at, "endedAt": ended_at}
+        return self._packs("POST", f"/ai-systems/{system_id}/traces", json={k: v for k, v in body.items() if v is not None})
+
+    def traces(self, system_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """The latest traces for a system, each with `stepCount` and `rationaleCoverage`."""
+        return self._packs("GET", f"/ai-systems/{system_id}/traces", params={"limit": limit})["traces"]
+
+    def trace(self, system_id: str, trace_id: str) -> Dict[str, Any]:
+        """One trace with its steps in order."""
+        return self._packs("GET", f"/ai-systems/{system_id}/traces/{quote(trace_id, safe='')}")["trace"]
+
+    def delete_trace(self, system_id: str, trace_id: str) -> Dict[str, Any]:
+        return self._packs("DELETE", f"/ai-systems/{system_id}/traces/{quote(trace_id, safe='')}")
 
     # -- findings, remediation -----------------------------------------------
 

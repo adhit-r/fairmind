@@ -314,10 +314,11 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate["riskTier"] = risk_tier
     gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
     has_target = _target_row(db, system_id) is not None
+    from api.routes.agent_traces import has_live_runs  # function-level: that router imports packs, which imports this one
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
         approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
-        model_target=has_target,
+        model_target=has_target, live_runs=has_live_runs(db, system_id),
     )
     if not has_target and any(c["key"] == "fairness" and c["state"] != "proven" for c in gate["checks"]):
         gate["path"]["notes"].append(

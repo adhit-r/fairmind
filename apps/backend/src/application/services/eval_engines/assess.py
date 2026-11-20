@@ -130,7 +130,7 @@ def tool_anomalies(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str,
         if prev is not None and (prev, row["_tool"]) not in seq and row["_tool"] in tools:
             why.append(f"sequence {prev} then {row['_tool']} not seen in the baseline")
         if why:
-            detail.append({"call": int(n) + 1, "tool": row["_tool"], "target": row["_target"], "reasons": why})
+            detail.append({"call": int(n) + 1, "tool": row["_tool"], "target": row["_target"], "reasons": why, **({"session": row["_session"]} if session else {})})
     score = len(detail) / len(cur)
     share_b, share_c = base["_tool"].value_counts(normalize=True), cur["_tool"].value_counts(normalize=True)
     volume = sorted(t for t in share_c.index if t in share_b.index and share_c[t] > factor * share_b[t])

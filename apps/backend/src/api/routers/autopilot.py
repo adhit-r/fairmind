@@ -31,11 +31,13 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes import evaluation_runs, llm
+from api.routes.agent_traces import TRACE_READERS
 from api.routes.ai_governance import _authenticated_actor, _caller_org, _ensure_tables, _require_system_access
 from api.routes.fairness_runs import (
     MAX_UPLOAD_BYTES,
@@ -50,7 +52,7 @@ from api.routes.pack_catalogue import EVALUATIONS
 from api.routes.system_targets import _row as _target_row, stored_target
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
-from src.application.services.eval_engines import ALTERNATES, REGISTRY
+from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError
 from src.application.services.fairness_run_service import (
     EVALUATION_RUN, GATE_CHECKS, FairnessRunError, evaluation_status, gate_check, run_fairness, run_monitoring,
 )
@@ -306,6 +308,48 @@ async def _evaluation_run(db: Session, org_id: str, system_id: str, evaluation_i
     return job["evidence_id"], f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on the saved connection; {status}"
 
 
+# --- evaluations on live runs ---------------------------------------------------
+
+
+def _last_live_run_params(db: Session, system_id: str, evaluation_id: str) -> Optional[Dict[str, Any]]:
+    """The settings of the latest run of this evaluation on live runs that a person started; the agent reuses them."""
+    for (content,) in db.execute(
+        text(
+            "SELECT content_json FROM governance_evidence WHERE system_id = :s AND evidence_type = :t AND content_json LIKE :ev "
+            "AND metadata_json LIKE :src ORDER BY created_at DESC LIMIT 20"
+        ),
+        {"s": system_id, "t": EVALUATION_RUN, "ev": f'%"evaluationId": "{evaluation_id}"%', "src": '%"source": "traces"%'},
+    ).fetchall():
+        params = json.loads(content or "{}").get("params") or {}
+        if all(params.get(p.name) not in (None, "") for p in REGISTRY[evaluation_id].params if p.required):
+            return params
+    return None
+
+
+def _live_run_needs(db: Session, system_id: str, evaluation_id: str) -> Optional[str]:
+    """None when the agent can run this evaluation on live runs, else what a person has to do first."""
+    if _last_live_run_params(db, system_id, evaluation_id) is None:
+        return f"Run {evaluation_id} on live runs once and set its agreed values; the agent reuses them after that"
+    return None
+
+
+async def _live_run_evaluation(db: Session, org_id: str, system_id: str, evaluation_id: str) -> tuple:
+    params = dict(_last_live_run_params(db, system_id, evaluation_id) or {})
+    engine = REGISTRY[evaluation_id]
+    try:
+        files = TRACE_READERS[evaluation_id](db, system_id, params)
+        db.rollback()  # hold no transaction open while the engine computes
+        outcome = await run_in_threadpool(engine.run, files, params)
+    except HTTPException as e:
+        raise AutopilotError(str(e.detail))
+    except EngineError as e:
+        raise AutopilotError(str(e))
+    by = f"agent:{AUTOPILOT_ACTOR}"
+    evidence_id = evaluation_runs._store_run(db, org_id, by, system_id, evaluation_id,
+                                             {**outcome, "params": params, "files": {"traces": "Live runs, last 7 days"}, "source": "traces"})
+    return evidence_id, f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on this week's live runs; {outcome['status']}"
+
+
 def _event(db: Session, org_id: str, system_id: str, check: str, action: str, status: str, detail: str, actor: str, evidence_id: Optional[str] = None) -> None:
     db.execute(
         text(
@@ -361,7 +405,7 @@ def _steps(db: Session, system, route: Dict[str, Any], sources: Dict[str, Any]) 
         tests.setdefault(check, []).append(ev)
     out = []
     for step in steps:
-        if step["action"] == EVALUATION_RUN and tests.get(step["check"]):
+        if step["action"] == EVALUATION_RUN and tests.get(step["check"]) and step.get("source") != "traces":
             out += [{**step, "evaluationId": ev.id, "note": f"{ev.id} {ev.name}", **({} if i == 0 else {"gain": 0})}
                     for i, ev in enumerate(tests.pop(step["check"]))]
         else:
@@ -407,20 +451,25 @@ async def run_steps(db: Session, system_id: str, actor: str, only: Optional[str]
     route = _route(db, system)
     sources = _sources(db, system_id)
     steps = _steps(db, system, route, sources)
-    chat_ready = any(s.get("evaluationId") for s in steps) and _chat_needs(db, system) is None
+    chat_ready = any(s.get("evaluationId") and s.get("source") != "traces" for s in steps) and _chat_needs(db, system) is None
     # read before any step runs, so one behaviour test does not hold back the next in the same sweep
     recent = {a for a in {s["action"] for s in steps} if scheduled and _recent(
         db, system_id, a, _monitoring_policy(db, system_id)["cadenceHours"] if a == "monitoring_snapshot" else FAIRNESS_RERUN_HOURS)}
     done = []
     for step in steps:
         action, check = step["action"], step["check"]
-        ready = chat_ready and bool(step.get("evaluationId")) if action == EVALUATION_RUN else bool(AGENT_ACTIONS.get(action) and sources[AGENT_ACTIONS[action]])
+        if step.get("source") == "traces":
+            ready = _live_run_needs(db, system_id, step["evaluationId"]) is None
+        else:
+            ready = chat_ready and bool(step.get("evaluationId")) if action == EVALUATION_RUN else bool(AGENT_ACTIONS.get(action) and sources[AGENT_ACTIONS[action]])
         if not ready or (only and action != only):
             continue
         if action in recent:
             continue  # a schedule does not repeat a step inside its cadence, whatever the last result was
         try:
-            if action == EVALUATION_RUN:
+            if step.get("source") == "traces":
+                evidence_id, detail = await _live_run_evaluation(db, system.org_id, system_id, step["evaluationId"])
+            elif action == EVALUATION_RUN:
                 evidence_id, detail = await _evaluation_run(db, system.org_id, system_id, step["evaluationId"])
             else:
                 evidence_id, detail = await RUNNERS[action](db, system.org_id, system_id)
@@ -537,11 +586,14 @@ def _view(db: Session, system) -> Dict[str, Any]:
     sources = _sources(db, system.id)
     basis = _basis_run(db, system.id)
     raw = _steps(db, system, route, sources)
-    chat_needs = _chat_needs(db, system) if any(s.get("evaluationId") for s in raw) else None
+    chat_needs = _chat_needs(db, system) if any(s.get("evaluationId") and s.get("source") != "traces" for s in raw) else None
     steps = []
     for step in raw:
         purpose = AGENT_ACTIONS.get(step["action"])
-        if step.get("evaluationId"):
+        if step.get("source") == "traces":
+            needs = _live_run_needs(db, system.id, step["evaluationId"])
+            by, why = ("person", needs) if needs else ("agent", None)
+        elif step.get("evaluationId"):
             by, why = ("person", chat_needs) if chat_needs else ("agent", None)
         elif purpose and sources[purpose]:
             by, why = "agent", None
