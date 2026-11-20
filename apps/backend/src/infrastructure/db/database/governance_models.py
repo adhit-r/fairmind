@@ -4082,7 +4082,7 @@ class GovernanceIntegration(Base):
     kind = Column(String, nullable=False)  # a key of api.routes.integrations._CONNECTORS
     name = Column(String, nullable=False)
     config_json = Column(Text, nullable=False, default="{}")
-    # ponytail: token stored at rest as-is in the local store; encrypt with an app key before production
+    # New tokens are stored encrypted (src/api/routers/integrations.py: encrypt on save, decrypt on use); legacy plaintext values are tolerated
     token = Column(Text, nullable=True)
     last_synced_at = Column(String, nullable=True)
     last_sync_summary = Column(Text, nullable=True)
