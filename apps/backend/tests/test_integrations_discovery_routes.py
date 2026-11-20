@@ -103,6 +103,29 @@ def test_schedule_set_and_validated(client):  # noqa: F811
     assert client.post("/api/v1/integrations", json={"kind": "github", "name": "x", "config": {"owner": "a", "schedule_minutes": 5}}).status_code == 422
 
 
+def test_source_settings_can_be_edited_without_reentering_credential(client):  # noqa: F811
+    created = client.post("/api/v1/integrations", json={
+        "kind": "github", "name": "Original", "config": {"owner": "old-org", "schedule_minutes": 60}, "token": "old-token",
+    })
+    assert created.status_code == 201, created.text
+    iid = created.json()["id"]
+    route = f"/api/v1/integrations/{iid}"
+
+    edited = client.patch(route, json={"name": "GitHub production", "config": {"owner": "new-org", "repos": "api,web"}})
+    assert edited.status_code == 200, edited.text
+    source = edited.json()
+    assert source["name"] == "GitHub production"
+    assert source["config"]["owner"] == "new-org" and source["config"]["repos"] == "api,web"
+    assert source["scheduleMinutes"] == 60 and source["hasToken"] is True
+    assert "old-token" not in json.dumps(source)
+
+    assert client.patch(route, json={"name": " "}).status_code == 422
+    assert client.patch(route, json={"config": {"schedule_minutes": 7}}).status_code == 422
+    assert client.patch(route, json={"token": "new-token", "clear_token": True}).status_code == 422
+    assert client.patch(route, json={"token": "new-token"}).json()["hasToken"] is True
+    assert client.patch(route, json={"clear_token": True}).json()["hasToken"] is False
+
+
 def test_preview_saves_nothing(client, monkeypatch):  # noqa: F811
     _mcp_registry(monkeypatch)
     r = client.post("/api/v1/integrations/preview", json={"kind": "mcp_registry", "name": "p", "config": {"registry_url": "https://registry.acme.com"}})

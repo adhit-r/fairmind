@@ -19,11 +19,13 @@ import {
   SCHEDULES,
   SOURCES,
   createSource,
+  updateSource,
   previewSource,
   syncSource,
   uploadLogs,
   useDiscovery,
   type IntegrationKind,
+  type Integration,
   type Preview,
 } from '@/astryx/data/discovery'
 
@@ -118,15 +120,28 @@ const REVIEW = [
 ]
 
 /** A plan with no admin API: the admin describes the workspace once, and FairMind asks again on the review cadence. */
-function WorkspaceForm({ kind, onDone, onSwitch }: { kind: IntegrationKind; onDone: () => void; onSwitch: (k: IntegrationKind) => void }) {
+function WorkspaceForm({ kind, existing, onDone, onSwitch }: { kind: IntegrationKind; existing?: Integration; onDone: () => void; onSwitch: (k: IntegrationKind) => void }) {
   const spec = SOURCES[kind]
   const chatgpt = kind === 'chatgpt_workspace'
   const assistant = chatgpt ? 'custom GPT' : 'project'
-  const [v, setV] = useState<Record<string, string>>({ name: spec.label, memory: 'on', history: 'until deleted' })
-  const [assistants, setAssistants] = useState<Array<{ name: string; purpose: string; audience: string }>>([{ name: '', purpose: '', audience: 'workspace' }])
-  const [apps, setApps] = useState<string[]>([])
-  const [other, setOther] = useState('')
-  const [review, setReview] = useState('90')
+  const saved = existing?.config ?? {}
+  const savedApps = Array.isArray(saved.apps) ? saved.apps.filter((a): a is string => typeof a === 'string') : []
+  const [v, setV] = useState<Record<string, string>>({
+    name: existing?.name ?? spec.label,
+    workspace_name: String(saved.workspace_name ?? ''),
+    seats: String(saved.seats ?? ''),
+    owner: String(saved.owner ?? ''),
+    memory: String(saved.memory ?? 'on'),
+    history: String(saved.history ?? 'until deleted'),
+  })
+  const [assistants, setAssistants] = useState<Array<{ name: string; purpose: string; audience: string }>>(
+    Array.isArray(saved.assistants) && saved.assistants.length
+      ? saved.assistants.map((a) => ({ name: String(a.name ?? ''), purpose: String(a.purpose ?? ''), audience: String(a.audience ?? 'workspace') }))
+      : [{ name: '', purpose: '', audience: 'workspace' }],
+  )
+  const [apps, setApps] = useState<string[]>(savedApps.filter((a) => APPS[kind].includes(a)))
+  const [other, setOther] = useState(savedApps.filter((a) => !APPS[kind].includes(a)).join(', '))
+  const [review, setReview] = useState(String(saved.review_days ?? '90'))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const set = (k: string) => (value: string) => setV((p) => ({ ...p, [k]: value }))
@@ -149,8 +164,10 @@ function WorkspaceForm({ kind, onDone, onSwitch }: { kind: IntegrationKind; onDo
         history: f('history'),
         review_days: Number(review),
       }
-      const created = await createSource({ kind, name: f('name') || spec.label, config })
-      await syncSource(created.id).catch(() => undefined)
+      const source = existing
+        ? await updateSource(existing.id, { name: f('name'), config })
+        : await createSource({ kind, name: f('name') || spec.label, config })
+      await syncSource(source.id).catch(() => undefined)
       onDone()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not save the workspace')
@@ -224,15 +241,15 @@ function WorkspaceForm({ kind, onDone, onSwitch }: { kind: IntegrationKind; onDo
         </div>
         <Text color="secondary" size="sm">Training on your data is off for business plans, as {chatgpt ? 'OpenAI' : 'Anthropic'} sets it.</Text>
       </Step>
-      <Step n={3} done={false} title="Confirm who uses it">
+      {!existing && <Step n={3} done={false} title="Confirm who uses it">
         <Text color="secondary" size="sm">FairMind matches people with a seat against these sources once they are connected.</Text>
         <HStack gap={2} wrap="wrap">
           <Button variant="secondary" size="sm" label="Connect Okta" onClick={() => onSwitch('okta')} />
           <Button variant="secondary" size="sm" label="Connect Microsoft Entra" onClick={() => onSwitch('entra')} />
           <Button variant="secondary" size="sm" label="Upload proxy logs" onClick={() => onSwitch('proxy_logs')} />
         </HStack>
-      </Step>
-      <Step n={4} done={Boolean(f('name'))} title="Review it again">
+      </Step>}
+      <Step n={existing ? 3 : 4} done={Boolean(f('name'))} title="Review it again">
         <SegmentedControl label="Ask for a review every" value={review} onChange={(x) => setReview(String(x))}>
           {REVIEW.map((r) => (
             <SegmentedControlItem key={r.days} value={r.days} label={r.label} />
@@ -241,8 +258,8 @@ function WorkspaceForm({ kind, onDone, onSwitch }: { kind: IntegrationKind; onDo
         <TextInput label="Name" description="How this source appears on the Sources view." value={v.name ?? ''} onChange={set('name')} isRequired />
         {err && <Banner status="error" title="That did not work" description={err} />}
         <HStack gap={2}>
-          <Button variant="primary" label={busy ? 'Saving' : 'Save the workspace'} isDisabled={!described || !f('name') || busy} onClick={() => void connect()} />
-          <Button variant="ghost" label="Cancel" href="/discovery" />
+          <Button variant="primary" label={busy ? 'Saving' : existing ? 'Save changes' : 'Save the workspace'} isDisabled={!described || !f('name') || busy} onClick={() => void connect()} />
+          <Button variant="ghost" label="Cancel" href={existing ? '/discovery?view=sources' : '/discovery'} />
         </HStack>
       </Step>
     </>
@@ -290,10 +307,14 @@ function VendorTiles({ kind, onSwitch, connected }: { kind: IntegrationKind; onS
   )
 }
 
-function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; onDone: () => void; onSwitch: (k: IntegrationKind) => void; connected: Set<string> }) {
+function Setup({ kind, existing, onDone, onSwitch, connected }: { kind: IntegrationKind; existing?: Integration; onDone: () => void; onSwitch: (k: IntegrationKind) => void; connected: Set<string> }) {
   const spec = SOURCES[kind]
-  const [v, setV] = useState<Record<string, string>>({ name: spec.label })
-  const [schedule, setSchedule] = useState('1440')
+  const [v, setV] = useState<Record<string, string>>({
+    name: existing?.name ?? spec.label,
+    ...Object.fromEntries(spec.fields.map((field) => [field.key, String(existing?.config[field.key] ?? '')])),
+  })
+  const [schedule, setSchedule] = useState(String(existing?.scheduleMinutes ?? 1440))
+  const [clearToken, setClearToken] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState<'preview' | 'connect' | null>(null)
@@ -305,7 +326,7 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
     setPreview(null) // access changed; the earlier preview no longer describes it
   }
   const logs = kind === 'proxy_logs'
-  const accessReady = spec.fields.every((x) => x.optional || f(x.key)) && (!spec.token || spec.tokenOptional || Boolean(f('token')))
+  const accessReady = spec.fields.every((x) => x.optional || f(x.key)) && (!spec.token || spec.tokenOptional || Boolean(f('token')) || Boolean(existing?.hasToken && !clearToken))
   const body = () => ({
     kind,
     name: f('name') || spec.label,
@@ -333,12 +354,23 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
     setBusy('connect')
     setErr(null)
     try {
-      const created = await createSource(body())
-      // The first read happens now, so the Sources view opens with real data rather than a wait.
-      if (logs) {
-        if (file) await uploadLogs(created.id, await file.text())
+      if (existing) {
+        await updateSource(existing.id, {
+          name: f('name'),
+          config: Object.fromEntries(spec.fields.map((field) => [field.key, f(field.key)])),
+          schedule_minutes: logs ? undefined : Number(schedule),
+          token: f('token') || undefined,
+          clear_token: clearToken,
+        })
+        if (!logs) await syncSource(existing.id).catch(() => undefined)
       } else {
-        await syncSource(created.id).catch(() => undefined) // a failed first read shows on the Sources view
+        const created = await createSource(body())
+        // The first read happens now, so the Sources view opens with real data rather than a wait.
+        if (logs) {
+          if (file) await uploadLogs(created.id, await file.text())
+        } else {
+          await syncSource(created.id).catch(() => undefined) // a failed first read shows on the Sources view
+        }
       }
       onDone()
     } catch (e) {
@@ -361,7 +393,7 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
             </Text>
           </VStack>
         </HStack>
-        {spec.vendor && <VendorTiles kind={kind} onSwitch={onSwitch} connected={connected} />}
+        {spec.vendor && !existing && <VendorTiles kind={kind} onSwitch={onSwitch} connected={connected} />}
         {spec.managedIn ? (
           <VStack gap={2}>
             <Text size="sm">{spec.managedIn.text}</Text>
@@ -370,7 +402,7 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
             </HStack>
           </VStack>
         ) : spec.described ? (
-          <WorkspaceForm kind={kind} onDone={onDone} onSwitch={onSwitch} />
+          <WorkspaceForm kind={kind} existing={existing} onDone={onDone} onSwitch={onSwitch} />
         ) : (
         <>
 
@@ -403,20 +435,25 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
               <div className="wide">
                 <TextInput
                   label={spec.token}
-                  description={spec.tokenDescription}
+                  description={existing?.hasToken ? `Leave blank to keep the saved credential. ${spec.tokenDescription ?? ''}` : spec.tokenDescription}
                   type="password"
                   value={v.token ?? ''}
-                  onChange={set('token')}
-                  isRequired={!spec.tokenOptional}
+                  onChange={(value) => { set('token')(value); if (value) setClearToken(false) }}
+                  isRequired={!spec.tokenOptional && !(existing?.hasToken && !clearToken)}
                   isOptional={spec.tokenOptional}
                   autoComplete="off"
                 />
+                {existing?.hasToken && spec.tokenOptional && (
+                  <label className="dv-chip" style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                    <input type="checkbox" checked={clearToken} onChange={(event) => { setClearToken(event.target.checked); if (event.target.checked) set('token')('') }} /> Remove saved credential
+                  </label>
+                )}
               </div>
             )}
           </div>
         </Step>
 
-        <Step n={2} done={logs ? Boolean(file) : Boolean(preview)} title={logs ? 'Choose a log export' : 'See what it would find'}>
+        {!existing && <Step n={2} done={logs ? Boolean(file) : Boolean(preview)} title={logs ? 'Choose a log export' : 'See what it would find'}>
           {logs ? (
             <VStack gap={2}>
               <Text color="secondary" size="sm">
@@ -461,9 +498,9 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
               )}
             </VStack>
           )}
-        </Step>
+        </Step>}
 
-        <Step n={3} done={Boolean(f('name'))} title={logs ? 'Connect' : 'Keep watching'}>
+        <Step n={existing ? 2 : 3} done={Boolean(f('name'))} title={existing ? 'Save changes' : logs ? 'Connect' : 'Keep watching'}>
           {!logs && (
             <SegmentedControl label="How often FairMind reads it" value={schedule} onChange={(x) => setSchedule(String(x))}>
               {SCHEDULES.map((s) => (
@@ -476,11 +513,11 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
           <HStack gap={2}>
             <Button
               variant="primary"
-              label={busy === 'connect' ? 'Connecting' : logs ? 'Connect and read the file' : 'Connect and start watching'}
-              isDisabled={!accessReady || !f('name') || busy !== null || (logs && !file)}
+              label={busy === 'connect' ? 'Saving' : existing ? 'Save changes' : logs ? 'Connect and read the file' : 'Connect and start watching'}
+              isDisabled={!accessReady || !f('name') || busy !== null || (logs && !file && !existing)}
               onClick={() => void connect()}
             />
-            <Button variant="ghost" label="Cancel" href="/discovery" />
+            <Button variant="ghost" label="Cancel" href={existing ? '/discovery?view=sources' : '/discovery'} />
           </HStack>
         </Step>
         </>
@@ -494,6 +531,8 @@ function ConnectView() {
   const router = useRouter()
   const params = useSearchParams()
   const d = useDiscovery()
+  const editId = params.get('edit')
+  const existing = editId ? d.integrations.find((i) => i.id === editId) : undefined
   const connected = useMemo(() => new Set<string>(d.integrations.map((i) => i.kind)), [d.integrations])
   const asked = params.get('source') as IntegrationKind | null
   // Start on the first source in an area nobody watches yet: that is where AI goes unseen.
@@ -502,21 +541,26 @@ function ConnectView() {
     [connected],
   )
   const [chosen, setChosen] = useState<IntegrationKind | null>(asked && SOURCES[asked] ? asked : null)
-  const pick = chosen ?? suggested
+  const pick = existing?.kind ?? chosen ?? suggested
+
+  if (editId && d.loading) return <div className="fm-page"><Text>Loading source…</Text></div>
+  if (editId && !existing) {
+    return <div className="fm-page"><VStack gap={3}><Banner status="error" title="Source unavailable" description={d.error ?? 'This source was removed or you no longer have access to it.'} /><Button variant="secondary" label="Back to sources" href="/discovery?view=sources" /></VStack></div>
+  }
 
   return (
     <div className="fm-page">
       <VStack gap={5}>
         <HStack gap={4} hAlign="between" vAlign="end" wrap="wrap">
           <VStack gap={1}>
-            <Heading level={1}>Connect a source</Heading>
-            <Text color="secondary">Pick where to look, see what FairMind would find, then choose how often it keeps watching.</Text>
+            <Heading level={1}>{existing ? `Edit ${existing.name}` : 'Connect a source'}</Heading>
+            <Text color="secondary">{existing ? 'Update where FairMind reads, its access, and how often it checks.' : 'Pick where to look, see what FairMind would find, then choose how often it keeps watching.'}</Text>
           </VStack>
-          <Button label="Back to Discovery" variant="secondary" href="/discovery" />
+          <Button label="Back to Discovery" variant="secondary" href={existing ? '/discovery?view=sources' : '/discovery'} />
         </HStack>
-        <div className="dv-connect">
-          <Catalog pick={pick} onPick={setChosen} connected={connected} />
-          <Setup key={pick} kind={pick} onDone={() => router.push('/discovery?view=sources')} onSwitch={setChosen} connected={connected} />
+        <div className={existing ? 'dv-edit' : 'dv-connect'}>
+          {!existing && <Catalog pick={pick} onPick={setChosen} connected={connected} />}
+          <Setup key={existing?.id ?? pick} kind={pick} existing={existing} onDone={() => router.push('/discovery?view=sources')} onSwitch={setChosen} connected={connected} />
         </div>
       </VStack>
     </div>

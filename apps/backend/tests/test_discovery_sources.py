@@ -26,7 +26,7 @@ from api.routes.discovery_sources import (
     seats,
 )
 from api.routes.discovery_sources.catalog import asset_kind, by_app_name, by_host, by_installed
-from api.routes.integrations import mcp_servers_in
+from api.routes.integrations import _manifest_packages, mcp_servers_in
 
 
 def run(coro):
@@ -84,6 +84,22 @@ def test_proxy_logs_formats():
     plain = "1700 CONNECT api.openai.com:443 HTTP/1.1\n1701 GET http://example.org/\n"
     [api] = proxy_logs.parse(plain)
     assert api["kind"] == "llm_app" and api["metadata"]["distinct_users"] is None
+
+
+def test_structured_proxy_logs_only_match_the_destination():
+    csv_text = "user,url,referrer\nalice,https://example.org/,https://chatgpt.com/\nbob,https://claude.ai/,https://example.org/\n"
+    [service] = proxy_logs.parse(csv_text)
+    assert service["name"] == "Claude" and service["metadata"]["users"] == ["bob"]
+    jsonl = '{"user":"alice@example.org","host":"example.org","note":"api.openai.com"}\n'
+    assert proxy_logs.parse(jsonl) == []
+
+
+def test_github_manifests_only_count_declared_runtime_packages():
+    assert _manifest_packages("requirements.txt", "# openai\nrequests>=2 # langchain is not installed\ntorch[vision]>=2\n") == {"requests", "torch"}
+    package = '{"description":"openai integration", "devDependencies":{"openai":"*"}, "dependencies":{"@anthropic-ai/sdk":"1"}}'
+    assert _manifest_packages("package.json", package) == {"@anthropic-ai/sdk"}
+    pyproject = '[project]\ndescription = "openai integration"\ndependencies = ["scikit_learn>=1"]\n[tool.poetry.group.dev.dependencies]\nlangchain = "*"\n'
+    assert _manifest_packages("pyproject.toml", pyproject) == {"scikit-learn"}
 
 
 def test_mcp_config_keeps_env_names_not_values():

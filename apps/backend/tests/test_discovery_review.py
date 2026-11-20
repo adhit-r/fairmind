@@ -107,14 +107,31 @@ def test_merge_by_name_repo_and_service_and_split():
     assert ("1", "2", "3") in split and ("4",) in split
 
 
+def test_cloud_resources_match_by_resource_id_not_provider_or_display_name():
+    assets = [
+        _a("1", "azure", "production", ext="/subscriptions/a/deployments/loan", cloud="azure", service="Azure OpenAI"),
+        _a("2", "azure", "production", ext="/subscriptions/b/deployments/chat", cloud="azure", service="Azure OpenAI"),
+        _a("3", "gcp", "production", ext="projects/a/locations/us/endpoints/1", cloud="gcp", service="Vertex AI endpoint"),
+        _a("4", "azure", "different label", ext="/subscriptions/a/deployments/loan", cloud="azure", service="Azure OpenAI"),
+        _a("5", "proxy_logs", "Azure OpenAI", kind="ai_service", ext="service:azure_openai"),
+    ]
+    groups = {frozenset(a["id"] for a in g["members"]): g for g in discovery_review.group_assets(assets, set())}
+    assert set(groups) == {frozenset({"1", "4"}), frozenset({"2"}), frozenset({"3"}), frozenset({"5"})}
+    assert discovery_review._name(groups[frozenset({"1", "4"})]["members"]) == "production"
+    assert groups[frozenset({"1", "4"})]["checks"][0]["type"] == "resource"
+
+
 def test_tier_follows_reach_once_the_owner_answers():
     members = [_a("1", "openai", "drafter", vendor="OpenAI"), _a("2", "github", "zendesk", kind="mcp_server", ext="x#mcp:zendesk")]
     before = discovery_review.reach(members, {})
-    assert {f["key"]: f["value"] for f in before}["leaves_india"] == "yes"
+    assert {f["key"]: f["value"] for f in before}["leaves_india"] == "unknown"
     assert discovery_review.tier_from(before, "high")[0] == "high"  # sources' suggestion holds until answers
     answered = {"personal_data": False, "acts_without_person": False, "moves_money": False, "decides_about_people": False}
-    assert discovery_review.tier_from(discovery_review.reach(members, answered), "high")[0] == "medium"  # tools + abroad
+    assert discovery_review.tier_from(discovery_review.reach(members, answered), "high")[0] == "medium"  # tools
     risky = {**answered, "personal_data": True}
+    tier, reasons = discovery_review.tier_from(discovery_review.reach(members, risky), "low")
+    assert tier == "medium" and "it uses personal data" in reasons
+    members[0]["metadata"]["region"] = "us-east-1"
     tier, reasons = discovery_review.tier_from(discovery_review.reach(members, risky), "low")
     assert tier == "high" and "it sends personal data out of India" in reasons
     india = [_a("1", "aws", "claims", region="ap-south-1")]
@@ -130,7 +147,7 @@ def test_merge_owner_link_and_decision(env):
     oa = _integration(c, "openai")
     repo = _asset(factory, gh, "github", "acme/reply-drafter", "reply-drafter", "llm_app", {"repo": "acme/reply-drafter", "description": "Drafts replies", "signals": {"mcp_servers": ["zendesk", "jira"]}}, minutes_ago=30)
     _asset(factory, gh, "github", "acme/reply-drafter#mcp:zendesk", "zendesk", "mcp_server", {"repo": "acme/reply-drafter"}, minutes_ago=20)
-    key = _asset(factory, oa, "openai", "openai:k1", "prod", "llm_app", {"project": "reply-drafter", "owner": "meera@acme.com", "vendor": "OpenAI"}, tier="high", minutes_ago=10)
+    key = _asset(factory, oa, "openai", "openai:k1", "prod", "llm_app", {"project": "reply-drafter", "owner": "meera@acme.com", "vendor": "OpenAI", "region": "us-east-1"}, tier="high", minutes_ago=10)
 
     listed = c.get("/api/v1/discovery/candidates").json()
     assert len(listed) == 1 and listed[0]["id"] == repo and listed[0]["sightings"] == 3 and listed[0]["kind"] == "agent"
@@ -169,6 +186,28 @@ def test_merge_owner_link_and_decision(env):
     assert c.get("/api/v1/discovery/candidates").json() == []
     assert c.get(f"/api/v1/public/owner-check/{token}").json() == {"closed": True}
     assert c.post(f"/api/v1/public/owner-check/{token}", json=answers).status_code == 409
+
+
+def test_reviewer_links_a_separate_cloud_resource_to_an_existing_system(env):
+    c, factory, _ = env
+    source = _integration(c, "azure")
+    loan = _asset(factory, source, "azure", "/subscriptions/a/deployments/loan", "loan", "llm_app",
+                  {"cloud": "azure", "service": "Azure OpenAI"}, minutes_ago=2)
+    chat = _asset(factory, source, "azure", "/subscriptions/a/deployments/chat", "chat", "llm_app",
+                  {"cloud": "azure", "service": "Azure OpenAI"}, minutes_ago=1)
+    assert {x["id"] for x in c.get("/api/v1/discovery/candidates").json()} == {loan, chat}
+    system_id = c.post(f"/api/v1/discovery/candidates/{loan}/decide", json={"decision": "approve"}).json()["systemId"]
+    assert c.post(f"/api/v1/discovery/candidates/{chat}/link", json={"system_id": "another-org-system"}).status_code == 404
+    linked = c.post(f"/api/v1/discovery/candidates/{chat}/link", json={"system_id": system_id})
+    assert linked.status_code == 200 and linked.json() == {"decision": "link", "systemId": system_id}
+    assert c.get("/api/v1/discovery/candidates").json() == []
+    with factory() as db:
+        system = db.execute(text("SELECT metadata_json FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+        assets = db.execute(text("SELECT status, system_id FROM governance_discovered_assets")).fetchall()
+        decisions = db.execute(text("SELECT decision, system_id FROM governance_discovery_decisions ORDER BY decided_at")).fetchall()
+    assert {a["assetId"] for a in json.loads(system)["merged_sightings"]} == {loan, chat}
+    assert {tuple(a) for a in assets} == {("promoted", system_id)}
+    assert {tuple(d) for d in decisions} == {("approve", system_id), ("link", system_id)}
 
 
 def test_expired_link_and_split(env):
