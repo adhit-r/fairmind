@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import tomllib
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -92,15 +93,8 @@ _HIGH_IMPACT = re.compile(
     r"health|medical|clinical|diagnos|insurance|underwrit|collection|eligib|benefit|biometric|face",
     re.I,
 )
-_LLM_DEPS = re.compile(
-    r"\b(openai|anthropic|google-generativeai|google-genai|langchain|llama[-_]index|vllm|litellm|"
-    r"@anthropic-ai/sdk|@ai-sdk|ai-sdk|cohere|mistralai|groq)\b",
-    re.I,
-)
-_ML_DEPS = re.compile(
-    r"\b(transformers|torch|pytorch|tensorflow|keras|scikit-learn|sklearn|xgboost|lightgbm|catboost|mlflow|onnxruntime)\b",
-    re.I,
-)
+_LLM_PACKAGES = {"openai", "anthropic", "google-generativeai", "google-genai", "langchain", "llama-index", "vllm", "litellm", "@anthropic-ai/sdk", "ai-sdk", "cohere", "mistralai", "groq"}
+_ML_PACKAGES = {"transformers", "torch", "pytorch", "tensorflow", "keras", "scikit-learn", "sklearn", "xgboost", "lightgbm", "catboost", "mlflow", "onnxruntime"}
 _MCP_CONFIGS = (".mcp.json", "mcp.json", ".cursor/mcp.json", ".vscode/mcp.json")
 _AGENT_FILES = {"CLAUDE.md", "AGENTS.md", ".cursorrules", ".cursor", ".codex", "GEMINI.md", ".windsurfrules"}
 _MODEL_FILES = re.compile(r"\.(pkl|joblib|onnx|pt|pth|h5|safetensors|gguf)$|^MLproject$|^model_card\.md$", re.I)
@@ -197,6 +191,29 @@ async def _github_json(client: httpx.AsyncClient, url: str, **params: Any) -> An
     return resp.json()
 
 
+def _manifest_packages(filename: str, content: str) -> set[str]:
+    """Declared runtime packages only; comments, scripts and dev dependencies are not AI evidence."""
+    names: List[str] = []
+    try:
+        if filename == "requirements.txt":
+            names = [line.split("#", 1)[0].strip() for line in content.splitlines() if not line.lstrip().startswith("-")]
+        elif filename == "pyproject.toml":
+            project = tomllib.loads(content)
+            names = list((project.get("project") or {}).get("dependencies") or [])
+            poetry = (project.get("tool") or {}).get("poetry") or {}
+            names.extend((poetry.get("dependencies") or {}).keys())
+        elif filename == "package.json":
+            names = list((json.loads(content).get("dependencies") or {}).keys())
+    except (ValueError, AttributeError, TypeError):
+        return set()
+    out = set()
+    for name in names:
+        match = re.match(r"^([@a-zA-Z0-9][a-zA-Z0-9_./@-]*)", str(name))
+        if match:
+            out.add(match.group(1).lower().replace("_", "-"))
+    return out
+
+
 async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dict[str, Any]]:
     owner = str(config.get("owner") or "").strip()
     if not owner:
@@ -230,15 +247,15 @@ async def _sync_github(config: Dict[str, Any], token: Optional[str]) -> List[Dic
                 continue  # MCP configs only; no manifests read
             agent_files = sorted(names & _AGENT_FILES)
             model_files = sorted(n for n in names if _MODEL_FILES.search(n))
-            deps_text = ""
+            packages: set[str] = set()
             for manifest in ("requirements.txt", "pyproject.toml", "package.json"):
                 entry = next((e for e in root if isinstance(e, dict) and e.get("name") == manifest), None)
                 if entry and entry.get("download_url"):
                     r = await client.get(entry["download_url"])
                     if r.status_code < 400:
-                        deps_text += "\n" + r.text[:20000]
-            llm = sorted({m.group(0).lower() for m in _LLM_DEPS.finditer(deps_text)})
-            ml = sorted({m.group(0).lower() for m in _ML_DEPS.finditer(deps_text)})
+                        packages.update(_manifest_packages(manifest, r.text[:20000]))
+            llm = sorted(p for p in packages if p in _LLM_PACKAGES or p.startswith("@ai-sdk/") or p.startswith("llama-index-"))
+            ml = sorted(packages & _ML_PACKAGES)
             if llm:
                 kind = "llm_app"
             elif ml or model_files:
@@ -490,6 +507,10 @@ RUNS_SHOWN = 20
 
 
 class IntegrationPatch(BaseModel):
+    name: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    token: Optional[str] = None
+    clear_token: bool = False
     schedule_minutes: Optional[int] = None
     disabled_steps: Optional[List[str]] = None
 
@@ -838,11 +859,29 @@ async def preview_integration(body: IntegrationCreate):
 
 @router.patch("/{integration_id}", dependencies=[Depends(org_mutator)])
 def update_integration(integration_id: str, body: IntegrationPatch, http: Request, db: Session = Depends(get_db)):
-    """Change how often a source is read, or which of its steps are read."""
+    """Edit a source without exposing or replacing its saved credential by default."""
     _ensure_tables()
     org = _caller_org(http)
     row = _get_integration(db, org, integration_id)
     config = _load_json_value(row[4], {})
+    name = row[3]
+    token = row[5]
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Source name is required")
+    if body.config is not None:
+        if {"schedule_minutes", "disabled_steps"} & body.config.keys():
+            raise HTTPException(status_code=422, detail="Use schedule_minutes or disabled_steps to change reading behavior")
+        config.update(body.config)
+        if row[2] == "mlflow":
+            _public_tracking_uri(config)
+    if body.clear_token and body.token:
+        raise HTTPException(status_code=422, detail="Choose a replacement token or remove the saved token")
+    if body.clear_token:
+        token = None
+    elif body.token:
+        token = encrypt(body.token)
     if body.schedule_minutes is not None:
         if body.schedule_minutes not in SCHEDULES:
             raise HTTPException(status_code=422, detail=f"schedule_minutes must be one of {list(SCHEDULES)}")
@@ -859,7 +898,10 @@ def update_integration(integration_id: str, body: IntegrationPatch, http: Reques
         if set(keys) <= set(body.disabled_steps):
             raise HTTPException(status_code=400, detail="Keep at least one step on; set the schedule to Manual to stop reading the source")
         config["disabled_steps"] = sorted(set(body.disabled_steps))
-    db.execute(text("UPDATE governance_integrations SET config_json = :c WHERE id = :id"), {"c": json.dumps(config), "id": integration_id})
+    db.execute(
+        text("UPDATE governance_integrations SET name = :n, config_json = :c, token = :t WHERE id = :id AND org_id = :org"),
+        {"n": name, "c": json.dumps(config), "t": token, "id": integration_id, "org": org},
+    )
     db.commit()
     return _integration_out(_get_integration(db, org, integration_id))
 

@@ -474,6 +474,10 @@ export async function createSource(body: NewIntegration): Promise<Integration> {
   return unwrap(await apiClient.post<Integration>(BASE, body))
 }
 
+export async function updateSource(id: string, body: { name: string; config: Record<string, unknown>; token?: string; clear_token?: boolean; schedule_minutes?: number }): Promise<Integration> {
+  return unwrap(await apiClient.patch<Integration>(`${BASE}/${id}`, body))
+}
+
 export async function syncSource(id: string) {
   return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/sync`, {}))
 }

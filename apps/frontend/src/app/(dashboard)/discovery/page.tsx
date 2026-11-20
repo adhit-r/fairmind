@@ -267,6 +267,7 @@ function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; ru
                 ) : (
                   <Button size="sm" variant="secondary" label={busyId === i.id ? 'Reading' : 'Sync now'} isDisabled={busyId !== null} onClick={() => run(i.id, async () => void (await d.sync(i.id)))} />
                 )}
+                <Button size="sm" variant="ghost" label="Edit" href={SOURCES[i.kind]?.managedIn?.href ?? `/discovery/connect?edit=${encodeURIComponent(i.id)}`} />
                 <Button size="sm" variant="ghost" label="Remove" isDisabled={busyId !== null} onClick={() => confirmRemove(d, i) && run(i.id, () => d.remove(i.id))} />
               </HStack>
             </div>

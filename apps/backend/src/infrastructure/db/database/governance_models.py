@@ -4182,7 +4182,7 @@ class GovernanceDiscoveryDecision(Base):
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
     anchor_asset_id = Column(String, nullable=False, index=True)
-    decision = Column(String, nullable=False)  # approve | conditions | retire
+    decision = Column(String, nullable=False)  # approve | conditions | retire | link
     system_id = Column(String, nullable=True)
     risk_tier = Column(String, nullable=True)
     owner = Column(String, nullable=True)
