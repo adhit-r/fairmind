@@ -4269,6 +4269,22 @@ class GovernanceLaptopReport(Base):
     __table_args__ = (Index("idx_governance_laptop_reports_device", "integration_id", "device_key", unique=True),)
 
 
+class GovernanceBrowserReport(Base):
+    """The latest answers one browser sent through the FairMind browser extension: per AI site, whether the
+    signed-in account is a company one (never the address), for the person device management named."""
+
+    __tablename__ = "governance_browser_reports"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False)
+    browser_key = Column(String, nullable=False)  # person and browser
+    report_json = Column(Text, nullable=False)
+    received_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("idx_governance_browser_reports_browser", "integration_id", "browser_key", unique=True),)
+
+
 class GovernanceAgentNode(Base):
     """One laptop enrolled with FairMind through osquery: its node key (hashed), what it is, when it last checked in."""
 
