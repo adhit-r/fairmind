@@ -37,7 +37,7 @@ jobs:
       ENVIRONMENT: development
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Lint (bug-class rules, pyproject.toml [tool.ruff.lint])
         run: uvx ruff@0.17.4 check .
       - name: Unit and Postgres tests
@@ -72,7 +72,7 @@ jobs:
       FAIRMIND_TEST_POSTGRES_URL: postgresql://postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Build the runner image and push it to the job's registry
         working-directory: .
         run: |
@@ -139,7 +139,7 @@ jobs:
       UV_PYTHON: "3.11"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Tests
         run: uv run --with pytest pytest -q -p no:cacheprovider tests
 
@@ -153,7 +153,7 @@ jobs:
       UV_PYTHON: "3.12"  # atheris ships wheels for 3.12+ on Linux only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Fuzz fairness metrics for 60 seconds
         run: >-
           uv run --no-project
