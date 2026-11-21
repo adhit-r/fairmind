@@ -24,9 +24,9 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/sitemap": "^3.7.4",
-    "astro": "^7.4.10",
-    "posthog-js": "^1.447.12",
+    "@astrojs/sitemap": "^3.7.5",
+    "astro": "^7.4.12",
+    "posthog-js": "^1.450.1",
     "three": "^0.187.0"
   },
   "overrides": {
