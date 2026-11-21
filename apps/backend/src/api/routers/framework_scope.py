@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from api.routes.ai_governance import org_member, org_mutator
 from api.routes.discovery_review import _email
 from database.connection import get_db
-from src.application.services import framework_scope_service as svc
+from api.routes import framework_scope_service as svc
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter(prefix="/frameworks/{framework_key}/scope", tags=["framework-scope"])
