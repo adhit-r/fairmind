@@ -27,6 +27,7 @@ import { Token } from '@astryxdesign/core/Token'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
+import { ProhibitedScreenPanel } from './ProhibitedScreenPanel'
 import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { checkCell, classLabel } from '@/components/ui/matrix'
 import { shortFrameworkName, tierBasis, useApplicability } from '@/lib/api/hooks/useApplicability'
@@ -66,7 +67,7 @@ const READINESS_LABEL: Record<string, string> = {
 const REQUEST_TONE = { not_requested: 'neutral', pending: 'orange', approved: 'green', rejected: 'red' } as const
 
 type Panel =
-  | { kind: 'fairness' | 'monitoring' | 'watch' | 'target' | 'analyses' | 'explain' | 'tier' | 'decide' | 'owner' }
+  | { kind: 'fairness' | 'monitoring' | 'watch' | 'target' | 'analyses' | 'explain' | 'tier' | 'decide' | 'owner' | 'art5' }
   | { kind: 'attest'; check: AttestableCheck }
 
 const PANEL_TITLE: Record<Panel['kind'], string> = {
@@ -79,6 +80,7 @@ const PANEL_TITLE: Record<Panel['kind'], string> = {
   tier: 'Tier and rules',
   decide: 'Release decision',
   owner: 'Change owner',
+  art5: 'EU AI Act Art 5 screen',
   attest: 'Attest a check',
 }
 
@@ -337,6 +339,7 @@ function SystemFileBody({ id }: { id: string }) {
       case 'monitoring': return <MonitoringRunPanel inspect={file.inspectCsv} run={file.runMonitoring} hasBaseline={fairnessRuns.length > 0} />
       case 'watch': return <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} live={file.liveRuns} save={file.saveMonitoringPolicy} />
       case 'target': return <TargetPanel systemId={id} />
+      case 'art5': return <ProhibitedScreenPanel systemId={id} onChanged={refresh} />
       case 'analyses': return <StoredAnalyses systemId={id} sources={['judge', 'advanced']} />
       case 'explain': return gate ? <VerdictExplainer gate={gate} onAttest={(c) => isAttestable(c) && setPanel({ kind: 'attest', check: c })} onOpen={openFromExplainer} /> : null
       case 'attest': return (
@@ -407,6 +410,7 @@ function SystemFileBody({ id }: { id: string }) {
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Text type="supporting" color="secondary">{applicability ? tierBasis(applicability) : 'Tier not confirmed'}</Text>
             <Button label={applicability ? 'Change tier or rules' : 'Confirm tier and rules'} variant="secondary" size="sm" onClick={() => setPanel({ kind: 'tier' })} />
+            <Button label="EU AI Act Art 5 screen" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'art5' })} />
             {awaitingSecond && applicability && (
               <Button label="Accept the lower tier" variant="secondary" size="sm" isDisabled={busy !== null} isLoading={busy === 'accept'} onClick={() => void act('accept', async () => { await acceptOverride(id, applicability.evidenceId); await refresh() })} />
             )}

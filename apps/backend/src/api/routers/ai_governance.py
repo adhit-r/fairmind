@@ -1823,15 +1823,19 @@ def _release_blockers(db: Session, system_id: str) -> Optional[Dict[str, Any]]:
         1 for task in _fetch_remediation_tasks(db, system_id)
         if task.get("priority") == "critical" and (task.get("status") or "open") in ACTIVE_REMEDIATION_STATUSES
     )
-    if not findings and not tasks:
+    from src.application.services import prohibited_screen_store as screen_store
+
+    screen = screen_store.blocking_state(screen_store.read(db, system_id))
+    if not findings and not tasks and not screen:
         return None
     parts = [
+        "an unresolved EU AI Act Art 5 screen" if screen else "",
         f"{findings} open high or critical finding{'' if findings == 1 else 's'}" if findings else "",
         f"{tasks} active critical remediation task{'' if tasks == 1 else 's'}" if tasks else "",
     ]
     return {
-        "message": "Approval is blocked by " + " and ".join(p for p in parts if p) + ". Close them first; the release can still be rejected.",
-        "blockers": {"openHighOrCriticalFindings": findings, "activeCriticalTasks": tasks},
+        "message": "Approval is blocked by " + " and ".join(p for p in parts if p) + ". Resolve them first; the release can still be rejected.",
+        "blockers": {"openHighOrCriticalFindings": findings, "activeCriticalTasks": tasks, **({"prohibitedPracticeScreen": screen} if screen else {})},
     }
 
 

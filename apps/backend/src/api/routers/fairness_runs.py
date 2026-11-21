@@ -154,6 +154,11 @@ def _approval_blockers(db: Session, system_id: str, gate: Dict[str, Any]) -> Lis
     out.append({"key": "critical_tasks", "text": "No active critical remediation tasks" + (f" ({tasks} active)" if tasks else ""), "met": not tasks})
     if gate["policy"]["blocking"]:
         out.append({"key": "policy", "text": "No blocking policy rule fails", "met": False})
+    from src.application.services import prohibited_screen_store as screen_store
+
+    record = screen_store.read(db, system_id)
+    if record:
+        out.append({"key": "prohibited_practices", "text": "The EU AI Act Art 5 screen has no unresolved prohibition", "met": not screen_store.blocking_state(record)})
     return out
 
 
@@ -310,6 +315,7 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
             check["reopenedBy"] = change[1]
             gate["reasons"].append(f"Change {change[1]} reopened {check['label'].lower()}")
     _apply_policy_rules(db, system_id, gate)
+    _apply_prohibited_screen(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
     gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
@@ -340,6 +346,18 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
         if gate["path"]["ceiling"]["verdict"] == "go":
             gate["path"]["ceiling"]["verdict"] = "conditional_go"
     return gate
+
+
+def _apply_prohibited_screen(db: Session, system_id: str, gate: Dict[str, Any]) -> None:
+    """An Art 5 screen that indicates a prohibited practice holds the verdict at no go until a person records a clearance."""
+    from src.application.services import prohibited_screen_store as screen_store
+
+    state = screen_store.blocking_state(screen_store.read(db, system_id))
+    gate["prohibitedScreen"] = {"blocking": state}
+    if state:
+        gate["reasons"].insert(0, screen_store.gate_reason(state))
+        if state == "indicated":
+            gate["verdict"] = "no_go"
 
 
 def _apply_policy_rules(db: Session, system_id: str, gate: Dict[str, Any]) -> None:

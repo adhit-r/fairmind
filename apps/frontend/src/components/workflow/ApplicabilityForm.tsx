@@ -305,9 +305,7 @@ export function ApplicabilityForm({
                     <span className="font-semibold text-[var(--fm-ink)]">{r.id}</span> · {r.text}
                   </li>
                 ))}
-                <li className="flex flex-wrap items-center gap-2">
-                  Prohibited-practice screening (EU AI Act Art 5) <Pill>Coming soon</Pill>
-                </li>
+                <li>Prohibited-practice screening (EU AI Act Art 5) is answered on the system page, once the system exists.</li>
               </ul>
             </details>
           )}

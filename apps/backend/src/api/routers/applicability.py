@@ -39,6 +39,7 @@ from database.connection import get_db
 from src.application.services.applicability_service import USE_KEYS, ApplicabilityError, build_record, suggest
 from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE
 from src.application.services.framework_catalog_service import CATALOGUE_STORE_KEYS
+from src.application.services import prohibited_practice_service as art5
 from src.application.services.governance_assurance_service import GovernanceAssuranceService
 
 router = APIRouter(tags=["applicability"], dependencies=[Depends(_enforce_org_scope)])
@@ -68,6 +69,14 @@ class ApplicabilityConfirmRequest(BaseModel):
     tier: Literal["low", "medium", "high", "critical"]
     frameworks: List[str] = Field(default_factory=list, max_length=64)
     reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ProhibitedScreenRequest(BaseModel):
+    answers: Dict[str, Literal["yes", "no", "unsure"]] = Field(default_factory=dict)
+
+
+class ProhibitedClearRequest(BaseModel):
+    reason: str = Field(min_length=12, max_length=2000)  # why legal counsel finds no prohibition applies
 
 
 class ApplicabilityAcceptRequest(BaseModel):
@@ -187,3 +196,92 @@ def accept_applicability_override(
         evidence_id=str(uuid.uuid4()), evidence_type="applicability_override_accepted", title=f"Lower risk tier {record['tier']} accepted",
     )
     return {"applicability": record, "gate": _gate_payload(db, system_id, stored_tier)}
+
+
+SCREEN_SOURCE = "fairmind.prohibited_screen"
+
+
+def _save_screen(db: Session, http: Request, actor: str, system_id: str, record: Dict[str, Any], *, evidence_type: str, title: str) -> None:
+    """The screen record in the system's metadata and one evidence row, in one transaction."""
+    _, metadata = _locked_system(db, system_id)
+    now = _utc_now_iso()
+    db.execute(
+        text("UPDATE governance_ai_systems SET metadata_json = :metadata, updated_at = :now WHERE id = :id"),
+        {"id": system_id, "metadata": json.dumps({**metadata, "prohibitedScreen": record}), "now": now},
+    )
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :system_id, :org_id, :evidence_type, :title, :source, :content_json, :confidence, :status, :uploaded_by, :metadata_json, :captured_at, :created_at)"
+        ),
+        {
+            "id": str(uuid.uuid4()), "system_id": system_id, "org_id": _caller_org(http), "evidence_type": evidence_type, "title": title,
+            "source": SCREEN_SOURCE, "content_json": json.dumps(record), "confidence": ATTESTATION_CONFIDENCE, "status": "collected",
+            "uploaded_by": actor, "metadata_json": json.dumps({"provenance_class": "manual", "rules_version": record["rulesVersion"], "computed_at": now}),
+            "captured_at": now, "created_at": now,
+        },
+    )
+    db.commit()
+
+
+@router.get("/applicability/prohibited-practices", dependencies=[Depends(org_member)])
+def prohibited_practice_questions():
+    """The eight Art 5(1)(a)-(h) questions, with the exception notes counsel should weigh."""
+    return {"rulesVersion": art5.RULES_VERSION, "questions": art5.questions()}
+
+
+@router.get("/systems/{system_id}/prohibited-screen")
+def get_prohibited_screen(system_id: str, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    from src.application.services import prohibited_screen_store as store
+
+    record = store.read(db, system_id)
+    return {"screen": record, "blocking": store.blocking_state(record)}
+
+
+@router.put("/systems/{system_id}/prohibited-screen")
+def save_prohibited_screen(
+    system_id: str,
+    body: ProhibitedScreenRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Screen the answers and store the result. The outcome is recomputed here; a new screen drops any earlier clearance."""
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user, mutate=True)
+    actor = _authenticated_actor(current_user)
+    try:
+        record = art5.screen(body.answers)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    record.update({"screenedBy": actor, "screenedAt": _utc_now_iso(), "clearance": None})
+    _save_screen(db, http, actor, system_id, record, evidence_type="prohibited_practice_screen", title=f"Art 5 screen: {record['outcome']}")
+    return {"screen": record, "gate": _gate_payload(db, system_id, _locked_system(db, system_id)[0])}
+
+
+@router.post("/systems/{system_id}/prohibited-screen/clear")
+def clear_prohibited_screen(
+    system_id: str,
+    body: ProhibitedClearRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Legal counsel records why an indicated or unresolved screen does not stop the release. Recorded with who and why;
+    clearing a screen the same person ran is allowed but flagged selfReview, as the ledger does for a self-decided gate."""
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user, mutate=True)
+    actor = _authenticated_actor(current_user)
+    from src.application.services import prohibited_screen_store as store
+
+    record = store.read(db, system_id)
+    if not record:
+        raise HTTPException(status_code=409, detail="Screen the system against Art 5 first")
+    if record.get("outcome") == "clear":
+        raise HTTPException(status_code=409, detail="The screen found nothing to clear")
+    record = {**record, "clearance": {"by": actor, "at": _utc_now_iso(), "reason": body.reason.strip(), "selfReview": actor == record.get("screenedBy")}}
+    _save_screen(db, http, actor, system_id, record, evidence_type="prohibited_practice_clearance", title="Art 5 screen cleared by a person")
+    return {"screen": record, "gate": _gate_payload(db, system_id, _locked_system(db, system_id)[0])}
