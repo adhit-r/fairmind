@@ -33,6 +33,72 @@ interface View {
   tools?: string[]
   prefill?: { purpose: string }
   answers?: OwnerAnswers | null
+  subject?: string
+  questions?: Question[]
+}
+
+interface Question { key: string; text: string; options?: string[]; draft?: string; basis?: string }
+
+function QuestionsForm({ url, subject, questions, previous }: { url: string; subject: string; questions: Question[]; previous: Record<string, string> | null }) {
+  const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(questions.map((q) => [q.key, previous?.[q.key] ?? q.draft ?? ''])))
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function send() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`${url}/questions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, referrerPolicy: 'no-referrer', body: JSON.stringify({ answers: vals }) })
+      if (!res.ok) {
+        const d = await res.json().catch(() => null)
+        throw new Error((d && typeof d.detail === 'string' && d.detail) || REASONS[res.status] || 'Your answers could not be saved')
+      }
+      setDone(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Your answers could not be saved')
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (done) {
+    return (
+      <>
+        <Heading level={1}>Thank you</Heading>
+        <Text color="secondary">Your governance team has your answers. They go back as a draft; a reviewer still confirms.</Text>
+        <HStack>
+          <Button variant="secondary" label="Change my answers" onClick={() => setDone(false)} />
+        </HStack>
+      </>
+    )
+  }
+  return (
+    <>
+      <Heading level={1}>{subject}</Heading>
+      {questions.map((q) => (
+        <section key={q.key} className="fm-card">
+          <VStack gap={2}>
+            <Text weight="semibold">{q.text}</Text>
+            {q.options?.length ? (
+              <HStack gap={2} wrap="wrap">
+                {q.options.map((o) => (
+                  <Button key={o} variant={vals[q.key] === o ? 'primary' : 'secondary'} label={o} onClick={() => setVals((p) => ({ ...p, [q.key]: o }))} />
+                ))}
+              </HStack>
+            ) : (
+              <TextArea label="Your answer" rows={3} value={vals[q.key] ?? ''} onChange={(v) => setVals((p) => ({ ...p, [q.key]: v }))} />
+            )}
+            {q.draft && <Text size="sm" color="secondary">Draft: {q.draft}</Text>}
+            {q.basis && <Text size="sm" color="secondary">{q.basis}</Text>}
+          </VStack>
+        </section>
+      ))}
+      {error && <Banner status="error" title="Not saved" description={error} />}
+      <HStack hAlign="between" vAlign="center" wrap="wrap" gap={3}>
+        <Text size="sm" color="secondary">Your answers go back as a draft; a reviewer still confirms.</Text>
+        <Button variant="primary" label={busy ? 'Sending' : 'Send answers'} isDisabled={busy || !Object.values(vals).some((v) => v.trim())} onClick={() => void send()} />
+      </HStack>
+    </>
+  )
 }
 
 type YesNo = 'yes' | 'no' | 'unsure'
@@ -168,6 +234,13 @@ export default function OwnerCheckPage() {
       <Frame>
         <Heading level={1}>Already handled</Heading>
         <Text color="secondary">Your governance team has already decided about this. Nothing more is needed from you.</Text>
+      </Frame>
+    )
+  }
+  if (view.questions) {
+    return (
+      <Frame>
+        <QuestionsForm url={url} subject={view.subject ?? 'A few questions'} questions={view.questions} previous={view.answers as unknown as Record<string, string> | null} />
       </Frame>
     )
   }

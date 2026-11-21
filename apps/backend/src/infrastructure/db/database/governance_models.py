@@ -4164,7 +4164,7 @@ class GovernanceOwnerCheck(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
-    anchor_asset_id = Column(String, nullable=False, index=True)
+    anchor_asset_id = Column(String, nullable=True, index=True)  # null for a check about something else (subject_type)
     email = Column(String, nullable=False)
     token_hash = Column(String, nullable=False, unique=True)
     expires_at = Column(String, nullable=False)
@@ -4172,6 +4172,36 @@ class GovernanceOwnerCheck(Base):
     created_at = Column(String, nullable=False)
     answered_at = Column(String, nullable=True)
     answers_json = Column(Text, nullable=True)
+    subject_type = Column(String, nullable=True)
+    subject_id = Column(String, nullable=True, index=True)
+    questions_json = Column(Text, nullable=True)
+
+
+class FrameworkScopeDraft(Base):
+    """The agent's draft of whether a framework applies to one system, and the person's decision on it."""
+
+    __tablename__ = "framework_scope_drafts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    framework_key = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    verdict = Column(String, nullable=False)  # in | out | unsure
+    reason = Column(Text, nullable=False)
+    confidence = Column(String, nullable=False)  # high | medium | low
+    evidence_json = Column(Text, nullable=False, default="[]")
+    model = Column(String, nullable=True)  # null when rules drafted it
+    test_version = Column(String, nullable=False)
+    drafted_at = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="draft")  # draft | confirmed | waiting_owner
+    decided_verdict = Column(String, nullable=True)
+    decided_by = Column(String, nullable=True)
+    decided_at = Column(String, nullable=True)
+    decided_reason = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    owner_check_id = Column(String, nullable=True)
+
+    __table_args__ = (UniqueConstraint("org_id", "framework_key", "system_id", name="uq_framework_scope_draft"),)
 
 
 class GovernanceDiscoveryDecision(Base):

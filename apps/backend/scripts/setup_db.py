@@ -74,6 +74,7 @@ ALWAYS = (
     "015_org_scope_legacy_tables.sql",
     "016_registration_requests.sql",
     "017_org_ai_providers.sql",
+    "028_framework_scope.sql",
 )
 
 
