@@ -197,6 +197,10 @@ def load_reference_data(engine) -> None:
     for result in results:
         print(f"reference: {result.framework_key} {'imported' if result.created else 'already present'} "
               f"({result.control_count} controls)")
+    from src.application.services.plan_assignment_service import backfill_all
+
+    with Session(engine) as db:
+        print(f"reference: {backfill_all(db)} plan framework assignments added")
 
 
 def verify(engine) -> int:

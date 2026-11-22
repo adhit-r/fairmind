@@ -38,8 +38,7 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services.applicability_service import USE_KEYS, ApplicabilityError, build_record, suggest
 from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE
-from src.application.services.framework_catalog_service import CATALOGUE_STORE_KEYS
-from src.application.services.governance_assurance_service import GovernanceAssuranceService
+from src.application.services.plan_assignment_service import assign_frameworks
 
 router = APIRouter(tags=["applicability"], dependencies=[Depends(_enforce_org_scope)])
 
@@ -112,13 +111,7 @@ def _save(db: Session, http: Request, actor: str, system_id: str, *, tier: str, 
 def _assign_frameworks(db: Session, org_id: str, system_id: str, frameworks: List[Dict[str, Any]]) -> None:
     """Assign the newest stored version of each confirmed framework the system has no version of yet. Never unassigns,
     and never adds a second version beside a pinned one: a catalogue edit imports a new version on the next deploy."""
-    service = GovernanceAssuranceService(db)
-    assigned = {a["frameworkVersionId"] for a in service.list_assignments(org_id, system_id) or []}
-    for framework in frameworks:
-        store_key = CATALOGUE_STORE_KEYS.get(framework["key"])
-        versions = service.list_versions(store_key) if store_key else []
-        if versions and not assigned & {v["id"] for v in versions}:
-            service.assign_framework(org_id, system_id, versions[0]["id"])
+    assign_frameworks(db, org_id, system_id, [f["key"] for f in frameworks])
 
 
 @router.post("/applicability/suggest", dependencies=[Depends(org_member)])

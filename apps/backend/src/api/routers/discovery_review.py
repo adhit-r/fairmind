@@ -33,6 +33,7 @@ from api.routes import integrations as hub
 from api.routes.ai_governance import _caller_org
 from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
+from src.application.services.plan_assignment_service import ensure_plan_assignments
 
 router = APIRouter(prefix="/discovery", tags=["discovery-review"], dependencies=[Depends(org_member)])
 public_router = APIRouter(tags=["owner-check-public"])
@@ -482,6 +483,8 @@ def decide(candidate_id: str, body: DecideRequest, http: Request, db: Session = 
         },
     )
     db.commit()
+    if system_id:
+        ensure_plan_assignments(db, org, [system_id])
     return {"decision": body.decision, "systemId": system_id}
 
 
