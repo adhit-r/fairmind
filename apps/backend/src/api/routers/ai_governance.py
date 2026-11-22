@@ -29,6 +29,7 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 from database.connection import get_db
 from database.models import OrganizationMember
+from src.application.services.plan_assignment_service import ensure_plan_assignments
 from src.application.services.governance_assurance_service import (
     GovernanceAssuranceService,
     OrgMembership,
@@ -1252,6 +1253,7 @@ def create_ai_system(request: AISystemCreateRequest, http: Request, db: Session 
     system_id = str(request.id or uuid.uuid4())
     if not (request.id and _already_created(db, "governance_ai_systems", system_id, org_id)):
         _insert_ai_system(db, request, system_id, org_id)
+        ensure_plan_assignments(db, org_id, [system_id])
     row = db.execute(
         text(
             "SELECT id, workspace_id, name, owner, risk_tier, lifecycle_stage, metadata_json, created_at, updated_at "
@@ -3052,6 +3054,7 @@ class AuditReportGenerateRequest(BaseModel):
 @router.post("/reports/generate")
 def generate_audit_report(
     request: AuditReportGenerateRequest,
+    http: Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -3164,9 +3167,17 @@ def generate_audit_report(
         }
 
     from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
-    from src.application.services.clause_map_service import clause_map, framework_keys
+    from src.application.services.clause_map_service import _catalogue, clause_map, framework_keys
+    from src.application.services.plan_assignment_service import catalogue_key_for_label, plan_frameworks
 
     gate = _gate_payload(db, system_id, sys_row.risk_tier if sys_row else "medium")
+    # The request names catalogue keys or assurance version labels ("AIUC-1 April, 2026"); with neither resolvable,
+    # use the frameworks the organisation follows in its plan, so the clause map never filters to nothing.
+    catalogue = _catalogue()["frameworks"]
+    named = [k if k in catalogue else catalogue_key_for_label(db, k) for k in framework_keys(request.frameworks) or []]
+    report_frameworks = [k for k in named if k in catalogue] or [
+        k for k in plan_frameworks(db, _caller_org(http)) if k in catalogue
+    ] or None
     data_snapshot = {
         "system": system_data,
         "risks": risks_data,
@@ -3174,7 +3185,7 @@ def generate_audit_report(
         "remediation": remediation_data,
         "approvals": approvals_data,
         "gate": {"verdict": gate.get("verdict"), "confidence": gate.get("confidence"), "checks": gate.get("checks", []), "reasons": gate.get("reasons", [])},
-        "clauseMap": clause_map(gate, frameworks=framework_keys(request.frameworks)),
+        "clauseMap": clause_map(gate, frameworks=report_frameworks),
         "generatedAt": _utc_now_iso(),
     }
 

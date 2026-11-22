@@ -47,6 +47,7 @@ from api.routes.discovery_sources import (
 from api.routes.discovery_sources import steps as read_steps
 from api.routes.org_scope import org_member, org_mutator
 from database.connection import get_db
+from src.application.services.plan_assignment_service import ensure_plan_assignments
 
 # Every query below already filters on the caller's org_id. The dependencies add
 # what the middleware alone did not: an active member of that organisation, and
@@ -972,6 +973,7 @@ def promote_asset(asset_id: str, body: PromoteRequest, http: Request, db: Sessio
         return {"systemId": asset["systemId"], "alreadyPromoted": True}
     system_id = create_system(db, org, asset, owner=body.owner, tier=body.risk_tier, stage=body.lifecycle_stage, business_line=body.business_line)
     db.commit()
+    ensure_plan_assignments(db, org, [system_id])
     return {"systemId": system_id, "alreadyPromoted": False}
 
 
