@@ -172,13 +172,14 @@ export interface Journey {
 
 export type ResultStatus = 'passed' | 'failed' | 'insufficient' | 'not_run'
 /** How FairMind can run an evaluation on a system: call it, read its live runs, read the agent platform, or read uploaded files. */
-export type RunWay = 'calls_system' | 'live_runs' | 'platform' | 'files'
+export type RunWay = 'calls_system' | 'live_runs' | 'platform' | 'fairmind_data' | 'files'
 /** Whether an evaluation is meant for the system's kind; unknown when the system has no kind yet. */
 export type Fit = 'applies' | 'other' | 'unknown'
 /** Read with ?system=: the evaluation's fit for that system and each way it runs, with whether that way is set up. */
 export interface SystemFit {
   fit?: Fit
-  ways?: Array<{ way: RunWay; ready: boolean }>
+  /** reason: why a set-up way still cannot run from here (a replay of live runs on a system the runner calls) */
+  ways?: Array<{ way: RunWay; ready: boolean; reason?: string }>
 }
 /** Results FairMind reads for an evaluation: the organisation-wide status and the latest result per AI system. */
 export interface EvaluationResults {
@@ -508,6 +509,8 @@ export interface EngineSpec extends SystemFit {
   kind?: string | null
   /** The engine that reads live runs when it is not this one (its settings differ from the upload's). */
   liveRunsEngine?: EngineSpec | null
+  /** Slots a person may upload beside live runs, with help for the form. */
+  liveRunsUploads?: Array<{ name: string; help: string }>
 }
 
 /** A behaviour test running in the background. */
@@ -582,6 +585,8 @@ export interface EngineRun {
   provenance?: { class: 'measured_live' | 'computed_from_upload'; modelJudged: boolean } | null
   /** Settings looser than the catalogue's: the run shows its result but proves nothing. */
   thresholdLoosened?: Array<{ param: string; value: number; catalogue: number | null }> | null
+  /** A zero-tolerance check that read only part of the week's live runs: a pass proves nothing. */
+  partialRead?: boolean
 }
 
 /** One step of a live run, as the system's own code reported it. `rationale` is the reason it stated; FairMind does not check it. */
@@ -593,7 +598,8 @@ export interface TraceStep {
   input: unknown
   output: unknown
   rationale: string | null
-  status: 'running' | 'ok' | 'error'
+  /** blocked: a guardrail stopped the call */
+  status: 'running' | 'ok' | 'error' | 'blocked'
   error: string | null
   startedAt: string | null
   endedAt: string | null

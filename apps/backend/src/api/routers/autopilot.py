@@ -37,7 +37,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes import evaluation_runs, llm
-from api.routes.agent_traces import TRACE_ENGINES, TRACE_READERS
+from api.routes.agent_traces import TRACE_ENGINES, read_live_runs
 from api.routes.ai_governance import _authenticated_actor, _caller_org, _ensure_tables, _require_system_access
 from api.routes.fairness_runs import (
     MAX_UPLOAD_BYTES,
@@ -286,13 +286,13 @@ def _chat_setup(db: Session, org_id: str, system_id: str) -> tuple:
 
 
 async def _evaluation_run(db: Session, org_id: str, system_id: str, evaluation_id: str, live_runs: Optional[tuple] = None) -> tuple:
-    """A behaviour test on the saved connection; live_runs=(engine, files, params) runs an engine that replays live runs instead."""
+    """A behaviour test on the saved connection; live_runs=(engine, files, params, names) runs an engine that replays live runs instead."""
     if live_runs:
-        engine, files, params = live_runs
+        engine, files, params, names = live_runs
         judge, target = _replay_setup(db, org_id, system_id)
     else:
         judge, target = _chat_setup(db, org_id, system_id)
-        engine, files, params = _behaviour_engine(evaluation_id), {}, {}
+        engine, files, params, names = _behaviour_engine(evaluation_id), {}, {}, {}
     system = db.execute(text("SELECT name, risk_tier, lifecycle_stage FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
     facts = {"name": system[0], "risk_tier": system[1], "lifecycle_stage": system[2]}
     previous = evaluation_runs._previous_metrics(db, system_id, evaluation_id)
@@ -306,7 +306,6 @@ async def _evaluation_run(db: Session, org_id: str, system_id: str, evaluation_i
     )
     db.commit()
     # A person's run, awaited here instead of in a request's background: probes, judge and the stored evidence.
-    names = {"traces": "Live runs, last 7 days"} if files else {}
     await evaluation_runs._run_job(db.get_bind(), job_id, org_id, by, system_id, evaluation_id, engine, files, names, params, judge, target, facts, previous)
     job = evaluation_runs._job_row(db, job_id)
     if job["status"] != "done":
@@ -366,9 +365,9 @@ async def _live_run_evaluation(db: Session, org_id: str, system_id: str, evaluat
     params = dict(_last_live_run_params(db, system_id, evaluation_id) or {})
     engine = TRACE_ENGINES.get(evaluation_id, REGISTRY[evaluation_id])
     try:
-        files = TRACE_READERS[evaluation_id](db, system_id, params)
+        files, names, partial = read_live_runs(db, evaluation_id, system_id, params)
         if evaluation_id in TRACE_ENGINES:  # replays the runs on the saved connection, as a person's job does
-            return await _evaluation_run(db, org_id, system_id, evaluation_id, (engine, files, params))
+            return await _evaluation_run(db, org_id, system_id, evaluation_id, (engine, files, params, names))
         db.rollback()  # hold no transaction open while the engine computes
         outcome = await run_in_threadpool(engine.run, files, params)
     except HTTPException as e:
@@ -377,7 +376,7 @@ async def _live_run_evaluation(db: Session, org_id: str, system_id: str, evaluat
         raise AutopilotError(str(e))
     by = f"agent:{AUTOPILOT_ACTOR}"
     evidence_id = evaluation_runs._store_run(db, org_id, by, system_id, evaluation_id,
-                                             {**outcome, "params": params, "files": {"traces": "Live runs, last 7 days"}, "source": "traces",
+                                             {**outcome, "params": params, "files": names, "source": "traces", **({"partialRead": True} if partial else {}),
                                               **evaluation_runs._record(engine, evaluation_id, "file", files, params),
                                               "provenance": {"class": "computed_from_upload", "modelJudged": False}})
     return evidence_id, f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on this week's live runs; {outcome['status']}"

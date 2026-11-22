@@ -69,7 +69,10 @@ export function snapshotLabel(run: Pick<MonitoringRunSummary, 'allChecksPass' | 
   return `${lead}, outside thresholds: ${failing.length ? failing.join(', ') : 'at least one check'}`
 }
 
-const LIVE_RUN_EVALUATIONS: Record<string, string> = { 'EV-MON-02': 'Tool calls', 'EV-TST-03': 'Groundedness' }
+const LIVE_RUN_EVALUATIONS: Record<string, string> = {
+  'EV-MON-02': 'Tool calls', 'EV-TST-03': 'Groundedness', 'EV-DAT-01': 'Prompt drift', 'EV-AGT-02': 'Out-of-scope actions',
+  'EV-TST-06': 'Tool-call correctness', 'EV-MON-05': 'Runaway loops', 'EV-SEC-16': 'Secrets in context',
+}
 const RESULT_TONE: Record<string, string> = { passed: 'text-[#1f7a4d]', failed: 'text-[#b4232c]', insufficient: 'text-[var(--fm-ink2)]' }
 
 export const traceSnippet = (systemId: string) => `from fairmind import FairMind

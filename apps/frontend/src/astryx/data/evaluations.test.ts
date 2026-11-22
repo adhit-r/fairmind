@@ -12,6 +12,8 @@ test('the run page opens on calling the system when ready, then live runs, then 
   assert.equal(defaultWay([w('calls_system', false), w('live_runs', false), w('files')]), 'files')
   assert.equal(defaultWay([w('calls_system', false)]), 'calls_system') // shows its setup
   assert.equal(defaultWay([w('platform'), w('files')]), 'platform')
+  assert.equal(defaultWay([w('fairmind_data'), w('files')]), 'fairmind_data') // records FairMind holds beat an upload
+  assert.equal(defaultWay([w('fairmind_data', false), w('files')]), 'files')
   assert.equal(defaultWay([w('files'), w('live_runs')], 'live_runs'), 'live_runs') // asked by a link
   assert.equal(defaultWay([w('files'), w('live_runs', false)], 'live_runs'), 'files') // asked, but no live runs yet
   assert.equal(defaultWay([w('files')], 'live_runs'), 'files')
@@ -44,6 +46,7 @@ test('a run is kept as measured live only when FairMind called the system or rea
   assert.equal(keptAs('platform'), 'Measured live')
   assert.equal(keptAs('live_runs'), 'Computed from upload')
   assert.equal(keptAs('files'), 'Computed from upload')
+  assert.equal(keptAs('fairmind_data'), 'Computed from FairMind records') // nothing is uploaded
   assert.equal(keptAs('files', true), 'Measured live') // FairMind's own agent answers live
   assert.equal(keptAs('live_runs', true), 'Computed from upload')
   assert.equal(keptAs('live_runs', false, true), 'Measured live') // Explanation quality replays live runs on the connection

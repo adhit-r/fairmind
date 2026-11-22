@@ -265,3 +265,24 @@ def test_tst02_tfidf_not_used_for_exact_repeats():
     # identical answers after case/punctuation normalisation agree without any vector similarity
     d = rows_csv(["prompt", "answer"], [["q", "Pay by July."], ["q", "pay by july"]])
     assert run("EV-TST-02", answers=d)["metrics"]["consistentShare"] == pytest.approx(1.0)
+
+
+@known_answer("EV-TST-02")
+def test_tst02_reversals_and_changed_numbers_disagree_however_similar():
+    # Each pair shares nearly every word, so TF-IDF alone calls it consistent; each still gives a different answer.
+    pairs = [
+        ("q0", "Yes, you can claim the refund online.", "No, you can claim the refund online."),  # yes against no
+        ("q1", "The refund is allowed for this order.", "The refund is not allowed for this order."),  # one negated
+        ("q2", "The fee is 1,000 rupees and is due in 30 days.", "The fee is 1,500 rupees and is due in 30 days."),  # numbers
+        ("q3", "No, the refund isn't allowed.", "The refund is not allowed."),  # both negative: agree
+        ("q4", "Pay 1,000 rupees within 30 days.", "Pay 1000 rupees within 30 days."),  # the same numbers written two ways: agree
+        ("q5", "Paris is the capital.", "Paris is the capital, home to 2 million people."),  # one adds a figure: agree
+        ("q6", "Sure, it works.", "It works, no problem."),  # an idiom is not a negation: agree
+        ("q7", "Right now it is closed.", "No, it is closed."),  # "right now" is no reply word, "No," no negation: agree
+    ]
+    d = rows_csv(["prompt", "answer"], [r for p, a, b in pairs for r in ([p, a], [p, b])])
+    out = run("EV-TST-02", {"similarity": 0.1}, answers=d)
+    assert (out["metrics"]["inconsistentPrompts"], out["metrics"]["contradictedPrompts"]) == (3, 3)
+    assert {r["prompt"]: r["contradiction"] for r in out["detail"]} == {
+        "q0": "yes against no", "q1": "one answer is negated", "q2": "different numbers"}
+    assert out["metrics"]["consistentShare"] == pytest.approx(5 / 8) and out["status"] == "failed"

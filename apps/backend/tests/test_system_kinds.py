@@ -71,7 +71,7 @@ def test_evaluations_for_a_system_say_whether_they_fit_and_which_ways_are_ready(
 
     rows = {e["id"]: e for e in client.get(f"{PACKS}/evaluations", params=q).json()}
     assert rows["EV-SEC-01"]["fit"] == "unknown" and _ways(rows["EV-SEC-01"]) == {"calls_system": False}
-    assert _ways(rows["EV-DAT-01"]) == {"files": True}
+    assert _ways(rows["EV-DAT-01"]) == {"live_runs": False, "files": True}  # prompts from live runs once they arrive
     assert _ways(rows["EV-SEC-06"]) == {"platform": False, "files": True}
     assert _ways(rows["EV-TST-03"]) == {"calls_system": False, "live_runs": False}
     assert "fit" not in client.get(f"{PACKS}/evaluations/EV-SEC-01").json()  # without ?system= nothing changes
@@ -92,7 +92,7 @@ def test_evaluations_for_a_system_say_whether_they_fit_and_which_ways_are_ready(
     one = client.get(f"{PACKS}/evaluations/EV-TST-03", params=q).json()
     assert one["fit"] == "applies" and _ways(one) == {"calls_system": True, "live_runs": True}
     spec = client.get(f"{PACKS}/evaluations/EV-DAT-01/engine", params=q).json()
-    assert (spec["kind"], spec["fit"], _ways(spec)) == ("llm_app", "applies", {"files": True})
+    assert (spec["kind"], spec["fit"], _ways(spec)) == ("llm_app", "applies", {"live_runs": True, "files": True})
     assert client.get(f"{PACKS}/evaluations/EV-FAI-01", params=q).json()["fit"] == "other"
 
     other_org, _ = _org(tmp_database)

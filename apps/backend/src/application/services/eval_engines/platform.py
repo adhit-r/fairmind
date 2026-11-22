@@ -17,7 +17,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 from .common import Engine, EngineError, Judge, Param, Slot, read_json, result, split
 from .detectors import INSTRUCTIONS, SECRETS, mask, scan
-from .ops import PIN_PIP, _host, _pct, _scrub, clause_rows
+from .ops import NO_JUDGE, PIN_PIP, _host, _pct, _scrub, clause_rows, clause_status
 
 COLLECTIONS = ("agents", "environments", "deployments", "vaults", "memory_stores", "sessions")
 BUILTIN_TOOLS = ("bash", "read", "write", "edit", "glob", "grep", "web_fetch", "web_search")
@@ -154,24 +154,31 @@ def system_prompts(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional
     if not agents:
         return result("insufficient", "The platform has no active agents, so there is no system prompt to check.", {"agents": 0})
     unread = _unread(agents, "system")
-    rows, failing = [], []
+    rows, failing, open_ = [], [], []
     for agent in agents:
         if "system" not in agent:
             continue
         text = agent.get("system") or ""
-        clauses = clause_rows(text, params) if text.strip() else [{"clause": "system prompt", "present": False, "matched": ""}]
+        clauses = clause_rows(text, params, judge) if text.strip() else [{"clause": "system prompt", "present": False, "matched": ""}]
         rows += [{"agent": _name(agent), **r} for r in clauses]
-        if not all(r["present"] for r in clauses):
+        status = clause_status(clauses, judge is not None)
+        if status == "failed":
             failing.append(_name(agent))
+        elif any(r["present"] is None for r in clauses):
+            open_.append(_name(agent))
     read = len(agents) - len(unread)
     metrics = {"agents": len(agents), "agentsMissingClauses": len(failing), "coverage": round(1 - len(failing) / read, 4) if read else None,
-               "unread": len(unread)}
+               "unread": len(unread), "judgeUsed": judge is not None}
     if failing:
         return result("failed", f"{len(failing)} of {len(agents)} agents lack a required clause: {', '.join(failing[:6])}.", metrics, rows)
     if unread:
         return result("insufficient", f"{len(unread)} of {len(agents)} agents carry no system prompt field, so their prompts were not read: "
                       f"{', '.join(unread[:6])}.", metrics, rows)
-    return result("passed", f"Every one of the {len(agents)} agents defines its role and scope and treats input as untrusted.", metrics, rows)
+    if judge is None:
+        return result("insufficient", f"Every one of the {len(agents)} agents' prompts has a keyword for each required clause; {NO_JUDGE}.", metrics, rows)
+    if open_:
+        return result("insufficient", f"Your model gave no verdict on some clauses for {', '.join(open_[:6])}.", metrics, rows)
+    return result("passed", f"Every one of the {len(agents)} agents defines its role and scope and treats input as untrusted, by your model's reading.", metrics, rows)
 
 
 # --- EV-DEV-02 credential hygiene ------------------------------------------------------------------
@@ -461,9 +468,11 @@ def memory_scan(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Ju
     return result("passed", f"No planted instructions or secrets in {total} memories, by pattern and by your model.{tail}", metrics)
 
 
-# --- EV-SEC-20 isolation between sessions ----------------------------------------------------------
+# --- EV-SEC-20 paths out of the code sandbox -------------------------------------------------------
 
 def session_isolation(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Judge]) -> Dict[str, Any]:
+    """The configured paths by which agent-run code reaches the network or another agent: unrestricted egress from the sandbox
+    and memory stores more than one agent can write. A flaw in the sandbox itself needs an escape suite run inside it."""
     if "sessions" not in snap and "deployments" not in snap:
         raise EngineError("The configuration holds no sessions or deployments")
     runs = [("session", s) for s in _live(snap, "sessions")] + [("deployment", d) for d in _live(snap, "deployments")]
@@ -476,20 +485,42 @@ def session_isolation(snap: Dict[str, Any], params: Dict[str, Any], judge: Optio
         for res in run.get("resources") or []:
             if res.get("type") == "memory_store" and (res.get("access") or "read_write") == "read_write":
                 writers[res.get("memory_store_id")].add(agent_id)
+    no_resources = [_name(r) for _, r in runs if "resources" not in r]  # not read, which is not the same as read and empty
     names = {s.get("id"): _name(s) for s in snap.get("memory_stores") or []}
     rows = [{"finding": "memory store written by several agents", "resource": names.get(store, store), "agents": len(agents), "counted": True}
             for store, agents in writers.items() if len(agents) > 1]
-    self_hosted = [e for e in snap.get("environments") or [] if e.get("id") in envs_used and (e.get("config") or {}).get("type") == "self_hosted"]
+    envs = {e.get("id"): e for e in snap.get("environments") or []}
+    used = [envs[i] for i in envs_used if i in envs]
+    unread = sorted(str(i) for i in envs_used if i not in envs)
+    self_hosted = [e for e in used if (e.get("config") or {}).get("type") == "self_hosted"]
+    open_net = [e for e in used if (e.get("config") or {}).get("type") != "self_hosted" and ((e.get("config") or {}).get("networking") or {}).get("type") != "limited"]
+    rows += [{"finding": "sandbox egress unrestricted: agent-run code can reach any host", "resource": _name(e), "agents": 0, "counted": True} for e in open_net]
     rows += [{"finding": "self-hosted sandbox: isolation is your infrastructure's", "resource": _name(e), "agents": 0, "counted": False} for e in self_hosted]
     counted = sum(1 for r in rows if r["counted"])
     metrics = {"sessions": sum(1 for k, _ in runs if k == "session"), "deployments": sum(1 for k, _ in runs if k == "deployment"),
-               "sharedWritableStores": counted, "selfHostedEnvironments": len(self_hosted)}
+               "escapePaths": counted, "sharedWritableStores": sum(1 for r in rows if r["counted"] and r["agents"]),
+               "unrestrictedEgress": len(open_net), "selfHostedEnvironments": len(self_hosted), "environmentsUnread": len(unread),
+               "resourcesUnread": len(no_resources), "sessionsCapped": bool(snap.get("sessions_capped"))}
     if counted:
-        return result("failed", f"{counted} memory stores are writable by sessions of more than one agent, so one agent can plant what another reads.", metrics, rows)
+        return result("failed", f"{counted} configured paths out of the sandbox: {metrics['sharedWritableStores']} memory stores more than one "
+                      f"agent can write, so one agent can plant what another reads, and {len(open_net)} environments with unrestricted egress.", metrics, rows)
     if not runs:
         return result("insufficient", "No sessions or deployments to read.", metrics)
-    return result("insufficient", f"No writable state is shared between agents across {len(runs)} sessions and deployments; whether "
-                  "one session's sandbox can reach another's is a runtime property that configuration cannot show.", metrics, rows)
+    if unread:
+        return result("insufficient", f"The environments {', '.join(unread[:6])} that sessions run in were not read, so their sandbox and "
+                      "egress are unknown.", metrics, rows)
+    if no_resources:
+        return result("insufficient", f"{len(no_resources)} sessions and deployments carry no resources field, so which memory stores "
+                      f"they write was not read: {', '.join(no_resources[:6])}.", metrics, rows)
+    if snap.get("sessions_capped"):
+        return result("insufficient", f"Only the newest {metrics['sessions']} sessions were read, so an older session of another agent "
+                      "writing the same memory store would not be seen.", metrics, rows)
+    if self_hosted:
+        return result("insufficient", f"{len(self_hosted)} environments are self-hosted, so their isolation is set in your own infrastructure "
+                      "and cannot be read here.", metrics, rows)
+    return result("passed", f"No configured path out of the sandbox across {len(runs)} sessions and deployments: every environment they use is "
+                  "platform-hosted with egress limited to named hosts, and no memory store is writable by more than one agent. This reads "
+                  "configuration; it does not run an escape suite inside the sandbox.", metrics, rows)
 
 
 # --- EV-SEC-18 shadow MCP servers and agents -------------------------------------------------------
@@ -526,7 +557,18 @@ def shadow_mcp(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Jud
     return result("passed", f"All {checked} are on the approved register.", metrics)
 
 
-# --- EV-SEC-19 MCP authentication --------------------------------------------------------------------
+# --- EV-SEC-19 MCP authentication and authorisation -------------------------------------------------
+
+def _grant(agent: Dict[str, Any], server: str) -> Optional[str]:
+    """How the agent's toolset authorises its calls to one MCP server: None when every call is limited to tools it names or a
+    person approves; otherwise what it allows. The platform refuses a call to an MCP tool the toolset does not enable."""
+    if "tools" not in agent:
+        return "not read: the configuration holds no tool list"
+    base = next((t for t in tools(agent) if t["tool"].lower() == f"mcp:{server}".lower()), None)
+    if base and base["enabled"] and base["policy"] != "always_ask":
+        return f"every tool the server lists, {base['policy']}"
+    return None
+
 
 def mcp_auth(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Judge]) -> Dict[str, Any]:
     agents = _agents_or_raise(snap)
@@ -545,7 +587,10 @@ def mcp_auth(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Judge
                 if not c.get("archived_at") and auth.get("mcp_server_url"):
                     creds[_norm_url(auth["mcp_server_url"])] = auth.get("type")
         for server in agent.get("mcp_servers") or []:
-            row = {"agent": _name(agent), "server": str(server.get("name", "")), "host": _server_host(server)}
+            grant = _grant(agent, str(server.get("name", "")))
+            row = {"agent": _name(agent), "server": str(server.get("name", "")), "host": _server_host(server),
+                   "authorisation": grant or "named tools, or a person approves each call",
+                   "overAuthorised": bool(grant) and not grant.startswith("not read"), "grantUnread": bool(grant) and grant.startswith("not read")}
             if not server.get("url"):
                 rows.append({**row, "auth": "local process", "counted": False})
             elif any(str(k).lower() == "authorization" for k in (server.get("headers") or {})):
@@ -557,24 +602,33 @@ def mcp_auth(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Judge
                 rows.append({**row, "auth": kind or "none: connects unauthenticated", "counted": kind is None,
                              "vaultScope": "vaults its sessions attach" if attached.get(agent.get("id")) else "every vault"})
     missing = [r for r in rows if r["counted"]]
+    over = [r for r in rows if r["overAuthorised"]]
     unknown = [r for r in rows if r.get("unknown")]
-    rows.sort(key=lambda r: not r["counted"])
-    metrics = {"agents": len(agents), "mcpServers": len(rows), "unauthenticated": len(missing), "unread": len(unknown)}
-    if missing:
-        return result("failed", f"{len(missing)} of {len(rows)} MCP servers have no vault credential, so the agent connects to them unauthenticated.", metrics, rows)
+    grant_unread = [r for r in rows if r["grantUnread"]]
+    rows.sort(key=lambda r: not (r["counted"] or r["overAuthorised"]))
+    metrics = {"agents": len(agents), "mcpServers": len(rows), "unauthenticated": len(missing), "overAuthorised": len(over),
+               "unread": len(unknown), "authorisationUnread": len(grant_unread)}
+    if missing or over:
+        return result("failed", f"Of {len(rows)} MCP servers, {len(missing)} have no vault credential, so the agent connects unauthenticated, "
+                      f"and {len(over)} let the agent call every tool the server lists without a person approving; name the tools in the "
+                      "toolset or set always_ask.", metrics, rows)
     if not rows:
         return result("passed", f"None of the {len(agents)} agents connects to an MCP server.", metrics)
     if unknown:
         return result("insufficient", f"{len(unknown)} MCP servers could not be checked because the configuration holds no vaults.", metrics, rows)
-    return result("insufficient", f"All {len(rows)} MCP servers authenticate; whether each server enforces per-tool authorisation "
-                  "is decided by the server and cannot be read from configuration.", metrics, rows)
+    if grant_unread:
+        return result("insufficient", f"{len(grant_unread)} MCP servers belong to agents that carry no tool list, so which of their tools "
+                      "the agent may call was not read.", metrics, rows)
+    return result("passed", f"All {len(rows)} MCP servers authenticate, and each agent calls only the tools its toolset names or a person "
+                  "approves each call; this reads the platform's grants, not a probe of each server with test identities.", metrics, rows)
 
 
 # --- declarations ----------------------------------------------------------------------------------
 
 # Catalogue entries whose upload engine also reads platform configuration: id -> (check, method, judge).
 EXTENDS: Dict[str, Tuple[Any, str, bool]] = {
-    "EV-DEV-01": (system_prompts, "Each active agent's system prompt is checked for the same required clauses; every agent must have them all.", False),
+    "EV-DEV-01": (system_prompts, "Your model judges each active agent's system prompt for the same required clauses; every agent must have them "
+                  "all. Keywords alone can fail an agent but never pass it.", True),
     "EV-DEV-02": (credential_hygiene, "Every agent, environment and deployment field is matched against credential formats, MCP URLs are checked for "
                   "embedded credentials, and vault credentials are flagged when static or not limited to their hosts.", False),
     "EV-SEC-14": (environment_packages, "Each package an environment installs is checked for an exact version pin in its package manager's syntax.", False),
@@ -607,7 +661,8 @@ ENGINES: List[Engine] = [
     ),
     Engine(
         id="EV-SEC-20",
-        method="Sessions and deployments are read for memory stores more than one agent can write; container isolation itself needs a behaviour test.",
+        method="Reads the configured paths out of the code sandbox: environments with unrestricted egress, self-hosted sandboxes and memory "
+               "stores more than one agent can write. It does not run an escape suite inside the sandbox.",
         slots=(EXPORT,),
         platform=session_isolation,
     ),
@@ -623,7 +678,8 @@ ENGINES: List[Engine] = [
     ),
     Engine(
         id="EV-SEC-19",
-        method="Each MCP server an agent declares must have a vault credential for its URL in the vaults its sessions attach; per-tool authorisation is the server's.",
+        method="Each MCP server an agent declares must have a vault credential for its URL in the vaults its sessions attach, and the agent's toolset "
+               "must limit it to tools it names or make a person approve each call; an always-on toolset with no approval fails.",
         slots=(EXPORT,),
         platform=mcp_auth,
     ),

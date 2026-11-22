@@ -9,6 +9,8 @@ error-rate gap from being judged. The run's own significance-gated checks do not
 from src.application.services.evaluation_results import RULES
 from tests.known_answer import known_answer
 
+GAP = "; error-rate gap not measured: monitoring runs carry no outcomes"  # EV-FAI-07 says what it leaves out
+
 
 def _attr(name, ratio=0.9, di=True, eo=0.02, eodds=0.03, eo_ok=True, eodds_ok=True, groups=None, **extra):
     groups = groups or {"a": 30, "b": 40}
@@ -82,19 +84,37 @@ def test_india_attribute_rule():
 
 @known_answer("EV-FAI-07")
 def test_fairness_drift_rule():
+    # The change in impact ratio between the reference fairness run and the monitoring run decides, not the selection-rate
+    # drift; the catalogue alerts on a change of 0.05 or more, so a change of exactly 0.05 fails.
+    def mon(name, change, max_rate_drift=0.0):
+        return _attr(name, baseline_selection_rates={"a": 0.6, "b": 0.6}, impact_ratio_change=change, max_rate_drift=max_rate_drift)
+
     assert _rule("EV-FAI-07", {}) is None
-    # Attributes without a baseline comparison: insufficient.
     assert _rule("EV-FAI-07", {"attributes": [_attr("gender")]}) == ("insufficient", "No baseline run to compare against")
-    stable = _attr("gender", max_rate_drift=0.04)
-    stable["checks"]["selection_rate_stable"] = True
-    assert _rule("EV-FAI-07", {"attributes": [stable]}) == ("passed", "Largest selection-rate drift 0.040")
-    moved = _attr("age", max_rate_drift=0.12)
-    moved["checks"]["selection_rate_stable"] = False
-    assert _rule("EV-FAI-07", {"attributes": [stable, moved]}) == ("failed", "Largest selection-rate drift 0.120")
-    # The catalogue alerts on a change of 0.05 or more; a run stored when its check passed exactly 0.05 is drift too.
-    edge = _attr("gender", max_rate_drift=0.05)
-    edge["checks"]["selection_rate_stable"] = True
-    assert _rule("EV-FAI-07", {"attributes": [edge]}) == ("failed", "Largest selection-rate drift 0.050")
+    old = _attr("gender", baseline_selection_rates={"a": 0.6}, max_rate_drift=0.01)
+    assert _rule("EV-FAI-07", {"attributes": [old]}) == ("insufficient", "The run predates impact-ratio drift; run monitoring again")
+    # Both groups' rates fell 0.12 (selection-rate drift 0.12) but the ratio moved 0.04: no fairness drift, passes.
+    assert _rule("EV-FAI-07", {"attributes": [mon("gender", 0.04, 0.12)]}) == ("passed", "Largest impact-ratio change 0.040 (gender)" + GAP)
+    assert _rule("EV-FAI-07", {"attributes": [mon("gender", 0.04), mon("age", 0.12)]}) == ("failed", "Largest impact-ratio change 0.120 (age)" + GAP)
+    assert _rule("EV-FAI-07", {"attributes": [mon("gender", 0.05)]}) == ("failed", "Largest impact-ratio change 0.050 (gender)" + GAP)
+    # An attribute whose ratio is not measurable keeps a pass elsewhere from proving the whole run.
+    status, _ = _rule("EV-FAI-07", {"attributes": [mon("gender", 0.01), mon("age", None)]})
+    assert status == "insufficient"
+    assert _rule("EV-FAI-07", {"attributes": [mon("age", None)]})[0] == "insufficient"
+
+
+@known_answer("EV-FAI-07")
+def test_monitoring_run_stores_the_impact_ratio_change_against_the_reference_run():
+    # Reference: a 0.6, b 0.5 over 40 rows each, ratio 0.5/0.6 = 0.8333. Current: a 0.5, b 0.4 (20 of 40, 16 of 40), ratio 0.8:
+    # change 0.0333 though each group's rate fell 0.1.
+    from src.application.services.fairness_run_service import run_monitoring
+    rows = [("a", 1)] * 20 + [("a", 0)] * 20 + [("b", 1)] * 16 + [("b", 0)] * 24
+    csv = ("group,pred\n" + "".join(f"{g},{p}\n" for g, p in rows)).encode()
+    baseline = {"attributes": [{"attribute": "group", "groups": {"a": 40, "b": 40}, "selection_rates": {"a": 0.6, "b": 0.5}}]}
+    a = run_monitoring(csv, attributes=["group"], prediction="pred", baseline=baseline, favorable_label="1")["attributes"][0]
+    assert a["impact_ratio"] == 0.8 and round(a["baseline_impact_ratio"], 4) == 0.8333 and a["impact_ratio_change"] == 0.033333
+    assert round(a["max_rate_drift"], 6) == 0.1
+    assert RULES["EV-FAI-07"][1]({"attributes": [a]}) == ("passed", "Largest impact-ratio change 0.033 (group)" + GAP)
 
 
 @known_answer("EV-ENV-01")

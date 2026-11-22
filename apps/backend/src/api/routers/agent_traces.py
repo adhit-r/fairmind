@@ -11,6 +11,8 @@ DELETE /ai-systems/{id}/traces/{trace_id}
 The customer's own code sends these (the SDK's record_trace), keyed by its own trace id and step ids, so
 re-sending a step updates it instead of adding a second one. A step is a model call, a tool call, a
 retrieval, a memory read or write, or a decision; its input and output are whatever JSON the caller has.
+A tool step a guardrail stopped has status blocked. A test run may send expectedCalls, the tool calls it
+should make in order, each {tool, args}; Tool-call correctness (EV-TST-06) compares the run's tool steps with them.
 
 A rationale is the reason the system itself stated, on a step or on the whole trace. It is stored as
 stated: nothing here checks that it reflects what the model computed. Coverage is the share of model
@@ -45,11 +47,20 @@ MAX_TEXT = 20_000  # characters kept of any one input, output or rationale
 MAX_TRACE_STEPS = 10_000  # per trace, across all requests
 DECISIONS = ("llm", "tool", "decision")  # the step kinds a rationale is expected on
 Status = Literal["running", "ok", "error"]
+StepStatus = Literal["running", "ok", "error", "blocked"]  # blocked: a guardrail stopped the call (EV-AGT-02 reads it)
 WEEK = timedelta(days=7)  # the live runs an evaluation reads
 BASELINE = timedelta(days=28)  # EV-MON-02 compares the week with the four weeks before it
 SUMMARY_DAYS = 14
 MAX_GROUNDED = 200  # EV-TST-03 judges at most this many runs, the newest; the engine's own probe limit
 MAX_EXPLAINED = 50  # EV-OVS-04 replays each run about 20 times, so it tests at most this many
+MAX_PROMPTS = 2000  # EV-DAT-01 compares at most this many prompts a side, the newest
+MAX_TOOL_CALLS = 50_000  # EV-AGT-02 and EV-MON-05 read at most this many tool calls, the newest runs first
+MAX_SCENARIOS = 500  # EV-TST-06 compares at most this many runs, the newest
+MAX_CONTEXT = 5_000_000  # characters of run text EV-SEC-16 scans, the newest runs first
+MAX_CONTEXT_RUNS = 2000  # and at most this many runs
+LIVE_RUNS = "Live runs, last 7 days"
+NOTE = "_live_runs_note"  # a reader that read part of the runs, or older ones, says so here; read_live_runs moves it into the file names
+PARTIAL = "_live_runs_partial"  # a zero-tolerance reader that read only part of the week sets this: its pass proves nothing
 
 
 def _clean(s: str) -> str:
@@ -72,10 +83,15 @@ class StepBody(_Body):
     input: Any = None
     output: Any = None
     rationale: Optional[str] = None
-    status: Optional[Status] = None  # ok when never sent
+    status: Optional[StepStatus] = None  # ok when never sent
     error: Optional[str] = None
     startedAt: Optional[str] = Field(default=None, max_length=40)
     endedAt: Optional[str] = Field(default=None, max_length=40)
+
+
+class ExpectedCall(_Body):
+    tool: str = Field(min_length=1, max_length=300)
+    args: Optional[Dict[str, Any]] = None  # each one the call must carry with this value; others may differ
 
 
 class TraceBody(_Body):
@@ -88,6 +104,7 @@ class TraceBody(_Body):
     startedAt: Optional[str] = Field(default=None, max_length=40)
     endedAt: Optional[str] = Field(default=None, max_length=40)
     steps: List[StepBody] = Field(default_factory=list, max_length=MAX_STEPS)
+    expectedCalls: Optional[List[ExpectedCall]] = Field(default=None, max_length=MAX_STEPS)
 
 
 def _text(value: Optional[str], cut: List[bool]) -> Optional[str]:
@@ -143,7 +160,10 @@ def _trace_json(row, steps: int, decisions: int, explained: int) -> Dict[str, An
 def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
-    now, cut = _utc_now_iso(), [False]
+    now, cut, over = _utc_now_iso(), [False], [False]
+    expected = None if body.expectedCalls is None else _clip([c.model_dump(exclude_none=True) for c in body.expectedCalls], over)
+    if over[0]:  # a cut list is no longer JSON, and EV-TST-06 could not compare the run
+        raise HTTPException(status_code=413, detail=f"expectedCalls is over {MAX_TEXT:,} characters as JSON; send fewer calls or shorter arguments")
     sent = {
         "name": body.name,
         "status": body.status,
@@ -152,6 +172,7 @@ def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_ma
         "rationale": _text(body.rationale, cut),
         "started_at": body.startedAt,
         "ended_at": body.endedAt,
+        "expected_calls": expected,
     }
     # A later call that leaves a field out keeps what an earlier call stored.
     # status reads the parameter: excluded.status already holds the insert's 'running' default.
@@ -161,8 +182,8 @@ def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_ma
     pk = db.execute(
         text(
             "INSERT INTO governance_agent_traces (id, org_id, system_id, trace_id, name, status, input, output, rationale, "
-            "started_at, ended_at, truncated, received_at, updated_at) VALUES (:id, :org, :sid, :tid, :name, COALESCE(:status, 'running'), "
-            ":input, :output, :rationale, :started_at, :ended_at, :cut, :now, :now) "
+            "started_at, ended_at, expected_calls, truncated, received_at, updated_at) VALUES (:id, :org, :sid, :tid, :name, COALESCE(:status, 'running'), "
+            ":input, :output, :rationale, :started_at, :ended_at, :expected_calls, :cut, :now, :now) "
             f"ON CONFLICT (system_id, trace_id) DO UPDATE SET {keep}, updated_at = excluded.updated_at RETURNING id"
         ),
         {"id": _new_id(), "org": m.org_id, "sid": system_id, "tid": body.traceId, "cut": False, "now": now, **sent},
@@ -291,9 +312,8 @@ def _tst03_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[st
             {"pk": t["id"]},
         ).scalars().all()
         if sources:
-            text_of = lambda v: v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)  # noqa: E731
-            probes.append({"traceId": t["trace_id"], "prompt": text_of(_value(t["input"]) or ""), "answer": text_of(_value(t["output"])),
-                           "source": "\n\n".join(text_of(_value(x)) for x in sources)})
+            probes.append({"traceId": t["trace_id"], "prompt": _as_text(_value(t["input"]) or ""), "answer": _as_text(_value(t["output"])),
+                           "source": "\n\n".join(_as_text(_value(x)) for x in sources)})
         if len(probes) == MAX_GROUNDED:
             break
     if not probes:
@@ -334,10 +354,184 @@ def _ovs04_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[st
     return {"traces": json.dumps(runs, ensure_ascii=False).encode()}
 
 
+class Insufficient(HTTPException):
+    """Live runs arrived this week but none carries what the evaluation reads; the run is kept as insufficient, saying so."""
+
+    def __init__(self, detail: str):
+        super().__init__(status_code=422, detail=detail)
+
+
+def _as_text(v: Any) -> str:
+    return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+
+
+def _csv(header: List[str], rows) -> bytes:
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return out.getvalue().encode()
+
+
+def has_runs_this_week(db: Session, system_id: str) -> bool:
+    return db.execute(
+        text("SELECT 1 FROM governance_agent_traces WHERE system_id = :id AND received_at >= :since LIMIT 1"), {"id": system_id, "since": _since(WEEK)}
+    ).first() is not None
+
+
+def _lacking(db: Session, system_id: str, what: str) -> HTTPException:
+    """422 when no live run arrived this week; else Insufficient, naming what the week's runs lack."""
+    if not has_runs_this_week(db, system_id):
+        return HTTPException(status_code=422, detail="No live runs arrived this week")
+    return Insufficient(f"This week's live runs carry no {what}, so there is nothing to measure.")
+
+
+def _capped(params: Dict[str, Any], kept: int, total: int, what: str) -> bool:
+    if total > kept:
+        params[NOTE] = f"the newest {kept:,} of {total:,} {what}"
+    return total > kept
+
+
+def _length(*cols: str) -> str:
+    return " + ".join(f"COALESCE(length({c}), 0)" for c in cols)
+
+
+def _prompts(db: Session, system_id: str, start: str, end: str):
+    """The newest MAX_PROMPTS run inputs in the window, as text, and how many runs in it have one."""
+    where = "FROM governance_agent_traces WHERE system_id = :sid AND received_at >= :start AND received_at < :end AND input IS NOT NULL AND input <> '\"\"'"
+    args = {"sid": system_id, "start": start, "end": end}
+    total = db.execute(text(f"SELECT COUNT(*) {where}"), args).scalar()
+    rows = db.execute(text(f"SELECT input {where} ORDER BY received_at DESC LIMIT :n"), {**args, "n": MAX_PROMPTS}).scalars().all()
+    return [[_as_text(_value(r))] for r in rows], total
+
+
+def _dat01_files(db: Session, system_id: str, params: Dict[str, Any], uploaded=frozenset()) -> Dict[str, bytes]:
+    """This week's prompts (each run's input) against an uploaded reference with a prompt column, else the four weeks before."""
+    week = _since(WEEK)
+    current, total = _prompts(db, system_id, week, _utc_now_iso())
+    if not current:
+        raise _lacking(db, system_id, "input to compare")
+    files = {"current": _csv(["prompt"], current)}
+    notes = [f"the newest {len(current):,} of {total:,} prompts"] if total > len(current) else []
+    if "reference" not in uploaded:
+        older, before = _prompts(db, system_id, _since(WEEK + BASELINE), week)
+        if not older:
+            raise HTTPException(status_code=422, detail="Add a reference set of prompts, or send live runs for longer: the four weeks before this one have none")
+        files["reference"] = _csv(["prompt"], older)
+        notes.append(f"reference: {f'the newest {len(older):,} of {before:,}' if before > len(older) else f'{len(older):,}'} prompts from the four weeks before")
+    params.update({"features": "prompt", "ignore": ""})
+    params[NOTE] = "; ".join(notes) or None
+    return files
+
+
+def _tool_steps(db: Session, system_id: str, columns: str):
+    """The week's tool calls, newest run first and in order within each run, at most MAX_TOOL_CALLS, and how many there are."""
+    where = ("FROM governance_agent_trace_steps s JOIN governance_agent_traces t ON t.id = s.trace_pk "
+             "WHERE t.system_id = :sid AND t.received_at >= :since AND s.kind = 'tool' AND s.name <> ''")
+    args = {"sid": system_id, "since": _since(WEEK)}
+    total = db.execute(text(f"SELECT COUNT(*) {where}"), args).scalar()
+    rows = db.execute(text(f"SELECT {columns} {where} ORDER BY t.received_at DESC, t.id, s.seq LIMIT :n"), {**args, "n": MAX_TOOL_CALLS}).fetchall()
+    return [list(r) for r in rows], total
+
+
+def _agt02_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
+    """Every tool call of the week: blocked when a guardrail stopped it (step status blocked), else executed."""
+    rows, total = _tool_steps(db, system_id, "t.trace_id, s.name, s.status")
+    if not rows:
+        raise _lacking(db, system_id, "tool calls")
+    params[PARTIAL] = _capped(params, len(rows), total, "tool calls")
+    return {"actions": _csv(["scenario", "tool", "outcome"], [[run, tool, "blocked" if status == "blocked" else "executed"] for run, tool, status in rows])}
+
+
+def _mon05_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
+    """Every tool call of the week by run, in order; two calls repeat when the tool and its input are the same (compared by hash)."""
+    rows, total = _tool_steps(db, system_id, "t.trace_id, s.name, md5(COALESCE(s.input, ''))")
+    if not rows:
+        raise _lacking(db, system_id, "tool calls")
+    params[PARTIAL] = _capped(params, len(rows), total, "tool calls")
+    return {"calls": _csv(["run_id", "tool", "args"], rows)}
+
+
+def _tst06_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
+    """Each finished run of the week that sent expectedCalls, with its tool steps in order as the calls made; a step's input is its arguments."""
+    where = "FROM governance_agent_traces WHERE system_id = :sid AND received_at >= :since AND expected_calls IS NOT NULL AND status <> 'running'"
+    args = {"sid": system_id, "since": _since(WEEK)}
+    total = db.execute(text(f"SELECT COUNT(*) {where}"), args).scalar()
+    traces = db.execute(text(f"SELECT id, trace_id, expected_calls {where} ORDER BY received_at DESC LIMIT :n"), {**args, "n": MAX_SCENARIOS}).mappings().all()
+    scenarios, size = [], 0
+    for t in traces:
+        if size >= MAX_CONTEXT:
+            break
+        expected = _value(t["expected_calls"])  # always a list: record_trace refuses one it would cut
+        step = "FROM governance_agent_trace_steps WHERE trace_pk = :pk AND kind = 'tool'"
+        made = db.execute(text(f"SELECT COUNT(*) {step}"), {"pk": t["id"]}).scalar()
+        steps = db.execute(text(f"SELECT name, input {step} ORDER BY seq LIMIT :n"), {"pk": t["id"], "n": len(expected)}).fetchall()
+        # a call past the expected ones is wrong whatever it carries, so only how many there are is read
+        actual = [{"tool": name, "args": a if isinstance(a := _value(raw), dict) else {}} for name, raw in steps] + [{"tool": "", "args": {}}] * (made - len(steps))
+        scenarios.append({"scenario": t["trace_id"], "expected": expected, "actual": actual})
+        size += len(t["expected_calls"]) + sum(len(raw or "") for _, raw in steps) + 30 * made
+    if not scenarios:
+        raise _lacking(db, system_id, "expected tool calls (expectedCalls) to compare with")
+    _capped(params, len(scenarios), total, "runs with expected calls")
+    return {"calls": json.dumps(scenarios, ensure_ascii=False).encode()}
+
+
+def _sec16_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
+    """The text of the week's runs, newest first: each run's input, output and stated reason, then each step's, and step errors."""
+    where = "FROM governance_agent_traces WHERE system_id = :sid AND received_at >= :since"
+    args = {"sid": system_id, "since": _since(WEEK)}
+    total = db.execute(text(f"SELECT COUNT(*) {where}"), args).scalar()
+    # Rows are loaded only up to the one that fills MAX_CONTEXT ("before" is the text of the rows ahead of it), so one long run cannot load more.
+    before = "COALESCE(SUM({}) OVER (ORDER BY {} ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS before"
+    traces = db.execute(text(
+        f"SELECT id, input, output, rationale FROM (SELECT id, input, output, rationale, received_at, "
+        f"{before.format(_length('input', 'output', 'rationale'), 'received_at DESC, id')} {where} ORDER BY received_at DESC, id LIMIT :n) r "
+        "WHERE before < :room ORDER BY received_at DESC, id"), {**args, "n": MAX_CONTEXT_RUNS, "room": MAX_CONTEXT}).mappings().all()
+    parts, room, read, cut = [], MAX_CONTEXT, 0, False
+    for t in traces:
+        if room <= 0:
+            break
+        steps = db.execute(text(
+            f"SELECT input, output, rationale, error, steps FROM (SELECT seq, step_id, input, output, rationale, error, COUNT(*) OVER () AS steps, "
+            f"{before.format(_length('input', 'output', 'rationale', 'error'), 'seq, step_id')} FROM governance_agent_trace_steps WHERE trace_pk = :pk) s "
+            "WHERE before < :room ORDER BY seq, step_id"), {"pk": t["id"], "room": room}).fetchall()
+        cut = cut or (bool(steps) and len(steps) < steps[0][4])
+        rows = [(t["input"], t["output"], t["rationale"], None), *(s[:4] for s in steps)]
+        for v in (v for row in rows for v in [_as_text(_value(x)) for x in row[:2] if x is not None] + [x for x in row[2:] if x]):  # inputs and outputs are JSON
+            if room <= 0:
+                cut = True
+                break
+            if len(v) > room:
+                v, cut = v[:room], True
+            parts.append(v)
+            room -= len(v)
+        read += 1
+    if not any(p.strip() for p in parts):
+        raise _lacking(db, system_id, "inputs, outputs or reasons to scan")
+    params[PARTIAL] = _capped(params, read, total, "runs") or cut
+    if cut:
+        params[NOTE] = f"the newest {read:,} of {total:,} runs, cut at {MAX_CONTEXT:,} characters"
+    return {"context": "\n".join(parts).encode()}
+
+
 # evaluation id -> reads the week's live runs into that engine's files (and may set params it needs)
-TRACE_READERS = {"EV-MON-02": _mon02_files, "EV-TST-03": _tst03_files, "EV-OVS-04": _ovs04_files}
+TRACE_READERS = {"EV-MON-02": _mon02_files, "EV-TST-03": _tst03_files, "EV-OVS-04": _ovs04_files, "EV-DAT-01": _dat01_files,
+                 "EV-AGT-02": _agt02_files, "EV-TST-06": _tst06_files, "EV-MON-05": _mon05_files, "EV-SEC-16": _sec16_files}
+# evaluation id -> slots a person may upload beside live runs, in place of what the reader takes from older runs, with help for the form
+TRACE_UPLOADS = {"EV-DAT-01": {"reference": "Optional: a CSV with a prompt column. Leave it out to compare with the prompts of the four weeks before this one."}}
 # evaluation id -> the engine that reads live runs, where it is not the evaluation's own (whose input is an upload)
 TRACE_ENGINES = {"EV-OVS-04": explain.ENGINE}
+
+
+def read_live_runs(db: Session, evaluation_id: str, system_id: str, params: Dict[str, Any], uploaded=frozenset()):
+    """The evaluation's files from the system's live runs, the names the run lists them under, and whether a zero-tolerance
+    check read only part of the week (its pass then proves nothing).
+    uploaded: the TRACE_UPLOADS slots a person uploaded, which the reader then leaves to the upload."""
+    params.pop(NOTE, None)
+    params.pop(PARTIAL, None)
+    files = TRACE_READERS[evaluation_id](db, system_id, params, **({"uploaded": uploaded} if evaluation_id in TRACE_UPLOADS else {}))
+    note, partial = params.pop(NOTE, None), bool(params.pop(PARTIAL, False))
+    return files, {"traces": LIVE_RUNS + (f" ({note})" if note else "")}, partial
 
 
 def has_decision_runs(db: Session, system_id: str) -> bool:
@@ -544,6 +738,7 @@ def get_trace(system_id: str, trace_id: str, m: OrgMembership = Depends(_member)
     trace["explanation"] = ({**json.loads(explanation["result_json"]), "evidenceId": explanation["evidence_id"], "createdAt": explanation["created_at"]}
                             if explanation else None)
     trace["explainable"] = _decision(db, row) is not None
+    trace["expectedCalls"] = _value(row["expected_calls"])
     return {"trace": trace}
 
 
