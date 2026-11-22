@@ -78,8 +78,11 @@ def _sentences(model: Dict[str, Any]) -> Tuple[List[str], Dict[str, Dict[str, An
     aud = model.get("auditor")
     if aud:
         ledger = aud["ledger"]
-        out.append(f"The ledger holds {f.add('ledger.entries', str(ledger['entries']), 'Hash-chained entries across workflow runs, internal audits and seals')} entries and is "
-                   f"{f.add('ledger.state', 'intact' if ledger['intact'] else 'broken', 'Every chain recomputed just now', '' if ledger['intact'] else 'bad')}.")
+        if ledger["entries"] or not ledger["intact"]:
+            out.append(f"The ledger holds {f.add('ledger.entries', str(ledger['entries']), 'Hash-chained entries across workflow runs, internal audits and seals')} entries and is "
+                       f"{f.add('ledger.state', 'intact' if ledger['intact'] else 'broken', 'Every chain recomputed just now', '' if ledger['intact'] else 'bad')}.")
+        else:
+            out.append("Nothing is on the ledger yet: no workflow run, internal audit or sealed decision.")
         if aud["sample"]["size"]:
             out.append(f"A reproducible sample of {f.add('sample.size', str(aud['sample']['size']), 'Drawn with the newest ledger hash as seed')} evidence items is ready for testing.")
     risk = model.get("risk")

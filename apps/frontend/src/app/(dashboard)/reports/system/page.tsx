@@ -11,7 +11,7 @@ import {
   useGovernanceAssurance,
   type EvidenceMapping,
 } from '@/lib/api/hooks/useGovernanceAssurance'
-import { AssuranceReportStudio } from './components/AssuranceReportStudio'
+import { AssuranceReportStudio } from '../components/AssuranceReportStudio'
 
 const field =
   'h-9 rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[13.5px] outline-none focus:border-[var(--fm-ink)]'

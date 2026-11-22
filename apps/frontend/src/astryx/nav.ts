@@ -3,6 +3,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   EyeOff,
+  FileBarChart,
   FileCheck2,
   FlaskConical,
   Gauge,
@@ -95,6 +96,7 @@ export const NAV: Group[] = [
     title: 'Records',
     icon: FileCheck2,
     places: [
+      { href: '/reports', label: 'Reports', icon: FileBarChart },
       { href: '/evidence', label: 'Evidence', icon: ClipboardCheck },
       { href: '/auditor-packs', label: 'Auditor packs', icon: Package },
     ],
