@@ -27,7 +27,13 @@ export default function AuditRecordsPage() {
             <Heading level={2}>Trace verification</Heading>
             {trace.error ? <Banner status="error" title="The trace could not load" description={trace.error} /> : trace.loading || !trace.data ? <Skeleton height={80} /> : (
               <>
-                <Banner status={trace.data.valid ? 'success' : 'error'} title={trace.data.valid ? 'The hash chain verifies' : 'The hash chain does not verify'} description={trace.data.head ? `Head ${trace.data.head}` : 'No events yet.'} />
+                <Banner status={trace.data.valid ? 'success' : 'error'} title={trace.data.valid ? 'The trace verifies' : 'The trace does not verify'} description={trace.data.head ? `Head ${trace.data.head}` : 'No events yet.'} />
+                <ul className="ia-list">
+                  <li><span>Hash chain intact</span><small>{trace.data.chainValid ? 'Yes' : 'No'}</small></li>
+                  <li><span>Chain ends at the issued report</span><small>{trace.data.headMatchesIssue ? 'Yes' : 'No'}</small></li>
+                  <li><span>Records match the chain</span><small>{trace.data.mismatches.length ? `${trace.data.mismatches.length} differ` : 'Yes'}</small></li>
+                  {trace.data.mismatches.map((m) => <li key={m.checkId}><span className="ia-bad">Check {m.checkId}: {m.reason}</span></li>)}
+                </ul>
                 <ul className="ia-list">
                   {trace.data.events.map((e) => (
                     <li key={e.seq}><span><b>{e.seq}. {e.kind.replace(/_/g, ' ')}</b> <small>{e.createdAt} · {e.actor ?? 'system'} · {e.hash.slice(0, 12)}</small></span></li>

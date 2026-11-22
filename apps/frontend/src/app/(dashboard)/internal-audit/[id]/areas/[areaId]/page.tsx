@@ -123,7 +123,7 @@ export default function AreaPage() {
   if (loading || !data || !orgId) return <div className="fm-page"><Skeleton height={200} /></div>
 
   const { area, checks } = data
-  const mayWrite = canConclude(area, user?.id)
+  const mayWrite = canConclude(area, user?.id) && area.auditStatus !== 'issued'
   const open = checks.filter((c) => !c.grade).length
 
   return (
@@ -140,7 +140,7 @@ export default function AreaPage() {
 
         {problem && <Banner status="error" title="That did not work" description={problem} />}
         {notice && <Banner status="success" title={notice} />}
-        {!mayWrite && <Banner status="info" title="Read only" description="Only this area's auditor can ask owners and record conclusions, and only during fieldwork." />}
+        {!mayWrite && <Banner status="info" title="Read only" description={area.auditStatus === 'issued' ? 'This audit has been issued.' : "Only this area's auditor can ask owners and record conclusions, and only during fieldwork."} />}
 
         {checks.length === 0 || !check ? (
           <Text color="secondary">This area has no checks.</Text>

@@ -15,7 +15,7 @@ import { useOrg } from '@/context/OrgContext'
 import { useSession } from '@/context/SessionContext'
 import { useMembers } from '@/astryx/data/settings'
 import {
-  acceptArea, approvePlan, canIssue, GRADES, issueAudit, mine, prepareEvidence, progressPct, reassignArea, uploadPlan, useAudit,
+  acceptArea, approvePlan, blockingConflict, canIssue, GRADES, issueAudit, mine, prepareEvidence, progressPct, reassignArea, uploadPlan, useAudit, warningFor,
   type AuditArea,
 } from '@/lib/api/hooks/useInternalAudit'
 
@@ -62,8 +62,10 @@ export default function AuditPage() {
   const isLead = mine(user?.id, audit.leadAuditorId)
   const planning = audit.status === 'planning'
   const issued = audit.status === 'issued'
-  const conflictFor = (a: AuditArea) => conflicts.find((c) => c.areaId === a.id)
-  const leadConflicts = conflicts.filter((c) => !c.areaId)
+  const locked = busy || issued
+  const conflictFor = (a: AuditArea) => blockingConflict(conflicts, a.id)
+  const warnFor = (a: AuditArea) => warningFor(conflicts, a.id)
+  const leadConflicts = conflicts.filter((c) => !c.areaId || c.kind?.startsWith('lead_'))
   const totalChecks = areas.reduce((n, a) => n + a.checksTotal, 0)
   const dates = [`evidence period ${audit.periodStart} to ${audit.periodEnd}`, audit.fieldworkStart && audit.fieldworkEnd ? `fieldwork ${audit.fieldworkStart} to ${audit.fieldworkEnd}` : null].filter(Boolean).join(' · ')
 
@@ -79,14 +81,14 @@ export default function AuditPage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <Button label="Records" variant="secondary" href={`/internal-audit/${id}/records`} />
             {isLead && !issued && (
-              <Button label="Issue report" variant="primary" isDisabled={busy || !canIssue(data)} onClick={() => void act(() => issueAudit(orgId, id), 'The report was issued.')} />
+              <Button label="Issue report" variant="primary" isDisabled={locked || !canIssue(data)} onClick={() => void act(() => issueAudit(orgId, id), 'The report was issued.')} />
             )}
           </div>
         </header>
 
         {problem && <Banner status="error" title="That did not work" description={problem} />}
         {notice && <Banner status="success" title={notice} />}
-        {leadConflicts.map((c, i) => <Banner key={i} status="warning" title="Independence conflict" description={c.detail} />)}
+        {leadConflicts.map((c, i) => <Banner key={i} status={c.blocking ? 'error' : 'warning'} title={c.blocking ? 'Independence conflict' : 'Independence could not be checked'} description={c.detail} />)}
 
         <section className="ia-card ia-plan" aria-label="Audit plan source">
           <VStack gap={1}>
@@ -114,7 +116,7 @@ export default function AuditPage() {
                 e.target.value = ''
                 if (f) void act(() => uploadPlan(orgId, id, f), 'The plan was read.')
               }} />
-              <Button label={audit.planFilename ? 'Replace plan' : 'Upload plan'} variant="secondary" isDisabled={busy} onClick={() => file.current?.click()} />
+              <Button label={audit.planFilename ? 'Replace plan' : 'Upload plan'} variant="secondary" isDisabled={locked} onClick={() => file.current?.click()} />
             </div>
           )}
         </section>
@@ -139,7 +141,7 @@ export default function AuditPage() {
               <Text color="secondary">Record who approved it. Fieldwork starts once it is approved.</Text>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
                 <TextInput label="Approved by (name and role)" value={approver} onChange={setApprover} />
-                <Button label="Approve plan" variant="primary" isDisabled={busy || !approver.trim() || areas.length === 0} onClick={() => void act(() => approvePlan(orgId, id, approver), 'The plan was approved.')} />
+                <Button label="Approve plan" variant="primary" isDisabled={locked || !approver.trim() || areas.length === 0} onClick={() => void act(() => approvePlan(orgId, id, approver), 'The plan was approved.')} />
               </div>
             </VStack>
           </section>
@@ -192,15 +194,18 @@ export default function AuditPage() {
                           <span className="ia-warn">{conflict.detail}</span>
                         ) : (
                           <>
+                            {warnFor(a) && <small className="ia-warn">Owner could not be matched to a member</small>}
+                          <>
                             <span className={`ia-bar${a.checksTotal && a.checksDone === a.checksTotal ? ' done' : ''}`}><i style={{ width: `${progressPct(a)}%`, display: 'block' }} /></span>
                             <small>{a.checksDone} of {a.checksTotal}{a.waitingOnOwner ? ` · ${a.waitingOnOwner} waiting on owner` : ''}</small>
+                          </>
                           </>
                         )}
                       </span>
                       <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                         <span>{STATUS[a.status] ?? a.status}</span>
-                        {isLead && !issued && reassigning !== a.id && <Button label="Reassign" size="sm" variant="secondary" isDisabled={busy} onClick={() => setReassigning(a.id)} />}
-                        {isLead && a.status === 'sent_to_lead' && <Button label="Accept area" size="sm" variant="primary" isDisabled={busy} onClick={() => void act(() => acceptArea(orgId, a.id))} />}
+                        {isLead && !issued && conflict && reassigning !== a.id && <Button label="Reassign" size="sm" variant="secondary" isDisabled={locked} onClick={() => setReassigning(a.id)} />}
+                        {isLead && a.status === 'sent_to_lead' && <Button label="Accept area" size="sm" variant="primary" isDisabled={locked} onClick={() => void act(() => acceptArea(orgId, a.id))} />}
                       </span>
                     </div>
                   )
@@ -209,7 +214,7 @@ export default function AuditPage() {
             )}
             {isLead && audit.status === 'fieldwork' && (
               <div>
-                <Button label="Prepare evidence" variant="secondary" isDisabled={busy} onClick={() => void act(() => prepareEvidence(orgId, id), 'The assistant read the evidence for every check not yet graded.')} />
+                <Button label="Prepare evidence" variant="secondary" isDisabled={locked} onClick={() => void act(() => prepareEvidence(orgId, id), 'The assistant read the evidence for every check not yet graded.')} />
               </div>
             )}
           </VStack>

@@ -56,7 +56,9 @@ export interface Conflict {
   areaId: string | null
   areaName: string | null
   auditorId: string | null
-  kind?: string
+  kind?: 'lead_process_owner' | 'lead_system_owner' | 'unverifiable' | string
+  /** False for a warning (the owner could not be matched to a member); only blocking conflicts need a reassignment. */
+  blocking: boolean
   detail: string
 }
 
@@ -129,6 +131,9 @@ export interface AreaView {
 export interface TraceView {
   events: Array<{ seq: number; kind: string; actor: string | null; payload: Record<string, unknown>; prevHash: string; hash: string; createdAt: string }>
   valid: boolean
+  chainValid: boolean
+  headMatchesIssue: boolean
+  mismatches: Array<{ checkId: string; reason: string }>
   head: string | null
 }
 
@@ -146,6 +151,10 @@ export const mine = (userId: string | undefined, id: string | null | undefined) 
 
 /** The area's own auditor may conclude checks, only while it is in fieldwork. */
 export const canConclude = (a: AreaView['area'], userId: string | undefined) => mine(userId, a.auditorId) && a.status === 'fieldwork' && a.auditStatus === 'fieldwork'
+
+/** Blocking conflicts need a reassignment; the rest are warnings. */
+export const blockingConflict = (cs: Conflict[], areaId: string) => cs.find((c) => c.areaId === areaId && c.blocking)
+export const warningFor = (cs: Conflict[], areaId: string) => cs.find((c) => c.areaId === areaId && !c.blocking)
 
 /** Every area accepted: the report can be issued. */
 export const canIssue = (v: AuditView) => v.audit.status === 'fieldwork' && v.areas.length > 0 && v.areas.every((a) => a.status === 'accepted')
