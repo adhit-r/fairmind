@@ -4,6 +4,7 @@ Shadow AI checks. Router and database are real; email is captured, never sent.""
 import json
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -208,6 +209,52 @@ def test_reviewer_links_a_separate_cloud_resource_to_an_existing_system(env):
     assert {a["assetId"] for a in json.loads(system)["merged_sightings"]} == {loan, chat}
     assert {tuple(a) for a in assets} == {("promoted", system_id)}
     assert {tuple(d) for d in decisions} == {("approve", system_id), ("link", system_id)}
+
+
+def test_simultaneous_links_preserve_both_sightings(env):
+    c, factory, _ = env
+    source = _integration(c, "azure")
+    original, chat, search = [
+        _asset(factory, source, "azure", f"/subscriptions/a/deployments/{name}", name, "llm_app", {"cloud": "azure"})
+        for name in ("original", "chat", "search")
+    ]
+    approved = c.post(f"/api/v1/discovery/candidates/{original}/decide", json={"decision": "approve"})
+    assert approved.status_code == 200, approved.text
+    system_id = approved.json()["systemId"]
+
+    def link(asset_id):
+        return c.post(f"/api/v1/discovery/candidates/{asset_id}/link", json={"system_id": system_id})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        with factory() as blocker, factory() as observer:
+            blocker.execute(text("SELECT id FROM governance_ai_systems WHERE id = :id FOR UPDATE"), {"id": system_id})
+            requests = [pool.submit(link, asset_id) for asset_id in (chat, search)]
+            # Both requests must be waiting on the same row before either can update it.
+            deadline = time.monotonic() + 10
+            while True:
+                waiting = observer.execute(text(
+                    "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
+                    "AND wait_event_type = 'Lock' AND query LIKE '%governance_ai_systems%'"
+                )).scalar_one()
+                observer.rollback()
+                if waiting == 2:
+                    break
+                assert time.monotonic() < deadline, "Both link requests did not reach the locked system"
+                time.sleep(0.02)
+
+        for request in requests:
+            response = request.result(timeout=10)
+            assert response.status_code == 200, response.text
+            assert response.json() == {"decision": "link", "systemId": system_id}
+
+    with factory() as db:
+        metadata = json.loads(db.execute(text("SELECT metadata_json FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar_one())
+        assets = db.execute(text("SELECT id, status, system_id FROM governance_discovered_assets")).fetchall()
+        decisions = db.execute(text("SELECT anchor_asset_id, system_id FROM governance_discovery_decisions WHERE decision = 'link'")).fetchall()
+
+    assert sorted(a["assetId"] for a in metadata["merged_sightings"]) == sorted([original, chat, search])
+    assert {tuple(a) for a in assets} == {(asset_id, "promoted", system_id) for asset_id in (original, chat, search)}
+    assert sorted(tuple(d) for d in decisions) == sorted([(chat, system_id), (search, system_id)])
 
 
 def test_expired_link_and_split(env):

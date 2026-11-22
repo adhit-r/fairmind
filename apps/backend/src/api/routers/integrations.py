@@ -96,7 +96,11 @@ _HIGH_IMPACT = re.compile(
     r"health|medical|clinical|diagnos|insurance|underwrit|collection|eligib|benefit|biometric|face",
     re.I,
 )
-_LLM_PACKAGES = {"openai", "anthropic", "google-generativeai", "google-genai", "langchain", "llama-index", "vllm", "litellm", "@anthropic-ai/sdk", "ai-sdk", "cohere", "mistralai", "groq"}
+_LLM_PACKAGES = {
+    "openai", "anthropic", "google-generativeai", "google-genai", "langchain", "llama-index",
+    "vllm", "litellm", "@anthropic-ai/sdk", "ai-sdk", "cohere", "mistralai", "groq",
+    "langchain-openai", "langchain-anthropic", "@langchain/openai",
+}
 _ML_PACKAGES = {"transformers", "torch", "pytorch", "tensorflow", "keras", "scikit-learn", "sklearn", "xgboost", "lightgbm", "catboost", "mlflow", "onnxruntime"}
 _MCP_CONFIGS = (".mcp.json", "mcp.json", ".cursor/mcp.json", ".vscode/mcp.json")
 _AGENT_FILES = {"CLAUDE.md", "AGENTS.md", ".cursorrules", ".cursor", ".codex", "GEMINI.md", ".windsurfrules"}

@@ -71,6 +71,35 @@ def test_github_finds_mcp_servers(client, monkeypatch):  # noqa: F811
     assert "env-value-must-not-be-kept" not in json.dumps(found)
 
 
+def test_github_detects_repos_with_only_a_langchain_provider_package(client, monkeypatch):  # noqa: F811
+    manifests = {
+        "python-openai": ("requirements.txt", "langchain-openai>=0.3", "langchain-openai"),
+        "python-anthropic": ("pyproject.toml", '[project]\ndependencies = ["langchain-anthropic>=0.3"]', "langchain-anthropic"),
+        "node-openai": ("package.json", json.dumps({"dependencies": {"@langchain/openai": "^0.5.0"}}), "@langchain/openai"),
+    }
+
+    def gh(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/orgs/acme/repos":
+            return httpx.Response(200, json=[{"name": repo, "full_name": f"acme/{repo}"} for repo in manifests])
+        for repo, (filename, content, _) in manifests.items():
+            download = f"/{repo}/{filename}"
+            if path == f"/repos/acme/{repo}/contents/":
+                return httpx.Response(200, json=[{"name": filename, "download_url": f"https://raw.example.com{download}"}])
+            if path == download:
+                return httpx.Response(200, text=content)
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(integrations.httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(gh)))
+    iid = _add(client, "github", owner="acme")
+    sync = client.post(f"/api/v1/integrations/{iid}/sync")
+    assert sync.status_code == 200, sync.text
+    assets = client.get("/api/v1/integrations/discovered").json()
+    assert {a["externalId"]: (a["kind"], a["metadata"]["signals"]["llm_sdks"]) for a in assets} == {
+        f"acme/{repo}": ("llm_app", [package]) for repo, (_, _, package) in manifests.items()
+    }
+
+
 def _mcp_registry(monkeypatch, status=200):
     def reg(request: httpx.Request) -> httpx.Response:
         if status != 200:

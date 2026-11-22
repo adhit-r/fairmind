@@ -497,8 +497,12 @@ def link_candidate(candidate_id: str, body: LinkRequest, http: Request, db: Sess
     """A reviewer, not a shared provider label, decides which system owns these sightings."""
     org = _caller_org(http)
     members = _find(db, org, candidate_id)["members"]
+    # Serialize links before reading the metadata each request will extend.
     system = db.execute(
-        text("SELECT id, metadata_json, risk_tier, owner, lifecycle_stage FROM governance_ai_systems WHERE id = :id AND org_id = :org"),
+        text(
+            "SELECT id, metadata_json, risk_tier, owner, lifecycle_stage FROM governance_ai_systems "
+            "WHERE id = :id AND org_id = :org FOR UPDATE"
+        ),
         {"id": body.system_id, "org": org},
     ).fetchone()
     if not system:
