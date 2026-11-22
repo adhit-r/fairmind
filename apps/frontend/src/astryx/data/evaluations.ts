@@ -57,6 +57,6 @@ export function groupRows<T extends SystemFit>(rows: T[]): Record<Bucket, T[]> {
   return out
 }
 
-/** How a run by this way is kept (evaluation_runs provenance): calling the system, FairMind's own agent or the platform is measured live; files and live runs are computed. */
-export const keptAs = (way: RunWay, live = false) =>
-  way === 'calls_system' || way === 'platform' || (live && way !== 'live_runs') ? 'Measured live' : 'Computed from upload'
+/** How a run by this way is kept (evaluation_runs provenance): calling the system, FairMind's own agent, the platform or replaying live runs on the connection is measured live; files and live runs read alone are computed. */
+export const keptAs = (way: RunWay, live = false, replays = false) =>
+  way === 'calls_system' || way === 'platform' || (live && way !== 'live_runs') || (replays && way === 'live_runs') ? 'Measured live' : 'Computed from upload'

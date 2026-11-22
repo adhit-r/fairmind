@@ -4780,6 +4780,22 @@ class GovernanceAgentTraceStep(Base):
     ended_at = Column(String, nullable=True)
 
 
+class GovernanceTraceExplanation(Base):
+    """The latest explanation of one live run: drivers, reason check and flip (eval_engines/explain.py)."""
+
+    __tablename__ = "governance_trace_explanations"
+    __table_args__ = (UniqueConstraint("system_id", "trace_id", name="uq_governance_trace_explanations_system_trace"),)
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False)
+    trace_id = Column(String, nullable=False)
+    evidence_id = Column(String, nullable=True)  # the evaluation run it came from; None when a person explained the run alone
+    result_json = Column(Text, nullable=False)
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+
+
 class InternalAudit(Base):
     """An internal audit programme (ISO/IEC 42001 clause 9.2); see api/routers/internal_audits.py."""
 

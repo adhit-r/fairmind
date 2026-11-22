@@ -46,4 +46,5 @@ test('a run is kept as measured live only when FairMind called the system or rea
   assert.equal(keptAs('files'), 'Computed from upload')
   assert.equal(keptAs('files', true), 'Measured live') // FairMind's own agent answers live
   assert.equal(keptAs('live_runs', true), 'Computed from upload')
+  assert.equal(keptAs('live_runs', false, true), 'Measured live') // Explanation quality replays live runs on the connection
 })

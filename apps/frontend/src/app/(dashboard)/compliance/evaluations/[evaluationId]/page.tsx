@@ -32,6 +32,7 @@ import { defaultWay, keptAs, presetFor, proves } from '@/astryx/data/evaluations
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { Drawer } from '@astryxdesign/core/Drawer'
 import { TraceView } from '@/components/traces/TraceView'
+import { ExplanationResult } from '@/components/explain/ExplainParts'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
 
 const FIELD = 'w-full rounded-[10px] border border-[var(--fm-line)] bg-white px-3 py-2 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none'
@@ -170,7 +171,7 @@ function Arrow({ label, broken, muted }: { label?: string; broken?: boolean; mut
 }
 
 /** A behaviour test: FairMind writes probes, the system (or its live runs, or FairMind's agent) answers, the judge decides. Without both ends, the steps to set them up. */
-function Flow({ spec, system, recorded, sending, answers, onReady }: { spec: EngineSpec; system: { id: string; name: string; kind?: string | null }; recorded: boolean; sending: string; answers: string; onReady: (ready: boolean) => void }) {
+function Flow({ spec, system, recorded, replays = false, sending, answers, onReady }: { spec: EngineSpec; system: { id: string; name: string; kind?: string | null }; recorded: boolean; replays?: boolean; sending: string; answers: string; onReady: (ready: boolean) => void }) {
   const provider = useAIProvider()
   const calls = spec.live === 'target' && !recorded // live runs already hold the answers, so the system is not called
   const target = useSystemTarget(calls ? system.id : undefined)
@@ -192,7 +193,7 @@ function Flow({ spec, system, recorded, sending, answers, onReady }: { spec: Eng
   return (
     <>
       <section className="fm-ev-card fm-ev-flow" aria-label="How it runs">
-        <Node icon={<img src="/logo.png" alt="" width={30} height={30} />} title="FairMind" sub={recorded ? 'reads runs' : 'writes probes'} />
+        <Node icon={<img src="/logo.png" alt="" width={30} height={30} />} title="FairMind" sub={recorded ? 'reads runs' : replays ? 'replays decisions' : 'writes probes'} />
         <Arrow label={calls && !targetOk ? 'no connection' : sending} broken={calls && !targetOk} />
         <Node
           icon={spec.live === 'agent' ? <Bot size={26} /> : recorded ? <Activity size={26} /> : <KindIcon size={26} />}
@@ -295,11 +296,12 @@ function Compare({ slots, threshold, psi, system }: { slots: EngineSpec['slots']
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
+function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, threshold, onDone }: {
   evaluationId: string
   spec: EngineSpec
   live: boolean
   way: RunWay
+  liveRunsOwn?: EngineSpec | null
   system: { id: string; name: string; kind?: string | null }
   threshold: string
   onDone: (run: EngineRun) => void
@@ -322,6 +324,8 @@ function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
   const connections = usePlatformConnections()
   const connection = connections.data?.find((c) => c.connected && c.keyReadable) ?? null
   const from = way === 'live_runs' ? 'traces' : way === 'platform' ? 'connection' : 'upload'
+  // Reading live runs may use an engine of its own (Explanation quality replays them), with its own settings.
+  const active = from === 'traces' && liveRunsOwn ? liveRunsOwn : spec
 
   // A behaviour test whose probes can be written, uploaded or taken from a benchmark offers that as one choice.
   const probeSlot = spec.slots.find((s) => s.name === 'probes' && !s.required)
@@ -331,7 +335,7 @@ function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
   const [probes, setProbes] = useState('write') // 'write', 'upload' or a benchmark name
   const slots = choosing ? spec.slots.filter((s) => s !== probeSlot) : spec.slots
   // Column names describe an uploaded file; the server sets them when it reads live runs.
-  const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : spec.params)
+  const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : active.params)
     .filter((p) => from !== 'traces' || !p.name.endsWith('_column'))
   const sampling = choosing ? spec.sampling : null
   const agreed = Number((params.max_rate ?? '').trim())
@@ -342,7 +346,7 @@ function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
   const psi = psiParam ? Number((params.psi_limit ?? '').trim() || psiParam.default) : null
 
   const filesReady = from === 'traces' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
-  const ready = connected && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
+  const ready = (!active.live || connected) && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   /** A behaviour test answers with a job; follow it until the run is stored. */
   async function follow(started: EvaluationJob) {
@@ -367,7 +371,7 @@ function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
     setBusy(true)
     setFailure(null)
     const values: Record<string, unknown> = {}
-    for (const p of spec.params) {
+    for (const p of active.params) {
       const raw = (params[p.name] ?? '').trim()
       if (!raw) continue
       if (p.kind === 'number') values[p.name] = Number(raw)
@@ -410,8 +414,8 @@ function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
         submit()
       }}
     >
-      {spec.live ? (
-        <Flow spec={spec} system={system} recorded={from === 'traces'} sending={sending} answers={choosing && probes === 'write' ? `${count} answers` : ''} onReady={setConnected} />
+      {active.live ? (
+        <Flow spec={active} system={system} recorded={from === 'traces' && active === spec} replays={from === 'traces' && active !== spec} sending={sending} answers={choosing && probes === 'write' ? `${count} answers` : ''} onReady={setConnected} />
       ) : (
         way === 'files' && slots.length > 0 && <Compare slots={slots} threshold={threshold} psi={psi} system={system.name} />
       )}
@@ -544,7 +548,7 @@ function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
           </div>
         )}
         <div className="fm-ev-between">
-          <span className="fm-ev-muted fm-ev-small">{spec.live ? 'Runs in the background; the result also shows under Runs.' : from === 'connection' ? spec.platformMethod : spec.method}</span>
+          <span className="fm-ev-muted fm-ev-small">{active.live ? 'Runs in the background; the result also shows under Runs.' : from === 'connection' ? spec.platformMethod : active.method}</span>
           <Button type="submit" label={busy ? 'Running' : 'Run evaluation'} variant="primary" icon={<Play size={14} aria-hidden />} isDisabled={!ready || busy} isLoading={busy} />
         </div>
       </section>
@@ -655,9 +659,9 @@ export default function EvaluationPage() {
   const KindIcon = KIND_ICON[kind ?? ''] ?? Cpu
   const mine = (runs.data ?? []).filter((r) => !system || r.systemId === system.id)
   const live = !!runSpec?.live
-  const kept = way ? keptAs(way, live) : null
-  // the stored run is model judged when a live engine runs, or a judged platform check reads the platform
-  const judged = live || (way === 'platform' && !!runSpec?.judge)
+  const kept = way ? keptAs(way, live, !!spec?.liveRunsEngine) : null
+  // the stored run is model judged when a live engine runs, a judged platform check reads the platform, or live runs are replayed
+  const judged = live || (way === 'platform' && !!runSpec?.judge) || (way === 'live_runs' && !!spec?.liveRunsEngine)
   const showPasses = !(way === 'files' && runSpec && !runSpec.live && runSpec.slots.length > 0)
 
   return (
@@ -735,6 +739,7 @@ export default function EvaluationPage() {
                 spec={runSpec}
                 live={!!behaviour && behaviour !== spec}
                 way={way}
+                liveRunsOwn={way === 'live_runs' ? spec.liveRunsEngine ?? null : null}
                 system={{ id: system.id, name: system.name, kind }}
                 threshold={e.threshold}
                 onDone={(run) => {
@@ -813,7 +818,16 @@ export default function EvaluationPage() {
       {runnable && shown && (
         <section className="rounded-2xl bg-white p-5">
           <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
-          <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />
+          {shown.source === 'traces' && e.id === 'EV-OVS-04' ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <ResultPill status={shown.status} />
+                <span className={`text-[13px] ${MUTED}`}>{shown.systemName}, {when(shown.createdAt)}, from live runs{shown.judge && `, judged by ${shown.judge.model}`}</span>
+              </div>
+              <p className="m-0 leading-normal text-[var(--fm-ink)]">{shown.summary}</p>
+              <ExplanationResult run={shown} onTrace={(id, flag) => setTrace({ id, flag })} />
+            </div>
+          ) : <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN_P}>Open the system file</Link>
             <Link href={`/risks?system=${encodeURIComponent(shown.systemId)}`} className={BTN}>Open findings</Link>

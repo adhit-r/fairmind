@@ -31,6 +31,7 @@ import { useSystemSeals } from '@/astryx/data/evidence'
 import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
 import { EvaluationRunList } from './components/EvaluationRunList'
+import { ExplainedDecisions } from './components/ExplainedDecisions'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
 
 const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
@@ -61,7 +62,8 @@ const short = (hash: string) => (hash.length > 16 ? `${hash.slice(0, 8)} ${hash.
 
 /** An old link to ?view=evaluations still opens the run list and the evaluator catalog. */
 export default function EvidencePage() {
-  return useSearchParams().get('view') === 'evaluations' ? <EvidenceEvaluations /> : <EvidenceList />
+  const view = useSearchParams().get('view')
+  return view === 'evaluations' ? <EvidenceEvaluations /> : view === 'explained' ? <ExplainedDecisions /> : <EvidenceList />
 }
 
 function EvidenceList() {
@@ -194,6 +196,7 @@ function EvidenceList() {
             </Text>
           </VStack>
           <HStack gap={2} wrap="wrap">
+            <Button label="Explained decisions" variant="secondary" href="/evidence?view=explained" />
             <Button label="Auditor packs" variant="secondary" href="/auditor-packs" />
             {hasSystem && canReview && <Button label="Add evidence" variant="primary" onClick={() => setAdding(true)} />}
           </HStack>

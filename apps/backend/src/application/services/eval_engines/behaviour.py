@@ -57,6 +57,7 @@ class Live:
     previous: Optional[Dict[str, Any]] = None  # metrics of this evaluation's latest run on the system
     agent: Optional[Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = None  # FairMind's agent on a facts object
     generated: Optional[List[Dict[str, str]]] = None  # the probes the judge wrote, in full, kept with the run
+    judged: int = 0  # judge calls that read an answer, not ones that write probes
 
 
 # --- shared ---------------------------------------------------------------------------------------
