@@ -473,11 +473,15 @@ def _require_report_access(
 ) -> Any:
     row = db.execute(
         text(
-            "SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at "
+            "SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at, org_id, sha256, narrative, approved_by, approved_at "
             "FROM governance_audit_reports WHERE id = :id"
         ),
         {"id": report_id},
     ).fetchone()
+    if row and not row.system_id and row.org_id:  # an org-wide role report: any member of that organisation may read it
+        if not GovernanceAssuranceService(db).membership(str(row.org_id), current_user.user_id):
+            raise HTTPException(status_code=404, detail="Report not found")
+        return row
     if not row or not row.system_id:
         raise HTTPException(status_code=404, detail="Report not found")
     _require_system_access(db, str(row.system_id), current_user)
@@ -3220,6 +3224,110 @@ def generate_audit_report(
         {"id": report_id},
     ).fetchone()
     return _serialize_audit_report_row(row)
+
+
+class RoleReportSnapshotRequest(BaseModel):
+    role: Literal["executive", "compliance", "engineering", "auditor", "risk"]
+    system_id: Optional[str] = None
+    framework: Optional[str] = None
+    narrative: Optional[str] = Field(default=None, max_length=4000)
+
+
+ROLE_REPORT_TITLES = {
+    "executive": "Executive summary", "compliance": "Framework readiness", "engineering": "Technical report",
+    "auditor": "Auditor report", "risk": "Risk register",
+}
+
+
+def _role_report_model(db: Session, http: Request, current_user: TokenData, role: str, system_id: Optional[str], framework: Optional[str]) -> Dict[str, Any]:
+    from src.application.services.report_model_service import build_overview
+
+    if system_id:
+        _require_system_access(db, system_id, current_user)
+    return build_overview(db, _caller_org(http), role, system_id or None, framework or None)
+
+
+@router.get("/reports/overview", dependencies=[Depends(org_member)])
+def get_report_overview(
+    http: Request,
+    role: Literal["executive", "compliance", "engineering", "auditor", "risk"] = Query("executive"),
+    system_id: Optional[str] = Query(None),
+    framework: Optional[str] = Query(None),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The report model for one reader: every section computed from the record now. Readable by any member."""
+    _ensure_tables(db)
+    return _role_report_model(db, http, current_user, role, system_id, framework)
+
+
+@router.post("/reports/briefing", dependencies=[Depends(org_member)])
+async def reword_report_briefing(
+    body: RoleReportSnapshotRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The briefing reworded by the organisation's own model, citing only the model's facts; the template otherwise."""
+    from api.routes.packs import _ai_row, _stored_connection
+    from src.application.services.report_briefing_service import briefing_with_model
+
+    _ensure_tables(db)
+    model = await run_in_threadpool(_role_report_model, db, http, current_user, body.role, body.system_id, body.framework)
+    row = await run_in_threadpool(_ai_row, db, _caller_org(http))
+    if not row or not row["enabled"]:
+        return model["briefing"]
+    conn = _stored_connection(row)
+    db.rollback()  # hold no transaction open while the model works
+    return await briefing_with_model(conn, model)
+
+
+@router.post("/reports/snapshots", dependencies=[Depends(org_mutator)])
+def seal_role_report(
+    body: RoleReportSnapshotRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """A person approves the page-one summary and seals the report: the model and the summary are stored together with
+    the SHA-256 of their canonical form, so every download of this report comes from the same bytes."""
+    from src.application.services.evidence_pack_service import manifest_digest
+
+    _ensure_tables(db)
+    model = _role_report_model(db, http, current_user, body.role, body.system_id, body.framework)
+    narrative = (body.narrative or "").strip() or None
+    actor, now = _authenticated_actor(current_user), _utc_now_iso()
+    digest = manifest_digest({"version": 2, "model": model, "narrative": narrative})
+    report_id = str(uuid.uuid4())
+    title = ROLE_REPORT_TITLES[body.role] + (f" · {model['scope']['systemName']}" if model["scope"]["systemName"] else "")
+    config = {"role": body.role, "systemId": body.system_id, "framework": model["framework"]["key"], "frameworks": [model["framework"]["key"]] if model["framework"]["key"] else []}
+    db.execute(
+        text(
+            "INSERT INTO governance_audit_reports (id, system_id, org_id, report_type, title, generated_by, config_json, data_json, created_at, sha256, narrative, approved_by, approved_at) "
+            "VALUES (:id, :system_id, :org_id, :report_type, :title, :by, :config, :data, :now, :sha, :narrative, :by, :now)"
+        ),
+        {
+            "id": report_id, "system_id": body.system_id or None, "org_id": _caller_org(http), "report_type": f"role:{body.role}", "title": title,
+            "by": actor, "config": json.dumps(config), "data": json.dumps(model), "now": now, "sha": digest, "narrative": narrative,
+        },
+    )
+    db.commit()
+    return {"id": report_id, "title": title, "role": body.role, "sha256": digest, "approvedBy": actor, "approvedAt": now, "systemId": body.system_id}
+
+
+@router.get("/reports/snapshots", dependencies=[Depends(org_member)])
+def list_role_reports(http: Request, db: Session = Depends(get_db)):
+    """Sealed role reports of the caller's organisation, newest first."""
+    _ensure_tables(db)
+    rows = db.execute(
+        text("SELECT id, title, report_type, system_id, sha256, approved_by, approved_at, created_at FROM governance_audit_reports "
+             "WHERE org_id = :org AND report_type LIKE 'role:%' ORDER BY created_at DESC LIMIT 50"),
+        {"org": _caller_org(http)},
+    ).fetchall()
+    return [
+        {"id": r[0], "title": r[1], "role": r[2].split(":", 1)[1], "systemId": r[3], "sha256": r[4], "approvedBy": r[5], "approvedAt": r[6], "createdAt": r[7]}
+        for r in rows
+    ]
 
 
 @router.get("/reports")
