@@ -1069,7 +1069,7 @@ def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]
 
 # Decision records stored as evidence so seals hash them; they are not evidence of a control,
 # so they neither move the lifecycle stage nor count toward readiness.
-RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted", "risk_acceptance"}
+RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted", "risk_acceptance", "scope_decision"}
 
 
 def _reject_record_only_type(evidence_type: str) -> None:
