@@ -174,6 +174,15 @@ async function send<T>(call: () => Promise<{ success: boolean; data?: T; error?:
 const post = <T,>(path: string, orgId: string, body: unknown, fail: string) =>
   send(() => apiClient.post<T>(withOrg(path, orgId), body, { enableRetry: false }), fail)
 
+export interface MyAuditWork {
+  auditId: string
+  auditTitle: string
+  areaId: string
+  areaName: string
+  kind: 'conclude' | 'accept'
+  open: number
+}
+export const useMyAuditWork = () => useOrgResource<{ items: MyAuditWork[] }>(`${base}/mine`)
 export const useAudits = () => useOrgResource<{ audits: Audit[] }>(base)
 export const useAudit = (id: string | undefined) => useOrgResource<AuditView>(id ? `${base}/${encodeURIComponent(id)}` : null)
 export const useAuditArea = (areaId: string | undefined) => useOrgResource<AreaView>(areaId ? `${base}/areas/${encodeURIComponent(areaId)}` : null)

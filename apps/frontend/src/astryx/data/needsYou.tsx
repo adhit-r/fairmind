@@ -7,9 +7,10 @@ import { useWaitingRuns } from '@/lib/api/hooks/usePacks'
 import { usePlan } from '@/lib/api/hooks/usePlan'
 import { usePolicyResource, type Policy, type PolicyAlert } from '@/lib/api/hooks/usePolicies'
 import { useApprovalRequests, useSystemRecords } from '@/astryx/data/approvals'
+import { useMyAuditWork } from '@/lib/api/hooks/useInternalAudit'
 import type { SystemRecord } from '@/lib/api/hooks/useSystemFile'
 
-export type Kind = 'approval' | 'run' | 'plan' | 'tier' | 'ack' | 'policy' | 'alert'
+export type Kind = 'approval' | 'run' | 'plan' | 'tier' | 'ack' | 'policy' | 'alert' | 'audit'
 export const KIND: Record<Kind, { label: string; color: 'orange' | 'blue' | 'green' | 'red' | 'gray' }> = {
   approval: { label: 'Release approval', color: 'orange' },
   run: { label: 'Workflow run', color: 'blue' },
@@ -18,6 +19,7 @@ export const KIND: Record<Kind, { label: string; color: 'orange' | 'blue' | 'gre
   ack: { label: 'Read a policy', color: 'green' },
   policy: { label: 'Policy approval', color: 'orange' },
   alert: { label: 'Policy alert', color: 'red' },
+  audit: { label: 'Internal audit', color: 'blue' },
 }
 
 export interface Item {
@@ -58,6 +60,7 @@ export function NeedsYouProvider({ children }: { children: ReactNode }) {
   const plan = usePlan()
   const policies = usePolicyResource<Policy[]>(orgId, '')
   const alerts = usePolicyResource<PolicyAlert[]>(orgId, '/alerts')
+  const audits = useMyAuditWork()
 
   const value = useMemo<NeedsYou>(() => {
     const names = new Map(systems.map((s) => [s.id, s.name]))
@@ -92,21 +95,28 @@ export function NeedsYouProvider({ children }: { children: ReactNode }) {
       if (al.status !== 'open' || al.acknowledgedAt) continue
       out.push({ id: `alert:${al.id}`, kind: 'alert', title: `${al.ruleTitle} on ${al.systemName}`, detail: al.detail, who: `${al.policyName}, ${al.severity}`, href: `/systems/${encodeURIComponent(al.systemId)}`, cta: 'Acknowledge' })
     }
+    for (const w of audits.data?.items ?? []) {
+      const area = `/internal-audit/${encodeURIComponent(w.auditId)}/areas/${encodeURIComponent(w.areaId)}`
+      out.push(w.kind === 'conclude'
+        ? { id: `audit:${w.areaId}`, kind: 'audit', title: `${w.areaName}: ${w.open} ${w.open === 1 ? 'check' : 'checks'} to conclude`, detail: 'You audit this area. Conclude each check, then send the area to the lead auditor.', who: w.auditTitle, href: area, cta: 'Open area' }
+        : { id: `audit:${w.areaId}`, kind: 'audit', title: `Accept ${w.areaName}`, detail: 'The auditor sent this area to you as lead auditor.', who: w.auditTitle, href: area, cta: 'Review area' })
+    }
     return {
       items: out,
-      loading: [approvals, records, waiting, policies, alerts].some((r) => r.loading && !r.data) || (!plan.data && !plan.error),
-      errors: [approvals.error, records.error, waiting.error, policies.error, alerts.error, plan.error].filter(Boolean) as string[],
+      loading: [approvals, records, waiting, policies, alerts, audits].some((r) => r.loading && !r.data) || (!plan.data && !plan.error),
+      errors: [approvals.error, records.error, waiting.error, policies.error, alerts.error, audits.error, plan.error].filter(Boolean) as string[],
       reload: () => {
         approvals.reload()
         records.reload()
         waiting.reload()
         policies.reload()
         alerts.reload()
+        audits.reload()
         void plan.reload()
       },
       records: records.data,
     }
-  }, [systems, approvals, records, waiting, plan, policies, alerts])
+  }, [systems, approvals, records, waiting, plan, policies, alerts, audits])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
