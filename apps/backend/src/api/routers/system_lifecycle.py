@@ -2,27 +2,29 @@
 
 GET  /systems/{id}/changes      the parts a change can name, what each reopens, and the changes on file
 POST /systems/{id}/changes      record a change; a material one reopens the gate checks it touches
-PATCH /systems/{id}             change the accountable owner; recorded as a "docs or owner" change
+PATCH /systems/{id}             change the accountable owner or the system's kind; recorded as a "docs or owner" change
 GET  /systems/{id}/retirement   the retirement on file, or the closing tasks and the suggested retention
 POST /systems/{id}/retire       retire the system once every closing task is done; its file is then read only
 """
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Annotated, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 
-from api.routes.ai_governance import _authenticated_actor, _caller_org, _enforce_org_scope, _ensure_tables, _require_system_access, _utc_now_iso
+from api.routes.ai_governance import _authenticated_actor, _caller_org, _enforce_org_scope, _ensure_tables, _load_json_value, _require_system_access, _utc_now_iso
 from api.routes.fairness_runs import _gate_payload, _system_row
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services import system_lifecycle_service as lifecycle
+from src.application.services.system_kinds import SYSTEM_KINDS
 
 router = APIRouter(tags=["lifecycle"], dependencies=[Depends(_enforce_org_scope)])
 
@@ -76,31 +78,48 @@ def post_change(
     return {"change": change, "gate": _gate_payload(db, system_id, system.risk_tier)}
 
 
-class OwnerRequest(BaseModel):
-    owner: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)]
+class SystemPatch(BaseModel):
+    owner: Optional[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=320)]] = None
+    kind: Optional[Literal[SYSTEM_KINDS]] = None
+
+    @model_validator(mode="after")
+    def _something(self):
+        if self.owner is None and self.kind is None:
+            raise ValueError("Set owner or kind")
+        return self
 
 
 @router.patch("/systems/{system_id}")
-def patch_owner(
-    system_id: str, body: OwnerRequest, http: Request,
+def patch_system(
+    system_id: str, body: SystemPatch, http: Request,
     current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db),
 ):
-    """Name the person accountable for the system. The old and new owner go on the sealed change chain."""
+    """Name the person accountable for the system, or what kind of system it is. Each change goes on the sealed change chain."""
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_row(db, system_id)
-    previous = db.execute(text("SELECT owner FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar() or ""
-    if body.owner == previous:
-        return {"owner": previous, "change": None}
+    row = db.execute(text("SELECT owner, metadata_json FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    owner, meta = row[0] or "", _load_json_value(row[1], {})
+    notes = []
+    if body.owner is not None and body.owner != owner:
+        notes.append(f"Owner changed from {owner or 'no owner'} to {body.owner}")
+        owner = body.owner
+    if body.kind is not None and body.kind != meta.get("asset_kind"):
+        notes.append(f"Kind changed from {meta.get('asset_kind') or 'not set'} to {body.kind}")
+        meta["asset_kind"] = body.kind
+    if not notes:
+        return {"owner": owner, "kind": meta.get("asset_kind"), "change": None}
     # Same transaction as the change record: record_change commits both.
-    db.execute(text("UPDATE governance_ai_systems SET owner = :o, updated_at = :at WHERE id = :id"), {"o": body.owner, "at": _utc_now_iso(), "id": system_id})
+    db.execute(
+        text("UPDATE governance_ai_systems SET owner = :o, metadata_json = :m, updated_at = :at WHERE id = :id"),
+        {"o": owner, "m": json.dumps(meta), "at": _utc_now_iso(), "id": system_id},
+    )
     change = lifecycle.record_change(
-        db, system_id, _caller_org(http), parts=["docs"], to_version=None,
-        note=f"Owner changed from {previous or 'no owner'} to {body.owner}",
+        db, system_id, _caller_org(http), parts=["docs"], to_version=None, note="; ".join(notes),
         gate_before=_snapshot(_gate_payload(db, system_id, system.risk_tier)), recorded_by=_authenticated_actor(current_user),
         include_environmental=_with_env(db, system_id),
     )
-    return {"owner": body.owner, "change": change}
+    return {"owner": owner, "kind": meta.get("asset_kind"), "change": change}
 
 
 def _tasks(db: Session, system_id: str, org_id: Optional[str], reason: Optional[str], replaced_by: Optional[str]) -> List[dict]:

@@ -17,9 +17,10 @@ from src.application.services import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
 from src.application.services.clause_map_service import GATE_CONTROLS, RELATION_RANK, _catalogue
-from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, PROVEN_CLASSES, evaluation_status, gate_check
+from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, PROVEN_CLASSES, counted_runs, gate_check
 from src.application.services.llm_runtime import grok_cli
 from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
+from src.application.services.system_kinds import system_kind
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -454,6 +455,7 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "pack": _pack_ref(pack_id),
         "engine": ev.engine,
         "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
+        "judgeNotValidated": ev.id in eval_engines.JUDGED,  # a judge model reads its verdicts, and no judge is validated yet
         "codeLocation": ev.codeLocation,
         "commonControl": ev.commonControl,
         # every requirement the evaluation counts toward (clause_map_service.reach), strongest relation first
@@ -467,11 +469,22 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
     }
 
 
+def _for_system(db: Session, org_id: str, system_id: Optional[str]):
+    """With ?system=, a function adding fit and ways to an evaluation's json; else one that leaves it as it is."""
+    if not system_id:
+        return lambda ev_id, out: out
+    from api.routes.evaluation_runs import fit_and_ways, system_setup  # evaluation_runs imports this module
+
+    setup = system_setup(db, org_id, system_id)
+    return lambda ev_id, out: {**out, **fit_and_ways(ev_id, setup)}
+
+
 @router.get("/evaluations")
 def list_evaluations(
     pillar: Optional[str] = Query(default=None),
     engine: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
+    system: Optional[str] = Query(default=None),
     m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
 ):
@@ -479,8 +492,9 @@ def list_evaluations(
     installed = set(_installed_ids(db, m.org_id))
     res = evaluation_results.results(db, m.org_id)
     needle = q.strip().lower() if q else ""
+    add = _for_system(db, m.org_id, system)
     return [
-        _evaluation_json(ev, installed, res)
+        add(ev.id, _evaluation_json(ev, installed, res))
         for ev in EVALUATIONS.values()
         if (not pillar or ev.pillar == pillar.upper())
         and (not engine or ev.engine == engine)
@@ -489,12 +503,15 @@ def list_evaluations(
 
 
 @router.get("/evaluations/{evaluation_id}")
-def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_evaluation(
+    evaluation_id: str, system: Optional[str] = Query(default=None), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)
+):
     ev = EVALUATIONS.get(evaluation_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
     _ensure_tables(db)
-    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
+    out = _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
+    return _for_system(db, m.org_id, system)(ev.id, out)
 
 
 @router.get("/library/{pack_id}")
@@ -1075,7 +1092,7 @@ def _file_gate_evidence(db: Session, run, wf, approval_request_id: Optional[str]
     records = [{"type": t, "content": _load_json_value(c, {}), "metadata": _load_json_value(meta, {}), "createdAt": at} for t, c, meta, at in rows]
     # only what the gate still counts: a record a material change superseded must not block this attestation
     records = drop_superseded(records, {k: at for k, (at, _) in reopened_since(db, run["ai_system_id"]).items()})
-    newest = next((r for r in records if evaluation_status(r) in (None, "passed", "failed") and gate_check(r) == check), None)
+    newest = next((r for r in counted_runs(records) if gate_check(r) == check), None)
     if newest and str(newest["metadata"].get("provenance_class") or "").lower() in PROVEN_CLASSES:
         return
     head = db.execute(
@@ -1182,12 +1199,12 @@ def _agent_facts(db: Session, run, step: Step, labels: List[str]) -> dict:
     if system_id:
         row = db.execute(
             text(
-                "SELECT name, system_type, version, owner, risk_tier, lifecycle_stage, framework "
+                "SELECT name, version, owner, risk_tier, lifecycle_stage, framework "
                 "FROM governance_ai_systems WHERE id = :id AND org_id = :org"
             ),
             {"id": system_id, "org": org_id},
         ).mappings().fetchone()
-        system = dict(row) if row else None
+        system = {**row, "kind": system_kind(db, system_id)} if row else None
     evidence = db.execute(
         text(
             "SELECT e.evidence_type, e.title, e.status, e.source, e.created_at, s.name AS system "

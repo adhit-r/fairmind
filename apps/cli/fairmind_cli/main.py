@@ -535,7 +535,12 @@ def _ask_model(model: httpx.Client, target: Dict[str, Any], auth: str, prompt: s
             headers[target.get("authHeader") or "Authorization"] = auth
         url, body = target["url"], _fill(json.loads(target["requestTemplate"]), prompt)
     try:
-        resp = model.post(url, json=body, headers=headers, timeout=MODEL_TIMEOUT_S)
+        if target["kind"] == "openai":  # temperature 0 so a run can be repeated; asked again at the default if refused, as the server does
+            resp = model.post(url, json={**body, "temperature": 0}, headers=headers, timeout=MODEL_TIMEOUT_S)
+            if resp.status_code == 400 and "temperature" in resp.text.lower():
+                resp = model.post(url, json=body, headers=headers, timeout=MODEL_TIMEOUT_S)
+        else:
+            resp = model.post(url, json=body, headers=headers, timeout=MODEL_TIMEOUT_S)
     except httpx.TimeoutException:
         raise CliError(f"the system did not answer within {MODEL_TIMEOUT_S:.0f} seconds")
     except httpx.HTTPError:

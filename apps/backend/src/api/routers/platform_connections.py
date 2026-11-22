@@ -113,7 +113,8 @@ async def snapshot(api_key: str) -> Dict[str, Any]:
         for vault in snap["vaults"]:
             vault["credentials"] = await _take(b.vaults.credentials.list(vault["id"], limit=MAX_ITEMS), MAX_ITEMS)
         for store in snap["memory_stores"]:
-            store["memories"] = await _take(b.memory_stores.memories.list(store["id"], view="full", limit=MAX_ITEMS), MAX_MEMORIES)
+            memories = await _take(b.memory_stores.memories.list(store["id"], view="full", limit=MAX_ITEMS), MAX_MEMORIES + 1)
+            store["memories"], store["memories_capped"] = memories[:MAX_MEMORIES], len(memories) > MAX_MEMORIES
         sessions = await _take(b.sessions.list(limit=MAX_SESSIONS, order="desc"), MAX_SESSIONS)
     except anthropic.APIError as e:
         raise _error(e)

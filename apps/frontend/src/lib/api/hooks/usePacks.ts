@@ -171,14 +171,25 @@ export interface Journey {
 }
 
 export type ResultStatus = 'passed' | 'failed' | 'insufficient' | 'not_run'
+/** How FairMind can run an evaluation on a system: call it, read its live runs, read the agent platform, or read uploaded files. */
+export type RunWay = 'calls_system' | 'live_runs' | 'platform' | 'files'
+/** Whether an evaluation is meant for the system's kind; unknown when the system has no kind yet. */
+export type Fit = 'applies' | 'other' | 'unknown'
+/** Read with ?system=: the evaluation's fit for that system and each way it runs, with whether that way is set up. */
+export interface SystemFit {
+  fit?: Fit
+  ways?: Array<{ way: RunWay; ready: boolean }>
+}
 /** Results FairMind reads for an evaluation: the organisation-wide status and the latest result per AI system. */
 export interface EvaluationResults {
   status: ResultStatus
+  /** How many systems are at each status: passed overall only when every system with a result passed. */
+  counts?: Record<'passed' | 'failed' | 'insufficient', number>
   systems: Array<{ systemId: string; systemName: string; status: Exclude<ResultStatus, 'not_run'>; detail: string; evidenceId: string; at: string }>
   latestAt: string | null
 }
 
-export interface EvaluationRow {
+export interface EvaluationRow extends SystemFit {
   id: string
   name: string
   measures: string
@@ -191,6 +202,8 @@ export interface EvaluationRow {
   engine: EngineStatus
   /** FairMind computes this evaluation itself from files you upload. */
   runnable: boolean
+  /** A judge model reads this evaluation's verdicts, and no judge has been validated against labelled answers yet. */
+  judgeNotValidated?: boolean
   codeLocation: string | null
   /** Every requirement the evaluation counts toward, strongest relation first. */
   tests: Array<{ key: string; framework: string; control: string; title: string; relation: string }>
@@ -376,7 +389,7 @@ export const useJourney = (frameworkKey: string | undefined, systemId?: string) 
     frameworkKey ? `${API_ENDPOINTS.packs.journey(frameworkKey)}${systemId ? `?system=${encodeURIComponent(systemId)}` : ''}` : null,
   )
 /** The evaluation catalogue; filters are optional and applied by the server. */
-export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string } = {}) {
+export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string; system?: string } = {}) {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v)
   const q = qs.toString()
@@ -475,7 +488,7 @@ export interface PlatformTest {
 export const usePlatformConnections = () => useOrgResource<PlatformConnection[]>(API_ENDPOINTS.packs.platformConnections)
 
 /** What an evaluation engine reads: one file per slot and optional settings, or, when `platform`, a platform connection. */
-export interface EngineSpec {
+export interface EngineSpec extends SystemFit {
   id: string
   method: string
   slots: Array<{ name: string; label: string; help: string; kind: 'csv' | 'text' | 'json' | 'binary'; required: boolean }>
@@ -489,6 +502,10 @@ export interface EngineSpec {
   alternate?: EngineSpec | null
   /** It can read the system's live runs of the last week instead of uploaded files. */
   liveRuns?: boolean
+  /** A rate-bounded behaviour test: limit in percent (null when agreed), probes a pass needs, and the 95% bound in percent each offered count shows with none failing. */
+  sampling?: { limit: number | null; max: number; needed: number | null; bounds: Array<{ count: number; bound: number }> } | null
+  /** With ?system=: the system's kind, null when not set. */
+  kind?: string | null
 }
 
 /** A behaviour test running in the background. */
@@ -557,8 +574,12 @@ export interface EngineRun {
   params?: Record<string, unknown>
   detail?: Array<Record<string, unknown>>
   detailTotal?: number
-  judge?: { provider: string; model: string }
+  judge?: { provider: string; model: string; sharesProviderWithSystem?: boolean | null }
   target?: { kind: string; url?: string }
+  /** How the run measured; null on runs stored before provenance classes. */
+  provenance?: { class: 'measured_live' | 'computed_from_upload'; modelJudged: boolean } | null
+  /** Settings looser than the catalogue's: the run shows its result but proves nothing. */
+  thresholdLoosened?: Array<{ param: string; value: number; catalogue: number | null }> | null
 }
 
 /** One step of a live run, as the system's own code reported it. `rationale` is the reason it stated; FairMind does not check it. */
@@ -603,10 +624,12 @@ export interface LiveRunSummary {
 export const useTrace = (systemId: string | null, traceId: string | null) =>
   useOrgResource<{ trace: Trace }>(systemId && traceId ? `/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}` : null)
 
+const forSystem = (path: string, systemId?: string) => (systemId ? `${path}?system=${encodeURIComponent(systemId)}` : path)
 export const useEvaluation = (evaluationId: string | undefined) =>
   useOrgResource<EvaluationRow>(evaluationId ? API_ENDPOINTS.packs.evaluation(evaluationId) : null)
-export const useEngine = (evaluationId: string | undefined, runnable: boolean) =>
-  useOrgResource<EngineSpec>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationEngine(evaluationId) : null)
+/** With systemId, the spec also says the system's kind, the evaluation's fit and which ways are set up. */
+export const useEngine = (evaluationId: string | undefined, runnable: boolean, systemId?: string) =>
+  useOrgResource<EngineSpec>(evaluationId && runnable ? forSystem(API_ENDPOINTS.packs.evaluationEngine(evaluationId), systemId) : null)
 export const useEngineRuns = (evaluationId: string | undefined, runnable: boolean) =>
   useOrgResource<EngineRun[]>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationRuns(evaluationId) : null)
 export const useEngineRun = (runId: string | null) => useOrgResource<EngineRun>(runId ? API_ENDPOINTS.packs.evaluationRun(runId) : null)

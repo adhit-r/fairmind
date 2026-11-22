@@ -132,9 +132,9 @@ def test_a_passing_evaluation_does_a_system_task_and_an_attested_check_reads_att
     oversight = _task(view, "FMC-OVS-01")
     assert oversight["systems"][0]["detail"] == "attested" and oversight["state"] == "attested"  # as the clause map reads it
 
-    # an insufficient rerun measured nothing: the earlier pass stands, as in the gate and the clause map
+    # the newest run decides, as in the gate and the clause map: an insufficient rerun replaces the earlier pass
     _store(tmp_database, org_id, system, "evaluation_run", {"evaluationId": "EV-TST-04", "status": "insufficient"}, "2026-11-01T12:00:00")
-    assert _task(client.get(PLAN).json(), "FMC-TST-01")["systems"][0]["detail"] == "tested"
+    assert _task(client.get(PLAN).json(), "FMC-TST-01")["systems"][0]["detail"] == "not started"
     # another test of the control failing keeps the task open, as a failing check keeps the clause from proven
     _store(tmp_database, org_id, system, "evaluation_run", {"evaluationId": "EV-TST-01", "status": "failed"}, "2026-11-01T12:00:00")
     testing = _task(client.get(PLAN).json(), "FMC-TST-01")

@@ -34961,8 +34961,8 @@
     "ISO42001|A.6.2.6",
     "UKAICOP|P12"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-DAT-02",
@@ -35120,8 +35120,8 @@
     "NISTADV|Privacy",
     "OWASPMCP|MCP10"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-PRV-02",
@@ -35205,8 +35205,8 @@
     "NISTRMF|MEASURE 2.5",
     "AIVERIFY|P3"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-TST-03",
@@ -35250,8 +35250,8 @@
     "NISTRMF|MEASURE 2.5",
     "NISTADV|Evasion"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-TST-05",
@@ -35420,8 +35420,8 @@
     "NIST600|Harmful bias",
     "NISTRMF|MEASURE 2.11"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-FAI-06",
@@ -35619,8 +35619,8 @@
     "OWASPLLM|LLM07",
     "ATLAS|Discovery"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-SEC-05",
@@ -36128,8 +36128,8 @@
    "tests": [
     "OWASPAG|ASI01"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-SLF-02",
@@ -37123,8 +37123,8 @@
     "OWASPLLM|LLM02",
     "NIST600|Data privacy"
    ],
-   "maturity": "L4",
-   "maturityLabel": "Known-answer tested (not independently benchmarked)"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-PRV-05",

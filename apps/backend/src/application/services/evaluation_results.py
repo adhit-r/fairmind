@@ -8,16 +8,20 @@ no rule has no results yet.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.application.services.fairness_run_service import (
+    EVALUATION_RUN,
     MIN_GROUP_SIZE,
+    PROOF_MAX_AGE,
     RATE_DRIFT_THRESHOLD,
     _record_time,
+    deciding_runs,
+    proof_status,
     _tokens,
     error_rate_gap,
     gap_status,
@@ -89,11 +93,18 @@ def _fairness_drift(c: dict) -> Verdict:
 
 
 def _energy(c: dict) -> Verdict:
-    kwh = c.get("total_kwh")
-    co2 = c.get("total_kg_co2e_location", c.get("total_kg_co2e_market"))
+    """The stored assessment (environmental_service._payload_for_storage): numbers under assessment.metrics, verdict under result."""
+    m = (c.get("assessment") or {}).get("metrics") or {}
+    reco = (c.get("result") or {}).get("recommendation")
+    kwh = m.get("total_kwh")
+    co2 = m.get("total_kg_co2e_location", m.get("total_kg_co2e_market"))
     parts = [f"{kwh:g} kWh" if isinstance(kwh, (int, float)) else None, f"{co2:g} kg CO2e" if isinstance(co2, (int, float)) else None]
-    # The catalogue threshold is "Reported": a recorded assessment meets it.
-    return "passed", ", ".join(p for p in parts if p) or "Assessment recorded"
+    shown = ", ".join(p for p in parts if p) or "no kWh or kg CO2e reported"
+    if reco == "no_go":
+        return "failed", f"Recommendation no_go; {shown}"
+    if reco == "go" and any(parts):
+        return "passed", f"Recommendation go; {shown}"
+    return "insufficient", f"Recommendation {reco or 'not recorded'}; {shown}"
 
 
 RULES: Dict[str, Tuple[str, Callable[[dict], Verdict]]] = {
@@ -105,14 +116,18 @@ RULES: Dict[str, Tuple[str, Callable[[dict], Verdict]]] = {
 }
 
 
-def _rollup(systems: List[dict]) -> str:
-    """failed if any system's latest result failed; passed if at least one passed and none failed."""
-    statuses = {s["status"] for s in systems}
-    if not statuses:
-        return "not_run"
-    if "failed" in statuses:
-        return "failed"
-    return "passed" if "passed" in statuses else "insufficient"
+def _rollup(systems: List[dict]) -> Dict[str, Any]:
+    """failed if any system's latest result failed; passed only when every system with a result passed; else insufficient.
+    counts says how many systems are at each status."""
+    statuses = [s["status"] for s in systems]
+    status = "not_run" if not statuses else "failed" if "failed" in statuses else "passed" if set(statuses) == {"passed"} else "insufficient"
+    return {"status": status, "counts": {k: statuses.count(k) for k in ("passed", "failed", "insufficient")},
+            "systems": systems, "latestAt": systems[0]["at"] if systems else None}
+
+
+def _aged(at: Any, now: datetime) -> bool:
+    filed = _record_time({"createdAt": at})
+    return filed is not None and now - filed > PROOF_MAX_AGE
 
 
 # the gate check each rule's evidence type feeds; a rule's result goes stale only when a change reopens that check
@@ -170,6 +185,7 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
         .all()
     )
     changed = _changed_at(db, org_id)
+    now = datetime.now(timezone.utc)
     out: Dict[str, Dict[str, Any]] = {}
     for ev_id, (evidence_type, rule) in RULES.items():
         latest: Dict[str, dict] = {}
@@ -180,7 +196,9 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
                 verdict = rule(json.loads(row["content_json"] or "{}"))
             except (KeyError, TypeError, ValueError):
                 verdict = None  # a run stored in an older shape is skipped, not guessed at
-            if verdict:
+            if verdict and verdict[0] == "passed" and _aged(row["created_at"], now):
+                latest[row["system_id"]] = None  # the newest readable result is a pass over a year old: stale, that system reads as not run
+            elif verdict:
                 latest[row["system_id"]] = {
                     "systemId": row["system_id"],
                     "systemName": row["system_name"],
@@ -189,14 +207,22 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
                     "evidenceId": row["id"],
                     "at": row["created_at"],
                 }
-        systems = sorted(latest.values(), key=lambda s: s["at"], reverse=True)
-        out[ev_id] = {"status": _rollup(systems), "systems": systems, "latestAt": systems[0]["at"] if systems else None}
-    return {**_engine_runs(db, org_id, changed), **out}
+        out[ev_id] = _rollup(sorted((s for s in latest.values() if s), key=lambda s: s["at"], reverse=True))
+    engine = _engine_runs(db, org_id, changed, now)
+    # an id with both an engine and a rule: per system, the newer result stands, so a rule never hides a newer engine run
+    for ev_id in out.keys() & engine.keys():
+        by_system: Dict[str, dict] = {}
+        for s in out[ev_id]["systems"] + engine[ev_id]["systems"]:
+            if s["systemId"] not in by_system or str(s["at"]) > str(by_system[s["systemId"]]["at"]):
+                by_system[s["systemId"]] = s
+        out[ev_id] = _rollup(sorted(by_system.values(), key=lambda s: s["at"], reverse=True))
+    return {**engine, **out}
 
 
-def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime]]) -> Dict[str, Dict[str, Any]]:
-    """Latest engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router): the newest
-    passed or failed one, or the newest insufficient one when nothing else is on file."""
+def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime]], now: datetime) -> Dict[str, Dict[str, Any]]:
+    """Deciding engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router), as the gate
+    reads it (fairness_run_service.deciding_runs): the newest run, with a failure standing behind a newer run that
+    proves nothing. A pass on loosened thresholds reads as insufficient; a pass over a year old as not run."""
     from src.application.services.eval_engines import REGISTRY
 
     rows = db.execute(
@@ -207,31 +233,27 @@ def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime
         ),
         {"org_id": org_id},
     ).mappings().all()
-    latest: Dict[str, Dict[str, dict]] = {ev: {} for ev in REGISTRY}
+    by_system: Dict[str, List[dict]] = {}
     for row in rows:
-        if _stale(row, changed):
-            continue
-        content = json.loads(row["content_json"] or "{}")
-        ev_id = content.get("evaluationId")
-        if ev_id not in latest:
-            continue
-        held = latest[ev_id].get(row["system_id"])
-        # newest first; an insufficient run measured nothing, so an older passed or failed run still stands, as in the gate
-        if held and (held["status"] != "insufficient" or content.get("status") == "insufficient"):
-            continue
-        latest[ev_id][row["system_id"]] = {
-            "systemId": row["system_id"],
-            "systemName": row["system_name"],
-            "status": content.get("status"),
-            "detail": content.get("summary"),
-            "evidenceId": row["id"],
-            "at": row["created_at"],
-        }
-    out = {}
-    for ev_id, by_system in latest.items():
-        systems = sorted(by_system.values(), key=lambda s: s["at"], reverse=True)
-        out[ev_id] = {"status": _rollup(systems), "systems": systems, "latestAt": systems[0]["at"] if systems else None}
-    return out
+        if not _stale(row, changed):
+            record = {"evidenceType": EVALUATION_RUN, "content": json.loads(row["content_json"] or "{}"), "createdAt": row["created_at"], "row": row}
+            by_system.setdefault(row["system_id"], []).append(record)
+    latest: Dict[str, Dict[str, dict]] = {ev: {} for ev in REGISTRY}
+    for records in by_system.values():
+        for ev_id, record in deciding_runs(records).items():
+            row, content = record["row"], record["content"]
+            if ev_id not in latest or (content.get("status") == "passed" and _aged(row["created_at"], now)):
+                continue
+            latest[ev_id][row["system_id"]] = {
+                "systemId": row["system_id"],
+                "systemName": row["system_name"],
+                "status": proof_status(record, now),
+                "detail": content.get("summary"),
+                "evidenceId": row["id"],
+                "at": row["created_at"],
+                **({"thresholdLoosened": content["thresholdLoosened"]} if content.get("thresholdLoosened") else {}),
+            }
+    return {ev_id: _rollup(sorted(s.values(), key=lambda s: s["at"], reverse=True)) for ev_id, s in latest.items()}
 
 
 def system_result(res: Dict[str, Dict[str, Any]], evaluation_id: str, system_id: str) -> Optional[Dict[str, Any]]:

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from database.governance_models import (
     GovernanceAISystem,
+    GovernanceAISystemTarget,
     GovernanceApprovalRequest,
     GovernanceControlDefinition,
     GovernanceEvidenceRun,
@@ -48,6 +49,7 @@ from database.governance_models import (
 )
 from database.models import OrganizationMember, User
 from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService
+from src.application.services.system_kinds import kind_of, system_kind
 
 SEVERITIES = ("low", "medium", "high", "critical")
 ENFORCEMENTS = ("block", "warn")
@@ -539,11 +541,12 @@ class PolicyService:
 
     def draft_context(self, org_id: str, brief: str) -> str:
         """What the model may know to draft a policy: the brief, the rule language, controls, systems."""
-        s = GovernanceAISystem.__table__
+        s, t = GovernanceAISystem.__table__, GovernanceAISystemTarget.__table__
         systems = [
-            dict(r)
+            {"name": r.name, "kind": kind_of(r.metadata_json, r.target_kind), "risk_tier": r.risk_tier, "lifecycle_stage": r.lifecycle_stage}
             for r in self.db.execute(
-                select(s.c.name, s.c.system_type, s.c.risk_tier, s.c.lifecycle_stage)
+                select(s.c.name, s.c.metadata_json, t.c.kind.label("target_kind"), s.c.risk_tier, s.c.lifecycle_stage)
+                .select_from(s.outerjoin(t, t.c.system_id == s.c.id))
                 .where(s.c.org_id == org_id)
                 .order_by(s.c.name)
                 .limit(50)
@@ -782,7 +785,7 @@ class PolicyService:
             "system.lifecycle_stage": system.get("lifecycle_stage"),
             "system.status": system.get("status"),
             "system.owner": system.get("owner"),
-            "system.system_type": system.get("system_type"),
+            "system.system_type": system_kind(self.db, system_id),  # the fact keeps its name so saved rules still read it
             "system.metadata": metadata if isinstance(metadata, dict) else {},
             "approval.status": approval or "none",
             "risks.open": len(open_risks),

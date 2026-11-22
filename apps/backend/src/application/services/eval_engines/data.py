@@ -26,7 +26,8 @@ MIN_ROWS = 20
 def _is_text(series: pd.Series) -> bool:
     values = series.dropna().astype(str)
     textual = pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)
-    return textual and len(values) > 0 and (values.str.len().mean() > 30 or values.nunique() > 0.5 * len(values) > 50)
+    # long values, or mostly distinct ones: a column of short prompts is text, not a category with one row per value
+    return textual and len(values) > 0 and (values.str.len().mean() > 30 or values.nunique() > 0.5 * len(values))
 
 
 def _psi(expected: np.ndarray, actual: np.ndarray) -> float:
@@ -49,30 +50,30 @@ def _feature_drift(ref: pd.Series, cur: pd.Series) -> Dict[str, Any]:
                                                c.value_counts().reindex(cats, fill_value=0).to_numpy(float)), "ks": None, "pValue": None}
 
 
-def _matrix(ref: pd.DataFrame, cur: pd.DataFrame, features: List[str]):
+def _matrix(ref: pd.DataFrame, cur: pd.DataFrame, features: List[str], text: set):
     both = pd.concat([ref[features], cur[features]], ignore_index=True)
     parts = []
     for f in features:
         col = both[f]
-        if pd.api.types.is_numeric_dtype(col):
+        if f in text:
+            parts.append(TfidfVectorizer(max_features=2000, ngram_range=(1, 2), min_df=1).fit_transform(col.fillna("").astype(str)))
+        elif pd.api.types.is_numeric_dtype(col):
             v = col.astype(float).fillna(col.astype(float).median())
             sd = v.std() or 1.0
             parts.append(sparse.csr_matrix(((v - v.mean()) / sd).to_numpy()[:, None]))
-        elif _is_text(col):
-            parts.append(TfidfVectorizer(max_features=2000, ngram_range=(1, 2), min_df=1).fit_transform(col.fillna("").astype(str)))
         else:
             top = col.astype(str).value_counts().index[:50]
             parts.append(sparse.csr_matrix(pd.get_dummies(col.astype(str).where(col.astype(str).isin(top), "other")).to_numpy(float)))
     return sparse.hstack(parts).tocsr()
 
 
-def _sample_scores(ref: pd.DataFrame, cur: pd.DataFrame, features: List[str]) -> Tuple[np.ndarray, np.ndarray]:
+def _sample_scores(ref: pd.DataFrame, cur: pd.DataFrame, features: List[str], text: set) -> Tuple[np.ndarray, np.ndarray]:
     """Density ratio p_ref(x) / p_cur(x) per current row, from a classifier that tells the two sets apart.
 
     Probabilities are out-of-fold, so no row is scored by a model that saw it. A ratio near 1 means
     the row looks like the reference; near 0 means the reference has nothing like it.
     """
-    X = _matrix(ref, cur, features)
+    X = _matrix(ref, cur, features, text)
     y = np.r_[np.zeros(len(ref)), np.ones(len(cur))]
     folds = StratifiedKFold(n_splits=min(5, len(ref), len(cur)), shuffle=True, random_state=0)
     p = cross_val_predict(LogisticRegression(max_iter=2000, C=1.0), X, y, cv=folds, method="predict_proba")[len(ref):, 1]
@@ -101,10 +102,14 @@ def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any
         raise EngineError("The two sets share no columns to compare")
     psi_limit = number(params, "psi_limit", 0.2)
     min_share = number(params, "min_in_distribution", 0.9)
+    empty = [f"{f} in the {name} set" for name, frame in (("reference", ref), ("current", cur)) for f in features if frame[f].dropna().empty]
+    if empty:
+        raise EngineError(f"These columns have no values: {', '.join(empty[:6])}")
+    text = {f for f in features if _is_text(ref[f])}  # decided once, on the reference
 
     rows, tabular = [], []
     for f in features:
-        if _is_text(ref[f]):
+        if f in text:
             rows.append({"kind": "feature", "feature": f, "type": "text", "psi": None, "ks": None, "pValue": None, "drifted": None})
             continue
         d = _feature_drift(ref[f], cur[f])
@@ -117,24 +122,25 @@ def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any
     if len(ref) < MIN_ROWS or len(cur) < MIN_ROWS:
         return result("insufficient", f"Each set needs at least {MIN_ROWS} rows to measure drift; got {len(ref)} and {len(cur)}.", metrics, rows)
 
-    ratio, score = _sample_scores(ref, cur, features)
+    ratio, score = _sample_scores(ref, cur, features, text)
     share = float((score == 1.0).mean())
     metrics.update({"datasetDrift": round(share, 4), "samplesInDistribution": int((score == 1.0).sum()),
                     "samplesLowDensity": int((score == 0.5).sum()), "samplesOutOfDistribution": int((score == 0.0).sum())})
     worst = np.argsort(ratio)[:50]
-    shown = [c for c in features if not _is_text(cur[c])][:4] + [c for c in features if _is_text(cur[c])][:1]
+    shown = [c for c in features if c not in text][:4] + [c for c in features if c in text][:1]
     rows += [{"kind": "sample", "row": int(i) + 1, "score": float(score[i]), "densityRatio": round(float(ratio[i]), 4),
               **{c: _cell(cur[c].iloc[i]) for c in shown}} for i in worst if score[i] < 1.0]
 
     failed_features = [r["feature"] for r in rows if r.get("drifted")]
+    ok, parts = not failed_features, []
     if tabular:
-        ok = not failed_features
-        summary = (f"No feature drifted: largest PSI {metrics['maxPsi']} (limit {psi_limit})." if ok
-                   else f"{len(failed_features)} of {len(tabular)} features drifted (PSI at or above {psi_limit}): {', '.join(failed_features[:6])}.")
-    else:
-        ok = share >= min_share
-        summary = f"Only text features; judged on the share of current samples in distribution (limit {min_share})."
-    summary += f" {share:.0%} of current samples are in distribution."
+        parts.append(f"No feature drifted: largest PSI {metrics['maxPsi']} (limit {psi_limit})." if ok
+                     else f"{len(failed_features)} of {len(tabular)} features drifted (PSI at or above {psi_limit}): {', '.join(failed_features[:6])}.")
+    if text:
+        # text has no PSI, so its drift is judged on the share of current samples in distribution
+        ok = ok and share >= min_share
+        parts.append(f"Text features judged on the share of current samples in distribution (limit {min_share}).")
+    summary = " ".join(parts) + f" {share:.0%} of current samples are in distribution."
     return result("passed" if ok else "failed", summary, metrics, rows)
 
 
@@ -602,14 +608,14 @@ ENGINES: List[Engine] = [
             "A sample scores 1.0 when its ratio is at least 0.5, 0.5 down to 0.1, and 0.0 below."
         ),
         slots=(
-            Slot("reference", "Reference set", "The data the model was trained or validated on, as CSV."),
-            Slot("current", "Current set", "Production or new data with the same columns, as CSV."),
+            Slot("reference", "Reference set", "The data the system was trained or validated on, as CSV: tabular features, or a prompt log with a text column."),
+            Slot("current", "Current set", "Production or new data with the same columns, as CSV: tabular features, or a prompt log with a text column."),
         ),
         params=(
             Param("features", "Features", "Columns to compare, comma-separated. Blank compares every shared column."),
             Param("ignore", "Ignore", "Columns to leave out, such as identifiers or timestamps."),
             Param("psi_limit", "PSI limit", "A feature drifts at or above this PSI.", "number", 0.2),
-            Param("min_in_distribution", "Minimum share in distribution", "Used when every feature is text.", "number", 0.9),
+            Param("min_in_distribution", "Minimum share in distribution", "Used when any feature is text.", "number", 0.9),
         ),
         run=data_drift,
     ),

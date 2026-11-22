@@ -1,8 +1,9 @@
 """Shared helpers for the known-answer (maturity L4) engine tests.
 
-Every known-answer test names the evaluations it validates with @known_answer("EV-...").
-tests/test_known_answer_coverage.py checks that set against eval_engines.VALIDATED, which is
-what the catalogue export reads to record maturity L4.
+Every known-answer test names the evaluations it validates with @known_answer("EV-...") and the path it
+runs (eval_engines.paths); no path means the evaluation's main engine path. tests/test_known_answer_coverage.py
+checks the evaluations covered on every path against eval_engines.VALIDATED, which is what the catalogue
+export reads to record maturity L4.
 """
 
 import io
@@ -12,9 +13,9 @@ import pandas as pd
 COVERED = set()
 
 
-def known_answer(*evaluation_ids):
+def known_answer(*evaluation_ids, path=None):
     def mark(fn):
-        COVERED.update(evaluation_ids)
+        COVERED.update((e, path) for e in evaluation_ids)
         return fn
 
     return mark

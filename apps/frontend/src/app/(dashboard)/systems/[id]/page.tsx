@@ -307,7 +307,7 @@ function SystemFileBody({ id }: { id: string }) {
               <Text type="body">
                 {/* the endpoint returns the newest 20 runs */}
                 {evaluationRuns.length >= 20 ? '20+' : evaluationRuns.length} run{evaluationRuns.length === 1 ? '' : 's'}, latest{' '}
-                <Link href={`/compliance/evaluations/${encodeURIComponent(evaluationRuns[0].evaluationId)}`}>{evaluationRuns[0].evaluationId}</Link>{' '}
+                <Link href={`/compliance/evaluations/${encodeURIComponent(evaluationRuns[0].evaluationId)}?system=${encodeURIComponent(id)}`}>{evaluationRuns[0].evaluationId}</Link>{' '}
                 {evaluationRuns[0].status} on {when(evaluationRuns[0].createdAt)}
               </Text>
             ) : <Text type="body">None run</Text>}

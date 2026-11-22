@@ -321,6 +321,7 @@ def tool_scope(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Jud
 # --- EV-SEC-06 human approval for high-risk tools --------------------------------------------------
 
 def _high_risk(tool: str, patterns: List[str]) -> bool:
+    tool = tool.lower()
     for p in patterns:
         p = p.lower()
         if p == tool or (p == "mcp:*" and tool.startswith("mcp:")) or (p.startswith("mcp:") and "/" not in p and tool.startswith(p + "/")):
@@ -414,12 +415,16 @@ def memory_scan(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Ju
     if "memory_stores" not in snap:
         raise EngineError("The configuration holds no memory stores")
     stores = _live(snap, "memory_stores")
-    rows, clean, total = [], [], 0
+    rows, clean, total, unread = [], [], 0, []
+    capped = [_name(s) for s in stores if s.get("memories_capped")]
     for store in stores:
         for mem in store.get("memories") or []:
             if not isinstance(mem, dict) or mem.get("type") == "memory_prefix":
                 continue
             total += 1
+            if mem.get("content") is None:  # listed without its content (absent or null): not read, which is not read and empty
+                unread.append(f"{_name(store)}:{mem.get('path', mem.get('id', ''))}")
+                continue
             text, where = str(mem.get("content") or ""), f"{_name(store)}:{mem.get('path', mem.get('id', ''))}"
             hits = [("instruction", c, v) for c, v in scan(text, INSTRUCTIONS)] + [("secret", c, v) for c, v in scan(text, SECRETS)]
             for kind, cat, value in hits:
@@ -435,10 +440,17 @@ def memory_scan(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Ju
             if answer.get("planted"):
                 rows.append({"memory": where, "kind": "instruction", "category": "judged", "snippet": _scrub(str(answer.get("reason", "")), 200), "source": "model"})
     metrics = {"stores": len(stores), "memories": total, "instructionHits": sum(1 for r in rows if r["kind"] == "instruction"),
-               "secretHits": sum(1 for r in rows if r["kind"] == "secret"), "judged": judged, "judgeUsed": judge is not None}
+               "secretHits": sum(1 for r in rows if r["kind"] == "secret"), "judged": judged, "judgeUsed": judge is not None,
+               "unread": len(unread), "cappedStores": len(capped)}
     if rows:
         return result("failed", f"{len({r['memory'] for r in rows})} of {total} memories hold planted instructions or secrets; "
                       "delete them and redact their versions.", metrics, rows)
+    if unread:
+        return result("insufficient", f"{len(unread)} of {total} memories came without their content, so they were not read: "
+                      f"{', '.join(unread[:6])}.", metrics)
+    if capped:
+        return result("insufficient", f"Only the first memories of {', '.join(capped[:6])} were read; the store holds more than the "
+                      "snapshot takes, so the rest were not checked.", metrics)
     if not total:
         return result("passed", f"The {len(stores)} memory stores hold no memories." if stores else "The platform has no memory stores.", metrics)
     if judge is None:
@@ -502,10 +514,14 @@ def shadow_mcp(snap: Dict[str, Any], params: Dict[str, Any], judge: Optional[Jud
             if approved_hosts and not _covered(host, approved_hosts):
                 rows.append({"kind": "mcp server", "name": str(server.get("name", "")), "host": host, "agent": _name(agent)})
     shadow_agents = sum(1 for r in rows if r["kind"] == "agent")
+    unread = _unread(agents, "mcp_servers") if approved_hosts else []
     metrics = {"agents": len(agents), "mcpServers": servers, "shadowAgents": shadow_agents, "shadowServers": len(rows) - shadow_agents,
-               "agentsChecked": bool(approved_agents), "serversChecked": bool(approved_hosts)}
+               "agentsChecked": bool(approved_agents), "serversChecked": bool(approved_hosts), "unread": len(unread)}
     if rows:
         return result("failed", f"{shadow_agents} agents and {len(rows) - shadow_agents} MCP servers run outside the approved register.", metrics, rows)
+    if unread:
+        return result("insufficient", f"{len(unread)} of {len(agents)} agents carry no MCP server list, so their servers were not read: "
+                      f"{', '.join(unread[:6])}.", metrics)
     checked = " and ".join(x for x, on in ((f"{len(agents)} agents", approved_agents), (f"{servers} MCP servers", approved_hosts)) if on)
     return result("passed", f"All {checked} are on the approved register.", metrics)
 

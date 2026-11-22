@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,8 @@ from src.application.services.governance_assurance_service import (
     OrgMembership,
     member_user_matches,
 )
-from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, evaluation_status, gate_check, gate_checks
+from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, counted_runs, gate_check, gate_checks
+from src.application.services.system_kinds import SYSTEM_KINDS
 
 
 def _caller_org(request: Request) -> str:
@@ -565,6 +566,13 @@ class AISystemCreateRequest(BaseModel):
     lifecycle_stage: str = Field(pattern="^(onboard|assess|govern|remediate|operate)$")
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("metadata")
+    @classmethod
+    def _known_kind(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        if "asset_kind" in v and v["asset_kind"] not in SYSTEM_KINDS:
+            raise ValueError(f"asset_kind must be one of {', '.join(SYSTEM_KINDS)}")
+        return v
+
 
 class RemediationCreateRequest(BaseModel):
     system_id: str = Field(min_length=1)
@@ -1085,7 +1093,7 @@ def _missing_gate_evidence(records: List[Dict[str, Any]]) -> List[str]:
     """The release gate's checks with no evidence it counts, so the file and the gate agree: by evidence type, or a
     measured evaluation run through its evaluation's control. Environmental is left out: it is read from the
     assessment, and an organisation may drop it from its gate."""
-    covered = {gate_check(r) for r in records if evaluation_status(r) in (None, "passed", "failed")}
+    covered = {gate_check(r) for r in counted_runs(records)}
     return [f"{key.replace('_', ' ')} evidence" for key, _, _ in gate_checks(include_environmental=False) if key not in covered]
 
 

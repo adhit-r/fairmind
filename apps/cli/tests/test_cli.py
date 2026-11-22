@@ -411,3 +411,24 @@ def test_soa_saves_the_csv(tmp_path, monkeypatch):
 def test_audit_names_the_frameworks_it_has_when_the_key_is_wrong(monkeypatch, capsys):
     code, _, _ = run_cli(["audit", "ISO9001", "--system", "sys-1", "--api-key", "k"], lambda r: httpx.Response(200, json=_iso([])), monkeypatch=monkeypatch)
     assert code == EXIT_ERROR and "ISO42001, EUAIA" in capsys.readouterr().err
+
+
+def test_a_runner_asks_an_openai_target_at_temperature_0_and_drops_it_only_when_refused():
+    from fairmind_cli.main import _ask_model
+
+    bodies = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        if "temperature" in body and request.url.host == "refuses.acme.test":
+            return httpx.Response(400, text="Unsupported value: 'temperature'")
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    target = {"kind": "openai", "url": "https://api.acme.test/v1", "model": "m"}
+    assert _ask_model(client, target, "", "hi") == "ok"
+    assert bodies[-1]["temperature"] == 0
+    bodies.clear()
+    assert _ask_model(client, {**target, "url": "https://refuses.acme.test/v1"}, "", "hi") == "ok"
+    assert [("temperature" in b) for b in bodies] == [True, False]

@@ -148,9 +148,9 @@ def test_reproducibility_is_the_share_of_items_that_agree():
 
 @known_answer("EV-TST-09")
 def test_reproducibility_agreement_boundary_and_tolerance():
-    """Agreement 0.75: a requirement of 0.75 passes, 0.7501 fails. Numbers: |0.5-0.75| = 0.25 agrees at tolerance 0.25
+    """Agreement 0.75 on 4 items: a requirement of 0.75 is met but 4 items cannot show it (insufficient), 0.7501 fails. Numbers: |0.5-0.75| = 0.25 agrees at tolerance 0.25
     (exactly representable) and disagrees at 0.24; the pair 0.1 vs 0.9 never agrees. Agreement 1/2 = 0.5."""
-    assert _repro(RUN_A, RUN_B, {"min_agreement": 0.75})["status"] == "passed"
+    assert _repro(RUN_A, RUN_B, {"min_agreement": 0.75})["status"] == "insufficient"
     assert _repro(RUN_A, RUN_B, {"min_agreement": 0.7501})["status"] == "failed"
     a, b = csv("id,result", "1,0.5", "2,0.1"), csv("id,result", "1,0.75", "2,0.9")
     assert _repro(a, b, {"tolerance": 0.25})["metrics"]["agreement"] == pytest.approx(0.5)
@@ -252,7 +252,7 @@ def _decisions(b_selected):
     return csv("group,y_true,y_pred", *rows)
 
 
-PREDICTIONS = rows_csv(["y_true", "y_pred"], [[1, 1]] * 5 + [[0, 0]] * 4 + [[1, 0]])  # 9 of 10 correct: accuracy 0.9
+PREDICTIONS = rows_csv(["y_true", "y_pred"], ([[1, 1]] * 5 + [[0, 0]] * 4 + [[1, 0]]) * 20)  # 180 of 200 correct: accuracy 0.9, enough to show >= 0.85
 SUITE = {"attributes": "group", "baseline": 0.85}
 
 
@@ -263,7 +263,7 @@ def _suite(eid, params=None, decisions=None, explanations=None):
     return run(eid, files, {**SUITE, **(params or {})})
 
 
-def _slices(low, n=8):
+def _slices(low, n=32):
     """Intersections of gender x caste, n records each; every slice selects n/2 (0.5) except F/x which selects `low` of n."""
     rows = [f"{g},{c},1,{1 if i < (low if (g, c) == ('F', 'x') else n // 2) else 0}" for g in "FM" for c in "xy" for i in range(n)]
     return csv("gender,caste,y_true,y_pred", *rows)
@@ -283,9 +283,9 @@ def test_insurance_suite_known_answer():
 
 @known_answer("EV-USE-09")
 def test_insurance_suite_accuracy_baseline_boundary():
-    """Accuracy is exactly 0.9: a baseline of 0.9 passes (at or above), 0.9001 fails the accuracy component and so the suite.
+    """Accuracy is exactly 0.9: a baseline of 0.9 is met but no sample can show a rate exactly at its limit (insufficient, never failed), 0.9001 fails the accuracy component and so the suite.
     Without a baseline accuracy cannot be judged and the suite is insufficient."""
-    assert _suite("EV-USE-09", {"baseline": 0.9})["status"] == "passed"
+    assert _suite("EV-USE-09", {"baseline": 0.9})["status"] == "insufficient"
     off = _suite("EV-USE-09", {"baseline": 0.9001})
     assert off["status"] == "failed" and off["metrics"]["EV-TST-01"] == "failed" and off["metrics"]["EV-FAI-01"] == "passed"
     assert run("EV-USE-09", {"predictions": PREDICTIONS, "decisions": _decisions(50)}, {"attributes": "group"})["status"] == "insufficient"
@@ -294,28 +294,28 @@ def test_insurance_suite_accuracy_baseline_boundary():
 @known_answer("EV-USE-01", "EV-USE-08")
 @pytest.mark.parametrize("eid", ["EV-USE-01", "EV-USE-08"])
 def test_hiring_and_public_service_suites_check_intersections(eid):
-    """Four gender x caste slices of 8 records. Slices selecting 4 of 8 everywhere: rates all 0.5, gap 0, so intersections pass.
-    F/x selecting 2 of 8: rate 0.25 against 0.5, gap 0.25. A largest gap of 0.25 is accepted at max_gap 0.25 and rejected at 0.24."""
+    """Four gender x caste slices of 32 records (min_slice 4 is raised to the floor of 30). Slices selecting 16 of 32 everywhere:
+    rates all 0.5, gap 0, so intersections pass. F/x selecting 8 of 32: rate 0.25 against 0.5, gap 0.25. A largest gap of 0.25 is accepted at max_gap 0.25 and rejected at 0.24."""
     p = {"attributes": "gender,caste", "min_slice": 4}
-    even = _suite(eid, p, _slices(4))
+    even = _suite(eid, p, _slices(16))
     assert even["metrics"]["EV-FAI-03"] == "passed" and even["metrics"]["EV-TST-01"] == "passed"
-    assert _suite(eid, {**p, "max_gap": 0.25}, _slices(2))["metrics"]["EV-FAI-03"] == "passed"
-    skew = _suite(eid, {**p, "max_gap": 0.24}, _slices(2))
+    assert _suite(eid, {**p, "max_gap": 0.25}, _slices(8))["metrics"]["EV-FAI-03"] == "passed"
+    skew = _suite(eid, {**p, "max_gap": 0.24}, _slices(8))
     assert skew["metrics"]["EV-FAI-03"] == "failed" and skew["status"] == "failed"
-    assert [r["evaluation"] for r in skew["detail"]] == ["EV-TST-01", "EV-FAI-01", "EV-FAI-03"]
+    assert [r["evaluation"] for r in skew["detail"]] == ["EV-TST-01", "EV-FAI-01", "EV-FAI-03", *(["EV-TST-04"] if eid == "EV-USE-01" else [])]
 
 
 @known_answer("EV-USE-02")
 def test_credit_suite_runs_india_check_and_explanations():
-    """Slices carry caste, an India-specific attribute, so EV-FAI-06 reads it. Slices of 16 give every group 32 rows, enough
+    """Slices carry caste, an India-specific attribute, so EV-FAI-06 reads it. Slices of 32 give every group 64 rows, enough
     to judge (under 30 is insufficient). Even slices pass every check; explanation
     faithfulness is 0.75 (see EV-OVS-04) against an agreed 0.7, so all four components pass.
     Faithfulness agreed at 0.8 fails EV-OVS-04 and the suite. Dropping caste leaves EV-FAI-06 with nothing to read: insufficient."""
     p = {"attributes": "gender,caste", "min_slice": 4, "min_faithfulness": 0.7}
-    ok = _suite("EV-USE-02", p, _slices(8, 16), EXPLAIN)
+    ok = _suite("EV-USE-02", p, _slices(16, 32), EXPLAIN)
     assert ok["status"] == "passed" and ok["metrics"]["components"] == 4 and ok["metrics"]["EV-FAI-06"] == "passed"
-    assert _suite("EV-USE-02", {**p, "min_faithfulness": 0.8}, _slices(8, 16), EXPLAIN)["metrics"]["EV-OVS-04"] == "failed"
-    plain = _suite("EV-USE-02", {**p, "attributes": "gender"}, _slices(8, 16), EXPLAIN)
+    assert _suite("EV-USE-02", {**p, "min_faithfulness": 0.8}, _slices(16, 32), EXPLAIN)["metrics"]["EV-OVS-04"] == "failed"
+    plain = _suite("EV-USE-02", {**p, "attributes": "gender"}, _slices(16, 32), EXPLAIN)
     assert plain["metrics"]["EV-FAI-06"] == "insufficient" and plain["status"] == "insufficient"
 
 
@@ -324,9 +324,9 @@ def test_credit_suite_runs_india_check_and_explanations():
 def test_explanation_floor_decides_the_suite_exactly_at_faithfulness(eid):
     """Faithfulness is exactly 0.75: an agreed 0.75 passes the explanation component, 0.7501 fails it and the suite."""
     p = {"attributes": "gender,caste", "min_slice": 4}
-    ok = _suite(eid, {**p, "min_faithfulness": 0.75}, _slices(8, 16), EXPLAIN)
+    ok = _suite(eid, {**p, "min_faithfulness": 0.75}, _slices(16, 32), EXPLAIN)
     assert ok["metrics"]["EV-OVS-04"] == "passed" and ok["status"] == "passed"
-    bad = _suite(eid, {**p, "min_faithfulness": 0.7501}, _slices(8, 16), EXPLAIN)
+    bad = _suite(eid, {**p, "min_faithfulness": 0.7501}, _slices(16, 32), EXPLAIN)
     assert bad["metrics"]["EV-OVS-04"] == "failed" and bad["status"] == "failed"
 
 

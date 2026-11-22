@@ -66,7 +66,9 @@ SECRETS: List[Detector] = [
     ("slack_token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"), None),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"), None),
     ("connection_string", re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:@/]+:[^\s@/]+@[^\s]+", re.I), None),
-    ("password_assignment", re.compile(r"(?i)\b(?:password|passwd|pwd|secret|api[_-]?key|token)\s*[:=]\s*['\"]?[^\s'\"]{8,}"), None),
+    # a quoted key ("api_key": "...") counts; a value read from the environment does not
+    ("password_assignment", re.compile(r"(?i)\b(?:password|passwd|pwd|secret|api[_-]?key|token)['\"]?\s*[:=]\s*['\"]?"
+                                       r"(?![^\s'\"]*(?:\$\{|environ|process\.env|getenv))[^\s'\"]{8,}"), None),
 ]
 
 # Instructions planted in data, documents, tool descriptions or memories.

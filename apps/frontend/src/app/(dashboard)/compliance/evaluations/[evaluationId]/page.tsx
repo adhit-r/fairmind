@@ -1,8 +1,17 @@
 'use client'
 
+import '@/astryx/pages/evaluations.css'
 import Link from 'next/link'
-import { useParams, useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Activity, ArrowLeftRight, Bot, Boxes, Check, Cloud, Code, Cpu, Info, MessageSquare, Network, Play, Plug, Scale, Server, Upload } from 'lucide-react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { FileInput } from '@astryxdesign/core/FileInput'
+import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
+import { Selector } from '@astryxdesign/core/Selector'
+import { Token } from '@astryxdesign/core/Token'
 import {
   useAIProvider,
   useEngine,
@@ -15,7 +24,11 @@ import {
   type EngineRun,
   type EngineSpec,
   type EvaluationJob,
+  type RunWay,
 } from '@/lib/api/hooks/usePacks'
+import { setSystemKind } from '@/lib/api/hooks/useLifecycle'
+import { KIND_LABEL } from '@/astryx/data/discovery'
+import { defaultWay, keptAs, presetFor, proves } from '@/astryx/data/evaluations'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { Drawer } from '@astryxdesign/core/Drawer'
 import { TraceView } from '@/components/traces/TraceView'
@@ -91,10 +104,11 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2.5">
         <ResultPill status={run.status} />
+        {run.thresholdLoosened && <Pill tone="warn">Loosened thresholds: not counted as proof</Pill>}
         <span className={`text-[13px] ${MUTED}`}>
           {run.systemName}, {when(run.createdAt)}
           {Object.values(run.files).length > 0 && `, from ${run.source === 'connection' ? 'the connection to ' : ''}${Object.values(run.files).join(' and ')}`}
-          {run.judge && `, judged by ${run.judge.model}`}
+          {run.judge && `, judged by ${run.judge.model}${run.judge.sharesProviderWithSystem ? ', the same provider as the system' : ''}`}
         </span>
       </div>
       <p className="m-0 leading-normal text-[var(--fm-ink)]">{run.summary}</p>
@@ -119,72 +133,178 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
   )
 }
 
-/** What a behaviour test calls: the system under test (from its page) and the judge (the organisation's AI provider). */
-function Connections({ spec, systemId, onReady, recorded }: { spec: EngineSpec; systemId: string; onReady: (ready: boolean) => void; recorded: boolean }) {
+const WAY_LABEL: Record<RunWay, string> = { calls_system: 'Call the system', live_runs: 'Live runs', platform: 'Platform connection', files: 'Upload files' }
+const WAY_ICON: Record<RunWay, typeof Plug> = { calls_system: Plug, live_runs: Activity, platform: Network, files: Upload }
+/** What a ready or missing way reads as beside the system. */
+const WAY_STATE: Partial<Record<RunWay, [ready: string, missing: string]>> = {
+  calls_system: ['Connected', 'Not connected'],
+  live_runs: ['Live runs this week', 'No live runs'],
+  platform: ['Platform connected', 'Platform not connected'],
+}
+/** What the chosen way asks of the system, for the header. */
+const WAY_HEAD: Record<RunWay, string> = { calls_system: 'Calls the system', live_runs: 'Reads live runs', platform: 'Reads the platform', files: 'Needs a file' }
+const KIND_ICON: Record<string, typeof Plug> = { llm_app: MessageSquare, ml_model: Boxes, agent: Bot, ai_service: Cloud, ai_assisted_dev: Code, mcp_server: Server }
+
+function Node({ icon, title, sub, state }: { icon: ReactNode; title: string; sub?: string; state?: 'ok' | 'missing' }) {
+  return (
+    <div className="fm-ev-node">
+      <span className={`fm-ev-node-icon${state === 'missing' ? ' is-missing' : ''}`} aria-hidden>
+        {icon}
+        {state === 'ok' && <span className="fm-ev-node-ok"><Check size={10} strokeWidth={3.5} /></span>}
+      </span>
+      <span className="fm-ev-node-title">{title}</span>
+      {sub && <span className="fm-ev-muted fm-ev-small">{sub}</span>}
+    </div>
+  )
+}
+
+function Arrow({ label, broken, muted }: { label?: string; broken?: boolean; muted?: boolean }) {
+  return (
+    <div className={`fm-ev-arrow${broken ? ' is-broken' : muted ? ' is-muted' : ''}`}>
+      <span className="fm-ev-small">{label || ' '}</span>
+      <svg width="100%" height="14" viewBox="0 0 120 14" preserveAspectRatio="none" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+        {broken ? <><path d="M2 7h48M70 7h48" strokeDasharray="3 5" /><path d="M56 2l8 10M64 2l-8 10" /></> : <><path d="M2 7h110" strokeDasharray="4 4" /><path d="M106 2l6 5-6 5" /></>}
+      </svg>
+    </div>
+  )
+}
+
+/** A behaviour test: FairMind writes probes, the system (or its live runs, or FairMind's agent) answers, the judge decides. Without both ends, the steps to set them up. */
+function Flow({ spec, system, recorded, sending, answers, onReady }: { spec: EngineSpec; system: { id: string; name: string; kind?: string | null }; recorded: boolean; sending: string; answers: string; onReady: (ready: boolean) => void }) {
   const provider = useAIProvider()
   const calls = spec.live === 'target' && !recorded // live runs already hold the answers, so the system is not called
-  const target = useSystemTarget(calls && systemId ? systemId : undefined)
+  const target = useSystemTarget(calls ? system.id : undefined)
   const cfg = provider.data?.config
   const judgeOk = !!cfg && cfg.enabled && cfg.keyReadable
   const t = target.data?.target
   const targetOk = !calls || (!!t && t.authReadable)
+  const checking = (calls && target.loading && !target.data) || (provider.loading && !provider.data)
   useEffect(() => onReady(judgeOk && targetOk), [judgeOk, targetOk, onReady])
-  const row = (label: string, value: ReactNode) => (
-    <div className="flex flex-col gap-0.5">
-      <span className={LABEL}>{label}</span>
-      <span className="text-[13px] leading-snug text-[var(--fm-ink)]">{value}</span>
+  const KindIcon = KIND_ICON[system.kind ?? ''] ?? Cpu
+  const steps = [
+    ...(calls
+      ? [{ done: targetOk, label: targetOk ? `${system.name} connected` : t ? `Enter ${system.name}'s auth value again` : `Connect ${system.name}`, href: `/systems/${encodeURIComponent(system.id)}#target`, action: 'Connect' }]
+      : []),
+    { done: judgeOk, label: judgeOk && cfg ? `Judge set: ${cfg.providerName}` : 'Set a judge model', href: '/settings?section=ai-provider', action: 'Set up' },
+  ]
+  const left = steps.filter((s) => !s.done).length
+  const ring = 2 * Math.PI * 16
+  return (
+    <>
+      <section className="fm-ev-card fm-ev-flow" aria-label="How it runs">
+        <Node icon={<img src="/logo.png" alt="" width={30} height={30} />} title="FairMind" sub={recorded ? 'reads runs' : 'writes probes'} />
+        <Arrow label={calls && !targetOk ? 'no connection' : sending} broken={calls && !targetOk} />
+        <Node
+          icon={spec.live === 'agent' ? <Bot size={26} /> : recorded ? <Activity size={26} /> : <KindIcon size={26} />}
+          title={spec.live === 'agent' ? "FairMind's agent" : recorded ? 'Live runs' : system.name}
+          sub={targetOk ? 'answers' : undefined}
+          state={calls ? (targetOk ? 'ok' : 'missing') : undefined}
+        />
+        <Arrow label={targetOk ? answers : ''} muted={!targetOk} />
+        <Node icon={<Scale size={24} />} title="Judge" sub={judgeOk && cfg ? cfg.providerName : 'not set'} state={judgeOk ? 'ok' : 'missing'} />
+      </section>
+      {target.error && <ErrorNote message={`Could not check the connection. ${target.error}`} onRetry={target.reload} />}
+      {provider.error && <ErrorNote message={`Could not check the AI provider. ${provider.error}`} onRetry={provider.reload} />}
+      {!checking && left > 0 && (
+        <section className="fm-ev-card" aria-labelledby="ev-setup">
+          <div className="fm-ev-setup-head">
+            <svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label={`${steps.length - left} of ${steps.length} done`}>
+              <circle cx="20" cy="20" r="16" fill="none" className="fm-ev-ring-track" strokeWidth="5" />
+              <circle cx="20" cy="20" r="16" fill="none" className="fm-ev-ring-done" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(ring * (steps.length - left)) / steps.length} ${ring}`} transform="rotate(-90 20 20)" />
+            </svg>
+            <h2 id="ev-setup" className="fm-ev-h2">{left} {left === 1 ? 'step' : 'steps'} left</h2>
+          </div>
+          <ol className="fm-ev-steps">
+            {steps.map((s) => (
+              <li key={s.label} className={s.done ? 'is-done' : 'is-todo'}>
+                <span className="fm-ev-step-mark" aria-hidden>{s.done ? <Check size={14} strokeWidth={3} /> : <Plug size={14} />}</span>
+                <span className="fm-ev-step-label">{s.label}</span>
+                {!s.done && <Button label={s.action} variant="primary" size="sm" href={s.href} />}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </>
+  )
+}
+
+/** The 95% bound each offered probe count shows with none failing, against the pass limit. */
+function ProofBars({ bounds, limit, count, needed }: { bounds: Array<{ count: number; bound: number }>; limit: number | null; count: number; needed: number | null }) {
+  const scale = Math.max(...bounds.map((b) => b.bound), limit ?? 0) || 1
+  const at = (v: number) => `${Math.min(100, (v / scale) * 100)}%`
+  const none = limit !== null && !bounds.some((b) => proves(b.bound, limit))
+  // a zero limit is zero tolerance on the server: no count bounds a rate at 0, any failure fails
+  if (limit === 0) return <span className="fm-ev-muted fm-ev-small">0% limit: any failure fails.</span>
+  return (
+    <div className="fm-ev-proof">
+      {bounds.map((b) => {
+        const ok = limit !== null && proves(b.bound, limit)
+        return (
+          <div key={b.count} className={`fm-ev-proof-row${b.count === count ? ' is-on' : ''}`}>
+            <span>{b.count}</span>
+            <span className="fm-ev-proof-track" aria-hidden>
+              <span className={`fm-ev-proof-fill${limit === null ? '' : ok ? ' is-ok' : ' is-no'}`} style={{ width: at(b.bound) }} />
+              {limit !== null && <span className="fm-ev-proof-limit" style={{ left: at(limit) }} />}
+            </span>
+            <span className={limit === null ? 'fm-ev-muted' : ok ? 'fm-ev-ok' : 'fm-ev-no'}>
+              {limit === null ? `under ${b.bound}%` : ok ? `shows ${limit}% or less` : `cannot show ${limit}%`}
+            </span>
+          </div>
+        )
+      })}
+      {limit !== null && <span className="fm-ev-muted fm-ev-small">{limit}% limit; bars: highest rate still possible at 95% with none failing.</span>}
+      {none && needed && <span className="fm-ev-muted fm-ev-small">Showing {limit}% takes {needed} probes with none failing: upload a probe set.</span>}
     </div>
   )
+}
+
+/** A data-only evaluation: the files it compares and when it passes. */
+function Compare({ slots, threshold, psi, system }: { slots: EngineSpec['slots']; threshold: string; psi: number | null; system: string }) {
+  const pair = slots.length === 2 // two files: an older set against a recent one
   return (
-    <div className="flex flex-col gap-2.5 rounded-[10px] border border-[var(--fm-line)] px-3 py-2.5">
-      {calls &&
-        row(
-          'System under test',
-          !systemId ? (
-            <span className={MUTED}>Choose a system first</span>
-          ) : target.error ? (
-            <span>
-              Could not check the connection. {target.error}{' '}
-              <button type="button" onClick={target.reload} className="font-semibold underline">Try again</button>
-            </span>
-          ) : target.loading && !target.data ? (
-            <span className={MUTED}>Checking</span>
-          ) : t ? (
-            <span className="break-all">{t.url}{t.model ? `, ${t.model}` : ''}{t.authReadable ? '' : ' (auth value unreadable, enter it again)'}</span>
-          ) : (
-            <span>
-              Not connected. <Link href={`/systems/${encodeURIComponent(systemId)}#target`} className="font-semibold underline">Connect it on the system&apos;s page</Link>
-            </span>
-          ),
-        )}
-      {spec.live === 'agent' && row('Agent under test', "FairMind's packs agent, on your AI provider")}
-      {row(
-        'Judge',
-        provider.error ? (
-          <span>
-            Could not check the AI provider. {provider.error}{' '}
-            <button type="button" onClick={provider.reload} className="font-semibold underline">Try again</button>
-          </span>
-        ) : provider.loading && !provider.data ? (
-          <span className={MUTED}>Checking</span>
-        ) : judgeOk ? (
-          `${cfg.providerName}, ${cfg.model}`
-        ) : (
-          <span>
-            No AI provider is on. <Link href="/settings?section=ai-provider" className="font-semibold underline">Set one up in organisation settings</Link>
-          </span>
-        ),
-      )}
-    </div>
+    <section className="fm-ev-card" aria-label={pair ? 'What it compares' : 'What it reads'}>
+      <div className="fm-ev-compare">
+        {slots.map((s, i) => (
+          <Fragment key={s.name}>
+            {pair && i === 1 && <ArrowLeftRight size={22} className="fm-ev-muted" aria-hidden />}
+            <figure className="fm-ev-doc">
+              <span className={`fm-ev-doc-stack${pair && i === 1 ? ' is-recent' : ''}`} aria-hidden><span /><span /></span>
+              <figcaption>{s.label}</figcaption>
+            </figure>
+          </Fragment>
+        ))}
+        <div className="fm-ev-passes">
+          <span className="fm-ev-label">Passes when</span>
+          <span className="fm-ev-big">{psi !== null ? `PSI under ${psi}` : threshold || '-'}</span>
+          {psi !== null && (
+            <>
+              <span className="fm-ev-meter" aria-hidden><span className="is-ok" /><span className="is-no" /><span className="fm-ev-meter-mark" /></span>
+              <span className="fm-ev-meter-legend fm-ev-small fm-ev-muted"><span>stable</span><span>{psi}</span><span>shifted</span></span>
+            </>
+          )}
+        </div>
+      </div>
+      <p className="fm-ev-note">
+        <Info size={16} aria-hidden />
+        Reads the files you upload. {system} is not called.
+      </p>
+    </section>
   )
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId: string; spec: EngineSpec; live: boolean; liveRuns: boolean; onDone: (run: EngineRun) => void }) {
-  const { systems, selectedSystem } = useSystemContext()
+function RunForm({ evaluationId, spec, live, way, system, threshold, onDone }: {
+  evaluationId: string
+  spec: EngineSpec
+  live: boolean
+  way: RunWay
+  system: { id: string; name: string; kind?: string | null }
+  threshold: string
+  onDone: (run: EngineRun) => void
+}) {
   const { runEvaluation, getJob, getRun } = usePackActions()
-  const [systemId, setSystemId] = useState('')
   const [files, setFiles] = useState<Record<string, File | null>>({})
   const [params, setParams] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -201,13 +321,7 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
   }, [])
   const connections = usePlatformConnections()
   const connection = connections.data?.find((c) => c.connected && c.keyReadable) ?? null
-  const asked = useSearchParams().get('source')
-  const [source, setSource] = useState<'upload' | 'connection' | 'traces' | null>(liveRuns && asked === 'traces' ? 'traces' : null)
-  const from = liveRuns ? source ?? 'upload' : spec.platform ? (source === 'traces' ? null : source) ?? (connection ? 'connection' : 'upload') : 'upload'
-
-  useEffect(() => {
-    if (!systemId && selectedSystem?.id) setSystemId(selectedSystem.id)
-  }, [selectedSystem, systemId])
+  const from = way === 'live_runs' ? 'traces' : way === 'platform' ? 'connection' : 'upload'
 
   // A behaviour test whose probes can be written, uploaded or taken from a benchmark offers that as one choice.
   const probeSlot = spec.slots.find((s) => s.name === 'probes' && !s.required)
@@ -219,10 +333,16 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
   // Column names describe an uploaded file; the server sets them when it reads live runs.
   const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : spec.params)
     .filter((p) => from !== 'traces' || !p.name.endsWith('_column'))
-  const count = (params.probe_count ?? '').trim() || String(countParam?.default ?? '')
+  const sampling = choosing ? spec.sampling : null
+  const agreed = Number((params.max_rate ?? '').trim())
+  const limit = sampling ? sampling.limit ?? ((params.max_rate ?? '').trim() && !Number.isNaN(agreed) ? agreed : null) : null
+  const preset = sampling ? presetFor(sampling.bounds, limit) : null
+  const count = (params.probe_count ?? '').trim() || String(preset ?? countParam?.default ?? '')
+  const psiParam = spec.params.find((p) => p.name === 'psi_limit' && typeof p.default === 'number')
+  const psi = psiParam ? Number((params.psi_limit ?? '').trim() || psiParam.default) : null
 
   const filesReady = from === 'traces' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
-  const ready = !!systemId && connected && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
+  const ready = connected && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   /** A behaviour test answers with a job; follow it until the run is stored. */
   async function follow(started: EvaluationJob) {
@@ -268,7 +388,7 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
       else if (probes !== 'upload') values.probe_source = probes
     }
     const form = new FormData()
-    form.append('system_id', systemId)
+    form.append('system_id', system.id)
     form.append('params', JSON.stringify(values))
     if (live) form.append('mode', 'live')
     form.append('source', from)
@@ -281,303 +401,342 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
     setBusy(false)
   }
 
+  const sending = choosing ? (probes === 'write' ? `${count} probes` : probes === 'upload' ? 'your probes' : `${probes} set`) : ''
   return (
     <form
-      className="flex flex-col gap-4"
+      className="fm-ev-stack"
       onSubmit={(e) => {
         e.preventDefault()
         submit()
       }}
     >
-      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{from === 'connection' ? spec.platformMethod : spec.method}</p>
-      {liveRuns && (
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Read from</legend>
-          {([
-            ['traces', 'Live runs', "The last 7 days of the system's live runs. Nothing to upload."],
-            ['upload', 'Upload files', spec.slots.map((s) => s.help).join(' ')],
-          ] as const).map(([value, title, help]) => (
-            <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-[10px] border bg-white px-3.5 py-3 ${from === value ? 'border-[var(--fm-ink)]' : 'border-[var(--fm-line)]'}`}>
-              <input type="radio" name="read-from" value={value} checked={from === value} onChange={() => setSource(value)} className="mt-0.5 accent-[var(--fm-ink)]" />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-sm font-semibold text-[var(--fm-ink)]">{title}</span>
-                <span className={`text-xs leading-normal ${MUTED}`}>{help}</span>
+      {spec.live ? (
+        <Flow spec={spec} system={system} recorded={from === 'traces'} sending={sending} answers={choosing && probes === 'write' ? `${count} answers` : ''} onReady={setConnected} />
+      ) : (
+        way === 'files' && slots.length > 0 && <Compare slots={slots} threshold={threshold} psi={psi} system={system.name} />
+      )}
+      <section className="fm-ev-card fm-ev-stack" aria-label="Run">
+        {choosing && probeSlot && countParam && connected && (
+          <>
+            <div className="fm-ev-between">
+              <h2 className="fm-ev-h2">Probes</h2>
+              {probes === 'write' && sampling && (
+                <SegmentedControl label="Number of probes" value={count} onChange={(v) => setParams((p) => ({ ...p, probe_count: v }))} size="sm">
+                  {sampling.bounds.map((b) => (
+                    <SegmentedControlItem key={b.count} label={String(b.count)} value={String(b.count)} />
+                  ))}
+                </SegmentedControl>
+              )}
+            </div>
+            {probes === 'write' && sampling && <ProofBars bounds={sampling.bounds} limit={limit} count={Number(count)} needed={sampling.needed} />}
+            {probes === 'write' && !sampling && (
+              <span className="fm-ev-inline">
+                <input
+                  id="param-probe_count"
+                  type="number"
+                  min={1}
+                  aria-label={countParam.label}
+                  value={params.probe_count ?? ''}
+                  placeholder={String(countParam.default ?? '')}
+                  onChange={(e) => setParams((v) => ({ ...v, probe_count: e.target.value }))}
+                  className={FIELD.replace('w-full', 'w-24')}
+                />
+                <span className="fm-ev-muted fm-ev-small">{countParam.help}</span>
               </span>
-            </label>
-          ))}
-        </fieldset>
-      )}
-      {spec.platform && (
-        <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-          <legend className="mb-1.5 text-[13px] font-semibold text-[var(--fm-ink)]">Read from</legend>
-          <div className="flex flex-wrap gap-2" role="radiogroup">
-            {(['connection', 'upload'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={from === value}
-                onClick={() => setSource(value)}
-                className={`rounded-full border px-3.5 py-1.5 text-[13px] font-semibold ${
-                  from === value ? 'border-[var(--fm-ink)] bg-[var(--fm-ink)] text-white' : 'border-[var(--fm-line)] bg-white text-[var(--fm-ink)]'
-                }`}
-              >
-                {value === 'connection' ? `From connection${connection ? `: ${connection.name}` : ''}` : 'Upload'}
-              </button>
-            ))}
-          </div>
-          {from === 'connection' && !connection && !connections.loading && (
-            <span className={`text-xs ${MUTED}`}>
-              No agent platform is connected. Connect one in <Link href="/settings?section=connections" className="font-semibold underline">organization settings</Link>, or upload an export.
-            </span>
-          )}
-          {from === 'connection' && connection && (
-            <span className={`text-xs ${MUTED}`}>FairMind lists the platform&apos;s agents, environments, vaults, memory stores, deployments and recent sessions with read-only calls when you run.</span>
-          )}
-          {spec.judge && (
-            <span className={`text-xs ${MUTED}`}>Uses your model from organization settings, AI provider, when one is set.</span>
-          )}
-        </fieldset>
-      )}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="eval-system" className="text-[13px] font-semibold text-[var(--fm-ink)]">AI system</label>
-        <select id="eval-system" value={systemId} onChange={(e) => setSystemId(e.target.value)} className={FIELD} required>
-          <option value="">Choose the system this result belongs to</option>
-          {systems.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        {systems.length === 0 && (
-          <span className={`text-xs ${MUTED}`}>
-            Register an AI system first: <Link href="/onboard" className="font-semibold underline">Register a system</Link>
+            )}
+            <SegmentedControl label="Probes from" value={probes} onChange={setProbes} size="sm">
+              <SegmentedControlItem label="Written for this system" value="write" />
+              {(benchParam?.options ?? []).map((o) => (
+                <SegmentedControlItem key={o} label={`${o} set`} value={o} />
+              ))}
+              <SegmentedControlItem label="Your CSV" value="upload" />
+            </SegmentedControl>
+            {probes === 'upload' && (
+              <FileInput label={probeSlot.label} description={probeSlot.help} accept={ACCEPT[probeSlot.kind] || undefined} value={files.probes ?? null} onChange={(f) => setFiles((v) => ({ ...v, probes: Array.isArray(f) ? f[0] ?? null : f }))} />
+            )}
+          </>
+        )}
+        {from === 'connection' && (
+          <span className="fm-ev-muted fm-ev-small">
+            {connection ? (
+              `FairMind reads ${connection.name} with read-only calls when you run.`
+            ) : connections.loading ? (
+              'Checking the platform connection'
+            ) : (
+              <>
+                No agent platform is connected. <Link href="/settings?section=connections" className="font-semibold underline">Connect one in organization settings</Link>.
+              </>
+            )}
           </span>
         )}
-      </div>
-      {spec.live && <Connections spec={spec} systemId={systemId} onReady={setConnected} recorded={from === 'traces'} />}
-      {choosing && probeSlot && countParam && (
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Probes</legend>
-          {[
-            ...(benchParam?.options ?? []).map((o) => ({ value: o, title: `${o} benchmark`, help: benchParam?.help ?? '' })),
-            { value: 'write', title: 'Write them for this system', help: "Your organisation's model writes them from the system's intended use." },
-            { value: 'upload', title: 'Upload your own', help: probeSlot.help },
-          ].map((o) => {
-            const on = probes === o.value
-            return (
-              <label
-                key={o.value}
-                className={`flex cursor-pointer items-start gap-3 rounded-[10px] border bg-white px-3.5 py-3 ${on ? 'border-[var(--fm-ink)]' : 'border-[var(--fm-line)]'}`}
-              >
-                <input type="radio" name="probes" value={o.value} checked={on} onChange={() => setProbes(o.value)} className="mt-0.5 accent-[var(--fm-ink)]" />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-sm font-semibold text-[var(--fm-ink)]">{o.title}</span>
-                  <span className={`text-xs leading-normal ${MUTED}`}>{o.help}</span>
-                  {on && o.value === 'write' && (
-                    <span className="mt-2 flex flex-wrap items-center gap-2.5">
-                      <input
-                        id="param-probe_count"
-                        type="number"
-                        min={1}
-                        aria-label={countParam.label}
-                        value={params.probe_count ?? ''}
-                        placeholder={String(countParam.default ?? '')}
-                        onChange={(e) => setParams((v) => ({ ...v, probe_count: e.target.value }))}
-                        className={FIELD.replace('w-full', 'w-24')}
-                      />
-                      <span className={`text-xs ${MUTED}`}>{countParam.help}</span>
-                    </span>
-                  )}
-                  {on && o.value === 'upload' && (
+        {from === 'connection' && spec.judge && <JudgeNote />}
+        {from === 'upload' && slots.length > 0 && (
+          <div className="fm-ev-drops">
+            {slots.map((s) => (
+              <FileInput
+                key={s.name}
+                mode="dropzone"
+                label={s.label}
+                description={s.help}
+                isOptional={!s.required}
+                accept={ACCEPT[s.kind] || undefined}
+                value={files[s.name] ?? null}
+                onChange={(f) => setFiles((v) => ({ ...v, [s.name]: Array.isArray(f) ? f[0] ?? null : f }))}
+              />
+            ))}
+          </div>
+        )}
+        {settings.length > 0 && (
+          <details className="rounded-[10px] border border-[var(--fm-line)] px-3 py-2" open={settings.some((p) => p.required)}>
+            <summary className="cursor-pointer text-[13px] font-semibold text-[var(--fm-ink)]">Settings</summary>
+            <div className="mt-3 flex flex-col gap-3.5">
+              {settings.map((p) => (
+                <div key={p.name} className="flex flex-col gap-1.5">
+                  <label htmlFor={`param-${p.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
+                    {p.label}{p.required ? '' : ' (optional)'}
+                  </label>
+                  {p.options?.length ? (
+                    <select
+                      id={`param-${p.name}`}
+                      value={params[p.name] ?? ''}
+                      onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
+                      className={FIELD}
+                    >
+                      <option value="">None</option>
+                      {p.options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : p.kind === 'json' ? (
+                    <textarea
+                      id={`param-${p.name}`}
+                      rows={3}
+                      value={params[p.name] ?? ''}
+                      onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
+                      className={`${FIELD} font-mono`}
+                    />
+                  ) : (
                     <input
-                      id="slot-probes"
-                      type="file"
-                      aria-label={probeSlot.label}
-                      accept={ACCEPT[probeSlot.kind] || undefined}
-                      onChange={(e) => setFiles((f) => ({ ...f, probes: e.target.files?.[0] ?? null }))}
-                      className="mt-2 text-sm text-[var(--fm-ink)] file:mr-3 file:rounded-full file:border file:border-[var(--fm-line)] file:bg-white file:px-3 file:py-1.5 file:text-[13px] file:font-semibold"
+                      id={`param-${p.name}`}
+                      type={p.kind === 'number' ? 'number' : 'text'}
+                      step="any"
+                      value={params[p.name] ?? ''}
+                      placeholder={p.default !== null && p.default !== undefined ? String(p.default) : ''}
+                      onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
+                      className={FIELD}
                     />
                   )}
-                </span>
-              </label>
-            )
-          })}
-        </fieldset>
-      )}
-      {from === 'upload' && slots.map((s) => (
-        <div key={s.name} className="flex flex-col gap-1.5">
-          <label htmlFor={`slot-${s.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
-            {s.label}{s.required ? '' : ' (optional)'}
-          </label>
-          <input
-            id={`slot-${s.name}`}
-            type="file"
-            accept={ACCEPT[s.kind] || undefined}
-            onChange={(e) => setFiles((f) => ({ ...f, [s.name]: e.target.files?.[0] ?? null }))}
-            className="text-sm text-[var(--fm-ink)] file:mr-3 file:rounded-full file:border file:border-[var(--fm-line)] file:bg-white file:px-3 file:py-1.5 file:text-[13px] file:font-semibold"
-          />
-          <span className={`text-xs ${MUTED}`}>{s.help}</span>
-        </div>
-      ))}
-      {settings.length > 0 && (
-        <details className="rounded-[10px] border border-[var(--fm-line)] px-3 py-2" open={settings.some((p) => p.required)}>
-          <summary className="cursor-pointer text-[13px] font-semibold text-[var(--fm-ink)]">Settings</summary>
-          <div className="mt-3 flex flex-col gap-3.5">
-            {settings.map((p) => (
-              <div key={p.name} className="flex flex-col gap-1.5">
-                <label htmlFor={`param-${p.name}`} className="text-[13px] font-semibold text-[var(--fm-ink)]">
-                  {p.label}{p.required ? '' : ' (optional)'}
-                </label>
-                {p.options?.length ? (
-                  <select
-                    id={`param-${p.name}`}
-                    value={params[p.name] ?? ''}
-                    onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
-                    className={FIELD}
-                  >
-                    <option value="">None</option>
-                    {p.options.map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
-                ) : p.kind === 'json' ? (
-                  <textarea
-                    id={`param-${p.name}`}
-                    rows={3}
-                    value={params[p.name] ?? ''}
-                    onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
-                    className={`${FIELD} font-mono`}
-                  />
-                ) : (
-                  <input
-                    id={`param-${p.name}`}
-                    type={p.kind === 'number' ? 'number' : 'text'}
-                    step="any"
-                    value={params[p.name] ?? ''}
-                    placeholder={p.default !== null && p.default !== undefined ? String(p.default) : ''}
-                    onChange={(e) => setParams((v) => ({ ...v, [p.name]: e.target.value }))}
-                    className={FIELD}
-                  />
-                )}
-                <span className={`text-xs ${MUTED}`}>{p.help}</span>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-      {failure && <ErrorNote message={failure} />}
-      {job && (
-        <div className="flex flex-col gap-1.5" role="status">
-          <span className={`text-[13px] ${MUTED}`}>
-            {job.phase ?? 'Running'}{job.total > 0 ? `: ${job.done} of ${job.total}` : ''}
-          </span>
-          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--fm-line)]">
-            <div className="h-full rounded-full bg-[var(--fm-ink)] transition-[width]" style={{ width: `${job.total ? (job.done / job.total) * 100 : 4}%` }} />
-          </div>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" className={BTN_P} disabled={!ready || busy}>{busy ? 'Running' : 'Run evaluation'}</button>
-        {choosing && (
-          <span className={`min-w-[180px] flex-1 text-xs ${MUTED}`}>
-            {probes === 'write'
-              ? `Your organisation's model writes ${count} probes from the intended use.`
-              : probes === 'upload'
-                ? 'Sends every row of your file.'
-                : 'Sends the same published cases every run.'}
-          </span>
+                  <span className={`text-xs ${MUTED}`}>{p.help}</span>
+                </div>
+              ))}
+            </div>
+          </details>
         )}
-      </div>
-      {spec.live && <p className={`m-0 text-xs ${MUTED}`}>Runs in the background; you can leave this page and find the result under Runs.</p>}
+        {failure && <ErrorNote message={failure} />}
+        {job && (
+          <div className="flex flex-col gap-1.5" role="status">
+            <span className={`text-[13px] ${MUTED}`}>
+              {job.phase ?? 'Running'}{job.total > 0 ? `: ${job.done} of ${job.total}` : ''}
+            </span>
+            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--fm-line)]">
+              <div className="h-full rounded-full bg-[var(--fm-ink)] transition-[width]" style={{ width: `${job.total ? (job.done / job.total) * 100 : 4}%` }} />
+            </div>
+          </div>
+        )}
+        <div className="fm-ev-between">
+          <span className="fm-ev-muted fm-ev-small">{spec.live ? 'Runs in the background; the result also shows under Runs.' : from === 'connection' ? spec.platformMethod : spec.method}</span>
+          <Button type="submit" label={busy ? 'Running' : 'Run evaluation'} variant="primary" icon={<Play size={14} aria-hidden />} isDisabled={!ready || busy} isLoading={busy} />
+        </div>
+      </section>
     </form>
   )
 }
 
+/** A judged platform check uses the organisation's AI provider model. */
+function JudgeNote() {
+  const provider = useAIProvider()
+  const cfg = provider.data?.config
+  if (provider.loading && !provider.data) return null
+  return cfg && cfg.enabled && cfg.keyReadable ? (
+    <span className="fm-ev-muted fm-ev-small">Judged by {cfg.providerName}, your AI provider model.</span>
+  ) : (
+    <span className="fm-ev-muted fm-ev-small">
+      Judged by your AI provider model. <Link href="/settings?section=ai-provider" className="font-semibold underline">Set one</Link>
+    </span>
+  )
+}
+
+/** The system has no kind yet: ask for it, since which evaluations fit depends on it. */
+function KindPrompt({ system, onSaved }: { system: { id: string; name: string }; onSaved: () => void }) {
+  const [kind, setKind] = useState<string | undefined>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function save() {
+    if (!kind) return
+    setBusy(true)
+    setError(null)
+    try {
+      await setSystemKind(system.id, kind)
+      onSaved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save the kind')
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="fm-ev-card fm-ev-stack" aria-labelledby="ev-kind">
+      <h2 id="ev-kind" className="fm-ev-h2">What kind of system is {system.name}?</h2>
+      {error && <Banner status="error" title="Kind not saved" description={error} />}
+      <div className="fm-ev-inline">
+        <div className="fm-ev-grow">
+          <Selector label="Kind" placeholder="Choose a kind" options={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} value={kind} onChange={setKind} />
+        </div>
+        <Button label="Save kind" variant="primary" isDisabled={!kind || busy} isLoading={busy} onClick={() => void save()} />
+      </div>
+    </section>
+  )
+}
+
+const SideCard = ({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="fm-ev-card fm-ev-side-card">
+    <span className="fm-ev-label">{label}</span>
+    {children}
+  </div>
+)
+
 export default function EvaluationPage() {
   const { evaluationId } = useParams<{ evaluationId: string }>()
+  const search = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const { systems: allSystems, selectedSystem, refreshSystems } = useSystemContext()
+  const systems = allSystems.filter((s) => s.metadata?.source !== 'fallback')
   const evaluation = useEvaluation(evaluationId)
   const runnable = !!evaluation.data?.runnable
-  const engine = useEngine(evaluationId, runnable)
+  const [picked, setPicked] = useState<string | null>(null)
+  const fallback = selectedSystem?.metadata?.source === 'fallback' ? '' : selectedSystem?.id ?? ''
+  const systemId = picked ?? search.get('system') ?? fallback
+  const system = systems.find((s) => s.id === systemId)
+  const engine = useEngine(evaluationId, runnable, system ? systemId : undefined)
   const runs = useEngineRuns(evaluationId, runnable)
   const [openId, setOpenId] = useState<string | null>(null)
   const [fresh, setFresh] = useState<EngineRun | null>(null)
-  const [live, setLive] = useState(false)
+  const [chosenWay, setChosenWay] = useState<RunWay | null>(null)
   const [trace, setTrace] = useState<{ id: string; flag?: string } | null>(null)
   const opened = useEngineRun(fresh ? null : openId)
   const shown = fresh ?? opened.data
+
+  const choose = (id: string) => {
+    setPicked(id)
+    setChosenWay(null)
+    const q = new URLSearchParams(search.toString())
+    q.set('system', id)
+    router.replace(`${pathname}?${q.toString()}`, { scroll: false })
+  }
 
   if (evaluation.loading && !evaluation.data) return <Loading label="Loading evaluation" />
   if (evaluation.error || !evaluation.data) {
     return (
       <div className="flex flex-col gap-4">
-        <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Evaluations', href: '/compliance/evaluations' }, { label: evaluationId }]} />
+        <Crumbs items={[{ label: 'Evaluations', href: '/evaluations' }, { label: evaluationId }]} />
         <ErrorNote message={`This evaluation could not be loaded. ${evaluation.error ?? ''}`} onRetry={evaluation.reload} />
       </div>
     )
   }
   const e = evaluation.data
+  const spec = engine.data
+  const ways = spec?.ways ?? []
+  const asked = search.get('source') === 'traces' ? 'live_runs' : null
+  // An engine with no way listed (FairMind's own agent) runs as it always has.
+  const way: RunWay | null = spec ? (chosenWay && ways.some((w) => w.way === chosenWay) ? chosenWay : defaultWay(ways, asked) ?? 'files') : null
+  const behaviour = spec && way === 'calls_system' ? (spec.live === 'target' ? spec : spec.alternate?.live === 'target' ? spec.alternate : null) : null
+  const runSpec = behaviour ?? spec
+  const kind = spec?.kind ?? null
+  const KindIcon = KIND_ICON[kind ?? ''] ?? Cpu
+  const mine = (runs.data ?? []).filter((r) => !system || r.systemId === system.id)
+  const live = !!runSpec?.live
+  const kept = way ? keptAs(way, live) : null
+  // the stored run is model judged when a live engine runs, or a judged platform check reads the platform
+  const judged = live || (way === 'platform' && !!runSpec?.judge)
+  const showPasses = !(way === 'files' && runSpec && !runSpec.live && runSpec.slots.length > 0)
 
   return (
-    <div className="flex flex-col gap-[22px]">
-      <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Evaluations', href: '/compliance/evaluations' }, { label: e.name }]} />
+    <div className="fm-ev-run">
+      <Crumbs items={[{ label: 'Evaluations', href: `/evaluations${system ? `?system=${encodeURIComponent(system.id)}` : ''}` }, { label: e.name }]} />
       <Heading title={e.name} lead={e.measures} />
       <div className="flex flex-wrap gap-2">
         <Pill>{e.id}</Pill>
-        {runnable ? <Pill tone="done" dot>Runs in FairMind</Pill> : <EnginePill engine={e.engine} />}
+        {!runnable ? <EnginePill engine={e.engine} /> : way && system ? <Pill tone="done" dot>{way === 'files' && live ? 'Runs live' : WAY_HEAD[way]}</Pill> : <Pill tone="done" dot>Runs in FairMind</Pill>}
+        {e.judgeNotValidated && <Pill>Judge not validated</Pill>}
         {e.results && e.results.status !== 'not_run' && <ResultPill status={e.results.status} />}
       </div>
-      <dl className="m-0 grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 rounded-2xl bg-white p-5">
-        {([
-          ['Metric', e.metric],
-          ['Pass when', e.threshold],
-          ['Applies to', e.appliesTo],
-          ['Pack', e.pack.name],
-          ['Counts toward', `${e.tests.length} ${e.tests.length === 1 ? 'requirement' : 'requirements'}`],
-        ] as const).map(([k, v]) => (
-          <div key={k} className="flex flex-col gap-0.5">
-            <dt className={LABEL}>{k}</dt>
-            <dd className="m-0 text-sm leading-snug text-[var(--fm-ink)]">{v || '-'}</dd>
-          </div>
-        ))}
-      </dl>
 
-      {!runnable ? (
-        <section className="rounded-2xl bg-white p-5">
-          <h2 className="m-0 text-base font-semibold text-[var(--fm-ink)]">Not runnable in FairMind yet</h2>
-          <p className={`mb-0 mt-2 text-sm leading-normal ${MUTED}`}>
-            FairMind cannot run this evaluation yet. It needs a connection to the system&apos;s platform or evidence FairMind does not collect.
-          </p>
-        </section>
-      ) : (
-        <div className="grid gap-[22px] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          <section className="rounded-2xl bg-white p-5">
-            <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Run this evaluation</h2>
-            {engine.error ? (
-              <ErrorNote message={engine.error} onRetry={engine.reload} />
-            ) : !engine.data ? (
-              <Loading label="Loading" />
-            ) : (
-              <div className="flex flex-col gap-4">
-              {engine.data.alternate && (
-                <div className="flex gap-2" role="group" aria-label="How to run">
-                  {([[false, 'From uploaded files'], [true, 'Against the live system']] as const).map(([v, text]) => (
-                    <button
-                      key={text}
-                      type="button"
-                      aria-pressed={live === v}
-                      onClick={() => setLive(v)}
-                      className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ${live === v ? 'bg-[var(--fm-ink)] text-white' : 'border border-[var(--fm-line)] bg-white text-[var(--fm-ink2)]'}`}
-                    >
-                      {text}
-                    </button>
-                  ))}
-                </div>
+      {runnable && (
+        <div className="fm-ev-card fm-ev-sysbar">
+          <span className="fm-ev-sysicon" aria-hidden><KindIcon size={20} /></span>
+          <div className="fm-ev-grow">
+            <Selector
+              label="Testing"
+              placeholder={systems.length ? 'Choose a system' : 'No systems registered'}
+              options={systems.map((s) => ({ value: s.id, label: s.name }))}
+              value={system ? system.id : undefined}
+              onChange={choose}
+              isDisabled={systems.length === 0}
+            />
+          </div>
+          <div className="fm-ev-chips">
+            {system && spec && <Token size="sm" color={kind ? 'blue' : 'gray'} label={kind ? KIND_LABEL[kind] ?? kind : 'Kind not set'} />}
+            {spec?.fit === 'other' && ways.length > 0 && <Token size="sm" color="orange" label={`Meant for ${e.appliesTo || 'another kind'}`} />}
+            {ways.map((w) => WAY_STATE[w.way] && (
+              <Token key={w.way} size="sm" color={w.ready ? 'green' : w.way === 'calls_system' ? 'orange' : 'gray'} label={WAY_STATE[w.way]![w.ready ? 0 : 1]} />
+            ))}
+          </div>
+        </div>
+      )}
+      {runnable && systems.length === 0 && (
+        <span className={`text-xs ${MUTED}`}>
+          Register an AI system first: <Link href="/onboard" className="font-semibold underline">Register a system</Link>
+        </span>
+      )}
+
+      <div className="fm-ev-run-grid">
+        <div className="fm-ev-stack fm-ev-run-main">
+          {!runnable ? (
+            <section className="fm-ev-card">
+              <h2 className="fm-ev-h2">Not runnable in FairMind yet</h2>
+              <p className="fm-ev-muted">FairMind cannot run this evaluation yet. It needs a connection to the system&apos;s platform or evidence FairMind does not collect.</p>
+            </section>
+          ) : !system ? null : engine.error ? (
+            <ErrorNote message={engine.error} onRetry={engine.reload} />
+          ) : !spec || !runSpec || !way ? (
+            <Loading label="Loading" />
+          ) : spec.fit === 'unknown' && ways.length > 0 ? (
+            <KindPrompt
+              system={system}
+              onSaved={() => {
+                engine.reload()
+                void refreshSystems()
+              }}
+            />
+          ) : (
+            <>
+              {ways.length > 1 && (
+                <SegmentedControl label="Run by" value={way} onChange={(v) => setChosenWay(v as RunWay)} size="sm">
+                  {ways.map((w) => {
+                    const Icon = WAY_ICON[w.way]
+                    const off = !w.ready && (w.way === 'live_runs' || w.way === 'platform')
+                    return <SegmentedControlItem key={w.way} value={w.way} label={off ? `${WAY_LABEL[w.way]}, none yet` : WAY_LABEL[w.way]} icon={<Icon size={14} aria-hidden />} isDisabled={off} />
+                  })}
+                </SegmentedControl>
               )}
               <RunForm
-                key={live ? 'live' : 'files'}
+                key={`${system.id}-${way}`}
                 evaluationId={e.id}
-                spec={live && engine.data.alternate ? engine.data.alternate : engine.data}
-                live={live && !!engine.data.alternate}
-                liveRuns={!live && !!engine.data.liveRuns}
+                spec={runSpec}
+                live={!!behaviour && behaviour !== spec}
+                way={way}
+                system={{ id: system.id, name: system.name, kind }}
+                threshold={e.threshold}
                 onDone={(run) => {
                   setFresh(run)
                   setOpenId(run.id)
@@ -585,35 +744,72 @@ export default function EvaluationPage() {
                   evaluation.reload()
                 }}
               />
-              </div>
+            </>
+          )}
+        </div>
+
+        <aside className="fm-ev-stack fm-ev-run-side" aria-label="About this evaluation">
+          {showPasses && (
+            <SideCard label="Passes when">
+              <span className="fm-ev-big">{e.threshold || '-'}</span>
+              {e.metric && <span className="fm-ev-muted fm-ev-small">{e.metric}</span>}
+            </SideCard>
+          )}
+          <SideCard label="Counts toward">
+            <span><span className="fm-ev-num">{e.tests.length}</span> <span className="fm-ev-muted">{e.tests.length === 1 ? 'requirement' : 'requirements'}</span></span>
+            {e.tests.length > 0 && (
+              <details className="fm-ev-details">
+                <summary>See them</summary>
+                <ul>
+                  {e.tests.map((t) => (
+                    <li key={t.key}>{t.framework} {t.control}: {t.title}</li>
+                  ))}
+                </ul>
+              </details>
             )}
-          </section>
-          <section className="flex min-w-0 flex-col gap-[22px]">
-            <div className="rounded-2xl bg-white p-5">
-              <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Runs</h2>
-              {runs.data && runs.data.length === 0 && <p className={`m-0 text-sm ${MUTED}`}>No runs yet. Each run is kept as measured evidence on its AI system.</p>}
-              <ul className="m-0 flex list-none flex-col p-0">
-                {(runs.data ?? []).map((r) => (
-                  <li key={r.id} className="border-t border-[#15171a14] first:border-t-0">
+          </SideCard>
+          {runnable && way && kept && (
+            <SideCard label="Kept as">
+              <span className="fm-ev-chips">
+                <Token size="sm" color={kept === 'Measured live' ? 'green' : 'gray'} label={kept} />
+                {judged && <Token size="sm" color="gray" label="Model judged" />}
+              </span>
+              {way === 'files' && !live && <span className="fm-ev-muted fm-ev-small">File hashes sealed</span>}
+              {live && way !== 'live_runs' && <span className="fm-ev-muted fm-ev-small">Every verdict is stored with the run.</span>}
+            </SideCard>
+          )}
+          <SideCard label="About">
+            <MetadataList columns="single" label={{ position: 'start', width: 80 }}>
+              <MetadataListItem label="Applies to">{e.appliesTo || 'Not stated'}</MetadataListItem>
+              <MetadataListItem label="Pack">{e.pack.name}</MetadataListItem>
+            </MetadataList>
+          </SideCard>
+          {runnable && (
+            <SideCard label={system ? 'Runs on this system' : 'Runs'}>
+              {runs.data && mine.length === 0 && <span className="fm-ev-muted fm-ev-small">None yet</span>}
+              <ul className="fm-ev-runs">
+                {mine.map((r) => (
+                  <li key={r.id}>
                     <button
                       type="button"
+                      aria-pressed={openId === r.id}
                       onClick={() => {
                         setFresh(null)
                         setOpenId(r.id)
                       }}
-                      className={`flex w-full flex-wrap items-center gap-2.5 py-2.5 text-left text-[13px] ${openId === r.id ? 'font-semibold' : ''}`}
                     >
                       <ResultPill status={r.status} />
-                      <span className="text-[var(--fm-ink)]">{r.systemName}</span>
-                      <span className={MUTED}>{when(r.createdAt)}</span>
+                      {!system && <span>{r.systemName}</span>}
+                      <span className="fm-ev-muted">{when(r.createdAt)}</span>
                     </button>
                   </li>
                 ))}
               </ul>
-            </div>
-          </section>
-        </div>
-      )}
+            </SideCard>
+          )}
+        </aside>
+      </div>
+
       {runnable && shown && (
         <section className="rounded-2xl bg-white p-5">
           <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>

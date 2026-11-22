@@ -267,7 +267,7 @@ def test_a_change_makes_a_rule_result_stale_only_when_it_reopens_that_check(tmp_
 
     org_id, client = _org(tmp_database)
     system = _system(tmp_database, org_id)
-    _store(tmp_database, org_id, system, "environmental_impact", {"total_kwh": 12.0}, "2026-11-01T10:00:00+00:00")
+    _store(tmp_database, org_id, system, "environmental_impact", {"assessment": {"metrics": {"total_kwh": 12.0}}, "result": {"recommendation": "go"}}, "2026-11-01T10:00:00+00:00")
     assert _run(client, system, 0.0).json()["status"] == "passed"
     _change(tmp_database, org_id, system, ["fairness", "data_governance"])
     status = lambda ev: client.get(f"{PACKS}/evaluations/{ev}").json()["results"]["status"]  # noqa: E731
@@ -535,3 +535,95 @@ def test_a_passed_llm_output_bias_run_turns_fairness_green_and_moves_iso_clauses
     assert row["status"] == "tested"
     sec = client.get(f"{PACKS}/evaluations/EV-SEC-01").json()
     assert {"key": "ISO42001|A.6.2.4", "relation": "Supports"}.items() <= next(t for t in sec["tests"] if t["key"] == "ISO42001|A.6.2.4").items()
+
+
+def test_an_accepted_pass_stops_supporting_its_control_once_it_no_longer_proves_anything(tmp_database):
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    from api.routes.evaluation_runs import _store_run
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, link, accept, missing = _assigned_control(tmp_database, client, org_id, system)
+    loose = client.post(
+        f"{PACKS}/evaluations/EV-DAT-01/runs",
+        data={"system_id": system, "params": json.dumps({"psi_limit": 1000})},
+        files={"reference": ("train.csv", _csv(300)), "current": ("prod.csv", _csv(300, 1.0, seed=1))},
+    ).json()
+    assert loose["status"] == "passed" and link(client, loose["id"]).status_code == 422  # a loosened pass cannot be linked
+
+    passed = _run(client, system, 0.0).json()
+    accept(passed["id"])
+    assert missing() == 0
+    with Session(bind=tmp_database) as db:  # a newer run that measured nothing decides: the pass no longer proves
+        _store_run(db, str(org_id), str(uuid.uuid4()), system, "EV-DAT-01", {"status": "insufficient", "summary": "too few rows"})
+        db.commit()
+    assert missing() == 1
+    age = "UPDATE governance_evidence_runs SET captured_at = :at WHERE system_id = :s AND result = :r"
+    with tmp_database.begin() as conn:  # move the insufficient run before the pass: the pass decides again
+        conn.execute(text(age), {"at": "2026-01-01T00:00:00+00:00", "s": system, "r": "insufficient_data"})
+    assert missing() == 0
+    with tmp_database.begin() as conn:  # and a pass over a year old is stale
+        conn.execute(text(age + " AND evidence_id = :e"), {"at": "2025-01-01T00:00:00+00:00", "s": system, "r": "passed", "e": passed["id"]})
+    assert missing() == 1
+
+
+def test_a_pass_on_loosened_thresholds_shows_its_result_but_proves_nothing(tmp_database):
+    import hashlib
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+    gov, _, _, _ = _assigned_control(tmp_database, client, org_id, system)
+    assert _run(client, system, 1.0).json()["status"] == "failed"
+    current = _csv(300, 1.0, seed=1)
+    loose = client.post(
+        f"{PACKS}/evaluations/EV-DAT-01/runs",
+        data={"system_id": system, "params": json.dumps({"psi_limit": 1000})},  # the catalogue limit is 0.2
+        files={"reference": ("train.csv", _csv(300)), "current": ("prod.csv", current)},
+    ).json()
+    assert loose["status"] == "passed" and loose["thresholdLoosened"] == [{"param": "psi_limit", "value": 1000.0, "catalogue": 0.2}]
+    assert loose["provenance"] == {"class": "computed_from_upload", "modelJudged": False}
+    assert loose["inputs"]["current"] == hashlib.sha256(current).hexdigest() and loose["engine"]["path"] == "file"
+    assert [r.status for r in _findings(tmp_database, system)] == ["open"]  # the failure's finding stays open
+    runs = {r["evidenceId"]: r for r in client.get(f"{gov}/systems/{system}/evidence-runs").json()}
+    assert runs[loose["id"]]["candidateMappings"] == []  # and it proposes no control mapping
+    result = client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["results"]
+    assert result["status"] == "failed"  # the earlier failure stands behind a pass that proves nothing
+
+
+def test_a_suite_reads_stored_components_as_proof_reads_them(tmp_database):
+    """A suite's stored components follow the proof rules: a loosened pass or an insufficient run proves nothing, an old pass is not on file."""
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    from api.routes.evaluation_runs import _store_run
+
+    org_id, client = _org(tmp_database)
+    system = _system(tmp_database, org_id)
+
+    def store(eid, **outcome):
+        with Session(bind=tmp_database) as db:
+            _store_run(db, str(org_id), str(uuid.uuid4()), system, eid, {"summary": "stored", **outcome})
+            db.commit()
+
+    def suite():
+        out = client.post(f"{PACKS}/evaluations/EV-USE-05/runs", data={"system_id": system, "params": "{}"})
+        assert out.status_code == 200, out.text
+        return out.json()
+
+    for eid in ("EV-TST-01", "EV-RSK-01", "EV-OVS-03", "EV-PRV-04"):
+        store(eid, status="passed")
+    first = suite()
+    assert first["status"] == "passed", first["summary"]
+    store("EV-TST-01", status="passed", thresholdLoosened=[{"param": "baseline", "value": 0.0, "catalogue": None}])
+    loose = suite()
+    assert loose["status"] == "insufficient" and loose["metrics"]["EV-TST-01"] == "insufficient"
+    store("EV-TST-01", status="insufficient")  # as a small sample stores it
+    assert suite()["metrics"]["EV-TST-01"] == "insufficient"
+    store("EV-TST-01", status="passed")
+    with tmp_database.begin() as conn:  # a pass over a year old is not on file
+        conn.execute(text("UPDATE governance_evidence SET created_at = '2025-01-01T00:00:00+00:00' WHERE system_id = :s AND content_json LIKE '%EV-RSK-01%'"),
+                     {"s": system})
+    aged = suite()
+    assert aged["status"] == "insufficient" and aged["metrics"]["EV-TST-01"] == "passed" and aged["metrics"]["EV-RSK-01"] == "insufficient"

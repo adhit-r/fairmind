@@ -90,7 +90,7 @@ type SystemContextValue = {
     systemOwner: string
     riskTier: AISystemSummary["riskTier"]
     stage: AISystemSummary["stage"]
-    systemType?: string
+    kind?: string
     systemVersion?: string
     businessLine?: string
     complianceFrameworks?: string[]
@@ -215,7 +215,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     systemOwner: string
     riskTier: AISystemSummary["riskTier"]
     stage: AISystemSummary["stage"]
-    systemType?: string
+    kind?: string
     systemVersion?: string
     businessLine?: string
     complianceFrameworks?: string[]
@@ -246,7 +246,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         metadata: {
           created_from: "onboard",
           workspace_name: params.workspaceName,
-          ...(params.systemType && { system_type: params.systemType }),
+          ...(params.kind && { asset_kind: params.kind }),
           ...(params.systemVersion && { system_version: params.systemVersion }),
           ...(params.businessLine && { business_line: params.businessLine }),
           ...(params.complianceFrameworks && { compliance_frameworks: params.complianceFrameworks }),

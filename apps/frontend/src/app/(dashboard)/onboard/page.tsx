@@ -11,6 +11,7 @@ import { PlanDemo } from '@/components/stageshow/PlanDemo'
 import { Illustration } from '@/components/stageshow/fm'
 import { apiClient } from '@/lib/api/api-client'
 import { API_ENDPOINTS } from '@/lib/api/endpoints'
+import { KIND_LABEL } from '@/astryx/data/discovery'
 import { readSystemsCsv, SYSTEMS_CSV_TEMPLATE, type SystemRow } from '@/lib/systemsCsv'
 
 const field =
@@ -51,6 +52,7 @@ export default function OnboardPage() {
           systemOwner: v('owner'),
           riskTier: draft.tier,
           stage: v('stage') as AISystemSummary['stage'],
+          kind: v('kind') || undefined,
           systemVersion: v('version') || undefined,
           businessLine: v('line') || undefined,
         })
@@ -114,6 +116,15 @@ export default function OnboardPage() {
               <select id="stage" name="stage" defaultValue="onboard" className={field}>
                 {STAGES.map((s) => (
                   <option key={s.key} value={s.key}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={label} htmlFor="kind">Kind of system</label>
+              <select id="kind" name="kind" defaultValue="" className={field}>
+                <option value="">Not sure yet</option>
+                {Object.entries(KIND_LABEL).map(([key, text]) => (
+                  <option key={key} value={key}>{text}</option>
                 ))}
               </select>
             </div>

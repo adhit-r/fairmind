@@ -144,7 +144,8 @@ async def ask(target: Target, prompt: str, attempts: int = 1) -> str:
         body = _fill(json.loads(target.fields["requestTemplate"]), prompt)
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_S, headers=headers, follow_redirects=False) as client:
-            resp = await llm.post_with_retry(client, url, attempts, json=body)
+            # a chat model is asked at temperature 0 where it accepts it, so a run can be repeated
+            resp = await (llm.post_at_zero(client, url, attempts, body) if target.kind == "openai" else llm.post_with_retry(client, url, attempts, json=body))
     except httpx.TimeoutException:
         raise TimedOut("The system did not answer in time")
     except httpx.HTTPError:

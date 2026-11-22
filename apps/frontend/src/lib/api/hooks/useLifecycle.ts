@@ -86,6 +86,13 @@ export function useSystemChanges(systemId: string | undefined) {
   return { ...q, record, setOwner }
 }
 
+/** Say what kind of system it is (system_kinds.SYSTEM_KINDS); the backend records it on the change chain. */
+export async function setSystemKind(systemId: string, kind: string) {
+  const res = await apiClient.patch<{ kind: string }>(`${GOV}/systems/${encodeURIComponent(systemId)}`, { kind }, { enableRetry: false })
+  if (!res.success || !res.data) throw new Error(res.error || 'Could not save the kind')
+  return res.data
+}
+
 /** The retirement on file, or the closing tasks for the chosen reason and the suggested retention. */
 export function useRetirement(systemId: string | undefined, reason?: RetireReason, replacedBy?: string) {
   const params = new URLSearchParams()
