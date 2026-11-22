@@ -947,6 +947,7 @@ ACTION_NOTES = {
     "evidence_upload": "an uploaded document",  # the step's counts already carries the manual cap
 }
 LIVE_RUN_MONITORING = "EV-MON-02"  # tool-call anomalies: the monitoring evaluation that reads live runs
+LIVE_RUN_OVERSIGHT = "EV-OVS-04"  # explanation quality: replays live decisions to test their stated reasons
 _CLASS_ORDER = {"measured": 0, "tool_estimated": 1, "manual": 2}
 _CHECK_ORDER = {key: i for i, (key, _, _) in enumerate(GATE_CHECKS)}
 
@@ -978,11 +979,13 @@ def path_forward(
     include_environmental: bool = True,
     model_target: bool = False,
     live_runs: bool = False,
+    decision_runs: bool = False,
 ) -> Dict[str, Any]:
     """The fewest, strongest steps to the next verdict, each priced by re-running the real release_gate.
 
     ``live_runs``: the system sent live runs this week, so the monitoring evaluation step names EV-MON-02 on them,
-    a monitoring evaluation that needs no upload.
+    a monitoring evaluation that needs no upload. ``decision_runs``: the system sent decisions with stated reasons this week and
+    FairMind can call it, so the human oversight evaluation step names EV-OVS-04 on them.
 
     ``model_target``: FairMind calls the system as a model (a stored target, such as a chat model), so fairness is
     priced through a catalogue evaluation run; otherwise through a CSV fairness run, the route the autopilot reruns.
@@ -1049,6 +1052,8 @@ def path_forward(
                "gain": round((counts[(key, action)] - current[key]["confidence"]) / len(checks), 2), "note": ACTION_NOTES.get(action)}
         if live_runs and key == "monitoring" and action == "evaluation_run":
             out.update({"evaluationId": LIVE_RUN_MONITORING, "source": "traces", "note": "the tool calls in this week's live runs against the four weeks before"})
+        if decision_runs and key == "human_oversight" and action == "evaluation_run":
+            out.update({"evaluationId": LIVE_RUN_OVERSIGHT, "source": "traces", "note": "replays this week's decisions to test the reasons the system stated"})
         return out
 
     def option(kind: str, steps: tuple, gate: Dict[str, Any]) -> Dict[str, Any]:

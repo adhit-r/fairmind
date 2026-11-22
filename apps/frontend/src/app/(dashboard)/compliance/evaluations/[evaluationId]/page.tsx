@@ -19,6 +19,7 @@ import {
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { Drawer } from '@astryxdesign/core/Drawer'
 import { TraceView } from '@/components/traces/TraceView'
+import { ExplanationResult } from '@/components/explain/ExplainParts'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
 
 const FIELD = 'w-full rounded-[10px] border border-[var(--fm-line)] bg-white px-3 py-2 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none'
@@ -181,7 +182,9 @@ function Connections({ spec, systemId, onReady, recorded }: { spec: EngineSpec; 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId: string; spec: EngineSpec; live: boolean; liveRuns: boolean; onDone: (run: EngineRun) => void }) {
+function RunForm({ evaluationId, spec, live, liveRuns, liveRunsOwn = null, onDone }: {
+  evaluationId: string; spec: EngineSpec; live: boolean; liveRuns: boolean; liveRunsOwn?: EngineSpec | null; onDone: (run: EngineRun) => void
+}) {
   const { systems, selectedSystem } = useSystemContext()
   const { runEvaluation, getJob, getRun } = usePackActions()
   const [systemId, setSystemId] = useState('')
@@ -204,6 +207,8 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
   const asked = useSearchParams().get('source')
   const [source, setSource] = useState<'upload' | 'connection' | 'traces' | null>(liveRuns && asked === 'traces' ? 'traces' : null)
   const from = liveRuns ? source ?? 'upload' : spec.platform ? (source === 'traces' ? null : source) ?? (connection ? 'connection' : 'upload') : 'upload'
+  // Reading live runs may use an engine of its own (Explanation quality replays them), with its own settings.
+  const active = from === 'traces' && liveRunsOwn ? liveRunsOwn : spec
 
   useEffect(() => {
     if (!systemId && selectedSystem?.id) setSystemId(selectedSystem.id)
@@ -217,12 +222,12 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
   const [probes, setProbes] = useState('write') // 'write', 'upload' or a benchmark name
   const slots = choosing ? spec.slots.filter((s) => s !== probeSlot) : spec.slots
   // Column names describe an uploaded file; the server sets them when it reads live runs.
-  const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : spec.params)
+  const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : active.params)
     .filter((p) => from !== 'traces' || !p.name.endsWith('_column'))
   const count = (params.probe_count ?? '').trim() || String(countParam?.default ?? '')
 
   const filesReady = from === 'traces' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
-  const ready = !!systemId && connected && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
+  const ready = !!systemId && (!active.live || connected) && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   /** A behaviour test answers with a job; follow it until the run is stored. */
   async function follow(started: EvaluationJob) {
@@ -247,7 +252,7 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
     setBusy(true)
     setFailure(null)
     const values: Record<string, unknown> = {}
-    for (const p of spec.params) {
+    for (const p of active.params) {
       const raw = (params[p.name] ?? '').trim()
       if (!raw) continue
       if (p.kind === 'number') values[p.name] = Number(raw)
@@ -289,12 +294,12 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
         submit()
       }}
     >
-      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{from === 'connection' ? spec.platformMethod : spec.method}</p>
+      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{from === 'connection' ? spec.platformMethod : active.method}</p>
       {liveRuns && (
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Read from</legend>
           {([
-            ['traces', 'Live runs', "The last 7 days of the system's live runs. Nothing to upload."],
+            ['traces', 'Live runs', liveRunsOwn ? "This week's decisions with a stated reason, replayed on the model connection. Nothing to upload." : "The last 7 days of the system's live runs. Nothing to upload."],
             ['upload', 'Upload files', spec.slots.map((s) => s.help).join(' ')],
           ] as const).map(([value, title, help]) => (
             <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-[10px] border bg-white px-3.5 py-3 ${from === value ? 'border-[var(--fm-ink)]' : 'border-[var(--fm-line)]'}`}>
@@ -353,7 +358,7 @@ function RunForm({ evaluationId, spec, live, liveRuns, onDone }: { evaluationId:
           </span>
         )}
       </div>
-      {spec.live && <Connections spec={spec} systemId={systemId} onReady={setConnected} recorded={from === 'traces'} />}
+      {active.live && <Connections spec={active} systemId={systemId} onReady={setConnected} recorded={from === 'traces' && active === spec} />}
       {choosing && probeSlot && countParam && (
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Probes</legend>
@@ -578,6 +583,7 @@ export default function EvaluationPage() {
                 spec={live && engine.data.alternate ? engine.data.alternate : engine.data}
                 live={live && !!engine.data.alternate}
                 liveRuns={!live && !!engine.data.liveRuns}
+                liveRunsOwn={live ? null : engine.data.liveRunsEngine ?? null}
                 onDone={(run) => {
                   setFresh(run)
                   setOpenId(run.id)
@@ -617,7 +623,16 @@ export default function EvaluationPage() {
       {runnable && shown && (
         <section className="rounded-2xl bg-white p-5">
           <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
-          <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />
+          {shown.source === 'traces' && e.id === 'EV-OVS-04' ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <ResultPill status={shown.status} />
+                <span className={`text-[13px] ${MUTED}`}>{shown.systemName}, {when(shown.createdAt)}, from live runs{shown.judge && `, judged by ${shown.judge.model}`}</span>
+              </div>
+              <p className="m-0 leading-normal text-[var(--fm-ink)]">{shown.summary}</p>
+              <ExplanationResult run={shown} onTrace={(id, flag) => setTrace({ id, flag })} />
+            </div>
+          ) : <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN_P}>Open the system file</Link>
             <Link href={`/risks?system=${encodeURIComponent(shown.systemId)}`} className={BTN}>Open findings</Link>

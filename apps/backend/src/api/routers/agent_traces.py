@@ -3,7 +3,9 @@
 POST   /ai-systems/{id}/traces               record or extend a trace; safe to call again as the run goes on
 GET    /ai-systems/{id}/traces               the latest traces, each with its step count and rationale coverage
 GET    /ai-systems/{id}/traces/summary       runs per day, the last run, and the latest evaluations that read live runs
-GET    /ai-systems/{id}/traces/{trace_id}    one trace with its steps in order
+GET    /ai-systems/{id}/traces/{trace_id}    one trace with its steps in order, and its latest explanation
+POST   /ai-systems/{id}/traces/{trace_id}/explain   explain the run now (eval_engines/explain.py)
+GET    /explained-decisions                  Records: each system's Explanation quality runs on live runs, and recent explained runs
 DELETE /ai-systems/{id}/traces/{trace_id}
 
 The customer's own code sends these (the SDK's record_trace), keyed by its own trace id and step ids, so
@@ -18,6 +20,7 @@ calls, tool calls and decisions that carry one. Mounted under /api/v1/packs besi
 import csv
 import io
 import json
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional
 
@@ -27,10 +30,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import _ensure_tables, _utc_now_iso
-from api.routes.packs import _manager, _member
-from api.routes.system_targets import _system_or_404
+from api.routes.packs import _ai_row, _manager, _member, _stored_connection
+from api.routes.system_targets import _system_or_404, stored_target
 from database.connection import get_db
 from database.governance_models import _new_id
+from src.application.services.eval_engines import explain
+from src.application.services.eval_engines.behaviour import CallError
 from src.application.services.governance_assurance_service import OrgMembership
 
 router = APIRouter()
@@ -44,6 +49,7 @@ WEEK = timedelta(days=7)  # the live runs an evaluation reads
 BASELINE = timedelta(days=28)  # EV-MON-02 compares the week with the four weeks before it
 SUMMARY_DAYS = 14
 MAX_GROUNDED = 200  # EV-TST-03 judges at most this many runs, the newest; the engine's own probe limit
+MAX_EXPLAINED = 50  # EV-OVS-04 replays each run about 20 times, so it tests at most this many
 
 
 def _clean(s: str) -> str:
@@ -295,8 +301,73 @@ def _tst03_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[st
     return {"traces": json.dumps(probes, ensure_ascii=False).encode()}
 
 
+def _decision(db: Session, t) -> Optional[Dict[str, Any]]:
+    """A run as EV-OVS-04 reads it: its input, its decision and the reason stated for it; None without all three.
+    The decision and reason come from the run's last decision step, else from the run itself."""
+    step = db.execute(
+        text("SELECT output, rationale FROM governance_agent_trace_steps WHERE trace_pk = :pk AND kind = 'decision' ORDER BY seq DESC LIMIT 1"),
+        {"pk": t["id"]},
+    ).mappings().fetchone()
+    decision = (step and step["output"]) or t["output"]
+    reason = (step and step["rationale"]) or t["rationale"]
+    if not (t["input"] and decision and reason):
+        return None
+    return {"traceId": t["trace_id"], "input": _value(t["input"]), "decision": _value(decision), "reason": reason}
+
+
+def _ovs04_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
+    """The newest finished runs of the week with an input, a decision and a stated reason."""
+    try:
+        n = min(max(int(float(params.get("runs") or 20)), 1), MAX_EXPLAINED)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="runs must be a number")
+    traces = db.execute(
+        text(
+            "SELECT id, trace_id, input, output, rationale FROM governance_agent_traces WHERE system_id = :sid AND received_at >= :since "
+            "AND status = 'ok' AND input IS NOT NULL ORDER BY received_at DESC LIMIT :n"
+        ),
+        {"sid": system_id, "since": _since(WEEK), "n": n * 5},
+    ).mappings().all()
+    runs = [r for r in (_decision(db, t) for t in traces) if r][:n]
+    if not runs:
+        raise HTTPException(status_code=422, detail="No finished live run this week has an input, a decision and a stated reason to test")
+    return {"traces": json.dumps(runs, ensure_ascii=False).encode()}
+
+
 # evaluation id -> reads the week's live runs into that engine's files (and may set params it needs)
-TRACE_READERS = {"EV-MON-02": _mon02_files, "EV-TST-03": _tst03_files}
+TRACE_READERS = {"EV-MON-02": _mon02_files, "EV-TST-03": _tst03_files, "EV-OVS-04": _ovs04_files}
+# evaluation id -> the engine that reads live runs, where it is not the evaluation's own (whose input is an upload)
+TRACE_ENGINES = {"EV-OVS-04": explain.ENGINE}
+
+
+def has_decision_runs(db: Session, system_id: str) -> bool:
+    """EV-OVS-04 can run on live runs: a finished run this week has a decision step with a stated reason."""
+    return db.execute(
+        text(
+            "SELECT 1 FROM governance_agent_trace_steps s JOIN governance_agent_traces t ON t.id = s.trace_pk WHERE t.system_id = :sid "
+            "AND t.received_at >= :since AND t.status = 'ok' AND t.input IS NOT NULL AND s.kind = 'decision' AND s.rationale IS NOT NULL "
+            "AND s.rationale <> '' LIMIT 1"
+        ),
+        {"sid": system_id, "since": _since(WEEK)},
+    ).first() is not None
+
+
+def save_explanations(db: Session, org_id: str, system_id: str, rows: List[Dict[str, Any]], by: str, evidence_id: Optional[str] = None) -> None:
+    """Keep each run's explanation, replacing the one before, so the run opens explained."""
+    now = _utc_now_iso()
+    for r in rows:
+        if r.get("verdict") == "error" or not r.get("traceId"):
+            continue
+        db.execute(
+            text(
+                "INSERT INTO governance_trace_explanations (id, org_id, system_id, trace_id, evidence_id, result_json, created_by, created_at) "
+                "VALUES (:id, :org, :sid, :tid, :ev, :res, :by, :now) ON CONFLICT (system_id, trace_id) DO UPDATE SET "
+                "evidence_id = excluded.evidence_id, result_json = excluded.result_json, created_by = excluded.created_by, created_at = excluded.created_at"
+            ),
+            {"id": _new_id(), "org": org_id, "sid": system_id, "tid": r["traceId"], "ev": evidence_id,
+             "res": json.dumps(r, ensure_ascii=False), "by": by, "now": now},
+        )
+    db.commit()
 
 
 def live_run_evaluations(db: Session, system_id: str) -> List[Dict[str, Any]]:
@@ -315,6 +386,45 @@ def live_run_evaluations(db: Session, system_id: str) -> List[Dict[str, Any]]:
             out.append({"evaluationId": evaluation_id, "evidenceId": row["id"], "status": content.get("status"), "summary": content.get("summary"),
                         "metrics": content.get("metrics", {}), "createdAt": row["created_at"]})
     return out
+
+
+@router.get("/explained-decisions")
+def explained_decisions(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    """Records: every system's Explanation quality runs on live runs, and the runs explained in the last 30 days."""
+    _ensure_tables(db)
+    since = _since(timedelta(days=30))
+    systems: Dict[str, Dict[str, Any]] = {}
+    for evidence_id, system_id, name, content, created in db.execute(
+        text(
+            "SELECT e.id, e.system_id, s.name, e.content_json, e.created_at FROM governance_evidence e JOIN governance_ai_systems s ON s.id = e.system_id "
+            "WHERE s.org_id = :org AND e.evidence_type = 'evaluation_run' AND e.content_json LIKE :ev AND e.metadata_json LIKE :src ORDER BY e.created_at"
+        ),
+        {"org": m.org_id, "ev": f'%"evaluationId": "{explain.ENGINE.id}"%', "src": '%"source": "traces"%'},
+    ).fetchall():
+        c = json.loads(content or "{}")
+        row = systems.setdefault(system_id, {"systemId": system_id, "name": name, "runs": []})
+        row["runs"].append({"evidenceId": evidence_id, "status": c.get("status"), "reasonHeldRate": (c.get("metrics") or {}).get("reasonHeldRate"),
+                            "faithfulness": (c.get("metrics") or {}).get("faithfulness"), "createdAt": created})
+    verdicts, flips = Counter(), 0
+    for (res,) in db.execute(
+        text("SELECT e.result_json FROM governance_trace_explanations e WHERE e.org_id = :org AND e.created_at >= :since"), {"org": m.org_id, "since": since}
+    ).fetchall():
+        r = json.loads(res)
+        verdicts[r.get("verdict")] += 1
+        flips += bool(r.get("flip"))
+    sending = db.execute(
+        text(
+            "SELECT COUNT(DISTINCT t.system_id) FROM governance_agent_traces t WHERE t.org_id = :org AND t.received_at >= :since "
+            "AND EXISTS (SELECT 1 FROM governance_agent_trace_steps s WHERE s.trace_pk = t.id AND s.kind = 'decision')"
+        ),
+        {"org": m.org_id, "since": since},
+    ).scalar()
+    scored = verdicts["held"] + verdicts["did not hold"] + verdicts["untested"]
+    return {
+        "systems": sorted(systems.values(), key=lambda r: r["runs"][-1]["createdAt"], reverse=True),
+        "totals": {"systemsSending": int(sending or 0), "explained": sum(verdicts.values()), "held": verdicts["held"], "notHeld": verdicts["did not hold"],
+                   "notReproducible": verdicts["not reproducible"], "scored": scored, "withFlip": flips},
+    }
 
 
 @router.get("/ai-systems/{system_id}/traces/summary")
@@ -344,6 +454,58 @@ def trace_summary(system_id: str, m: OrgMembership = Depends(_member), db: Sessi
         "week": {"runs": int(week[0] or 0), "errors": int(week[1] or 0)},
         "days": [{"date": d, "runs": int(by_day.get(d, (0, 0))[0]), "errors": int(by_day.get(d, (0, 0))[1] or 0)} for d in days],
         "evaluations": live_run_evaluations(db, system_id),
+        "decisions": _decisions_summary(db, system_id, days),
+    }
+
+
+def _label(output: Optional[str]) -> str:
+    """A decision step's outcome as a label: its output when that is a short string, else other."""
+    v = _value(output)
+    return " ".join(v.casefold().split()) if isinstance(v, str) and 0 < len(v.strip()) <= 40 else "other"
+
+
+def _decisions_summary(db: Session, system_id: str, days: List[str]) -> Optional[Dict[str, Any]]:
+    """Decision steps per day by outcome over the summary's days, the days before for comparison, and the runs explained.
+    None when the system sent no decision step in that time."""
+    prior_start = (datetime.fromisoformat(days[0]) - timedelta(days=SUMMARY_DAYS)).date().isoformat()
+    last: Dict[str, tuple] = {}  # trace -> its last decision step: (day, label, has reason)
+    # ponytail: reads every decision step of 28 days into memory; aggregate in SQL if systems send many thousands a day
+    for trace_id, day, output, rationale in db.execute(
+        text(
+            "SELECT t.trace_id, LEFT(t.received_at, 10), s.output, s.rationale FROM governance_agent_trace_steps s "
+            "JOIN governance_agent_traces t ON t.id = s.trace_pk WHERE t.system_id = :sid AND t.received_at >= :since "
+            "AND s.kind = 'decision' ORDER BY t.received_at, s.seq"
+        ),
+        {"sid": system_id, "since": prior_start},
+    ).fetchall():
+        last[trace_id] = (day, _label(output), bool(rationale and rationale.strip()))
+    if not last:
+        return None
+    now = [v for v in last.values() if v[0] >= days[0]]
+    before = [v for v in last.values() if v[0] < days[0]]
+    counts = Counter(label for _, label, _ in now)
+    labels = [k for k, _ in counts.most_common(2) if k != "other"]
+    top = labels[0] if labels else None
+    share = lambda rows: round(sum(r[1] == top for r in rows) / len(rows), 4) if rows and top else None  # noqa: E731
+    per_day = {d: Counter() for d in days}
+    for day, label, _ in now:
+        per_day[day][label if label in labels else "other"] += 1
+    explained = defaultdict(Counter)
+    for day, res in db.execute(
+        text(
+            "SELECT LEFT(t.received_at, 10), e.result_json FROM governance_trace_explanations e JOIN governance_agent_traces t "
+            "ON t.system_id = e.system_id AND t.trace_id = e.trace_id WHERE e.system_id = :sid AND t.received_at >= :since"
+        ),
+        {"sid": system_id, "since": days[0]},
+    ).fetchall():
+        explained[day][json.loads(res).get("verdict")] += 1
+    total = sum(explained.values(), Counter())
+    return {
+        "total": len(now), "withReason": sum(r[2] for r in now), "labels": labels, "topLabel": top,
+        "topShare": share(now), "priorTopShare": share(before), "priorTotal": len(before),
+        "days": [{"date": d, "total": sum(per_day[d].values()), "byLabel": dict(per_day[d]),
+                  "held": explained[d]["held"], "tested": explained[d]["held"] + explained[d]["did not hold"]} for d in days],
+        "explained": {"held": total["held"], "notHeld": total["did not hold"], "notReproducible": total["not reproducible"], "untested": total["untested"]},
     }
 
 
@@ -375,7 +537,49 @@ def get_trace(system_id: str, trace_id: str, m: OrgMembership = Depends(_member)
         }
         for s in steps
     ]
+    explanation = db.execute(
+        text("SELECT result_json, evidence_id, created_at FROM governance_trace_explanations WHERE system_id = :sid AND trace_id = :tid"),
+        {"sid": system_id, "tid": trace_id},
+    ).mappings().fetchone()
+    trace["explanation"] = ({**json.loads(explanation["result_json"]), "evidenceId": explanation["evidence_id"], "createdAt": explanation["created_at"]}
+                            if explanation else None)
+    trace["explainable"] = _decision(db, row) is not None
     return {"trace": trace}
+
+
+@router.post("/ai-systems/{system_id}/traces/{trace_id}/explain")
+async def explain_trace(system_id: str, trace_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    """Explain one run now: about 20 replays on the model connection, judged by the organisation's model; kept on the run."""
+    from api.routes import evaluation_runs  # it imports this module
+
+    _ensure_tables(db)
+    _system_or_404(db, m.org_id, system_id)
+    row = _trace_row(db, system_id, trace_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    run = _decision(db, row)
+    if not run:
+        raise HTTPException(status_code=422, detail="This run has no input, decision and stated reason to explain")
+    ai = _ai_row(db, m.org_id)
+    if not ai or not ai["enabled"]:
+        raise HTTPException(status_code=409, detail="Explaining a run uses your organisation's AI provider as the judge; set one up in organisation settings")
+    target = stored_target(db, m.org_id, system_id)
+    if target.via_runner:
+        raise HTTPException(status_code=409, detail="This system is on your private network, so only the runner can call it; run Explanation quality from there")
+    system = db.execute(text("SELECT name, risk_tier, lifecycle_stage FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    judge = _stored_connection(ai)
+    db.rollback()  # hold no transaction open during the replays
+
+    async def progress(done: int, total: int, phase: str) -> None:
+        return None
+
+    live = evaluation_runs.make_live(target, judge, {"name": system[0], "risk_tier": system[1], "lifecycle_stage": system[2]}, progress)
+    try:
+        out = await explain.explain_run(run, live)
+    except CallError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    save_explanations(db, m.org_id, system_id, [out], m.user_id)
+    return {"explanation": {**out, "evidenceId": None, "createdAt": _utc_now_iso()}}
 
 
 @router.delete("/ai-systems/{system_id}/traces/{trace_id}")
