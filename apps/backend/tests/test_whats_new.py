@@ -13,8 +13,8 @@ Your agents send their runs (#537).
 
 ## Agents and live runs
 
-- Live runs: a running agent sends its runs with the reason for each step [Open](/systems) (#537).
-- Explained decisions: replays decisions to test the stated reason (#547, #548).
+- Live runs: a running agent sends its runs with the reason for each step [Open](https://app.fairmind.xyz/systems) (#537).
+- Explained decisions: replays decisions to test the stated reason [Open](/evidence?view=explained) (#547, #548).
 - A line with no name in front of it.
 
 ## Install
@@ -37,7 +37,7 @@ def test_release_notes_are_read_as_people_read_them():
     assert [s["name"] for s in r["sections"]] == ["Agents and live runs"]  # Install is developer detail
     items = r["sections"][0]["items"]
     assert items[0] == {"name": "Live runs", "text": "A running agent sends its runs with the reason for each step.", "href": "/systems"}
-    assert items[1] == {"name": "Explained decisions", "text": "Replays decisions to test the stated reason.", "href": None}
+    assert items[1] == {"name": "Explained decisions", "text": "Replays decisions to test the stated reason.", "href": "/evidence?view=explained"}
     assert items[2]["name"] == "" and items[2]["text"] == "A line with no name in front of it."
     untitled = parse_release({"tag_name": "v0.4.1-alpha", "name": "FairMind v0.4.1-alpha", "body": "## App\n\n- Fixes (#1)."})
     assert untitled["title"] == "FairMind v0.4.1-alpha" and untitled["lead"] == ""

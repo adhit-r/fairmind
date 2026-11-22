@@ -12,7 +12,7 @@ const SKIP = new Set(['install', 'installation']);
 const REFS = /\s*\((?:#\d+(?:,\s*)?)+\)/g;
 
 function item(area: string, line: string): ReleaseItem {
-  const body = line.replace(REFS, '').replace(/\[([^\]]+)\]\(\/[^)\s]*\)/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\*\*/g, '').trim().replace(/[ .]+$/, '') + '.';
+  const body = line.replace(REFS, '').replace(/\[([^\]]+)\]\((?:https:\/\/app\.fairmind\.xyz)?\/[^)\s]*\)/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\*\*/g, '').trim().replace(/[ .]+$/, '') + '.';
   const at = body.indexOf(': ');
   const name = at > 0 && at <= 60 ? body.slice(0, at) : '';
   const rest = name ? body.slice(at + 2) : body;

@@ -9,7 +9,7 @@ GET  /public/release-emails/unsubscribe  no session: a signed link from the emai
 
 The notes are written once, as the GitHub release body: an optional "# Title" and lead paragraph, then "## Area"
 sections of "- Name: what it does (#123)" items. A markdown link to an app path ("[Open](/systems)") becomes the
-item's link. Pull request numbers and the Install section are developer detail and are left out here.
+item's link; write it as https://app.fairmind.xyz/systems so it also works on GitHub. Pull request numbers and the Install section are developer detail and are left out here.
 """
 
 import hashlib
@@ -43,7 +43,7 @@ SKIP_SECTIONS = {"install", "installation"}
 _cache: Dict[str, Any] = {"at": 0.0, "releases": None}
 
 _REFS = re.compile(r"\s*\((?:#\d+(?:,\s*)?)+\)")  # "(#537)" or "(#508, #509)"
-_APP_LINK = re.compile(r"\[([^\]]+)\]\((/[^)\s]*)\)")
+_APP_LINK = re.compile(r"\[([^\]]+)\]\((?:https://app\.fairmind\.xyz)?(/[^)\s]*)\)")  # an app path, written in full so it works on GitHub too
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 
 
