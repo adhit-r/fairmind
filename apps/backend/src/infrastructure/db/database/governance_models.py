@@ -4796,6 +4796,17 @@ class GovernanceTraceExplanation(Base):
     created_at = Column(String, nullable=False)
 
 
+class ReleaseAnnouncement(Base):
+    """A release emailed to the people who asked for release emails; one row per release, so it goes out once."""
+
+    __tablename__ = "release_announcements"
+
+    tag = Column(String, primary_key=True)
+    sent_by = Column(String, nullable=False)
+    sent_at = Column(String, nullable=False)
+    recipients = Column(Integer, nullable=False, default=0)
+
+
 class InternalAudit(Base):
     """An internal audit programme (ISO/IEC 42001 clause 9.2); see api/routers/internal_audits.py."""
 

@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     olai_api_key: Optional[str] = None
     olai_tenant_id: str = ""
     olai_collection_point_id: str = ""
+    # The Olai purpose a person grants or withdraws with the release email switch. Unset = recorded in FairMind only.
+    olai_release_purpose_id: str = ""
+    # The public GitHub repository whose releases are FairMind's release notes (What's new, the email, the changelog).
+    release_repo: str = "adhit-r/fairmind"
 
     # Security
     secret_key: str = secrets.token_urlsafe(32)

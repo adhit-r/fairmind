@@ -1,0 +1,88 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/pages.css';
+import { areaKey, dayLabel, releases, releasesUrl } from '../lib/releases';
+
+const list = await releases();
+const areas = [...new Map(list.flatMap((r) => r.items.map((i) => [areaKey(i.area), i.area.split(/\s+/)[0]] as const))).entries()];
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairmind.xyz/' },
+    { '@type': 'ListItem', position: 2, name: 'Changelog', item: 'https://fairmind.xyz/changelog/' },
+  ],
+};
+---
+
+<Layout
+  title="FairMind changelog: what shipped, release by release"
+  description="Every FairMind release, from the notes published on GitHub: agent governance, live runs, audits and frameworks. If it is listed here, it is live in the app."
+  structuredData={structuredData}
+>
+  <div class="route-page">
+    <section class="changelog-hero">
+      <p class="route-signal">Changelog</p>
+      <h1>What shipped, <span>release by release.</span></h1>
+      <p>Every release of FairMind, written from the notes we publish on GitHub. If it is here, it is live in the app.</p>
+      {areas.length > 0 && (
+        <div class="changelog-tools" role="group" aria-label="Show changes in">
+          <button type="button" class="changelog-chip" aria-pressed="true" data-area="">All</button>
+          {areas.map(([key, label]) => <button type="button" class="changelog-chip" aria-pressed="false" data-area={key}>{label}</button>)}
+          <span class="changelog-links"><a href="/changelog/rss.xml">RSS feed</a> · <a href={releasesUrl}>GitHub releases</a></span>
+        </div>
+      )}
+    </section>
+
+    <div class="changelog-body">
+      {list.length === 0 && (
+        <p class="changelog-empty">The release notes could not be loaded right now. Read them on <a href={releasesUrl}>GitHub</a>.</p>
+      )}
+      {list.map((r, n) => {
+        const highlights = n === 0 ? r.items.filter((i) => i.name).slice(0, 3) : [];
+        const rest = r.items.filter((i) => !highlights.includes(i));
+        return (
+          <article class="changelog-entry" id={r.tag} data-release>
+            <div class="changelog-when"><b>v{r.version}</b><span>{dayLabel(r.date)}</span></div>
+            <div class="changelog-what">
+              <h2>{r.title}</h2>
+              {r.lead && <p class="changelog-lead">{r.lead}</p>}
+              {highlights.length > 0 && (
+                <div class="changelog-highlights">
+                  {highlights.map((i) => (
+                    <div data-area={areaKey(i.area)}><span>{i.area}</span><b>{i.name}</b><p>{i.text}</p></div>
+                  ))}
+                </div>
+              )}
+              {rest.length > 0 && (
+                <ul class="changelog-list">
+                  {rest.map((i) => (
+                    <li data-area={areaKey(i.area)}><span>{i.area.split(/\s+/)[0]}</span><span>{i.name ? <><b>{i.name}:</b> {i.text}</> : i.text}</span></li>
+                  ))}
+                </ul>
+              )}
+              <a class="changelog-source" href={r.url}>Full notes on GitHub</a>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  </div>
+</Layout>
+
+<script>
+  const chips = document.querySelectorAll<HTMLButtonElement>('.changelog-chip');
+  chips.forEach((chip) =>
+    chip.addEventListener('click', () => {
+      const area = chip.dataset.area ?? '';
+      chips.forEach((c) => c.setAttribute('aria-pressed', String(c === chip)));
+      document.querySelectorAll<HTMLElement>('.changelog-entry [data-area]').forEach((el) => {
+        el.hidden = !!area && el.dataset.area !== area;
+      });
+      document.querySelectorAll<HTMLElement>('[data-release]').forEach((entry) => {
+        entry.hidden = !!area && !entry.querySelector(`[data-area="${area}"]`);
+      });
+    }),
+  );
+</script>
