@@ -16,7 +16,8 @@ from . import agentic, assess, behaviour, data, model, ops, platform, suites
 REGISTRY: Dict[str, Engine] = {}
 # A behaviour test for an evaluation that also has a file engine is its second way to run (live mode).
 ALTERNATES: Dict[str, Engine] = {}
-for _module in (data, model, ops, platform, behaviour, agentic, suites, assess):
+# behaviour last: its live engines are the alternates of file engines in every other module
+for _module in (data, model, ops, platform, agentic, suites, assess, behaviour):
     for _engine in _module.ENGINES:
         if _engine.id in REGISTRY:
             if not (_engine.live and not REGISTRY[_engine.id].live and _engine.id not in ALTERNATES):
@@ -29,11 +30,11 @@ for _id, (_check, _method, _judged) in platform.EXTENDS.items():
 
 
 # Stored with every run beside the catalogue version; raise it when an engine's verdict on the same inputs can change.
-ENGINE_VERSION = "2026.11.22"
+ENGINE_VERSION = "2026.11.23"
 
 # Evaluations whose verdict a judge model reads (behaviour tests and judged platform checks). No labelled agreement
 # set measures any judge yet, so the API labels each of them "judge not validated".
-JUDGED = frozenset(e.id for d in (REGISTRY, ALTERNATES) for e in d.values() if e.live or e.judge)
+JUDGED = frozenset(e.id for d in (REGISTRY, ALTERNATES) for e in d.values() if e.live or e.judge or e.file_judge)
 
 # Paths whose code differs from the engine's main one, each earning L4 on its own known-answer test.
 EXTRA_PATHS = {"EV-DAT-01": ("text",)}  # text features are judged by an in-distribution share, not PSI

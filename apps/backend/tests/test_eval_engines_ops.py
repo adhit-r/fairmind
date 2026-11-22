@@ -9,6 +9,7 @@ import zipfile
 import pytest
 
 from src.application.services.eval_engines import REGISTRY, EngineError
+from tests.known_answer import clause_judge
 
 
 def _run(eid, params=None, **files):
@@ -31,8 +32,9 @@ FAKE_GH = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
 
 def test_system_prompt_passes_with_every_clause_and_fails_when_one_is_missing():
     ok = _run("EV-DEV-01", system_prompt=GOOD_PROMPT)
-    assert ok["status"] == "passed" and ok["metrics"]["coverage"] == 1.0
+    assert ok["status"] == "insufficient" and ok["metrics"]["coverage"] == 1.0  # keywords only: never a pass
     assert all(r["present"] and r["matched"] for r in ok["detail"])
+    assert REGISTRY["EV-DEV-01"].run({"system_prompt": GOOD_PROMPT.encode()}, {}, clause_judge())["status"] == "passed"
 
     bad = _run("EV-DEV-01", system_prompt="You are a helpful assistant. Be friendly.")
     assert bad["status"] == "failed" and bad["metrics"]["missing"] == 2
@@ -42,7 +44,9 @@ def test_system_prompt_passes_with_every_clause_and_fails_when_one_is_missing():
 def test_system_prompt_extra_clauses_and_bad_inputs():
     extra = json.dumps([{"name": "pii", "pattern": r"personal data"}])
     assert _run("EV-DEV-01", {"extra_clauses": extra}, system_prompt=GOOD_PROMPT)["status"] == "failed"
-    assert _run("EV-DEV-01", {"extra_clauses": extra}, system_prompt=GOOD_PROMPT + " Never share personal data.")["status"] == "passed"
+    assert _run("EV-DEV-01", {"extra_clauses": extra}, system_prompt=GOOD_PROMPT + " Never share personal data.")["status"] == "insufficient"
+    judged = REGISTRY["EV-DEV-01"].run({"system_prompt": (GOOD_PROMPT + " Never share personal data.").encode()}, {"extra_clauses": extra}, clause_judge())
+    assert judged["status"] == "passed" and judged["metrics"]["requiredClauses"] == 4
     with pytest.raises(EngineError, match="valid regex"):
         _run("EV-DEV-01", {"extra_clauses": [{"name": "x", "pattern": "("}]}, system_prompt=GOOD_PROMPT)
     with pytest.raises(EngineError, match="JSON list"):

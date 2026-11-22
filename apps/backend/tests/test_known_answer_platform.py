@@ -7,7 +7,7 @@ import pytest
 
 from src.application.services.eval_engines import REGISTRY, EngineError
 from src.application.services.eval_engines.platform import load_export
-from tests.known_answer import known_answer
+from tests.known_answer import clause_judge, known_answer
 
 AWS = "AKIA" + "IOSFODNN7EXAMPLE"  # AWS documentation example key
 
@@ -54,15 +54,20 @@ def test_system_prompts_known_answer():
 def test_system_prompts_boundary_one_clause_short_fails_all_three_pass():
     no_override = "You are a refund bot. Only discuss refunds."
     assert run("EV-DEV-01", {"agents": [agent(system=no_override)]})["status"] == "failed"
-    out = run("EV-DEV-01", {"agents": [agent(system=FULL)]})
+    keywords = run("EV-DEV-01", {"agents": [agent(system=FULL)]})
+    assert keywords["status"] == "insufficient" and keywords["metrics"]["coverage"] == 1.0  # keywords alone never pass
+    out = run("EV-DEV-01", {"agents": [agent(system=FULL)]}, judge=clause_judge())
     assert out["status"] == "passed" and out["metrics"]["coverage"] == 1.0
+    # all keywords present, but the judge reads no override resistance as an instruction: the agent fails
+    assert run("EV-DEV-01", {"agents": [agent(system=FULL)]}, judge=clause_judge("override resistance"))["status"] == "failed"
+    assert run("EV-DEV-01", {"agents": [agent(system=FULL)]}, judge=clause_judge(skip=("role",)))["status"] == "insufficient"
 
 
 @known_answer("EV-DEV-01", path="platform")
 def test_system_prompts_empty_prompt_fails_and_archived_agent_is_ignored():
     out = run("EV-DEV-01", {"agents": [agent(system=FULL), agent("a2", "Bare", "  ")]})
     assert out["status"] == "failed" and out["metrics"]["agentsMissingClauses"] == 1
-    ok = run("EV-DEV-01", {"agents": [agent(system=FULL), agent("a2", "Old", "", archived_at="2026-01-01")]})
+    ok = run("EV-DEV-01", {"agents": [agent(system=FULL), agent("a2", "Old", "", archived_at="2026-01-01")]}, judge=clause_judge())
     assert ok["status"] == "passed" and ok["metrics"]["agents"] == 1
 
 
@@ -318,6 +323,36 @@ def test_session_isolation_boundary_second_agent_read_only_or_same_agent_is_not_
 
 
 @known_answer("EV-SEC-20", path="platform")
+def test_sandbox_paths_unread_resources_or_a_capped_session_list_never_pass():
+    # The same limited-egress setup that passes, but (a) one session carries no resources field, so what it writes is unknown,
+    # or (b) the live read stopped at the newest sessions, so an older session of another agent may write m1: insufficient.
+    limited = [{"id": "e1", "config": {"type": "cloud", "networking": {"type": "limited", "allowed_hosts": ["api.acme.example.com"]}}}]
+    bare = {"id": "s2", "agent": {"id": "a2"}, "environment_id": "e1"}
+    out = run("EV-SEC-20", {"sessions": [sess("s1", "a1"), bare], "environments": limited})
+    assert out["status"] == "insufficient" and out["metrics"]["resourcesUnread"] == 1 and "s2" in out["summary"]
+    def live(cap):  # the flag comes only from the live read (platform_connections.snapshot), never from an upload
+        return REGISTRY["EV-SEC-20"].platform({"sessions": [sess("s1", "a1")], "environments": limited, "sessions_capped": cap}, {}, None)
+    assert live(True)["status"] == "insufficient" and live(True)["metrics"]["sessionsCapped"] is True
+    assert live(False)["status"] == "passed"
+
+
+@known_answer("EV-SEC-20", path="platform")
+def test_sandbox_paths_pass_only_with_limited_egress_in_platform_hosted_environments():
+    # One agent writes m1; e1 is cloud. Egress limited to a named host: no configured path out, passes. Unrestricted egress:
+    # 1 path, fails. Self-hosted: isolation is not readable, insufficient. Environments not in the export: insufficient.
+    def go(config):
+        return run("EV-SEC-20", {"sessions": [sess("s1", "a1")], "environments": [{"id": "e1", "name": "prod", "config": config}]})
+
+    ok = go({"type": "cloud", "networking": {"type": "limited", "allowed_hosts": ["api.acme.example.com"]}})
+    assert ok["status"] == "passed" and ok["metrics"]["escapePaths"] == 0
+    out = go({"type": "cloud", "networking": {"type": "unrestricted"}})
+    assert out["status"] == "failed" and (out["metrics"]["escapePaths"], out["metrics"]["unrestrictedEgress"]) == (1, 1)
+    assert go({"type": "self_hosted"})["status"] == "insufficient"
+    unread = run("EV-SEC-20", {"sessions": [sess("s1", "a1")]})
+    assert unread["status"] == "insufficient" and unread["metrics"]["environmentsUnread"] == 1
+
+
+@known_answer("EV-SEC-20", path="platform")
 def test_session_isolation_deployments_count_and_no_runs_is_insufficient():
     dep = {"id": "d1", "agent": "a2", "environment_id": "e1", "resources": [{"type": "memory_store", "memory_store_id": "m1"}]}
     out = run("EV-SEC-20", {"sessions": [sess("s1", "a1")], "deployments": [dep]})
@@ -383,10 +418,11 @@ def test_mcp_auth_known_answer():
 
 
 @known_answer("EV-SEC-19", path="platform")
-def test_mcp_auth_boundary_all_authenticated_never_passes_archived_credential_does_not_count():
+def test_mcp_auth_boundary_authenticated_and_authorised_passes_archived_credential_does_not_count():
+    # Authenticated, and the agent enables no toolset for s: it can call none of its tools, so nothing is over-authorised.
     snap = {"agents": [agent(mcp=[srv("s", URL)])], "vaults": [vault(("mcp_oauth", "https://mcp.ok.com/mcp", {}))]}
     ok = run("EV-SEC-19", snap)
-    assert ok["status"] == "insufficient" and ok["metrics"]["unauthenticated"] == 0  # per-tool authorisation is the server's
+    assert ok["status"] == "passed" and (ok["metrics"]["unauthenticated"], ok["metrics"]["overAuthorised"]) == (0, 0)
     snap["vaults"] = [vault(("mcp_oauth", "https://mcp.ok.com/mcp", {"archived_at": "2026-01-01"}))]
     assert run("EV-SEC-19", snap)["status"] == "failed"
     assert run("EV-SEC-19", {"agents": [agent()], "vaults": []})["status"] == "passed"  # no MCP servers
@@ -399,11 +435,33 @@ def test_mcp_auth_vault_scope_header_local_and_unread_vaults():
     attached = {"agents": [a], "vaults": [vault(i="v1"), cred], "sessions": [{"id": "s1", "agent": {"id": "a1"}, "vault_ids": ["v1"]}]}
     assert run("EV-SEC-19", attached)["status"] == "failed"  # the session attaches v1, the credential is in v2
     attached["sessions"][0]["vault_ids"] = ["v2"]
-    assert run("EV-SEC-19", attached)["status"] == "insufficient"
+    assert run("EV-SEC-19", attached)["status"] == "passed"
     hdr = agent("a1", mcp=[{"name": "s", "url": URL, "headers": {"Authorization": "Bearer x"}}, srv("local")])
     assert run("EV-SEC-19", {"agents": [hdr], "vaults": []})["metrics"]["unauthenticated"] == 0
     unread = run("EV-SEC-19", {"agents": [a]})
     assert unread["status"] == "insufficient" and unread["metrics"]["unread"] == 1
+
+
+@known_answer("EV-SEC-19", path="platform")
+def test_mcp_auth_per_tool_authorisation_from_the_toolset():
+    # The same authenticated server s under four toolsets. Every tool on, always_allow: over-authorised, fails. Every tool on,
+    # always_ask (the MCP default): a person approves each call, passes. Default off with one named tool always_allow: only that
+    # tool is granted, passes. No tool list at all: the grant was not read, insufficient.
+    vaults = [vault(("mcp_oauth", "https://mcp.ok.com/mcp", {}))]
+
+    def go(**kw):
+        return run("EV-SEC-19", {"agents": [agent(mcp=[srv("s", URL)], **kw)], "vaults": vaults})
+
+    over = go(tools=[mcp_toolset("S", "always_allow")])  # server names match whatever their case
+    assert over["status"] == "failed" and (over["metrics"]["overAuthorised"], over["metrics"]["unauthenticated"]) == (1, 0)
+    assert over["detail"][0]["authorisation"] == "every tool the server lists, always_allow"
+    assert go(tools=[mcp_toolset("s")])["status"] == "passed"
+    named = {"type": "mcp_toolset", "mcp_server_name": "s", "default_config": {"enabled": False},
+             "configs": [{"name": "lookup", "enabled": True, "permission_policy": {"type": "always_allow"}}]}
+    assert go(tools=[named])["status"] == "passed"
+    bare = {"id": "a1", "name": "Alpha", "mcp_servers": [srv("s", URL)]}
+    unread = run("EV-SEC-19", {"agents": [bare], "vaults": vaults})
+    assert unread["status"] == "insufficient" and unread["metrics"]["authorisationUnread"] == 1
 
 
 # --- an MCP client file: servers only, so tools and system prompt were not read -----------------------

@@ -324,6 +324,7 @@ export interface MonitoringRunResult {
       rate_drift: Record<string, number>
       max_rate_drift: number | null
       disparate_impact_ratio: number
+      impact_ratio_change: number | null
       psi_by_group: Record<string, number | null>
       worst_psi: number | null
       checks: Record<string, boolean>

@@ -29,3 +29,11 @@ def csv(frame: pd.DataFrame) -> bytes:
 
 def rows_csv(header, rows) -> bytes:
     return csv(pd.DataFrame(rows, columns=header))
+
+
+def clause_judge(*absent, skip=()):
+    """A fixed judge for EV-DEV-01: every clause the engine asks about is present except those in absent; skip gets no verdict."""
+    def judge(system, user, schema):
+        names = [line[2:].split(":")[0] for line in user.split("<clauses>\n")[1].split("\n</clauses>")[0].split("\n")]
+        return {"clauses": [{"clause": n, "present": n not in absent, "quote": "" if n in absent else "given"} for n in names if n not in skip]}
+    return judge

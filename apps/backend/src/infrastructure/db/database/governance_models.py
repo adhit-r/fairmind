@@ -4754,6 +4754,7 @@ class GovernanceAgentTrace(Base):
     rationale = Column(Text, nullable=True)  # the reason the system stated for the whole run; not checked
     started_at = Column(String, nullable=True)
     ended_at = Column(String, nullable=True)
+    expected_calls = Column(Text, nullable=True)  # JSON list of {tool, args} a test run should make, in order (EV-TST-06)
     truncated = Column(Boolean, nullable=False, default=False)
     received_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())

@@ -80,16 +80,23 @@ def _india(c: dict) -> Verdict:
 
 
 def _fairness_drift(c: dict) -> Verdict:
+    """The change in impact ratio between the reference fairness run and this monitoring run, per attribute; the catalogue
+    alerts on a change of 0.05 or more. Monitoring runs carry no outcomes, so no error-rate gap is stored to compare."""
     attrs = c.get("attributes") or []
-    compared = [a for a in attrs if "selection_rate_stable" in a["checks"]]
     if not attrs:
         return None
-    if not compared:
+    if not any(a.get("baseline_selection_rates") for a in attrs):
         return "insufficient", "No baseline run to compare against"
-    drift = max(a["max_rate_drift"] for a in compared)
-    # the stored max_rate_drift, not the stored check, so a run saved when a change of exactly 0.05 passed is judged as drift too
-    passed = all(a["max_rate_drift"] < RATE_DRIFT_THRESHOLD and a["checks"].get("disparate_impact") for a in compared)
-    return _ok(passed), f"Largest selection-rate drift {drift:.3f}"
+    if not any("impact_ratio_change" in a for a in attrs):
+        return "insufficient", "The run predates impact-ratio drift; run monitoring again"
+    compared = [a for a in attrs if a.get("impact_ratio_change") is not None]
+    if not compared:
+        return "insufficient", f"Impact ratio not measurable: fewer than two groups of {MIN_GROUP_SIZE} rows in the reference or this run"
+    worst = max(compared, key=lambda a: a["impact_ratio_change"])
+    status = worst_status(["failed" if a["impact_ratio_change"] >= RATE_DRIFT_THRESHOLD else "passed" for a in compared]
+                          + ["insufficient"] * (len(attrs) - len(compared)))
+    return status, (f"Largest impact-ratio change {worst['impact_ratio_change']:.3f} ({worst['attribute']}); error-rate gap not "
+                    "measured: monitoring runs carry no outcomes")
 
 
 def _energy(c: dict) -> Verdict:

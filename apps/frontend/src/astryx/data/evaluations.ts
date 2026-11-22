@@ -22,10 +22,10 @@ export const fmtWhen = (iso: string | null | undefined) => {
 
 type Ways = NonNullable<SystemFit['ways']>
 
-/** The way a run page opens on: the asked one when it applies and is ready, else calling the system, then live runs, then the platform when set up, then files. */
+/** The way a run page opens on: the asked one when it applies and is ready, else calling the system, then live runs, then the platform, then records FairMind holds, when set up, then files. */
 export function defaultWay(ways: Ways, asked?: RunWay | null): RunWay | null {
   if (asked && ways.some((w) => w.way === asked && w.ready)) return asked
-  for (const way of ['calls_system', 'live_runs', 'platform'] as const) if (ways.some((w) => w.way === way && w.ready)) return way
+  for (const way of ['calls_system', 'live_runs', 'platform', 'fairmind_data'] as const) if (ways.some((w) => w.way === way && w.ready)) return way
   return ways.find((w) => w.way === 'files')?.way ?? ways[0]?.way ?? null
 }
 
@@ -57,6 +57,6 @@ export function groupRows<T extends SystemFit>(rows: T[]): Record<Bucket, T[]> {
   return out
 }
 
-/** How a run by this way is kept (evaluation_runs provenance): calling the system, FairMind's own agent, the platform or replaying live runs on the connection is measured live; files and live runs read alone are computed. */
+/** How a run by this way is kept (evaluation_runs provenance): calling the system, FairMind's own agent, the platform or replaying live runs on the connection is measured live; files, records FairMind holds and live runs read alone are computed. Records FairMind holds keep the computed class but read as that, since nothing is uploaded. */
 export const keptAs = (way: RunWay, live = false, replays = false) =>
-  way === 'calls_system' || way === 'platform' || (live && way !== 'live_runs') || (replays && way === 'live_runs') ? 'Measured live' : 'Computed from upload'
+  way === 'fairmind_data' ? 'Computed from FairMind records' : way === 'calls_system' || way === 'platform' || (live && way !== 'live_runs') || (replays && way === 'live_runs') ? 'Measured live' : 'Computed from upload'

@@ -550,6 +550,11 @@ def run_monitoring(
                 expected = base_hist["by_attribute"][attribute].get(str(g))
                 psi_by_group[str(g)] = psi(expected, score_histogram(proba[sensitive == g])) if expected else None
         worst_psi = max((v for v in psi_by_group.values() if v is not None), default=None)
+        # EV-FAI-07: the impact ratio over groups of MIN_GROUP_SIZE or more, here and in the reference fairness run
+        sizes = {str(g): int(c) for g, c in zip(groups, counts)}
+        ratio = large_group_ratio({"selection_rates": rates, "groups": sizes})
+        base = base_attrs.get(attribute) or {}
+        base_ratio = large_group_ratio(base) if base.get("selection_rates") and base.get("groups") else None
         checks = {"disparate_impact": bool(di_ratio >= DI_THRESHOLD)}
         if drift:
             checks["selection_rate_stable"] = bool(max(drift.values()) < RATE_DRIFT_THRESHOLD)  # EV-FAI-07 alerts on a change of 0.05 or more
@@ -565,6 +570,9 @@ def run_monitoring(
                 "rate_drift": drift,
                 "max_rate_drift": max(drift.values()) if drift else None,
                 "disparate_impact_ratio": di_ratio,
+                "impact_ratio": ratio,
+                "baseline_impact_ratio": base_ratio,
+                "impact_ratio_change": round(abs(ratio - base_ratio), 6) if ratio is not None and base_ratio is not None else None,
                 "psi_by_group": psi_by_group,
                 "worst_psi": worst_psi,
                 "checks": checks,
@@ -693,8 +701,8 @@ PROOF_MAX_AGE = timedelta(days=365)  # a pass older than this is stale: it no lo
 
 
 def _loosened(record: Dict[str, Any]) -> bool:
-    """A pass judged on thresholds looser than the catalogue's (evaluation_runs stores which)."""
-    return evaluation_status(record) == "passed" and bool(record["content"].get("thresholdLoosened"))
+    """A pass judged on thresholds looser than the catalogue's (evaluation_runs stores which), or a zero-tolerance pass on part of the live runs."""
+    return evaluation_status(record) == "passed" and bool(record["content"].get("thresholdLoosened") or record["content"].get("partialRead"))
 
 
 def proof_status(record: Dict[str, Any], now: Optional[datetime] = None) -> Optional[str]:

@@ -73,6 +73,7 @@ class Engine:
     platform: Optional[Callable[[Dict[str, Any], Dict[str, Any], Optional[Judge]], Dict[str, Any]]] = None
     platform_method: str = ""
     judge: bool = False  # the platform check asks the organisation's model
+    file_judge: bool = False  # the file run takes the organisation's model as a third argument, None when none is set
     live: str = ""  # "" reads uploaded files; "target" calls the AI system under test; "agent" calls FairMind's own agent
     # Reads inputs from FairMind's own stored results: (db session, org id, system id) -> files, added to any uploads.
     collect: Optional[Callable[[Any, str, str], Dict[str, bytes]]] = None
@@ -89,6 +90,7 @@ class Engine:
             "platform": self.platform is not None,
             "platformMethod": self.platform_method or self.method,
             "judge": self.judge,
+            "fileJudge": self.file_judge,
             "sampling": self.sampling,
         }
 
@@ -135,12 +137,13 @@ def samples_needed(limit: float) -> int:
     return math.ceil(math.log(0.05) / math.log(1 - limit))
 
 
-def read_csv(raw: bytes, what: str, text: bool = False) -> pd.DataFrame:
-    """text keeps every cell as a string, so ids and yes/no flags never turn into floats like 1.0 when a cell is blank."""
+def read_csv(raw: bytes, what: str, text: bool = False, literal: bool = False) -> pd.DataFrame:
+    """text keeps every cell as a string, so ids and yes/no flags never turn into floats like 1.0 when a cell is blank.
+    literal also keeps NA, None, null and the like as written, so only a blank cell is missing (a tool may be named NA)."""
     if not raw:
         raise EngineError(f"{what} is empty")
     try:
-        frame = pd.read_csv(io.BytesIO(raw), dtype=str if text else None)
+        frame = pd.read_csv(io.BytesIO(raw), dtype=str if text or literal else None, keep_default_na=not literal, na_values=[""] if literal else None)
     except Exception as exc:  # pandas raises several parser errors
         raise EngineError(f"{what} is not a readable CSV: {exc}")
     if frame.empty:
