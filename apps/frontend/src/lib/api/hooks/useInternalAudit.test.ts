@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mock, test } from 'node:test'
 
 import { apiClient } from '../api-client'
-import { blockingConflict, canConclude, warningFor, canIssue, concludeCheck, createAudit, needsOverride, uploadPlan, type AreaView, type AuditView } from './useInternalAudit'
+import { blockingConflict, type Conflict, canConclude, warningFor, canIssue, concludeCheck, createAudit, needsOverride, uploadPlan, type AreaView, type AuditView } from './useInternalAudit'
 
 const area = (over: Partial<AreaView['area']> = {}) => ({ auditorId: 'u1', status: 'fieldwork', auditStatus: 'fieldwork', ...over }) as AreaView['area']
 
@@ -14,7 +14,7 @@ test('only the area auditor concludes, and only in fieldwork', () => {
 })
 
 test('only blocking conflicts are blocking; unverifiable is a warning', () => {
-  const cs = [{ areaId: 'a', blocking: false, kind: 'unverifiable', detail: 'x' }, { areaId: 'b', blocking: true, detail: 'y' }]
+  const cs = [{ areaId: 'a', blocking: false, kind: 'unverifiable', detail: 'x' }, { areaId: 'b', blocking: true, detail: 'y' }] as Conflict[]
   assert.equal(blockingConflict(cs, 'a'), undefined)
   assert.equal(warningFor(cs, 'a')?.kind, 'unverifiable')
   assert.equal(blockingConflict(cs, 'b')?.detail, 'y')
