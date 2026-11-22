@@ -138,6 +138,27 @@ def test_sealing_needs_mutation_rights_and_the_hash_covers_model_and_summary():
     assert _client().get(f"{AIG}/reports/snapshots").json() == []
 
 
+def test_every_format_of_a_sealed_report_comes_from_the_same_snapshot():
+    import io
+
+    from docx import Document
+
+    client = _client()
+    loan = _system(client, "Acme loan scoring", "high")
+    _plan(loan, "ISO42001")
+    sealed = client.post(f"{AIG}/reports/snapshots", json={"role": "compliance", "narrative": "=SUM(A1) reviewed by acme GRC"}).json()
+
+    pdf = client.get(f"/api/v1/reports/snapshots/{sealed['id']}/pdf")
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+    doc = Document(io.BytesIO(client.get(f"/api/v1/reports/snapshots/{sealed['id']}/docx").content))
+    assert sealed["sha256"] in [c.text for t in doc.tables for row in t.rows for c in row.cells]
+    assert "Road to the audit" in [p.text for p in doc.paragraphs]
+    csv_body = client.get(f"/api/v1/reports/snapshots/{sealed['id']}/csv").content.decode("utf-8-sig")
+    assert sealed["sha256"] in csv_body and "Readiness" in csv_body
+    assert "'=SUM(A1)" in csv_body  # a formula in the summary stays text
+    assert _client().get(f"/api/v1/reports/snapshots/{sealed['id']}/csv").status_code == 404
+
+
 def test_a_reworded_briefing_must_cite_every_fact_and_add_no_number():
     model = {"role": "executive", "framework": {"name": "ISO/IEC 42001"}, "scope": {"systemName": None},
              "readiness": {"systems": 2, "pct": 40, "met": 8, "total": 20}, "road": {"steps": [{}], "forecast": 55}}

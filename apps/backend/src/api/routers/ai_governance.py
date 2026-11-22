@@ -479,7 +479,10 @@ def _require_report_access(
         {"id": report_id},
     ).fetchone()
     if row and not row.system_id and row.org_id:  # an org-wide role report: any member of that organisation may read it
-        if not GovernanceAssuranceService(db).membership(str(row.org_id), current_user.user_id):
+        member = GovernanceAssuranceService(db).membership(str(row.org_id), current_user.user_id)
+        # local development only, as in _require_system_access: the org claim of an account without a members row
+        member = member or (settings.is_development and current_user.org_id and str(current_user.org_id) == str(row.org_id))
+        if not member:
             raise HTTPException(status_code=404, detail="Report not found")
         return row
     if not row or not row.system_id:
