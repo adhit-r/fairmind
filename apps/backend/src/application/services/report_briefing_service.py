@@ -57,7 +57,9 @@ def _sentences(model: Dict[str, Any]) -> Tuple[List[str], Dict[str, Dict[str, An
                    f"{_plural(proof['attested'], 'requirement rests', 'requirements rest')} on someone’s word.")
     tasks = model.get("tasks")
     if tasks and tasks.get("open"):
-        out.append(f"{f.add('tasks.open', str(tasks['open']), 'Open tasks')} tasks are open and {f.add('tasks.overdue', str(tasks['overdue']), 'Tasks past their due date', 'bad' if tasks['overdue'] else '')} are overdue.")
+        open_n, late_n = tasks["open"], tasks["overdue"]
+        out.append(f"{f.add('tasks.open', str(open_n), 'Open tasks')} {_plural(open_n, 'task is', 'tasks are')} open and "
+                   f"{f.add('tasks.overdue', str(late_n), 'Tasks past their due date', 'bad' if late_n else '')} {_plural(late_n, 'is', 'are')} overdue.")
     cross = model.get("crosswalk")
     other = next((x for x in (cross or {}).get("frameworks", []) if not x["followed"]), None)
     if other:

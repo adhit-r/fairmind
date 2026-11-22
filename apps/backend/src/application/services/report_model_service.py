@@ -160,7 +160,7 @@ def road_section(e: Estate, ready: Dict[str, Any]) -> Dict[str, Any]:
             taken.update(closes)
             owner = next((owners[(sid, k)] for k in closes for sid in (s["id"], "") if (sid, k) in owners), None)
             steps.append({
-                "systemId": s["id"], "systemName": s["name"], "check": step.get("check"), "action": step.get("action"),
+                "systemId": s["id"], "systemName": s["name"], "check": step.get("check"), "kind": step.get("action"), "action": step_label(step),
                 "evidenceClass": step.get("evidenceClass"), "closes": closes, "gain": round(100 * len(closes) / total, 1) if total else 0,
                 "owner": owner,
             })
@@ -169,9 +169,27 @@ def road_section(e: Estate, ready: Dict[str, Any]) -> Dict[str, Any]:
     return {"start": ready["pct"], "steps": steps, "forecast": min(100, round(ready["pct"] + sum(x["gain"] for x in steps)))}
 
 
+ACTION_WORDS = {
+    "fairness_run": "Run a fairness test", "monitoring_snapshot": "Take a monitoring snapshot", "evaluation_run": "Run an evaluation",
+    "environmental_assessment": "Run the environmental assessment", "attest": "Attest", "evidence_upload": "Upload evidence",
+}
+
+
+def step_label(step: Dict[str, Any]) -> str:
+    """A path-forward step in words: "Run an evaluation for human oversight", or the named catalogue evaluation."""
+    from src.application.services.fairness_run_service import GATE_CHECKS  # function-level: that module imports clause_map
+
+    evaluation = _catalogue()["evaluations"].get(step.get("evaluationId") or "")
+    if evaluation:
+        return f"Run {step['evaluationId']} {evaluation.get('name', '')}".strip()
+    check = {key: label for key, label, _ in GATE_CHECKS}.get(step.get("check"), step.get("check") or "")
+    return f"{ACTION_WORDS.get(step.get('action'), 'Act on')} for {check.lower()}"
+
+
 def _proof_of(clause: Dict[str, Any]) -> str:
-    """How a clause is backed: measured by FairMind, a tool estimate, a person's word, or nothing yet."""
-    if readiness(clause["cell"]) in ("notstarted",) or clause.get("state") == "open":
+    """How a clause is backed: measured by FairMind, a tool estimate, a person's word, or nothing yet.
+    Only met or in-progress clauses count as backed; a failing or stale one has no proof to show."""
+    if readiness(clause["cell"]) not in ("met", "progress"):
         return "none"
     backing = [c for c in clause.get("checks") or [] if not c.get("fails") and c.get("state") in ("proven", "attested")]
     if any(c["state"] == "proven" and c.get("evidenceClass") == "measured" for c in backing):
