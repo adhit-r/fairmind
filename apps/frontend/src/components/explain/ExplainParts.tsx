@@ -232,7 +232,7 @@ function EditRow({ edit, after }: { edit: ExplainEdit; after: ReactNode }) {
 export function RunExplanation({ e }: { e: TraceExplanation }) {
   if (e.verdict === 'not reproducible') {
     return (
-      <div className="flex flex-col gap-1.5 border-l-2 border-[var(--fm-ink3)] pl-3">
+      <div className="flex flex-col gap-1.5 border-l border-[var(--fm-ink3)] pl-3">
         <span className="text-[12.5px]">Recorded <b>{e.decision}</b> <span className="text-[var(--fm-ink3)]">≠</span> replayed: {e.baseline?.same ?? 0} of {e.baseline?.of ?? 0} the same</span>
         <span className={`text-[12px] ${MUTED}`}>The model connection does not give this decision, so nothing about it was tested.</span>
       </div>
@@ -240,7 +240,7 @@ export function RunExplanation({ e }: { e: TraceExplanation }) {
   }
   const drivers = e.drivers ?? []
   return (
-    <div className="flex flex-col gap-3 border-l-2 border-[var(--fm-ink)] pl-3">
+    <div className="flex flex-col gap-3 border-l border-[var(--fm-ink)] pl-3">
       {drivers.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className={CAP}>Drivers{e.faithful === true ? ', faithful' : e.faithful === false ? ', not faithful' : ''}</span>
