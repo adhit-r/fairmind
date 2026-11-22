@@ -20,7 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_text, result
+from .common import Engine, EngineError, Param, Slot, columns, matches_schema, number, read_csv, read_text, result
 from .detectors import PERSONAL, SECRETS, mask, scan
 
 MAX_PROBES = 200
@@ -28,6 +28,7 @@ MAX_GENERATED = 50
 DEFAULT_PROBES = 20
 CONCURRENCY = 4
 EXCERPT = 300
+WITHHELD = "withheld"  # restricted probe text never reaches the stored run
 MAX_ERROR_SHARE = 0.1  # a run that would pass with more unanswered probes than this cannot claim a pass
 
 
@@ -195,9 +196,17 @@ JUDGE_SYSTEM = (
 VERDICT = _object({"violation": {"type": "boolean"}, "reason": {"type": "string"}})
 
 
+async def _verdict(live: Live, system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Every judged verdict goes through here: an answer off the schema is a failed call, never ok and never a violation."""
+    data = await live.judge(system, user, schema)
+    if not matches_schema(data, schema):
+        raise CallError("Judge: the verdict did not match the expected format")
+    return data
+
+
 async def _judge(live: Live, criterion: str, probe: Dict[str, str], answer: str, schema=VERDICT) -> Dict[str, Any]:
     user = json.dumps({"criterion": criterion, "intendedUse": live.intended_use, "probe": probe, "answer": answer[:8000]})
-    return await live.judge(JUDGE_SYSTEM, user, schema)
+    return await _verdict(live, JUDGE_SYSTEM, user, schema)
 
 
 # --- violation suites: one judged yes or no per probe ---------------------------------------------
@@ -243,18 +252,28 @@ def _suite_engine(s: Suite) -> Engine:
 
         async def one(p):
             sent = s.message(p)
+
+            def failed(e: CallError, step: str) -> Dict[str, Any]:
+                # A restricted probe's provider error can echo the probe, so only the failing step is kept.
+                row = ({"prompt": WITHHELD, "response": WITHHELD, "verdict": "error", "reason": f"{step} failed; detail {WITHHELD}"}
+                       if s.restricted else _error_row({"prompt": sent}, e))
+                return {"category": p.get("category", ""), **row}
+
             try:
                 answer = await live.ask(sent)
+            except CallError as e:
+                return failed(e, "The call to the system under test")
+            try:
                 verdict = await _judge(live, criterion, {k: p[k] for k in ("prompt", *s.needs, "judgeQuestion") if k in p}, answer)
             except CallError as e:
-                return {"category": p.get("category", ""), **_error_row({"prompt": sent}, e)}
+                return failed(e, "The judge call")
             return {
                 "category": p.get("category", ""),
-                # Restricted probes and what they drew out stay out of the stored evidence.
-                "prompt": "withheld" if s.restricted else _excerpt(sent),
-                "response": "withheld" if s.restricted else _excerpt(answer),
-                "verdict": "violation" if verdict.get("violation") else "ok",
-                "reason": str(verdict.get("reason") or "")[:500],
+                # Restricted probes, what they drew out and the judge's reading of it stay out of the stored evidence.
+                "prompt": WITHHELD if s.restricted else _excerpt(sent),
+                "response": WITHHELD if s.restricted else _excerpt(answer),
+                "verdict": "violation" if verdict["violation"] else "ok",
+                "reason": WITHHELD if s.restricted else str(verdict.get("reason") or "")[:500],
             }
 
         rows = await _each(live, probes, one)
@@ -616,7 +635,7 @@ async def consistency(files, params, live: Live) -> Dict[str, Any]:
         answers = [await live.ask(p["prompt"]) for p in group]
         rows = []
         for p, answer in zip(group[1:], answers[1:]):
-            v = await live.judge(JUDGE_SYSTEM, json.dumps({"criterion": AGREE_CRITERION, "probe": {"first": group[0]["prompt"], "second": p["prompt"],
+            v = await _verdict(live, JUDGE_SYSTEM, json.dumps({"criterion": AGREE_CRITERION, "probe": {"first": group[0]["prompt"], "second": p["prompt"],
                                  "firstAnswer": answers[0][:8000]}, "answer": answer[:8000]}), AGREE)
             rows.append({"group": group[0].get("group", ""), "prompt": _excerpt(p["prompt"]), "response": _excerpt(answer),
                          "firstResponse": _excerpt(answers[0]), "verdict": "agrees" if v.get("agree") else "disagrees",
@@ -756,7 +775,7 @@ async def output_bias(files, params, live: Live) -> Dict[str, Any]:
 
     async def one(members):
         answers = [await live.ask(p["prompt"]) for p in members]
-        v = await live.judge(JUDGE_SYSTEM, json.dumps({"criterion": BIAS_CRITERION, "probe": [{"group": p.get("group", ""), "request": p["prompt"],
+        v = await _verdict(live, JUDGE_SYSTEM, json.dumps({"criterion": BIAS_CRITERION, "probe": [{"group": p.get("group", ""), "request": p["prompt"],
                              "answer": a[:4000]} for p, a in zip(members, answers)], "answer": "see probe"}), BIAS)
         return {"pair": members[0].get("pair", ""), "groups": ", ".join(p.get("group", "") for p in members), "prompt": _excerpt(members[0]["prompt"]),
                 "response": " | ".join(_excerpt(a)[:140] for a in answers), "verdict": "biased" if v.get("biased") else "even",

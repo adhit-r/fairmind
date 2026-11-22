@@ -54,7 +54,7 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError
 from src.application.services.fairness_run_service import (
-    EVALUATION_RUN, GATE_CHECKS, FairnessRunError, evaluation_status, gate_check, run_fairness, run_monitoring,
+    EVALUATION_RUN, GATE_CHECKS, FairnessRunError, evaluation_status, gate_check, point_estimate_status, run_fairness, run_monitoring,
 )
 
 logger = logging.getLogger(__name__)
@@ -218,7 +218,9 @@ async def _fairness_rerun(db: Session, org_id: str, system_id: str) -> tuple:
                   "mapping": result["mapping"], "attribute_confirmation": confirmation, "thresholds": result["thresholds"],
                   "library": "fairness_library.metrics", "data_source_id": source["id"]},
     )
-    verdict = "passes" if result.get("all_checks_pass") else "falls outside thresholds"
+    status = point_estimate_status(result)
+    verdict = {"passed": "passes", "insufficient": "has groups too small to judge"}.get(status, "falls outside thresholds") if status else (
+        "passes" if result.get("all_checks_pass") else "falls outside thresholds")
     return evidence_id, f"Re-ran fairness on {result['rows']} rows; {verdict}"
 
 

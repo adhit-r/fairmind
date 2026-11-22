@@ -14,10 +14,21 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from src.application.services.fairness_run_service import _record_time
+from src.application.services.fairness_run_service import (
+    MIN_GROUP_SIZE,
+    RATE_DRIFT_THRESHOLD,
+    _record_time,
+    _tokens,
+    error_rate_gap,
+    gap_status,
+    large_group_ratio,
+    ratio_status,
+    worst_status,
+)
 
-# Attribute names the fairness engine treats as India-specific (see fairness_run_service.ATTRIBUTE_HINTS).
-INDIA_ATTRIBUTES = ("caste", "religion", "region", "state", "district", "language")
+# Attribute names the fairness engine treats as India-specific (see fairness_run_service.ATTRIBUTE_HINTS),
+# matched as whole words of the column name, so "real_estate" and "statement_type" do not count.
+INDIA_ATTRIBUTES = ("caste", "social_category", "religion", "region", "state", "district", "language", "city_tier", "urban_rural")
 
 # (status, one line on what was measured); None when the run does not speak to the evaluation.
 Verdict = Optional[Tuple[str, str]]
@@ -27,30 +38,41 @@ def _ok(passed: bool) -> str:
     return "passed" if passed else "failed"
 
 
+def _small_groups(attrs: List[dict]) -> str:
+    """Names the groups under MIN_GROUP_SIZE rows, which are left out of a ratio and keep a failing gap from being judged."""
+    small = [f"{a['attribute']} {g}" for a in attrs for g, n in a["groups"].items() if n < MIN_GROUP_SIZE]
+    return f"; groups under {MIN_GROUP_SIZE} rows: {', '.join(small)}" if small else ""
+
+
 def _impact_ratio(c: dict) -> Verdict:
     attrs = c.get("attributes") or []
     if not attrs:
         return None
-    detail = ", ".join(f"{a['attribute']} {a['disparate_impact_ratio']:.2f}" for a in attrs)
-    return _ok(all(a["checks"].get("disparate_impact") for a in attrs)), f"Impact ratio {detail}"
+    ratios = [(a["attribute"], large_group_ratio(a)) for a in attrs]
+    detail = ", ".join(f"{name} {r:.2f}" if r is not None else f"{name} not measurable" for name, r in ratios)
+    return worst_status(ratio_status(a) for a in attrs), f"Impact ratio {detail}{_small_groups(attrs)}"
 
 
 def _error_rates(c: dict) -> Verdict:
     attrs = c.get("attributes") or []
     if not attrs:
         return None
-    worst = max(attrs, key=lambda a: max(a["equal_opportunity"]["value"], a["equalized_odds"]["value"]))
-    gap = max(worst["equal_opportunity"]["value"], worst["equalized_odds"]["value"])
-    passed = all(a["checks"].get("equal_opportunity") and a["checks"].get("equalized_odds") for a in attrs)
-    return _ok(passed), f"Largest error-rate gap {gap:.3f} ({worst['attribute']})"
+    worst = max(attrs, key=error_rate_gap)
+    detail = f"Largest error-rate gap {error_rate_gap(worst):.3f} ({worst['attribute']}){_small_groups(attrs)}"
+    return worst_status(gap_status(a) for a in attrs), detail
+
+
+def _is_india(name: str) -> bool:
+    words = f"_{'_'.join(_tokens(name))}_"
+    return any(f"_{h}_" in words for h in INDIA_ATTRIBUTES)
 
 
 def _india(c: dict) -> Verdict:
-    attrs = [a for a in c.get("attributes") or [] if any(h in a["attribute"].lower() for h in INDIA_ATTRIBUTES)]
+    attrs = [a for a in c.get("attributes") or [] if _is_india(a["attribute"])]
     if not attrs:
         return None
-    passed = all(all(a["checks"].get(k) for k in ("disparate_impact", "equal_opportunity", "equalized_odds")) for a in attrs)
-    return _ok(passed), f"Checked {', '.join(a['attribute'] for a in attrs)}"
+    status = worst_status(s for a in attrs for s in (ratio_status(a), gap_status(a)))
+    return status, f"Checked {', '.join(a['attribute'] for a in attrs)}{_small_groups(attrs)}"
 
 
 def _fairness_drift(c: dict) -> Verdict:
@@ -61,7 +83,8 @@ def _fairness_drift(c: dict) -> Verdict:
     if not compared:
         return "insufficient", "No baseline run to compare against"
     drift = max(a["max_rate_drift"] for a in compared)
-    passed = all(a["checks"]["selection_rate_stable"] and a["checks"].get("disparate_impact") for a in compared)
+    # the stored max_rate_drift, not the stored check, so a run saved when a change of exactly 0.05 passed is judged as drift too
+    passed = all(a["max_rate_drift"] < RATE_DRIFT_THRESHOLD and a["checks"].get("disparate_impact") for a in compared)
     return _ok(passed), f"Largest selection-rate drift {drift:.3f}"
 
 
