@@ -165,3 +165,9 @@ test('a monitoring evaluation on live runs is named by what it checks', () => {
   assert.equal(stepTitle(onRuns, gate), 'Check tool calls on live runs')
   assert.equal(stepTitle(step('monitoring', 'evaluation_run', 'measured', 1, 0.2), gate), 'Run a catalogue evaluation for monitoring in place')
 })
+
+test('explanation quality on live runs is named by what it checks', () => {
+  const gate = { checks: [{ key: 'human_oversight', label: 'Human oversight' }] } as unknown as ReleaseGate
+  const onRuns: GatePathStep = { ...step('human_oversight', 'evaluation_run', 'measured', 1, 0.2), evaluationId: 'EV-OVS-04', source: 'traces' }
+  assert.equal(stepTitle(onRuns, gate), 'Check stated reasons on live runs')
+})

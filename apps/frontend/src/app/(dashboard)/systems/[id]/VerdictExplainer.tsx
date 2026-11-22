@@ -46,7 +46,9 @@ const ACTION_TITLE: Record<GatePathStep['action'], (check: string) => string> = 
 }
 
 export const stepTitle = (step: GatePathStep, gate: ReleaseGate) =>
-  step.source === 'traces' ? 'Check tool calls on live runs' : ACTION_TITLE[step.action](checkName(step.check, gate))
+  step.source === 'traces'
+    ? step.evaluationId === 'EV-OVS-04' ? 'Check stated reasons on live runs' : 'Check tool calls on live runs'
+    : ACTION_TITLE[step.action](checkName(step.check, gate))
 
 const CLASS_PILL: Record<GatePathStep['evidenceClass'], { label: string; tone: 'done' | 'info' | 'warn' | 'plain' }> = {
   measured: { label: 'Measured', tone: 'done' },
