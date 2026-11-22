@@ -28,6 +28,7 @@ import { useRisks } from '@/lib/api/hooks/useRisks'
 import { useShadowAI } from './data/review'
 import { fairmindTheme } from './theme'
 import { ALL, NAV, SETTINGS, groupOf, isOn, type Place } from './nav'
+import { WhatsNewButton } from '@/components/whatsnew/WhatsNew'
 
 /** Live counts for the menu, read from the API. A count the API cannot give is left out, never guessed. */
 function useNavCounts(): Partial<Record<NonNullable<Place['count']> | 'waiting', number>> {
@@ -275,6 +276,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
         })}
       </div>}
       <AgentLine />
+      <WhatsNewButton />
       <Me />
     </nav>
   )

@@ -559,10 +559,118 @@ def _snapshot_sections(report: Dict[str, Any], content_hash: str) -> List[tuple]
     return sections
 
 
+# ─── Role reports (Reports page) ─────────────────────────────────────────────
+
+READINESS_WORDS = {"met": "Met", "progress": "In progress", "attention": "Needs attention", "notstarted": "Not started"}
+_CELL_WORDS = {"proven": "Proven", "attested": "Attested", "excluded": "Excluded", "partial": "Partial", "estimated": "Estimated",
+               "planned": "Planned", "atorg": "At organisation", "fails": "Failing", "stale": "Stale", "open": "Open", "none": "Not tracked"}
+
+
+def _role_sections(report: Dict[str, Any], content_hash: str) -> List[tuple]:
+    """A sealed role report as (heading, header_row | None, rows): every figure read from the stored model."""
+    m = report.get("data") or {}
+    s = lambda v: "" if v is None else str(v)  # noqa: E731
+    scope = (m.get("scope") or {}).get("systemName") or "Whole organisation"
+    fw = (m.get("framework") or {}).get("name") or "No framework followed"
+    out: List[tuple] = [("Record", None, [
+        ("Report ID", report["id"]), ("Reader", s(m.get("role")).capitalize()), ("Scope", scope), ("Framework", fw),
+        ("Computed at", s(m.get("generatedAt"))), ("Approved by", s(report.get("approvedBy") or report.get("generatedBy"))),
+        ("Approved at", s(report.get("approvedAt") or report.get("createdAt"))), ("Seal SHA-256", content_hash),
+    ])]
+    if r := m.get("readiness"):
+        out.append(("Readiness", None, [(READINESS_WORDS[k], s(r[k])) for k in READINESS_WORDS] + [("Requirement cells", s(r["total"])), ("Share met", f"{r['pct']}%")]))
+    if road := m.get("road"):
+        rows = [(x["action"] or x["check"] or "", x["systemName"], f"{len(x['closes'])}: {', '.join(x['closes'][:4])}", f"+{x['gain']}", s(x.get("owner") or "Unassigned")) for x in road["steps"]]
+        out.append(("Road to the audit", ("Step", "System", "Closes", "Points", "Owner"), rows + [("Forecast if every step is done", "", "", f"{road['forecast']}%", "")]))
+    if p := m.get("proof"):
+        out.append(("Proof depth", ("System", "Measured", "Tool estimate", "Attested", "No proof"),
+                    [(x["name"], s(x["measured"]), s(x["estimated"]), s(x["attested"]), s(x["none"])) for x in p["bySystem"]]
+                    + [("All in scope", s(p["measured"]), s(p["estimated"]), s(p["attested"]), s(p["none"]))]))
+    if g := m.get("governed"):
+        out.append(("Governed AI", None, [("Found", s(g["found"])), ("Registered", s(g["registered"])), ("Checked", s(g["checked"])), ("Approved", s(g["approved"]))]
+                    + [("Not registered", f"{a['name']} ({a['kind']}, {a['source']})") for a in g["unregistered"]]))
+    if o := m.get("oversight"):
+        wait = o["medianWaitHours"] if o["medianWaitHours"] is not None else "No decisions"
+        out.append(("Agents and people, last 30 days", None, [("Agent steps", s(o["agentSteps"])), ("Decisions by people", s(o["decisions"])),
+                    ("Median wait at a gate (hours)", s(wait)), ("Approved without a named person", s(o["approvedWithoutPerson"]))]))
+    if (d := m.get("decisions")) is not None:
+        out.append(("Waiting for a decision", ("System", "Requested by", "Days waiting"), [(x["systemName"], s(x["requestedBy"]), s(x["waitingDays"])) for x in d]))
+    if c := m.get("crosswalk"):
+        out.append(("Coverage through the clause map", ("Framework", "Followed", "Covered"), [(x["name"], "Yes" if x["followed"] else "No", f"{x['coverage']}%") for x in c["frameworks"]]))
+    if t := m.get("tasks"):
+        out.append(("Open work by owner", ("Owner", "On time", "Overdue"), [(x["owner"], s(x["onTime"]), s(x["overdue"])) for x in t["byOwner"]]))
+        out.append(("Overdue tasks", ("Task", "Requirement", "Owner", "Days late"), [(x["title"], s(x["subject"]), x["owner"], s(x["daysLate"])) for x in t["overdueList"]]))
+    if gr := m.get("grid"):
+        names = [x["name"] for x in gr["systems"]]
+        out.append(("Where systems fall short", ("Requirement", *names), [(f"{x['control']} {x['title']}", *[_CELL_WORDS.get(c, c) for c in x["cells"]]) for x in gr["requirements"]]))
+    if (sy := m.get("systems")) is not None:
+        out.append(("Release gate", ("System", "Verdict", "Checks"),
+                    [(x["name"], s(x["verdict"]), "; ".join(f"{c['label']}: {'failing' if c['fails'] else c['state']}" for c in x["checks"])) for x in sy]))
+    if e := m.get("engineering"):
+        out.append(("Agent tools", ("System", "Tool", "Policy", "A person approves"), [(x["systemName"], x["tool"], s(x["policy"]), "Yes" if x["gated"] else "No") for x in e["toolExposure"]]))
+        out.append(("Fairness over time", ("System", "Latest disparate impact", "Limit", "Runs"),
+                    [(x["systemName"], s(x["points"][-1]["value"]), s(x["threshold"]), s(len(x["points"]))) for x in e["fairnessDrift"]]))
+        out.append(("Fixes to make", ("Fix", "System", "Priority", "Status"), [(x["title"], x["systemName"], s(x["priority"]), s(x["status"])) for x in e["fixes"]]))
+    if a := m.get("auditor"):
+        led = a["ledger"]
+        out.append(("Ledger chains", ("Chain", "Chains", "Entries", "Broken"),
+                    [(x["kind"], s(x["chains"]), s(x["entries"] if x["entries"] is not None else ""), s(x["broken"])) for x in led["chains"]]))
+        out.append(("Audit sample", ("Evidence", "Type", "Provenance", "System"),
+                    [(x["title"], s(x["type"]), s(x["provenance"]), x["systemName"]) for x in a["sample"]["items"]] + [("Seed", s(a["sample"]["seed"]), "", "")]))
+        if soa := a.get("soa"):
+            out.append((f"Statement of applicability: {soa['systemName']}", ("Clause", "Title", "State", "Applicability", "Justification"),
+                        [(x["control"], x["title"], READINESS_WORDS.get(x["readiness"], x["readiness"]), s(x.get("applicability")), s(x.get("justification"))) for x in soa["controls"]]))
+        out.append(("Inspection packs", ("Pack", "Created", "Manifest SHA-256"), [(x["title"], s(x["createdAt"]), s(x["manifestHash"])) for x in a["packs"]]))
+    if rk := m.get("risk"):
+        out.append(("Risk register", ("Risk", "System", "Severity", "Likelihood", "Status", "Owner"),
+                    [(x["title"], x["systemName"], s(x["severity"]), s(x["likelihood"]), s(x["status"]), s(x.get("owner"))) for x in rk["risks"]]))
+        out.append(("Acceptance waiting for a second person", ("Risk", "System", "Owner", "Days waiting"),
+                    [(x["title"], x["systemName"], s(x.get("owner")), s(x.get("waitingDays"))) for x in rk["acceptanceWaiting"]]))
+    return out
+
+
+def _is_role(report: Dict[str, Any]) -> bool:
+    return str(report.get("reportType") or "").startswith("role:")
+
+
+def _sections(report: Dict[str, Any], content_hash: str) -> List[tuple]:
+    return _role_sections(report, content_hash) if _is_role(report) else _snapshot_sections(report, content_hash)
+
+
+def _bars(report: Dict[str, Any]) -> List[tuple]:
+    """(label, [(value, colour, name)]) proportional bars on page one of a role report PDF."""
+    m = report.get("data") or {}
+    bars = []
+    if r := m.get("readiness"):
+        bars.append(("Readiness", [(r["met"], "#12805f", "met"), (r["progress"], "#d4930f", "in progress"), (r["attention"], "#c4323a", "need attention"), (r["notstarted"], "#dcdcd6", "not started")]))
+    if p := m.get("proof"):
+        bars.append(("Proof depth", [(p["measured"], "#2a78d6", "measured"), (p["estimated"], "#86b6ef", "tool estimate"), (p["attested"], "#c7dcf6", "attested"), (p["none"], "#ecebe6", "no proof")]))
+    return bars
+
+
+def _bar_drawing(parts: List[tuple], width: float = 460, height: float = 12):
+    from reportlab.graphics.shapes import Drawing, Rect
+
+    drawing = Drawing(width, height)
+    total = sum(v for v, _, _ in parts) or 1
+    x = 0.0
+    for value, colour, _ in parts:
+        w = width * value / total
+        if w > 0:
+            drawing.add(Rect(x, 0, max(w - 1.5, 0.5), height, fillColor=colors.HexColor(colour), strokeColor=None))
+        x += w
+    return drawing
+
+
 def generate_snapshot_pdf(report: Dict[str, Any], content_hash: str) -> bytes:
     styles = getSampleStyleSheet()
     story = [Paragraph(report.get("title") or "Audit Report", styles["Title"])]
-    for heading, head, rows in _snapshot_sections(report, content_hash):
+    if _is_role(report):
+        if report.get("narrative"):
+            story.append(Paragraph(escape(report["narrative"]), styles["BodyText"]))
+        for label, parts in _bars(report):
+            story += [Spacer(1, 8), Paragraph(escape(f"{label}: " + ", ".join(f"{v} {n}" for v, _, n in parts)), styles["BodyText"]), _bar_drawing(parts)]
+    for heading, head, rows in _sections(report, content_hash):
         story.append(Paragraph(heading, styles["Heading2"]))
         if not rows:
             story.append(Paragraph("None recorded.", styles["Normal"]))
@@ -579,7 +687,9 @@ def generate_snapshot_pdf(report: Dict[str, Any], content_hash: str) -> bytes:
 def generate_snapshot_docx(report: Dict[str, Any], content_hash: str) -> bytes:
     doc = Document()
     doc.add_heading(report.get("title") or "Audit Report", 0)
-    for heading, head, rows in _snapshot_sections(report, content_hash):
+    if _is_role(report) and report.get("narrative"):
+        doc.add_paragraph(report["narrative"])
+    for heading, head, rows in _sections(report, content_hash):
         doc.add_heading(heading, 2)
         if not rows:
             doc.add_paragraph("None recorded.")
@@ -591,3 +701,22 @@ def generate_snapshot_docx(report: Dict[str, Any], content_hash: str) -> bytes:
     buffer = BytesIO()
     doc.save(buffer)
     return buffer.getvalue()
+
+
+def generate_snapshot_csv(report: Dict[str, Any], content_hash: str) -> bytes:
+    """One CSV for the whole report: a section column, then that section's header and rows (UTF-8 with BOM for spreadsheets)."""
+    import csv
+    import io
+
+    from src.application.services.clause_map_service import _csv_cell
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    if report.get("narrative"):
+        writer.writerow(["Summary", _csv_cell(report["narrative"])])
+    for heading, head, rows in _sections(report, content_hash):
+        if head:
+            writer.writerow([heading, *head])
+        for row in rows:
+            writer.writerow([heading, *[_csv_cell(v) for v in row]])
+    return buf.getvalue().encode("utf-8-sig")

@@ -29,6 +29,7 @@ import { useSession } from '@/context/SessionContext'
 import { useIntegrations } from '@/lib/api/hooks/useIntegrations'
 import { AIProviderSettings } from '@/components/packs/AIProviderSettings'
 import { PlatformConnectionSettings } from '@/components/packs/PlatformConnectionSettings'
+import { ReleaseEmailsSection } from '@/components/whatsnew/WhatsNew'
 import {
   PAGE_SIZE,
   changeMemberRole,
@@ -66,6 +67,7 @@ const SECTIONS = [
   { id: 'audit-log', label: 'Audit log' },
   // Shown to platform admins only: approving a request creates a new organisation.
   { id: 'access-requests', label: 'Access requests' },
+  { id: 'release-emails', label: 'Release emails' },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
@@ -86,7 +88,7 @@ export default function SettingsPage() {
 function Settings() {
   const requested = useSearchParams().get('section')
   const platformAdmin = useSession().user?.role === 'admin'
-  const sections = SECTIONS.filter((s) => s.id !== 'access-requests' || platformAdmin)
+  const sections = SECTIONS.filter((s) => !['access-requests', 'release-emails'].includes(s.id) || platformAdmin)
   const [active, setActive] = useState<SectionId>(SECTIONS.find((s) => s.id === requested)?.id ?? 'organisation')
   const title = sections.find((s) => s.id === active)?.label
 
@@ -117,6 +119,7 @@ function Settings() {
               {active === 'developers' && <DevelopersSection />}
               {active === 'audit-log' && <AuditSection />}
               {active === 'access-requests' && platformAdmin && <AccessRequestsSection />}
+              {active === 'release-emails' && platformAdmin && <ReleaseEmailsSection />}
             </VStack>
           </div>
         </div>

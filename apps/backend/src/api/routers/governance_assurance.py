@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from config.auth import TokenData, get_current_active_user
 from config.settings import settings
 from database.connection import get_db
+from src.application.services.plan_assignment_service import ensure_plan_assignments
 from src.application.ports.evidence_ingestion import (
     EvidenceAuditWriteError,
     EvidenceMappingReferenceError,
@@ -714,6 +715,7 @@ def create_system(
     )
     if system is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    ensure_plan_assignments(db, membership.org_id, [system["id"]])
     return system
 
 

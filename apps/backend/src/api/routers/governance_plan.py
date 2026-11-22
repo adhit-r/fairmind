@@ -35,6 +35,7 @@ from database.connection import get_db
 from src.application.services import evaluation_results
 from src.application.services.clause_map_service import GATE_CONTROLS, _catalogue
 from src.application.services.governance_assurance_service import OrgMembership
+from src.application.services.plan_assignment_service import ensure_plan_assignments
 
 router = APIRouter()
 
@@ -714,6 +715,8 @@ async def answer(body: AnswerBody, m: OrgMembership = Depends(_manager), db: Ses
                                    + (f"I filled in: {took}. You can change any of it in the map." if fields else "I could not fill anything in from that; I will ask.")})
     _save_plan(db, plan, m.user_id)
     db.commit()
+    if body.key == "frameworks":
+        ensure_plan_assignments(db, m.org_id)
     return _view(db, m.org_id)
 
 

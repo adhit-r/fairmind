@@ -4062,6 +4062,12 @@ class GovernanceAuditReport(Base):
     config_json = Column(Text, nullable=True)  # JSON: frameworks, date_range, sections
     data_json = Column(Text, nullable=True)  # Full snapshot of report data at generation time
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    # Role reports (report_type "role:<role>"): org-wide when system_id is null, sealed when a person approves them.
+    org_id = Column(String, nullable=True, index=True)
+    sha256 = Column(String, nullable=True)  # of the canonical {model, narrative}
+    narrative = Column(Text, nullable=True)  # the page-one summary as the approver left it
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(String, nullable=True)
 
     __table_args__ = (
         Index("idx_governance_audit_reports_system_id", "system_id"),
@@ -4795,6 +4801,17 @@ class GovernanceTraceExplanation(Base):
     result_json = Column(Text, nullable=False)
     created_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
+
+
+class ReleaseAnnouncement(Base):
+    """A release emailed to the people who asked for release emails; one row per release, so it goes out once."""
+
+    __tablename__ = "release_announcements"
+
+    tag = Column(String, primary_key=True)
+    sent_by = Column(String, nullable=False)
+    sent_at = Column(String, nullable=False)
+    recipients = Column(Integer, nullable=False, default=0)
 
 
 class InternalAudit(Base):

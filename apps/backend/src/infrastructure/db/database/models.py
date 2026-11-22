@@ -209,6 +209,9 @@ class User(Base):
     token_version = Column(Integer, nullable=False, default=0, server_default="0")
     # Set from the unsubscribe link in a task reminder email; assignment notices still go out.
     task_reminders_off = Column(Boolean, nullable=True)
+    # What's new: the latest release tag this person opened, and whether they asked for release emails (off unless set).
+    seen_release = Column(String(64), nullable=True)
+    release_emails = Column(Boolean, nullable=True)
 
     # Organization relationships
     # organizations.owner_id points back at users, so these two keys are added after both tables exist (use_alter).

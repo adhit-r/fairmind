@@ -27,7 +27,7 @@ const LIBRARY: Array<{ section: string; links: Array<{ label: string; href: stri
       { label: 'Plan', href: '/plan', icon: ListChecks },
       { label: 'Findings', href: '/risks', icon: AlertTriangle },
       { label: 'Evidence', href: '/evidence', icon: FileCheck2 },
-      { label: 'Exports', href: '/audit-reports', icon: FileOutput },
+      { label: 'Exports', href: '/reports/system', icon: FileOutput },
     ],
   },
   {

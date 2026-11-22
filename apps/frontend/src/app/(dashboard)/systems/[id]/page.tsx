@@ -336,7 +336,7 @@ function SystemFileBody({ id }: { id: string }) {
         {evidence?.recommendedNextStep && <Text type="supporting" color="secondary">{evidence.recommendedNextStep}</Text>}
         <HStack gap={2} wrap="wrap">
           <Button label="Evidence" variant="secondary" href={`/evidence?system=${encodeURIComponent(id)}`} />
-          <Button label="Audit reports" variant="secondary" onClick={() => open('/audit-reports')} />
+          <Button label="Audit reports" variant="secondary" onClick={() => open('/reports/system')} />
         </HStack>
       </VStack>
     </VStack>

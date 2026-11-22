@@ -46,6 +46,7 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
+from src.application.services.plan_assignment_service import plan_frameworks
 from src.application.services.clause_map_service import POLICY_CONTROL, _catalogue, clause_map, statement_of_applicability, tracked_requirements
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
@@ -684,13 +685,7 @@ def _weakness(state: str) -> int:
 
 def _plan_frameworks(db: Session, org_id: str) -> List[str]:
     """The frameworks the organisation chose in its governance plan; [] before it has a plan."""
-    try:
-        row = db.execute(text("SELECT profile_json FROM governance_plans WHERE org_id = :org"), {"org": org_id}).fetchone()
-    except Exception:  # the plan table is created on first use of the plan
-        db.rollback()
-        return []
-    chosen = (_load_json_value(row[0], {}).get("frameworks") or {}).get("value") if row else None
-    return [k for k in chosen if isinstance(k, str)] if isinstance(chosen, list) else []
+    return plan_frameworks(db, org_id)
 
 
 @router.get("/estate/frameworks")
