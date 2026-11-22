@@ -19,6 +19,8 @@ import { useFrameworkSystems } from '@/lib/api/hooks/useEstate'
 import { useJourney } from '@/lib/api/hooks/usePacks'
 import { GROUP_LABEL, Glyph, Legend, NEEDS_WORK, READINESS_LABEL, READINESS_OF, READINESS_ORDER, STATE_LABEL, WEAKEST_FIRST, cellIndex, groupOf, readinessCounts, requirementHref, stateFor, type ReqState } from '../parts'
 import { MatrixView } from './MatrixView'
+import { ScopeCard } from './ScopeCard'
+import { useFrameworkScope } from '@/lib/api/hooks/useFrameworkScope'
 import { PrepareAudit } from './PrepareAudit'
 import { TaskForm, initials, personName, useAssignees } from '@/components/tasks/TaskForm'
 import { useTasks } from '@/lib/api/hooks/useTasks'
@@ -42,6 +44,7 @@ function ClauseView() {
   useOrg()
   const journey = useJourney(key)
   const fw = useFrameworkSystems(key)
+  const scope = useFrameworkScope(key)
   const tasks = useTasks({ subject_type: 'requirement', status: 'open' })
   const [assigning, setAssigning] = useState<string | null>(null)
   const assignees = useAssignees()
@@ -150,6 +153,8 @@ function ClauseView() {
           description="Follow it from Frameworks and every AI system you have not assessed is in scope. Until then, the map shows only what installed packs cover at organisation level."
         />
       )}
+
+      <ScopeCard frameworkKey={key} view={scope.data} onChange={scope.reload} />
 
       <section className="fm-card" aria-label="Readiness">
         <div className="fx-summary">

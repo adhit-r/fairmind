@@ -15,7 +15,7 @@ import pandas as pd
 from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_json, result, split
 
 YES = {"yes", "y", "true", "1", "granted"}
-NO = {"no", "n", "false", "0", "denied", ""}
+NO = {"no", "n", "false", "0", "denied"}
 MAX_UNZIPPED = 50 * 1024 * 1024
 MAX_FILES = 2000
 
@@ -27,6 +27,9 @@ def _name(params: Dict[str, Any], key: str, default: str) -> str:
 
 def _flag(value: Any, what: str) -> bool:
     text = "" if pd.isna(value) else str(value).strip().casefold()
+    if not text:
+        # an unknown outcome must not count as no, or an unrecorded attack reads as safe
+        raise EngineError(f"{what} is blank; use yes or no")
     if text in YES:
         return True
     if text in NO:
@@ -90,7 +93,7 @@ def code_scan(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]
 # --- EV-MON-02 tool-call anomalies -------------------------------------------------------------------
 
 def _calls(raw: bytes, what: str, tool: str, target: str, session: str) -> pd.DataFrame:
-    f = read_csv(raw, what)
+    f = read_csv(raw, what, text=True)
     columns(f, [tool] + ([target] if target else []) + ([session] if session else []), what)
     f = f.copy()
     f["_tool"] = f[tool].astype(str).str.strip()
@@ -130,7 +133,7 @@ def tool_anomalies(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str,
         if prev is not None and (prev, row["_tool"]) not in seq and row["_tool"] in tools:
             why.append(f"sequence {prev} then {row['_tool']} not seen in the baseline")
         if why:
-            detail.append({"call": int(n) + 1, "tool": row["_tool"], "target": row["_target"], "reasons": why})
+            detail.append({"call": int(n) + 1, "tool": row["_tool"], "target": row["_target"], "reasons": why, **({"session": row["_session"]} if session else {})})
     score = len(detail) / len(cur)
     share_b, share_c = base["_tool"].value_counts(normalize=True), cur["_tool"].value_counts(normalize=True)
     volume = sorted(t for t in share_c.index if t in share_b.index and share_c[t] > factor * share_b[t])
@@ -146,9 +149,9 @@ def tool_anomalies(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str,
 
 def disclosure(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     tc, ac, dc = _name(params, "touchpoint_column", "touchpoint"), _name(params, "ai_column", "ai_involved"), _name(params, "disclosure_column", "disclosure_shown")
-    f = read_csv(files["touchpoints"], "The touchpoint inventory")
+    f = read_csv(files["touchpoints"], "The touchpoint inventory", text=True)
     columns(f, [tc, ac, dc], "The touchpoint inventory")
-    ai = [(str(r[tc]), _flag(r[dc], dc)) for _, r in f.iterrows() if _flag(r[ac], ac)]
+    ai = [(str(r[tc]).strip(), _flag(r[dc], f"Column {dc} row {n + 1}")) for n, r in f.iterrows() if _flag(r[ac], f"Column {ac} row {n + 1}")]
     if not ai:
         return result("insufficient", "No touchpoint involves AI, so there is nothing to check.", {"touchpoints": len(f), "aiTouchpoints": 0}, [])
     shown = sum(d for _, d in ai)
@@ -166,18 +169,18 @@ def licence_compliance(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[
     if not approved:
         raise EngineError("approved_licences needs the licences your organisation accepts, comma-separated")
     lc, cc, ic = _name(params, "licence_column", "licence"), _name(params, "consent_column", ""), _name(params, "id_column", "record")
-    f = read_csv(files["records"], "The licence and consent records")
+    f = read_csv(files["records"], "The licence and consent records", text=True)
     columns(f, [ic, lc] + ([cc] if cc else []), "The licence and consent records")
     detail = []
-    for _, r in f.iterrows():
+    for n, r in f.iterrows():
         why = []
         licence = "" if pd.isna(r[lc]) else str(r[lc]).strip()
         if licence.casefold() not in approved:
             why.append(f"licence {licence or 'missing'} is not approved")
-        if cc and not _flag(r[cc], cc):
+        if cc and not _flag(r[cc], f"Column {cc} row {n + 1}"):
             why.append("no consent")
         if why:
-            detail.append({"record": str(r[ic]), "reasons": why})
+            detail.append({"record": str(r[ic]).strip(), "reasons": why})
     return result("failed" if detail else "passed", f"{len(detail)} of {len(f)} records are outside their licence or consent terms (threshold 0).",
                   {"records": len(f), "outside": len(detail), "threshold": 0}, detail)
 
@@ -186,9 +189,9 @@ def licence_compliance(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[
 
 def erasure_propagation(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     sc, stc, fc = _name(params, "subject_column", "subject_id"), _name(params, "store_column", "store"), _name(params, "found_column", "found")
-    erased = read_csv(files["erasures"], "The erasure log")
+    erased = read_csv(files["erasures"], "The erasure log", text=True)
     columns(erased, [sc], "The erasure log")
-    scans = read_csv(files["scans"], "The store scans")
+    scans = read_csv(files["scans"], "The store scans", text=True)
     columns(scans, [sc, stc, fc], "The store scans")
     subjects = set(erased[sc].astype(str).str.strip())
     scans = scans.assign(_s=scans[sc].astype(str).str.strip(), _t=scans[stc].astype(str).str.strip())
@@ -196,8 +199,8 @@ def erasure_propagation(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict
     scanned = set(zip(scans["_s"], scans["_t"]))
     missing = [{"subject": s, "store": t, "state": "not scanned"} for s in sorted(subjects) for t in stores if (s, t) not in scanned]
     holding: Dict[str, List[str]] = {}
-    for _, r in scans[scans["_s"].isin(subjects)].iterrows():
-        if _flag(r[fc], fc):
+    for n, r in scans[scans["_s"].isin(subjects)].iterrows():
+        if _flag(r[fc], f"Column {fc} row {n + 1}"):
             holding.setdefault(r["_t"], []).append(r["_s"])
     detail = [{"store": t, "subjects": sorted(set(v)), "state": "still holds erased data"} for t, v in sorted(holding.items())] + missing
     metrics = {"erasedSubjects": len(subjects), "stores": len(stores), "storesHolding": len(holding), "pairsNotScanned": len(missing), "threshold": 0}
@@ -242,9 +245,9 @@ def _tokens(text: Any) -> set:
 
 def vector_weaknesses(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     qt, rt = _name(params, "tenant_column", "tenant"), _name(params, "result_tenant_column", "result_tenant")
-    hits = read_csv(files["hits"], "The retrieval probe results")
+    hits = read_csv(files["hits"], "The retrieval probe results", text=True)
     columns(hits, [qt, rt], "The retrieval probe results")
-    cross = hits[hits[qt].astype(str) != hits[rt].astype(str)]
+    cross = hits[hits[qt].astype(str).str.strip() != hits[rt].astype(str).str.strip()]
     detail = [{"queryingTenant": str(r[qt]), "returnedTenant": str(r[rt]), **({"query": str(r["query"])} if "query" in hits.columns else {})} for _, r in cross.iterrows()]
     metrics: Dict[str, Any] = {"hits": len(hits), "crossTenantHits": len(cross), "threshold": 0}
     summary = f"{len(cross)} of {len(hits)} retrieved items belong to a different tenant than the one querying (threshold 0)"

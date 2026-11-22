@@ -1,6 +1,7 @@
 import {
   Bot,
   ClipboardCheck,
+  ClipboardList,
   EyeOff,
   FileCheck2,
   FlaskConical,
@@ -62,6 +63,7 @@ export const NAV: Group[] = [
       { href: '/plan', label: 'Plan', icon: ListChecks },
       { href: '/frameworks', label: 'Frameworks', icon: Scale },
       { href: '/policies', label: 'Policies', icon: ScrollText },
+      { href: '/internal-audit', label: 'Internal audit', icon: ClipboardList },
     ],
   },
   {

@@ -21,7 +21,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional, Set, Tuple
@@ -405,37 +404,19 @@ class AskRequest(BaseModel):
 @router.post("/candidates/{candidate_id}/ask")
 def ask_owner(candidate_id: str, body: AskRequest, http: Request, db: Session = Depends(get_db), who: Any = Depends(org_mutator)):
     """Mint a link for the owner and email it. The link is returned once, for copying when email is not set up."""
-    from config.settings import settings
-    from src.application.services.reviewer_notify import decision_email, send_in_background
+    from src.application.services import owner_questions
 
     org = _caller_org(http)
     email = _email(body.email)
     if not email:
         raise HTTPException(status_code=422, detail="That is not an email address")
     g = _find(db, org, candidate_id)
-    token = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
-    expires = (now + timedelta(days=OWNER_LINK_DAYS)).isoformat()
-    db.execute(
-        text(
-            "INSERT INTO governance_owner_checks (id, org_id, anchor_asset_id, email, token_hash, expires_at, created_by, created_at) "
-            "VALUES (:id, :org, :anchor, :email, :hash, :exp, :by, :now)"
-        ),
-        {"id": str(uuid.uuid4()), "org": org, "anchor": g["members"][0]["id"], "email": email, "hash": _hash(token), "exp": expires, "by": _actor(who), "now": now.isoformat()},
-    )
-    db.commit()
-    path = f"/owner-check/{token}"
     name = _name(g["members"])
-    send_in_background(
-        [email],
-        f"Is {name} yours?",
-        decision_email(
-            f"Is {name} yours?",
-            [f"Your AI governance team found {name}, and your account is linked to it.", "Please tell them what it is for. It takes about two minutes."],
-            path,
-        ),
+    out = owner_questions.ask(
+        db, org_id=org, email=email, title=f"Is {name} yours?", created_by=_actor(who), anchor_asset_id=g["members"][0]["id"],
+        lines=[f"Your AI governance team found {name}, and your account is linked to it.", "Please tell them what it is for. It takes about two minutes."],
     )
-    return {"link": f"{settings.frontend_url.rstrip('/')}{path}", "expiresAt": expires, "emailSent": bool(getattr(settings, "resend_api_key", None))}
+    return {k: out[k] for k in ("link", "expiresAt", "emailSent")}
 
 
 class DecideRequest(BaseModel):
@@ -593,7 +574,7 @@ def _check_by_token(db: Session, token: str) -> Any:
     if not token or len(token) > 128:
         raise HTTPException(status_code=404, detail="This link is not valid")
     row = db.execute(
-        text("SELECT id, org_id, anchor_asset_id, email, expires_at, answered_at, answers_json FROM governance_owner_checks WHERE token_hash = :h"),
+        text("SELECT id, org_id, anchor_asset_id, email, expires_at, answered_at, answers_json, subject_type, questions_json FROM governance_owner_checks WHERE token_hash = :h"),
         {"h": _hash(token)},
     ).fetchone()
     if not row:
@@ -610,6 +591,8 @@ def _group_for(db: Session, org: str, anchor: str) -> Optional[Dict[str, Any]]:
 @public_router.get("/owner-check/{token}")
 def owner_check_view(token: str, db: Session = Depends(get_db)):
     row = _check_by_token(db, token)
+    if row[7]:  # a check about something other than a discovered asset: just its questions
+        return {"closed": False, "subject": row[7], "questions": json.loads(row[8] or "[]"), "answers": json.loads(row[6]) if row[6] else None, "answeredAt": row[5]}
     g = _group_for(db, row[1], row[2])
     if g is None:
         return {"closed": True}
@@ -657,5 +640,28 @@ def owner_check_answer(token: str, body: OwnerAnswers, db: Session = Depends(get
         text("UPDATE governance_owner_checks SET answers_json = :a, answered_at = :now WHERE id = :id"),
         {"a": json.dumps(answers), "now": _now(), "id": row[0]},
     )
+    db.commit()
+    return {"saved": True}
+
+
+class QuestionAnswers(BaseModel):
+    answers: Dict[str, str] = Field(max_length=50)
+
+
+@public_router.post("/owner-check/{token}/questions")
+def owner_check_answer_questions(token: str, body: QuestionAnswers, db: Session = Depends(get_db)):
+    """The owner's answers to a check that carries its own questions (see owner_questions)."""
+    row = _check_by_token(db, token)
+    if not row[7]:
+        raise HTTPException(status_code=404, detail="This link is not valid")
+    if row[5]:
+        raise HTTPException(status_code=409, detail="These questions were already answered")
+    asked = {q.get("key"): q.get("options") for q in json.loads(row[8] or "[]")}
+    answers = {k: v.strip()[:2000] for k, v in body.answers.items() if k in asked}
+    if any(asked[k] and v not in asked[k] for k, v in answers.items()):
+        raise HTTPException(status_code=422, detail="Pick one of the options")
+    if not answers:
+        raise HTTPException(status_code=422, detail="Answer at least one question")
+    db.execute(text("UPDATE governance_owner_checks SET answers_json = :a, answered_at = :now WHERE id = :id"), {"a": json.dumps(answers), "now": _now(), "id": row[0]})
     db.commit()
     return {"saved": True}

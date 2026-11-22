@@ -263,9 +263,9 @@ def _suite(eid, params=None, decisions=None, explanations=None):
     return run(eid, files, {**SUITE, **(params or {})})
 
 
-def _slices(low):
-    """Intersections of gender x caste, 8 records each; every slice selects 4 of 8 (0.5) except F/x which selects `low` of 8."""
-    rows = [f"{g},{c},1,{1 if i < (low if (g, c) == ('F', 'x') else 4) else 0}" for g in "FM" for c in "xy" for i in range(8)]
+def _slices(low, n=8):
+    """Intersections of gender x caste, n records each; every slice selects n/2 (0.5) except F/x which selects `low` of n."""
+    rows = [f"{g},{c},1,{1 if i < (low if (g, c) == ('F', 'x') else n // 2) else 0}" for g in "FM" for c in "xy" for i in range(n)]
     return csv("gender,caste,y_true,y_pred", *rows)
 
 
@@ -307,14 +307,15 @@ def test_hiring_and_public_service_suites_check_intersections(eid):
 
 @known_answer("EV-USE-02")
 def test_credit_suite_runs_india_check_and_explanations():
-    """Slices carry caste, an India-specific attribute, so EV-FAI-06 reads it. Even slices pass every check; explanation
+    """Slices carry caste, an India-specific attribute, so EV-FAI-06 reads it. Slices of 16 give every group 32 rows, enough
+    to judge (under 30 is insufficient). Even slices pass every check; explanation
     faithfulness is 0.75 (see EV-OVS-04) against an agreed 0.7, so all four components pass.
     Faithfulness agreed at 0.8 fails EV-OVS-04 and the suite. Dropping caste leaves EV-FAI-06 with nothing to read: insufficient."""
     p = {"attributes": "gender,caste", "min_slice": 4, "min_faithfulness": 0.7}
-    ok = _suite("EV-USE-02", p, _slices(4), EXPLAIN)
+    ok = _suite("EV-USE-02", p, _slices(8, 16), EXPLAIN)
     assert ok["status"] == "passed" and ok["metrics"]["components"] == 4 and ok["metrics"]["EV-FAI-06"] == "passed"
-    assert _suite("EV-USE-02", {**p, "min_faithfulness": 0.8}, _slices(4), EXPLAIN)["metrics"]["EV-OVS-04"] == "failed"
-    plain = _suite("EV-USE-02", {**p, "attributes": "gender"}, _slices(4), EXPLAIN)
+    assert _suite("EV-USE-02", {**p, "min_faithfulness": 0.8}, _slices(8, 16), EXPLAIN)["metrics"]["EV-OVS-04"] == "failed"
+    plain = _suite("EV-USE-02", {**p, "attributes": "gender"}, _slices(8, 16), EXPLAIN)
     assert plain["metrics"]["EV-FAI-06"] == "insufficient" and plain["status"] == "insufficient"
 
 
@@ -323,9 +324,9 @@ def test_credit_suite_runs_india_check_and_explanations():
 def test_explanation_floor_decides_the_suite_exactly_at_faithfulness(eid):
     """Faithfulness is exactly 0.75: an agreed 0.75 passes the explanation component, 0.7501 fails it and the suite."""
     p = {"attributes": "gender,caste", "min_slice": 4}
-    ok = _suite(eid, {**p, "min_faithfulness": 0.75}, _slices(4), EXPLAIN)
+    ok = _suite(eid, {**p, "min_faithfulness": 0.75}, _slices(8, 16), EXPLAIN)
     assert ok["metrics"]["EV-OVS-04"] == "passed" and ok["status"] == "passed"
-    bad = _suite(eid, {**p, "min_faithfulness": 0.7501}, _slices(4), EXPLAIN)
+    bad = _suite(eid, {**p, "min_faithfulness": 0.7501}, _slices(8, 16), EXPLAIN)
     assert bad["metrics"]["EV-OVS-04"] == "failed" and bad["status"] == "failed"
 
 

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   useAIProvider,
@@ -17,6 +17,9 @@ import {
   type EvaluationJob,
 } from '@/lib/api/hooks/usePacks'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { Drawer } from '@astryxdesign/core/Drawer'
+import { TraceView } from '@/components/traces/TraceView'
+import { ExplanationResult } from '@/components/explain/ExplainParts'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, LABEL, Loading, MUTED, Pill, ResultPill, when } from '@/components/packs/parts'
 
 const FIELD = 'w-full rounded-[10px] border border-[var(--fm-line)] bg-white px-3 py-2 text-sm text-[var(--fm-ink)] focus:border-[var(--fm-ink)] focus:outline-none'
@@ -41,7 +44,7 @@ function show(value: unknown): string {
   return String(value)
 }
 
-function DetailTable({ rows }: { rows: Array<Record<string, unknown>> }) {
+function DetailTable({ rows, onTrace }: { rows: Array<Record<string, unknown>>; onTrace?: (row: Record<string, unknown>) => void }) {
   const keys = useMemo(() => {
     const seen = new Set<string>()
     for (const row of rows) Object.keys(row).forEach((k) => k !== 'kind' && seen.add(k))
@@ -61,7 +64,11 @@ function DetailTable({ rows }: { rows: Array<Record<string, unknown>> }) {
           {rows.map((row, i) => (
             <tr key={i} className="border-t border-[#15171a14] align-top">
               {keys.map((k) => (
-                <td key={k} className="max-w-[280px] break-words py-1.5 pr-3 tabular-nums">{show(row[k])}</td>
+                <td key={k} className="max-w-[280px] break-words py-1.5 pr-3 tabular-nums">
+                  {(k === 'traceId' || k === 'session') && onTrace && typeof row[k] === 'string'
+                    ? <button type="button" onClick={() => onTrace({ ...row, traceId: row[k] })} className="font-mono font-semibold underline">{show(row[k])}</button>
+                    : show(row[k])}
+                </td>
               ))}
             </tr>
           ))}
@@ -71,7 +78,7 @@ function DetailTable({ rows }: { rows: Array<Record<string, unknown>> }) {
   )
 }
 
-function RunResult({ run }: { run: EngineRun }) {
+function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<string, unknown>) => void }) {
   // Engines that report more than one kind of row (features and samples, say) get a table per kind.
   const groups = useMemo(() => {
     const out = new Map<string, Array<Record<string, unknown>>>()
@@ -103,7 +110,7 @@ function RunResult({ run }: { run: EngineRun }) {
       {groups.map(([kind, rows]) => (
         <div key={kind} className="flex flex-col gap-1.5">
           {kind && <h3 className="m-0 text-[13px] font-semibold text-[var(--fm-ink)]">{label(kind)}s</h3>}
-          <DetailTable rows={rows} />
+          <DetailTable rows={rows} onTrace={run.source === 'traces' ? onTrace : undefined} />
         </div>
       ))}
       {(run.detailTotal ?? 0) > (run.detail?.length ?? 0) && (
@@ -114,13 +121,14 @@ function RunResult({ run }: { run: EngineRun }) {
 }
 
 /** What a behaviour test calls: the system under test (from its page) and the judge (the organisation's AI provider). */
-function Connections({ spec, systemId, onReady }: { spec: EngineSpec; systemId: string; onReady: (ready: boolean) => void }) {
+function Connections({ spec, systemId, onReady, recorded }: { spec: EngineSpec; systemId: string; onReady: (ready: boolean) => void; recorded: boolean }) {
   const provider = useAIProvider()
-  const target = useSystemTarget(spec.live === 'target' && systemId ? systemId : undefined)
+  const calls = spec.live === 'target' && !recorded // live runs already hold the answers, so the system is not called
+  const target = useSystemTarget(calls && systemId ? systemId : undefined)
   const cfg = provider.data?.config
   const judgeOk = !!cfg && cfg.enabled && cfg.keyReadable
   const t = target.data?.target
-  const targetOk = spec.live !== 'target' || (!!t && t.authReadable)
+  const targetOk = !calls || (!!t && t.authReadable)
   useEffect(() => onReady(judgeOk && targetOk), [judgeOk, targetOk, onReady])
   const row = (label: string, value: ReactNode) => (
     <div className="flex flex-col gap-0.5">
@@ -130,7 +138,7 @@ function Connections({ spec, systemId, onReady }: { spec: EngineSpec; systemId: 
   )
   return (
     <div className="flex flex-col gap-2.5 rounded-[10px] border border-[var(--fm-line)] px-3 py-2.5">
-      {spec.live === 'target' &&
+      {calls &&
         row(
           'System under test',
           !systemId ? (
@@ -174,7 +182,9 @@ function Connections({ spec, systemId, onReady }: { spec: EngineSpec; systemId: 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; spec: EngineSpec; live: boolean; onDone: (run: EngineRun) => void }) {
+function RunForm({ evaluationId, spec, live, liveRuns, liveRunsOwn = null, onDone }: {
+  evaluationId: string; spec: EngineSpec; live: boolean; liveRuns: boolean; liveRunsOwn?: EngineSpec | null; onDone: (run: EngineRun) => void
+}) {
   const { systems, selectedSystem } = useSystemContext()
   const { runEvaluation, getJob, getRun } = usePackActions()
   const [systemId, setSystemId] = useState('')
@@ -194,8 +204,11 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
   }, [])
   const connections = usePlatformConnections()
   const connection = connections.data?.find((c) => c.connected && c.keyReadable) ?? null
-  const [source, setSource] = useState<'upload' | 'connection' | null>(null)
-  const from = spec.platform ? source ?? (connection ? 'connection' : 'upload') : 'upload'
+  const asked = useSearchParams().get('source')
+  const [source, setSource] = useState<'upload' | 'connection' | 'traces' | null>(liveRuns && asked === 'traces' ? 'traces' : null)
+  const from = liveRuns ? source ?? 'upload' : spec.platform ? (source === 'traces' ? null : source) ?? (connection ? 'connection' : 'upload') : 'upload'
+  // Reading live runs may use an engine of its own (Explanation quality replays them), with its own settings.
+  const active = from === 'traces' && liveRunsOwn ? liveRunsOwn : spec
 
   useEffect(() => {
     if (!systemId && selectedSystem?.id) setSystemId(selectedSystem.id)
@@ -208,11 +221,13 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
   const choosing = from === 'upload' && !!probeSlot && !!countParam
   const [probes, setProbes] = useState('write') // 'write', 'upload' or a benchmark name
   const slots = choosing ? spec.slots.filter((s) => s !== probeSlot) : spec.slots
-  const settings = choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : spec.params
+  // Column names describe an uploaded file; the server sets them when it reads live runs.
+  const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : active.params)
+    .filter((p) => from !== 'traces' || !p.name.endsWith('_column'))
   const count = (params.probe_count ?? '').trim() || String(countParam?.default ?? '')
 
-  const filesReady = from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
-  const ready = !!systemId && connected && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
+  const filesReady = from === 'traces' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
+  const ready = !!systemId && (!active.live || connected) && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   /** A behaviour test answers with a job; follow it until the run is stored. */
   async function follow(started: EvaluationJob) {
@@ -237,7 +252,7 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
     setBusy(true)
     setFailure(null)
     const values: Record<string, unknown> = {}
-    for (const p of spec.params) {
+    for (const p of active.params) {
       const raw = (params[p.name] ?? '').trim()
       if (!raw) continue
       if (p.kind === 'number') values[p.name] = Number(raw)
@@ -279,7 +294,24 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
         submit()
       }}
     >
-      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{from === 'connection' ? spec.platformMethod : spec.method}</p>
+      <p className={`m-0 text-[13px] leading-normal ${MUTED}`}>{from === 'connection' ? spec.platformMethod : active.method}</p>
+      {liveRuns && (
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Read from</legend>
+          {([
+            ['traces', 'Live runs', liveRunsOwn ? "This week's decisions with a stated reason, replayed on the model connection. Nothing to upload." : "The last 7 days of the system's live runs. Nothing to upload."],
+            ['upload', 'Upload files', spec.slots.map((s) => s.help).join(' ')],
+          ] as const).map(([value, title, help]) => (
+            <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-[10px] border bg-white px-3.5 py-3 ${from === value ? 'border-[var(--fm-ink)]' : 'border-[var(--fm-line)]'}`}>
+              <input type="radio" name="read-from" value={value} checked={from === value} onChange={() => setSource(value)} className="mt-0.5 accent-[var(--fm-ink)]" />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-sm font-semibold text-[var(--fm-ink)]">{title}</span>
+                <span className={`text-xs leading-normal ${MUTED}`}>{help}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
       {spec.platform && (
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
           <legend className="mb-1.5 text-[13px] font-semibold text-[var(--fm-ink)]">Read from</legend>
@@ -326,7 +358,7 @@ function RunForm({ evaluationId, spec, live, onDone }: { evaluationId: string; s
           </span>
         )}
       </div>
-      {spec.live && <Connections spec={spec} systemId={systemId} onReady={setConnected} />}
+      {active.live && <Connections spec={active} systemId={systemId} onReady={setConnected} recorded={from === 'traces' && active === spec} />}
       {choosing && probeSlot && countParam && (
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className="mb-2 text-[13px] font-semibold text-[var(--fm-ink)]">Probes</legend>
@@ -474,6 +506,7 @@ export default function EvaluationPage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [fresh, setFresh] = useState<EngineRun | null>(null)
   const [live, setLive] = useState(false)
+  const [trace, setTrace] = useState<{ id: string; flag?: string } | null>(null)
   const opened = useEngineRun(fresh ? null : openId)
   const shown = fresh ?? opened.data
 
@@ -549,6 +582,8 @@ export default function EvaluationPage() {
                 evaluationId={e.id}
                 spec={live && engine.data.alternate ? engine.data.alternate : engine.data}
                 live={live && !!engine.data.alternate}
+                liveRuns={!live && !!engine.data.liveRuns}
+                liveRunsOwn={live ? null : engine.data.liveRunsEngine ?? null}
                 onDone={(run) => {
                   setFresh(run)
                   setOpenId(run.id)
@@ -588,12 +623,31 @@ export default function EvaluationPage() {
       {runnable && shown && (
         <section className="rounded-2xl bg-white p-5">
           <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
-          <RunResult run={shown} />
+          {shown.source === 'traces' && e.id === 'EV-OVS-04' ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <ResultPill status={shown.status} />
+                <span className={`text-[13px] ${MUTED}`}>{shown.systemName}, {when(shown.createdAt)}, from live runs{shown.judge && `, judged by ${shown.judge.model}`}</span>
+              </div>
+              <p className="m-0 leading-normal text-[var(--fm-ink)]">{shown.summary}</p>
+              <ExplanationResult run={shown} onTrace={(id, flag) => setTrace({ id, flag })} />
+            </div>
+          ) : <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN_P}>Open the system file</Link>
             <Link href={`/risks?system=${encodeURIComponent(shown.systemId)}`} className={BTN}>Open findings</Link>
           </div>
         </section>
+      )}
+      {shown && (
+        <Drawer isOpen={trace !== null} onOpenChange={(o) => !o && setTrace(null)} label="Live run" width={560} padding={5}>
+          {trace && (
+            <div className="flex flex-col gap-4">
+              <h2 className="m-0 text-lg font-semibold text-[var(--fm-ink)]">Live run</h2>
+              <TraceView systemId={shown.systemId} traceId={trace.id} flag={trace.flag} />
+            </div>
+          )}
+        </Drawer>
       )}
     </div>
   )

@@ -119,10 +119,9 @@ Org context injected: user_id=uuid, org_id=uuid for GET /api/v1/compliance/repor
       # org_id parameter validated
   ```
 
-#### 3. `@org_admin_required`
-- **Purpose**: Verify user is admin in their organization
-- **Status**: DEFINED (implementation requires DB query)
-- **TODO**: Implement DB check for org_members.role = 'admin'
+#### 3. Admin role checks
+- The former `@org_admin_required` placeholder was removed (it did not enforce anything).
+- Use `require_org_admin` from `core.decorators.org_permissions` for admin-only endpoints.
 
 **Import Path**:
 ```python
@@ -370,7 +369,7 @@ WHERE org_id = :org_id AND status = 'active'
 ## Future Enhancements
 
 ### 1. **Role-Based Access Control**
-- Implement `@org_admin_required` decorator
+- Use `require_org_admin` (core.decorators.org_permissions) for admin-only endpoints
 - Query org_members.role for permission checks
 - Support granular permissions per resource type
 
@@ -451,7 +450,7 @@ For future endpoints, verify:
    - NEW: Decorator exports
 
 ✅ apps/backend/core/decorators/org_isolation.py
-   - NEW: @isolate_by_org, @require_org_member, @org_admin_required
+   - NEW: @isolate_by_org, @require_org_member
 
 ✅ apps/backend/src/api/routers/core.py
    - Updated: GET /api/v1/core/models endpoint

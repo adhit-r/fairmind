@@ -1069,7 +1069,7 @@ def _fetch_evidence_records(db: Session, system_id: str) -> List[Dict[str, Any]]
 
 # Decision records stored as evidence so seals hash them; they are not evidence of a control,
 # so they neither move the lifecycle stage nor count toward readiness.
-RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted", "risk_acceptance"}
+RECORD_ONLY_EVIDENCE_TYPES = {"applicability_decision", "applicability_override_accepted", "risk_acceptance", "scope_decision"}
 
 
 def _reject_record_only_type(evidence_type: str) -> None:
@@ -2715,14 +2715,8 @@ def list_remediation_tasks(
     }
 
 
-@router.post("/remediation")
-def create_remediation_task(
-    request: RemediationCreateRequest,
-    current_user: TokenData = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
-):
-    _ensure_tables(db)
-    _require_system_access(db, request.system_id, current_user, mutate=True)
+def insert_remediation_task(db: Session, request: "RemediationCreateRequest") -> tuple:
+    """Add an open remediation task in the caller's transaction (the caller commits); returns (id, created_at)."""
     task_id = str(uuid.uuid4())
     now = _utc_now_iso()
     db.execute(
@@ -2750,6 +2744,18 @@ def create_remediation_task(
             "updated_at": now,
         },
     )
+    return task_id, now
+
+
+@router.post("/remediation")
+def create_remediation_task(
+    request: RemediationCreateRequest,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_tables(db)
+    _require_system_access(db, request.system_id, current_user, mutate=True)
+    task_id, now = insert_remediation_task(db, request)
     db.commit()
     return {
         "id": task_id,

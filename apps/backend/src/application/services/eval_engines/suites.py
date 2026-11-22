@@ -55,11 +55,21 @@ def explanation_quality(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict
 
 # --- EV-OVS-05 explanation stability ----------------------------------------------------------------
 
+def _ids(frame: pd.DataFrame, col: str, what: str) -> pd.Series:
+    """Strips an id column read as text; a blank id raises, since it would silently drop or wrongly pair rows."""
+    ids = frame[col].str.strip()
+    blank = ids.isna() | (ids == "")
+    if blank.any():
+        raise EngineError(f"{what}: column {col} row {int(blank.to_numpy().argmax()) + 1} is blank")
+    return ids
+
+
 def explanation_stability(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     pair, feat = _name(params, "pair_column", "pair"), _name(params, "feature_column", "feature")
     a, b = _name(params, "original", "attribution_original"), _name(params, "perturbed", "attribution_perturbed")
-    frame = read_csv(files["pairs"], "The explanation pairs")
+    frame = read_csv(files["pairs"], "The explanation pairs", text=True)
     columns(frame, [pair, feat, a, b], "The explanation pairs")
+    frame[pair] = _ids(frame, pair, "The explanation pairs")
     for c in (a, b):
         frame[c] = pd.to_numeric(frame[c], errors="coerce")
     if frame[[a, b]].isna().any().any():
@@ -240,8 +250,9 @@ def reproducibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str
     cfg_a, cfg_b = read_json(files["config_a"], "The first run's configuration"), read_json(files["config_b"], "The second run's configuration")
     runs = []
     for slot, label in (("run_a", "The first run"), ("run_b", "The second run")):
-        f = read_csv(files[slot], label)
+        f = read_csv(files[slot], label, text=True)
         columns(f, [idc, rc], label)
+        f[idc] = _ids(f, idc, label)
         if f[idc].duplicated().any():
             raise EngineError(f"{label} has a repeated {idc}")
         runs.append(f.set_index(idc)[rc].astype(str).str.strip().to_dict())
@@ -272,11 +283,11 @@ def reproducibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str
 def incident_regression(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     idc, sc, tc = _name(params, "id_column", "id"), _name(params, "status_column", "status"), _name(params, "test_column", "regression_test")
     closed_values = {v.casefold() for v in split(params.get("closed_values") or "closed,resolved")}
-    f = read_csv(files["incidents"], "The incident records")
+    f = read_csv(files["incidents"], "The incident records", text=True)
     columns(f, [idc, sc, tc], "The incident records")
     known = None
     if files.get("tests"):
-        t = read_csv(files["tests"], "The test list")
+        t = read_csv(files["tests"], "The test list", text=True)
         columns(t, ["id"], "The test list")
         known = set(t["id"].astype(str).str.strip())
     closed = f[f[sc].astype(str).str.strip().str.casefold().isin(closed_values)]
@@ -285,7 +296,7 @@ def incident_regression(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict
     detail = []
     for _, r in closed.iterrows():
         link = "" if pd.isna(r[tc]) else str(r[tc]).strip()
-        detail.append({"incident": str(r[idc]), "regressionTest": link, "covered": bool(link) and (known is None or link in known)})
+        detail.append({"incident": str(r[idc]).strip(), "regressionTest": link, "covered": bool(link) and (known is None or link in known)})
     covered = sum(r["covered"] for r in detail)
     rate = _pct(covered, len(detail))
     detail.sort(key=lambda r: r["covered"])

@@ -3,6 +3,7 @@
 GET  /evaluations/{id}/engine        the files and settings the engine takes; 404 when FairMind cannot run it
 POST /evaluations/{id}/runs          multipart: system_id, params (JSON), source, then one file per slot;
                                      source=connection reads the organisation's agent platform instead of files,
+                                     source=traces reads the system's live runs of the last week (agent_traces.TRACE_READERS),
                                      mode=live runs an evaluation's alternate behaviour test
 GET  /evaluations/{id}/runs          recent runs, optionally for one AI system
 GET  /evaluation-runs/{evidence_id}  one run in full
@@ -44,12 +45,14 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import CLOSED_RISK_STATUSES, RISK_ACCEPTANCE_PENDING, _ensure_tables, _risk_score, _utc_now_iso, _without_pending
 from api.routes import llm, platform_connections
+from api.routes.agent_traces import TRACE_ENGINES, TRACE_READERS, save_explanations
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS
 from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
 from database.governance_models import GovernanceEvidenceRun
 from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
+from src.application.services.eval_engines.common import matches_schema
 from src.application.services.eval_engines.behaviour import CallError, Live
 from src.application.services.eval_engines.platform import load_export
 from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService, OrgMembership
@@ -86,10 +89,13 @@ def _judge(db: Session, org_id: str) -> Optional[Judge]:
 
     def judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            return anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
+            answer = anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
         except llm.LLMError:
             # ponytail: the provider's reason is dropped here; the AI provider test in settings shows it
             raise EngineError("Your model could not judge this; test it under organization settings, AI provider")
+        if not matches_schema(answer, schema):  # a missing key or "false" for false is no verdict, never a pass
+            raise EngineError("Your model's answer was not in the expected format; test it under organization settings, AI provider")
+        return answer
 
     return judge
 
@@ -125,7 +131,9 @@ _RUN_COLS = (
 @router.get("/evaluations/{evaluation_id}/engine")
 def get_engine(evaluation_id: str, _m: OrgMembership = Depends(_member)):
     alternate = ALTERNATES.get(evaluation_id)
-    return {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None}
+    own = TRACE_ENGINES.get(evaluation_id)  # an engine of its own for live runs, whose settings differ from the upload's
+    return {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None, "liveRuns": evaluation_id in TRACE_READERS,
+            "liveRunsEngine": own.spec() if own else None}
 
 
 @router.post("/evaluations/{evaluation_id}/runs")
@@ -151,9 +159,14 @@ async def create_run(
     except (ValueError, AssertionError):
         raise HTTPException(status_code=422, detail="params must be a JSON object")
     source = str(form.get("source") or "upload")
-    if source not in ("upload", "connection") or (source == "connection" and not engine.platform):
-        raise HTTPException(status_code=422, detail="source must be upload, or connection for an evaluation that reads platform configuration")
+    if source not in ("upload", "connection", "traces") or (source == "connection" and not engine.platform) or (source == "traces" and evaluation_id not in TRACE_READERS):
+        raise HTTPException(status_code=422, detail="source must be upload, connection for an evaluation that reads platform configuration, "
+                            "or traces for one that reads live runs")
     files, names = {}, {}
+    if source == "traces":
+        engine = TRACE_ENGINES.get(evaluation_id, engine)
+        files = TRACE_READERS[evaluation_id](db, system_id, params)
+        names = {"traces": "Live runs, last 7 days"}
     for slot in engine.slots if source == "upload" else ():
         upload = form.get(slot.name)
         if upload is None or not hasattr(upload, "read"):
@@ -171,7 +184,8 @@ async def create_run(
             raise HTTPException(status_code=422, detail=f"Set {p.label.lower()}")
     if engine.live:
         runner = str(form.get("runner") or "") in ("1", "true")
-        return _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner)
+        return _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner,
+                          use_target=source != "traces" or evaluation_id in TRACE_ENGINES)
     reads_platform = source == "connection" or engine.run is None
     judge = _judge(db, m.org_id) if engine.judge and reads_platform else None
     key = None
@@ -311,13 +325,13 @@ def _previous_metrics(db: Session, system_id: str, evaluation_id: str) -> Option
     return json.loads(row["content_json"] or "{}").get("metrics") if row else None
 
 
-def _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner=False):
+def _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner=False, use_target=True):
     """Check the judge and the target now, so a missing setting fails the request and not the job; then run in the background."""
     row = _ai_row(db, m.org_id)
     if not row or not row["enabled"]:
         raise HTTPException(status_code=409, detail="Behaviour tests use your organisation's AI provider as the judge; set one up in organisation settings")
     judge = _stored_connection(row)
-    target = stored_target(db, m.org_id, system_id) if engine.live == "target" else None
+    target = stored_target(db, m.org_id, system_id) if engine.live == "target" and use_target else None
     if target and target.via_runner and not runner:
         raise HTTPException(status_code=409, detail="This system is on your private network, so the runner calls it. Run this from a "
                             f"machine that can reach it: {runner_command(evaluation_id, system_id)}")
@@ -341,23 +355,14 @@ def _start_job(db, background, m, evaluation_id, engine, system, system_id, file
     return JSONResponse(status_code=202, content={"job": _job_json(_job_row(db, job_id))})
 
 
-async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engine, files, names, params, judge, target: Optional[Target], facts, previous):
-    db = Session(bind=bind)
-    lock = asyncio.Lock()
-
-    async def progress(done: int, total: int, phase: str) -> None:
-        async with lock:  # probes run a few at a time; their reports share this session
-            await run_in_threadpool(_update_job, db, job_id, done=done, total=total, phase=phase)
+def make_live(target: Optional[Target], judge, facts: Dict[str, Any], progress, previous=None, ask_override=None) -> Live:
+    """The calls an engine makes: the system under test, the judge (the organisation's model) and FairMind's agent."""
 
     async def call_target(prompt: str) -> str:
         try:
             return await ask(target, prompt, attempts=llm.RETRY_ATTEMPTS)
         except (TargetError, llm.LLMError) as e:
             raise CallError(f"System under test: {e}")
-
-    if target and target.via_runner:
-        relay = _RELAYS[job_id] = _Relay(asyncio.get_running_loop())
-        call_target = relay.ask
 
     async def call_judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -371,8 +376,8 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
         except llm.LLMError as e:
             raise CallError(f"FairMind agent: {e}")
 
-    live = Live(
-        ask=call_target,
+    return Live(
+        ask=ask_override or call_target,
         judge=call_judge,
         progress=progress,
         system=facts,
@@ -381,6 +386,20 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
         previous=previous,
         agent=call_agent,
     )
+
+
+async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engine, files, names, params, judge, target: Optional[Target], facts, previous):
+    db = Session(bind=bind)
+    lock = asyncio.Lock()
+
+    async def progress(done: int, total: int, phase: str) -> None:
+        async with lock:  # probes run a few at a time; their reports share this session
+            await run_in_threadpool(_update_job, db, job_id, done=done, total=total, phase=phase)
+
+    relay = None
+    if target and target.via_runner:
+        relay = _RELAYS[job_id] = _Relay(asyncio.get_running_loop())
+    live = make_live(target, judge, facts, progress, previous, relay.ask if relay else None)
     try:
         outcome = await engine.run(files, params, live)
         outcome.update({
@@ -388,9 +407,12 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
             "files": names,
             "judge": {"provider": judge.provider.id, "model": judge.model},
             "target": ({"kind": target.kind, "url": target.url, **({"via": "runner"} if target.via_runner else {})}
-                       if target else {"kind": "fairmind-agent"}),
+                       if target else {"kind": "live-runs"} if "traces" in files else {"kind": "fairmind-agent"}),
+            **({"source": "traces"} if "traces" in files else {}),
         })
         evidence_id = await run_in_threadpool(_store_run, db, org_id, user_id, system_id, evaluation_id, outcome)
+        if "traces" in files and evaluation_id in TRACE_ENGINES:  # each run tested opens explained
+            await run_in_threadpool(save_explanations, db, org_id, system_id, outcome["detail"], user_id, evidence_id)
         await run_in_threadpool(_update_job, db, job_id, status="done", phase="Done", evidence_id=evidence_id)
     except EngineError as e:
         await run_in_threadpool(_update_job, db, job_id, status="failed", error=str(e))

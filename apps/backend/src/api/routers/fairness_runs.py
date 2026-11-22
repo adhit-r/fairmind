@@ -50,6 +50,7 @@ from src.application.services.clause_map_service import POLICY_CONTROL, _catalog
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
 from src.application.services.fairness_run_service import (
+    point_estimate_status,
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
     TIERS,
@@ -314,10 +315,12 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate["riskTier"] = risk_tier
     gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
     has_target = _target_row(db, system_id) is not None
+    from api.routes.agent_traces import has_decision_runs, has_live_runs  # function-level: that router imports packs, which imports this one
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
         approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
-        model_target=has_target,
+        model_target=has_target, live_runs=has_live_runs(db, system_id),
+        decision_runs=has_target and has_decision_runs(db, system_id),
     )
     if not has_target and any(c["key"] == "fairness" and c["state"] != "proven" for c in gate["checks"]):
         gate["path"]["notes"].append(
@@ -506,12 +509,14 @@ def list_fairness_runs(
     runs: List[Dict[str, Any]] = []
     for row in rows:
         content = json.loads(row[2] or "{}")
+        status = point_estimate_status(content)  # the same rule as EV-FAI-01/02 and the gate, not the significance-gated checks
         runs.append(
             {
                 "evidenceId": row[0],
                 "title": row[1],
                 "rows": content.get("rows"),
-                "allChecksPass": content.get("all_checks_pass"),
+                "allChecksPass": content.get("all_checks_pass") if status is None else status == "passed",
+                "status": status,
                 "attributes": [
                     {
                         "attribute": a.get("attribute"),

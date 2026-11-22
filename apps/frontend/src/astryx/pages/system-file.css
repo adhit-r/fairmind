@@ -3,6 +3,7 @@
 .fm-sf-rail { position: sticky; top: 16px; display: grid; gap: 24px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); }
 .fm-sf-crumb { font-size: 13px; color: var(--color-text-secondary); }
 .fm-sf-check { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 48px; gap: 12px; align-items: center; }
+.fm-sf-check-more { grid-column: 1 / -1; order: 4; }
 .fm-sf-step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border-radius: var(--radius-element); background: var(--color-background-muted); }
 .fm-sf-step-n { font-size: 13px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .fm-sf-num { font-family: var(--font-family-code, ui-monospace, monospace); font-variant-numeric: tabular-nums; }

@@ -487,6 +487,10 @@ export interface EngineSpec {
   live: '' | 'target' | 'agent'
   /** A second way to run the same evaluation, against the live system. */
   alternate?: EngineSpec | null
+  /** It can read the system's live runs of the last week instead of uploaded files. */
+  liveRuns?: boolean
+  /** The engine that reads live runs when it is not this one (its settings differ from the upload's). */
+  liveRunsEngine?: EngineSpec | null
 }
 
 /** A behaviour test running in the background. */
@@ -549,7 +553,7 @@ export interface EngineRun {
   summary: string
   metrics: Record<string, number | string | null>
   files: Record<string, string>
-  source: 'upload' | 'connection'
+  source: 'upload' | 'connection' | 'traces'
   createdAt: string
   createdBy: string | null
   params?: Record<string, unknown>
@@ -558,6 +562,99 @@ export interface EngineRun {
   judge?: { provider: string; model: string }
   target?: { kind: string; url?: string }
 }
+
+/** One step of a live run, as the system's own code reported it. `rationale` is the reason it stated; FairMind does not check it. */
+export interface TraceStep {
+  id: string
+  parentId: string | null
+  kind: 'llm' | 'tool' | 'retrieval' | 'memory' | 'decision' | 'other'
+  name: string
+  input: unknown
+  output: unknown
+  rationale: string | null
+  status: 'running' | 'ok' | 'error'
+  error: string | null
+  startedAt: string | null
+  endedAt: string | null
+}
+
+export interface Trace {
+  traceId: string
+  name: string | null
+  status: 'running' | 'ok' | 'error'
+  input: unknown
+  output: unknown
+  rationale: string | null
+  startedAt: string | null
+  endedAt: string | null
+  receivedAt: string
+  truncated: boolean
+  stepCount: number
+  rationaleCoverage: number | null
+  steps: TraceStep[]
+  /** The run's latest explanation, from an Explanation quality run on live runs or a person's "Explain". */
+  explanation?: TraceExplanation | null
+  /** It has an input, a decision and a stated reason, so it can be explained. */
+  explainable?: boolean
+}
+
+/** One fact's change of decision when hidden: 0 never changed it, 1 always did. */
+export interface ExplainDriver { factor: string; value: string; score: number }
+export interface ExplainEdit { factor: string; from: string; to: string; changed: number; of: number }
+
+/** A recorded decision explained by replaying it on the model connection (EV-OVS-04 on live runs). */
+export interface TraceExplanation {
+  traceId: string
+  decision: string
+  reason: string
+  verdict: 'held' | 'did not hold' | 'untested' | 'not reproducible' | 'error'
+  baseline?: { same: number; of: number }
+  drivers?: ExplainDriver[]
+  named?: string[]
+  topDriver?: string | null
+  namedChange?: number | null
+  otherChange?: number | null
+  faithful?: boolean | null
+  reasonCheck?: ExplainEdit
+  flip?: ExplainEdit & { decision: string }
+  replays?: number
+  evidenceId?: string | null
+  createdAt?: string
+}
+
+/** Decision steps per day by outcome, for the system file's Decisions card. */
+export interface DecisionSummary {
+  total: number
+  withReason: number
+  labels: string[]
+  topLabel: string | null
+  topShare: number | null
+  priorTopShare: number | null
+  priorTotal: number
+  days: Array<{ date: string; total: number; byLabel: Record<string, number>; held: number; tested: number }>
+  explained: { held: number; notHeld: number; notReproducible: number; untested: number }
+}
+
+/** Records: every system's Explanation quality runs on live runs, and the runs explained in the last 30 days. */
+export interface ExplainedDecisions {
+  systems: Array<{ systemId: string; name: string; runs: Array<{ evidenceId: string; status: EngineRun['status']; reasonHeldRate: number | null; faithfulness: number | null; createdAt: string }> }>
+  totals: { systemsSending: number; explained: number; held: number; notHeld: number; notReproducible: number; scored: number; withFlip: number }
+}
+
+/** Live runs for the Watch drawer: runs per day, the last run, and the latest evaluations that read them. */
+export interface LiveRunSummary {
+  lastRunAt: string | null
+  week: { runs: number; errors: number }
+  days: Array<{ date: string; runs: number; errors: number }>
+  evaluations: Array<{ evaluationId: string; evidenceId: string; status: EngineRun['status']; summary: string; metrics: Record<string, unknown>; createdAt: string }>
+  /** None when the system sent no decision step in the last 28 days. */
+  decisions?: DecisionSummary | null
+}
+
+export const useExplainedDecisions = () => useOrgResource<ExplainedDecisions>('/api/v1/packs/explained-decisions')
+
+export const useTrace = (systemId: string | null, traceId: string | null) =>
+  useOrgResource<{ trace: Trace }>(systemId && traceId ? `/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}` : null)
 
 export const useEvaluation = (evaluationId: string | undefined) =>
   useOrgResource<EvaluationRow>(evaluationId ? API_ENDPOINTS.packs.evaluation(evaluationId) : null)
@@ -608,6 +705,8 @@ export function usePackActions() {
         send<EngineRun | { job: EvaluationJob }>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
       getJob: (jobId: string) => send<EvaluationJob>(API_ENDPOINTS.packs.evaluationJob(jobId), (p) => apiClient.get(p)),
       getRun: (runId: string) => send<EngineRun>(API_ENDPOINTS.packs.evaluationRun(runId), (p) => apiClient.get(p)),
+      explainTrace: (systemId: string, traceId: string) =>
+        send<{ explanation: TraceExplanation }>(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}/explain`, (p) => apiClient.post(p)),
       saveTarget: (systemId: string, body: SystemTargetBody) =>
         send<{ target: SystemTarget | null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.put(p, body)),
       deleteTarget: (systemId: string) => send<{ target: null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.delete(p)),

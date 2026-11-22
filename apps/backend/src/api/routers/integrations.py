@@ -76,6 +76,9 @@ def _ensure_tables() -> None:
             conn.execute(text("ALTER TABLE governance_agent_nodes ADD COLUMN IF NOT EXISTS models_json TEXT"))
             conn.execute(text("ALTER TABLE governance_agent_nodes ADD COLUMN IF NOT EXISTS accounts_json TEXT"))
             conn.execute(text("ALTER TABLE governance_agent_events ADD COLUMN IF NOT EXISTS delivered_at TEXT"))
+            for col in ("subject_type", "subject_id", "questions_json"):
+                conn.execute(text(f"ALTER TABLE governance_owner_checks ADD COLUMN IF NOT EXISTS {col} TEXT"))
+            conn.execute(text("ALTER TABLE governance_owner_checks ALTER COLUMN anchor_asset_id DROP NOT NULL"))
     _tables_ready = True
 
 
