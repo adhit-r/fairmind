@@ -17,7 +17,6 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.neighbors import NearestNeighbors
 
 from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, result, split
-from .detectors import PERSONAL, SECRETS, mask, scan
 from .detectors import INSTRUCTIONS, PERSONAL, SECRETS, mask, scan
 
 EPS = 1e-4
