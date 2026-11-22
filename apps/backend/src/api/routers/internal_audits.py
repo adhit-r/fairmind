@@ -96,6 +96,14 @@ def _audit(db: Session, org_id: str, audit_id: str):
     return row
 
 
+def _lock_audit(db: Session, org_id: str, audit_id: str):
+    """The audit row, locked until the caller's commit, so writers to one audit run one at a time and read its current status."""
+    row = db.execute(text("SELECT * FROM internal_audits WHERE id = :id AND org_id = :org FOR UPDATE"), {"id": audit_id, "org": org_id}).mappings().fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    return row
+
+
 def _area(db: Session, org_id: str, area_id: str):
     row = db.execute(text("SELECT * FROM internal_audit_areas WHERE id = :id AND org_id = :org"), {"id": area_id, "org": org_id}).mappings().fetchone()
     if not row:
@@ -133,24 +141,35 @@ def _may_write(m: OrgMembership, audit) -> bool:
     return GovernanceAssuranceService.may_mutate(m) or m.user_id == audit["lead_auditor_id"]
 
 
+def _known(people: Dict[str, str]) -> set:
+    return {v.lower() for v in people} | {v.lower() for v in people.values() if v}
+
+
 def _area_conflicts(area, people: Dict[str, str], systems: Dict[str, Dict[str, Any]], auditor_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Conflicts (blocking) and warnings (kind "unverifiable", not blocking) for the area's auditor, or for auditor_id."""
     auditor_id = auditor_id or area["auditor_id"]
     if not auditor_id:
         return []
-    found = rules.conflicts({"id": auditor_id, "email": people.get(auditor_id)}, area["process_owner"], [systems[s] for s in _json(area["system_ids"], []) if s in systems])
-    return [{"areaId": area["id"], "areaName": area["name"], "auditorId": auditor_id, **c} for c in found]
+    found = rules.conflicts({"id": auditor_id, "email": people.get(auditor_id)}, area["process_owner"], [systems[s] for s in _json(area["system_ids"], []) if s in systems], _known(people))
+    return [{"areaId": area["id"], "areaName": area["name"], "auditorId": auditor_id, "blocking": c["kind"] != "unverifiable", **c} for c in found]
+
+
+def _lead_conflicts(areas, audit, people, systems) -> List[Dict[str, Any]]:
+    lead = {"id": audit["lead_auditor_id"], "email": people.get(audit["lead_auditor_id"])}
+    out = []
+    for a in areas:
+        for c in rules.conflicts(lead, a["process_owner"], [systems[s] for s in _json(a["system_ids"], []) if s in systems]):
+            out.append({"areaId": a["id"], "areaName": a["name"], "auditorId": lead["id"], "blocking": True, **c, "kind": "lead_" + c["kind"]})
+    return out
 
 
 def _all_conflicts(db: Session, audit, people, systems) -> List[Dict[str, Any]]:
     areas = db.execute(text("SELECT * FROM internal_audit_areas WHERE audit_id = :a ORDER BY name"), {"a": audit["id"]}).mappings().all()
-    out = [c for a in areas for c in _area_conflicts(a, people, systems)]
-    in_scope = [systems[s] for a in areas for s in _json(a["system_ids"], []) if s in systems]
-    for c in rules.conflicts({"id": audit["lead_auditor_id"], "email": people.get(audit["lead_auditor_id"])}, None, in_scope):
-        out.append({"areaId": None, "areaName": None, "auditorId": audit["lead_auditor_id"], **c, "kind": "lead_system_owner"})
-    return out
+    return [c for a in areas for c in _area_conflicts(a, people, systems)] + _lead_conflicts(areas, audit, people, systems)
 
 
 def _refuse_conflicts(found: List[Dict[str, Any]]) -> None:
+    found = [c for c in found if c["blocking"]]
     if found:
         raise HTTPException(status_code=409, detail={"message": "Independence conflict: " + "; ".join(c["detail"] for c in found), "conflicts": found})
 
@@ -183,7 +202,16 @@ def _suggest(db: Session, check) -> Optional[tuple]:
     """The rule's grade from the check's evidence state and what the owner has answered so far; None before the audit is prepared."""
     if not check["cell_state"]:
         return None
-    return _suggest_for(db, check["org_id"], check["id"], check["cell_state"])
+    return _suggest_for(db, check)
+
+
+def _suggest_for(db: Session, check, cell: Optional[str] = None) -> tuple:
+    """An owner's answer counts only when it came from the area's process owner or the system's owner."""
+    owners = {(db.execute(text("SELECT process_owner FROM internal_audit_areas WHERE id = :a"), {"a": check["area_id"]}).scalar() or "").strip().lower(),
+              (db.execute(text("SELECT owner FROM governance_ai_systems WHERE id = :s"), {"s": check["system_id"]}).scalar() or "").strip().lower()} - {""}
+    answers = owner_questions.answers_for(db, SUBJECT, check["id"], check["org_id"])
+    with_evidence = any(a["email"].strip().lower() in owners and str((a["answers"] or {}).get("evidence", "")).strip() for a in answers)
+    return rules.suggest_grade(cell or check["cell_state"], with_evidence)
 
 
 def _check_json(db: Session, check, systems, titles) -> Dict[str, Any]:
@@ -317,18 +345,19 @@ def read_audit(audit_id: str, m: OrgMembership = Depends(_member), db: Session =
 @router.post("/{audit_id}/plan")
 def upload_plan(audit_id: str, file: UploadFile = File(...), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    audit = _audit(db, m.org_id, audit_id)
+    audit = _lock_audit(db, m.org_id, audit_id)
     if not _may_write(m, audit):
         raise HTTPException(status_code=403, detail="Only the lead auditor or a manager can upload the plan")
-    if audit["plan_approved_at"]:
+    if audit["plan_approved_at"] or audit["status"] != "planning":
         raise HTTPException(status_code=409, detail="The plan was approved; it can no longer be replaced")
     data = file.file.read(rules.MAX_PLAN_BYTES + 1)
     try:
-        lines = rules.parse_plan(file.filename or "", data)
+        lines, skipped = rules.parse_plan(file.filename or "", data)
     except Exception as e:  # a bad file is the caller's: a wrong type, a missing column, a workbook that will not open
         raise HTTPException(status_code=422, detail=str(e) or "The plan file could not be read")
     controls = {r["control"]: r for r in _catalogue()["by_framework"].get(audit["framework_key"], [])}
     areas, unmatched = rules.match_plan(lines, controls, list(_systems(db, m.org_id).values()), {e: u for u, e in _people(db, m.org_id).items()})
+    unmatched = skipped + unmatched
     sha = hashlib.sha256(data).hexdigest()
     db.execute(text("DELETE FROM internal_audit_checks WHERE audit_id = :a"), {"a": audit_id})
     db.execute(text("DELETE FROM internal_audit_areas WHERE audit_id = :a"), {"a": audit_id})
@@ -357,7 +386,7 @@ def upload_plan(audit_id: str, file: UploadFile = File(...), m: OrgMembership = 
 @router.post("/{audit_id}/plan/approve")
 def approve_plan(audit_id: str, body: ApproveBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    audit = _audit(db, m.org_id, audit_id)
+    audit = _lock_audit(db, m.org_id, audit_id)
     if not audit["plan_filename"] or not db.execute(text("SELECT 1 FROM internal_audit_checks WHERE audit_id = :a LIMIT 1"), {"a": audit_id}).fetchone():
         raise HTTPException(status_code=409, detail="Upload a plan with at least one check first")
     if audit["plan_approved_at"]:
@@ -373,8 +402,9 @@ def approve_plan(audit_id: str, body: ApproveBody, m: OrgMembership = Depends(_m
 def reassign_area(area_id: str, body: ReassignBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     area = _area(db, m.org_id, area_id)
-    if _audit(db, m.org_id, area["audit_id"])["status"] == "issued":
+    if _lock_audit(db, m.org_id, area["audit_id"])["status"] == "issued":
         raise HTTPException(status_code=409, detail="The audit was issued")
+    area = _area(db, m.org_id, area_id)
     people = _people(db, m.org_id)
     if body.auditor_id not in people:
         raise HTTPException(status_code=422, detail="The auditor must be a member of this organisation")
@@ -417,7 +447,7 @@ def _evidence(row, runs, seal, framework_key: str, clause: str) -> List[Dict[str
         if run:
             out.append({"kind": "evaluation_run", "ref": run["id"], "text": f"{ev_id}: {run['status']} on {str(run['createdAt'])[:10]}", "found": True})
     out.append(
-        {"kind": "decision_seal", "ref": seal["id"], "text": f"Release decision {seal['decision']} sealed {str(seal['created_at'])[:10]}", "found": True} if seal
+        {"kind": "decision_seal", "ref": seal["id"], "text": f"Release decision {seal['decision']} sealed {str(seal['createdAt'])[:10]}", "found": True} if seal
         else {"kind": "decision_seal", "ref": "none", "text": "No release decision has been sealed for this system", "found": False}
     )
     return out
@@ -444,7 +474,9 @@ async def prepare(audit_id: str, m: OrgMembership = Depends(_manager), db: Sessi
     for c in checks:
         sid = c["system_id"]
         system = systems.get(sid)
-        if not system:
+        if not system:  # removed since the plan: it can still be concluded, on the evidence that it is gone
+            prepared.append({"check": c, "system": "a removed system", "clause": c["clause"], "cell": "none",
+                             "evidence": [{"kind": "system", "ref": sid, "text": "The system no longer exists", "found": False}]})
             continue
         if sid not in read:
             gate = _gate_payload(db, sid, system["risk_tier"])
@@ -455,7 +487,7 @@ async def prepare(audit_id: str, m: OrgMembership = Depends(_manager), db: Sessi
         row = rows.get(c["clause"])
         cell = row["cell"] if row else "none"
         evidence = _evidence(row, runs, seal, framework, c["clause"])
-        prepared.append({"id": c["id"], "system": system["name"], "clause": c["clause"], "cell": cell, "evidence": evidence})
+        prepared.append({"check": c, "system": system["name"], "clause": c["clause"], "cell": cell, "evidence": evidence})
     conn = _writer_connection(db, m.org_id)
     db.rollback()  # hold no transaction open while the model works
     used_model = False
@@ -470,29 +502,28 @@ async def prepare(audit_id: str, m: OrgMembership = Depends(_manager), db: Sessi
                     p["summary"], used_model = words[:2000], True
             except llm.LLMError:
                 pass
+    audit = _lock_audit(db, m.org_id, audit_id)  # the audit may have been issued while the model worked
+    _fieldwork(audit)
+    digests = {}
     for p in prepared:
-        grade, basis = _suggest_for(db, m.org_id, p["id"], p["cell"])
+        grade, basis = _suggest_for(db, p["check"], p["cell"])
+        digests[p["check"]["id"]] = rules.evidence_digest(p["evidence"], p["cell"])
         db.execute(
             text("UPDATE internal_audit_checks SET question = :q, assistant_summary = :s, evidence = :e, cell_state = :cell, suggested_grade = :g, suggested_basis = :b WHERE id = :id AND grade IS NULL"),
             {"q": f"Does {p['system']} meet clause {p['clause']} ({titles.get(p['clause'], 'clause')})?", "s": p["summary"], "e": json.dumps(p["evidence"]),
-             "cell": p["cell"], "g": grade, "b": basis, "id": p["id"]},
+             "cell": p["cell"], "g": grade, "b": basis, "id": p["check"]["id"]},
         )
-    _append(db, audit_id, "prepared", m.user_id, {"checks": len(prepared), "wordedByModel": used_model})
+    _append(db, audit_id, "prepared", m.user_id, {"checks": len(prepared), "wordedByModel": used_model, "digests": digests})
     db.commit()
     return {"prepared": len(prepared), "wordedByModel": used_model}
 
 
-def _suggest_for(db: Session, org_id: str, check_id: str, cell: str) -> tuple:
-    answers = owner_questions.answers_for(db, SUBJECT, check_id, org_id)
-    return rules.suggest_grade(cell, any(str((a["answers"] or {}).get("evidence", "")).strip() for a in answers))
-
-
 def _my_area_check(db: Session, m: OrgMembership, check_id: str):
     check = _check(db, m.org_id, check_id)
-    area = _area(db, m.org_id, check["area_id"])
+    audit = _lock_audit(db, m.org_id, check["audit_id"])
+    check, area = _check(db, m.org_id, check_id), _area(db, m.org_id, check["area_id"])  # read again under the lock
     if area["auditor_id"] != m.user_id:
         raise HTTPException(status_code=403, detail="Only the area's auditor can do this")
-    audit = _audit(db, m.org_id, check["audit_id"])
     _fieldwork(audit)
     return check, area, audit
 
@@ -504,14 +535,26 @@ def ask_owner(check_id: str, body: AskBody, m: OrgMembership = Depends(_member),
     email = _email(body.email)
     if not email:
         raise HTTPException(status_code=422, detail="That is not an email address")
-    system = _systems(db, m.org_id).get(check["system_id"]) or {}
-    out = owner_questions.ask(
-        db, org_id=m.org_id, email=email, title=f"Internal audit question about {system.get('name', 'an AI system')}, clause {check['clause']}",
-        created_by=m.user_id, subject_type=SUBJECT, subject_id=check_id,
-        questions=[{"key": "answer", "text": body.text.strip()}, {"key": "evidence", "text": "Where can the auditor see the evidence (a link or a document name)?"}],
-    )
+    systems = _systems(db, m.org_id)
+    _refuse_conflicts(_area_conflicts(area, _people(db, m.org_id), systems))
+    system = systems.get(check["system_id"]) or {}
+    # ask commits its own transaction, so the event goes in first and is committed with it; a failed ask is recorded after
+    _append(db, audit["id"], "owner_asked", m.user_id, {"checkId": check_id, "email": email})
+    try:
+        out = owner_questions.ask(
+            db, org_id=m.org_id, email=email, title=f"Internal audit question about {system.get('name', 'an AI system')}, clause {check['clause']}",
+            created_by=m.user_id, subject_type=SUBJECT, subject_id=check_id,
+            questions=[{"key": "answer", "text": body.text.strip()}, {"key": "evidence", "text": "Where can the auditor see the evidence (a link or a document name)?"}],
+        )
+    except Exception:
+        db.rollback()
+        _lock_audit(db, m.org_id, audit["id"])
+        _append(db, audit["id"], "owner_ask_failed", m.user_id, {"checkId": check_id, "email": email})
+        db.commit()
+        raise HTTPException(status_code=502, detail="The question could not be sent; the attempt is on the audit's trace")
+    _lock_audit(db, m.org_id, audit["id"])
     db.execute(text("UPDATE internal_audit_checks SET owner_check_id = :o WHERE id = :id"), {"o": out["id"], "id": check_id})
-    _append(db, audit["id"], "owner_asked", m.user_id, {"checkId": check_id, "email": email, "ownerCheckId": out["id"]})
+    _append(db, audit["id"], "owner_linked", m.user_id, {"checkId": check_id, "ownerCheckId": out["id"]})
     db.commit()
     return {k: out[k] for k in ("link", "expiresAt", "emailSent")}
 
@@ -531,20 +574,32 @@ def conclude(check_id: str, body: ConcludeBody, m: OrgMembership = Depends(_memb
     if body.grade != suggested[0] and not reason:
         raise HTTPException(status_code=422, detail=f"The evidence suggests {GRADE_LABELS[suggested[0]]}; say why you grade {GRADE_LABELS[body.grade]}")
     now = _utc_now_iso()
-    task_id = check["remediation_task_id"]
+    task_id, closed = check["remediation_task_id"], None
     system = systems.get(check["system_id"]) or {}
-    if body.grade in ("minor_nc", "major_nc") and not task_id and system:
+    is_nc, priority = body.grade in ("minor_nc", "major_nc"), "high" if body.grade == "major_nc" else "medium"
+    if is_nc and task_id:  # concluded again as a nonconformity: the severity may have changed
+        db.execute(text("UPDATE governance_remediation_tasks SET priority = :p, updated_at = :at WHERE id = :id"), {"p": priority, "at": now, "id": task_id})
+    elif is_nc and system:
         task_id, _ = insert_remediation_task(db, RemediationCreateRequest(
             system_id=check["system_id"], title=f"Internal audit {GRADE_LABELS[body.grade]}: clause {check['clause']} on {system['name']}",
             description=body.statement.strip(), source_type="internal_audit", source_id=check_id,
-            owner=system.get("owner") or area["process_owner"], priority="high" if body.grade == "major_nc" else "medium", retest_required=True,
+            owner=system.get("owner") or area["process_owner"], priority=priority, retest_required=True,
         ))
+    elif task_id:  # no longer a nonconformity: close its task and say why
+        db.execute(
+            text("UPDATE governance_remediation_tasks SET status = 'closed', notes = COALESCE(notes, '') || :n, updated_at = :at WHERE id = :id"),
+            {"n": f" Closed by the internal audit: the check was concluded again as {GRADE_LABELS[body.grade]} on {now[:10]}.", "at": now, "id": task_id},
+        )
+        closed, task_id = task_id, None
+    reason_or_none = reason or None
     db.execute(
         text("UPDATE internal_audit_checks SET grade = :g, statement = :s, override_reason = :r, suggested_grade = :sg, suggested_basis = :sb, "
              "concluded_by = :by, concluded_at = :at, remediation_task_id = :t WHERE id = :id"),
-        {"g": body.grade, "s": body.statement.strip(), "r": reason or None, "sg": suggested[0], "sb": suggested[1], "by": m.user_id, "at": now, "t": task_id, "id": check_id},
+        {"g": body.grade, "s": body.statement.strip(), "r": reason_or_none, "sg": suggested[0], "sb": suggested[1], "by": m.user_id, "at": now, "t": task_id, "id": check_id},
     )
-    _append(db, audit["id"], "concluded", m.user_id, {"checkId": check_id, "grade": body.grade, "suggested": suggested[0], "overridden": body.grade != suggested[0], "remediationTaskId": task_id})
+    sha = rules.decision_digest(body.statement.strip(), reason_or_none, _json(check["evidence"], []), check["cell_state"], suggested[1])
+    _append(db, audit["id"], "concluded", m.user_id, {"checkId": check_id, "grade": body.grade, "suggested": suggested[0], "overridden": body.grade != suggested[0],
+                                                       "remediationTaskId": task_id, "closedRemediationTaskId": closed, "sha256": sha})
     db.commit()
     return {"id": check_id, "grade": body.grade, "suggestedGrade": suggested[0], "remediationTaskId": task_id}
 
@@ -552,13 +607,14 @@ def conclude(check_id: str, body: ConcludeBody, m: OrgMembership = Depends(_memb
 @router.post("/areas/{area_id}/send-to-lead")
 def send_to_lead(area_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
+    audit = _lock_audit(db, m.org_id, _area(db, m.org_id, area_id)["audit_id"])
     area = _area(db, m.org_id, area_id)
-    audit = _audit(db, m.org_id, area["audit_id"])
     if area["auditor_id"] != m.user_id:
         raise HTTPException(status_code=403, detail="Only the area's auditor can do this")
     _fieldwork(audit)
     if area["status"] != "fieldwork":
         raise HTTPException(status_code=409, detail="The area was already sent")
+    _refuse_conflicts(_area_conflicts(area, _people(db, m.org_id), _systems(db, m.org_id)))
     open_checks = db.execute(text("SELECT COUNT(*) FROM internal_audit_checks WHERE area_id = :a AND grade IS NULL"), {"a": area_id}).scalar()
     if open_checks:
         raise HTTPException(status_code=409, detail=f"{open_checks} checks are not concluded")
@@ -572,14 +628,14 @@ def _lead(db: Session, m: OrgMembership, audit, people, systems) -> None:
     if m.user_id != audit["lead_auditor_id"]:
         raise HTTPException(status_code=403, detail="Only the lead auditor can do this")
     _fieldwork(audit)
-    _refuse_conflicts([c for c in _all_conflicts(db, audit, people, systems) if c["kind"] == "lead_system_owner"])
+    _refuse_conflicts([c for c in _all_conflicts(db, audit, people, systems) if c["kind"].startswith("lead_")])
 
 
 @router.post("/areas/{area_id}/accept")
 def accept_area(area_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
+    audit = _lock_audit(db, m.org_id, _area(db, m.org_id, area_id)["audit_id"])
     area = _area(db, m.org_id, area_id)
-    audit = _audit(db, m.org_id, area["audit_id"])
     _lead(db, m, audit, _people(db, m.org_id), _systems(db, m.org_id))
     if area["status"] != "sent_to_lead":
         raise HTTPException(status_code=409, detail="The area has not been sent to the lead auditor")
@@ -592,7 +648,7 @@ def accept_area(area_id: str, m: OrgMembership = Depends(_member), db: Session =
 @router.post("/{audit_id}/issue")
 def issue(audit_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    audit = _audit(db, m.org_id, audit_id)
+    audit = _lock_audit(db, m.org_id, audit_id)
     _lead(db, m, audit, _people(db, m.org_id), _systems(db, m.org_id))
     waiting = db.execute(text("SELECT COUNT(*) FROM internal_audit_areas WHERE audit_id = :a AND status <> 'accepted'"), {"a": audit_id}).scalar()
     total = db.execute(text("SELECT COUNT(*) FROM internal_audit_areas WHERE audit_id = :a"), {"a": audit_id}).scalar()
@@ -611,12 +667,18 @@ def issue(audit_id: str, m: OrgMembership = Depends(_member), db: Session = Depe
 @router.get("/{audit_id}/trace")
 def trace(audit_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
-    _audit(db, m.org_id, audit_id)
+    audit = _audit(db, m.org_id, audit_id)
     rows = db.execute(text("SELECT * FROM internal_audit_events WHERE audit_id = :a ORDER BY seq"), {"a": audit_id}).mappings().all()
     events = [{**dict(r), "payload": json.loads(r["payload"])} for r in rows]
+    checks = [{**dict(c), "evidence": _json(c["evidence"], [])} for c in db.execute(text("SELECT * FROM internal_audit_checks WHERE audit_id = :a"), {"a": audit_id}).mappings().all()]
+    mismatches = rules.check_mismatches(events, checks)
+    chain = rules.verify_chain(events)
+    # an issued audit's chain must end at the issue event the audit recorded: a cut or extended tail breaks it
+    sealed = audit["status"] != "issued" or bool(events and events[-1]["kind"] == "issued" and events[-1]["hash"] == audit["trace_head"])
     return {
         "events": [{"seq": e["seq"], "kind": e["kind"], "actor": e["actor"], "payload": e["payload"], "prevHash": e["prev_hash"], "hash": e["hash"], "createdAt": e["created_at"]} for e in events],
-        "valid": rules.verify_chain(events), "head": events[-1]["hash"] if events else None,
+        "valid": chain and sealed and not mismatches, "chainValid": chain, "headMatchesIssue": sealed, "mismatches": mismatches,
+        "head": events[-1]["hash"] if events else None,
     }
 
 

@@ -57,12 +57,13 @@ def test_full_audit_flow(tmp_database, monkeypatch):
 
     detail = manager.get(f"{BASE}/{audit}").json()
     assert detail["audit"]["status"] == "planning" and len(detail["unmatchedLines"]) >= 3 and len(detail["audit"]["planSha256"]) == 64
-    assert [c["kind"] for c in detail["conflicts"]] == ["system_owner"]  # Cy is planned to audit a system Cy owns
+    assert [c["kind"] for c in detail["conflicts"] if c["blocking"]] == ["system_owner"]
+    assert [c["kind"] for c in detail["conflicts"] if not c["blocking"]] == ["unverifiable"]  # ops@acme.test is nobody in the organisation  # Cy is planned to audit a system Cy owns
     risk = next(a for a in detail["areas"] if a["name"] == "Risk")
     support = next(a for a in detail["areas"] if a["name"] == "Support")
     assert manager.patch(f"{BASE}/areas/{risk['id']}", json={"auditor_id": cy_id}).status_code == 409
     assert manager.patch(f"{BASE}/areas/{risk['id']}", json={"auditor_id": ann_id}).status_code == 200
-    assert manager.get(f"{BASE}/{audit}").json()["conflicts"] == []
+    assert [c["kind"] for c in manager.get(f"{BASE}/{audit}").json()["conflicts"]] == ["unverifiable"]
 
     assert manager.post(f"{BASE}/{audit}/prepare").status_code == 409  # plan not approved yet
     assert manager.post(f"{BASE}/{audit}/plan/approve", json={"approved_by": "Top management"}).status_code == 200
@@ -78,7 +79,7 @@ def test_full_audit_flow(tmp_database, monkeypatch):
     assert all(set(e) == {"kind", "ref", "text", "found"} for e in first["evidence"])
 
     # the owner answers with evidence, and the suggestion softens by one grade
-    asked = ann.post(f"{BASE}/checks/{second['id']}/ask-owner", json={"email": "owner@acme.test", "text": "Where is the risk register?"})
+    asked = ann.post(f"{BASE}/checks/{second['id']}/ask-owner", json={"email": "ops@acme.test", "text": "Where is the risk register?"})
     assert asked.status_code == 200, asked.text
     token = asked.json()["link"].rsplit("/", 1)[1]
     assert sum(a["waitingOnOwner"] for a in ann.get(f"{BASE}/{audit}").json()["areas"]) == 1
@@ -150,3 +151,107 @@ def test_conflicted_auditor_cannot_conclude_and_other_orgs_see_nothing(tmp_datab
     _, outsider = _org(tmp_database)
     assert outsider.get(f"{BASE}/{audit}").status_code == 404
     assert outsider.get(f"{BASE}/areas/{area['id']}").status_code == 404
+
+
+def _started(engine, monkeypatch, plan_rows, owner_of_credit=None):
+    """An approved, prepared audit with one auditor: (org, manager, lead, auditor, audit id, systems, area)."""
+    monkeypatch.setattr(internal_audits, "_ai_row", lambda db, org: None)
+    org, manager = _org(engine)
+    lead, lead_id, _ = _person(engine, org)
+    ann, ann_id, ann_email = _person(engine, org)
+    credit = _system(engine, org, "Credit model")
+    if owner_of_credit:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE governance_ai_systems SET owner = :o WHERE id = :id"), {"o": owner_of_credit, "id": credit})
+    audit = manager.post(BASE, json={"title": "Audit", "framework_key": "ISO42001", "period_start": "2026-01-01", "period_end": "2026-12-31", "lead_auditor_id": lead_id}).json()["id"]
+    assert lead.post(f"{BASE}/{audit}/plan", files=_plan(plan_rows(ann_email))).status_code == 200
+    assert manager.post(f"{BASE}/{audit}/plan/approve", json={"approved_by": "CEO"}).status_code == 200
+    return org, manager, lead, ann, audit, credit
+
+
+def _first_area(client, audit):
+    area = client.get(f"{BASE}/{audit}").json()["areas"][0]
+    return area, client.get(f"{BASE}/areas/{area['id']}").json()["checks"]
+
+
+def test_a_sealed_system_can_be_prepared(tmp_database, monkeypatch):
+    org, manager, lead, ann, audit, credit = _started(tmp_database, monkeypatch, lambda e: f"Risk,9.2,Credit model,{e},\n")
+    with tmp_database.begin() as conn:
+        conn.execute(text("INSERT INTO governance_decision_seals (id, system_id, request_id, decision_id, decision, chain_head, evidence_count, entries_json, gate_json, sealed_by, created_at) "
+                          "VALUES ('seal-1', :s, 'r', 'd', 'approved', 'h', 0, '[]', '{}', 'u', '2026-03-04T00:00:00+00:00')"), {"s": credit})
+    assert manager.post(f"{BASE}/{audit}/prepare").status_code == 200
+    _, checks = _first_area(ann, audit)
+    assert any(e["kind"] == "decision_seal" and e["found"] and "2026-03-04" in e["text"] for e in checks[0]["evidence"])
+
+
+def test_only_the_systems_own_people_soften_a_grade(tmp_database, monkeypatch):
+    org, manager, lead, ann, audit, credit = _started(tmp_database, monkeypatch, lambda e: f"Risk,9.2,Credit model,{e},ops@acme.test\n", owner_of_credit="owner@acme.test")
+    manager.post(f"{BASE}/{audit}/prepare")
+    area, (check,) = _first_area(ann, audit)
+    assert check["suggestedGrade"] == "major_nc" and "none" in check["suggestedBasis"] + (check["cellState"] or "")
+    answer = lambda email: ann.post(f"/api/v1/public/owner-check/{ann.post(f'{BASE}/checks/{check['id']}/ask-owner', json={'email': email, 'text': 'Evidence?'}).json()['link'].rsplit('/', 1)[1]}/questions",
+                                    json={"answers": {"answer": "yes", "evidence": "https://x.acme.test"}})
+    assert answer("stranger@acme.test").status_code == 200
+    assert ann.get(f"{BASE}/areas/{area['id']}").json()["checks"][0]["suggestedGrade"] == "major_nc"  # not the process owner or the system's owner
+    assert answer("owner@acme.test").status_code == 200
+    softened = ann.get(f"{BASE}/areas/{area['id']}").json()["checks"][0]
+    assert softened["suggestedGrade"] == "minor_nc" and "none" in softened["suggestedBasis"]
+
+
+def test_the_chain_vouches_for_the_grades_and_the_head(tmp_database, monkeypatch):
+    org, manager, lead, ann, audit, credit = _started(tmp_database, monkeypatch, lambda e: f"Risk,9.2,Credit model,{e},\n")
+    manager.post(f"{BASE}/{audit}/prepare")
+    area, (check,) = _first_area(ann, audit)
+    assert manager.get(f"{BASE}/{audit}/trace").json()["valid"] is True
+    with tmp_database.begin() as conn:  # the evidence changes after it was prepared
+        conn.execute(text("UPDATE internal_audit_checks SET cell_state = 'proven' WHERE id = :id"), {"id": check["id"]})
+    bad = manager.get(f"{BASE}/{audit}/trace").json()
+    assert bad["valid"] is False and bad["chainValid"] is True and bad["mismatches"][0]["checkId"] == check["id"]
+    with tmp_database.begin() as conn:
+        conn.execute(text("UPDATE internal_audit_checks SET cell_state = :c WHERE id = :id"), {"c": check["cellState"], "id": check["id"]})
+    assert ann.post(f"{BASE}/checks/{check['id']}/conclude", json={"grade": check["suggestedGrade"], "statement": "Nothing on file"}).status_code == 200
+    assert manager.get(f"{BASE}/{audit}/trace").json()["valid"] is True
+    with tmp_database.begin() as conn:  # a conclusion rewritten in the table
+        conn.execute(text("UPDATE internal_audit_checks SET statement = 'Fine' WHERE id = :id"), {"id": check["id"]})
+    assert manager.get(f"{BASE}/{audit}/trace").json()["valid"] is False
+    with tmp_database.begin() as conn:
+        conn.execute(text("UPDATE internal_audit_checks SET statement = 'Nothing on file' WHERE id = :id"), {"id": check["id"]})
+    assert ann.post(f"{BASE}/areas/{area['id']}/send-to-lead").status_code == 200
+    assert lead.post(f"{BASE}/areas/{area['id']}/accept").status_code == 200
+    assert lead.post(f"{BASE}/{audit}/issue").status_code == 200
+    assert manager.get(f"{BASE}/{audit}/trace").json()["valid"] is True
+    # after issue every write is refused
+    assert ann.post(f"{BASE}/checks/{check['id']}/conclude", json={"grade": "major_nc", "statement": "again"}).status_code == 409
+    assert ann.post(f"{BASE}/checks/{check['id']}/ask-owner", json={"email": "a@acme.test", "text": "q"}).status_code == 409
+    assert manager.post(f"{BASE}/{audit}/prepare").status_code == 409
+    assert manager.patch(f"{BASE}/areas/{area['id']}", json={"auditor_id": ann.get(f"{BASE}/{audit}").json()["team"][0]["userId"]}).status_code == 409
+    assert lead.post(f"{BASE}/{audit}/plan", files=_plan("x,9.2,Credit model,,\n")).status_code == 409
+    with tmp_database.begin() as conn:  # the tail is cut off
+        conn.execute(text("DELETE FROM internal_audit_events WHERE audit_id = :a AND kind = 'issued'"), {"a": audit})
+    cut = manager.get(f"{BASE}/{audit}/trace").json()
+    assert cut["valid"] is False and cut["chainValid"] is True and cut["headMatchesIssue"] is False
+
+
+def test_concluding_again_follows_the_grade_to_its_task(tmp_database, monkeypatch):
+    org, manager, lead, ann, audit, credit = _started(tmp_database, monkeypatch, lambda e: f"Risk,9.2,Credit model,{e},\n")
+    manager.post(f"{BASE}/{audit}/prepare")
+    _, (check,) = _first_area(ann, audit)
+    conclude = lambda **b: ann.post(f"{BASE}/checks/{check['id']}/conclude", json={"statement": "Seen", **b})
+    task = conclude(grade="major_nc").json()["remediationTaskId"]
+    task_row = lambda: tmp_database.connect().execute(text("SELECT priority, status, notes FROM governance_remediation_tasks WHERE id = :i"), {"i": task}).fetchone()
+    assert task_row()[:2] == ("high", "open")
+    assert conclude(grade="minor_nc", override_reason="Owner showed a register").json()["remediationTaskId"] == task and task_row()[0] == "medium"
+    out = conclude(grade="conformity", override_reason="Evidence seen on site").json()
+    assert out["remediationTaskId"] is None and task_row()[1] == "closed" and "Conformity" in task_row()[2]
+    assert manager.get(f"{BASE}/{audit}/management-review").json()["openNonconformities"] == []
+    assert conclude(grade="major_nc").json()["remediationTaskId"] not in (None, task)  # a new nonconformity, a new task
+
+
+def test_a_removed_system_can_still_be_concluded(tmp_database, monkeypatch):
+    org, manager, lead, ann, audit, credit = _started(tmp_database, monkeypatch, lambda e: f"Risk,9.2,Credit model,{e},\n")
+    with tmp_database.begin() as conn:
+        conn.execute(text("DELETE FROM governance_ai_systems WHERE id = :id"), {"id": credit})
+    assert manager.post(f"{BASE}/{audit}/prepare").status_code == 200
+    _, (check,) = _first_area(ann, audit)
+    assert check["cellState"] == "none" and check["evidence"][0]["text"] == "The system no longer exists" and not check["evidence"][0]["found"]
+    assert ann.post(f"{BASE}/checks/{check['id']}/conclude", json={"grade": "major_nc", "statement": "System removed"}).status_code == 200

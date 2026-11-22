@@ -38,7 +38,8 @@ def test_plan_csv_is_matched_and_nothing_is_dropped():
         ",9.2,Chatbot,,\n"
         "Again,9.2,Credit model,,\n"
     ).encode()
-    lines = r.parse_plan("plan.csv", csv_bytes)
+    lines, skipped = r.parse_plan("plan.csv", csv_bytes)
+    assert skipped == []
     areas, unmatched = r.match_plan(lines, CONTROLS, SYSTEMS, {"ann@acme.test": "u1"})
     assert [a["name"] for a in areas] == ["Risk", "Support"]
     assert areas[0]["checks"] == [("6.1.2", "sys-1"), ("9.2", "sys-1")] and areas[0]["auditor_id"] == "u1"
@@ -57,7 +58,7 @@ def test_plan_xlsx_and_bad_files():
     wb.active.append(["Risk", "9.2", "Credit model"])
     buf = io.BytesIO()
     wb.save(buf)
-    assert r.parse_plan("plan.xlsx", buf.getvalue())[0]["clauses"] == ["9.2"]
+    assert r.parse_plan("plan.xlsx", buf.getvalue())[0][0]["clauses"] == ["9.2"]
     with pytest.raises(ValueError):
         r.parse_plan("plan.pdf", b"x")
     with pytest.raises(ValueError):
@@ -74,3 +75,36 @@ def test_chain_detects_tampering():
     assert r.verify_chain(events)
     events[0]["payload"] = {"n": 9}
     assert not r.verify_chain(events)
+
+
+def test_a_failing_check_is_never_softened_and_the_basis_names_the_state():
+    assert r.suggest_grade("fails", True)[0] == "major_nc"
+    grade, basis = r.suggest_grade("none", True)
+    assert grade == "minor_nc" and "none" in basis and "open" not in basis
+
+
+def test_unverifiable_owners_are_reported():
+    me = {"id": "u1", "email": "ann@acme.test"}
+    known = {"u1", "ann@acme.test", "bob@acme.test"}
+    got = r.conflicts(me, "ops@acme.test", [{"id": "s", "name": "Chatbot", "owner": "Bob"}, {"id": "t", "name": "Bot", "owner": "bob@acme.test"}], known)
+    assert [c["kind"] for c in got] == ["unverifiable", "unverifiable"]
+    assert r.conflicts(me, "ops@acme.test", []) == []  # nothing to compare with when the caller gives no known people
+
+
+def test_xlsx_limits_and_what_was_not_read():
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["area", "clauses", "systems", "notes"])
+    ws.append(["Risk", "9.2", "Credit model", "keep this note"])
+    ws.append(["Risk2", "9.2", "Chatbot", "", "stray"])
+    for _ in range(r.MAX_ROWS + 5):
+        ws.append(["More", "9.2", "Chatbot"])
+    wb.create_sheet("Second")
+    buf = io.BytesIO()
+    wb.save(buf)
+    lines, skipped = r.parse_plan("plan.xlsx", buf.getvalue())
+    assert len(lines) == r.MAX_ROWS
+    reasons = {(s["column"], s["value"]) for s in skipped}
+    assert {("sheet", "Second"), ("notes", "keep this note"), ("(no header)", "stray"), ("rows", "")} <= reasons
