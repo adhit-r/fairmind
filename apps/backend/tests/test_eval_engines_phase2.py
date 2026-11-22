@@ -40,6 +40,12 @@ def test_code_scan_counts_high_severity_findings_in_a_file_and_in_an_archive():
     assert out["status"] == "failed" and out["metrics"]["files"] == 2 and out["detail"][0]["file"].endswith("deploy.py")
 
 
+def test_code_scan_ignores_nosec_comments():
+    hidden = SHELL.replace("shell=True)", "shell=True)  # nosec")
+    out = _run("EV-DEV-03", code=hidden)
+    assert out["status"] == "failed" and out["metrics"]["high"] == 1
+
+
 def test_code_scan_refuses_an_archive_that_escapes_its_folder_and_one_without_python():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
@@ -194,7 +200,8 @@ def test_judged_behaviour_tests_flip_with_the_answer(eid, params):
     assert engine.live == "target"
     answer = lambda p: "BAD answer" if p == "trigger" else "I can only help with billing."  # noqa: E731
     clean = _live_run(eid, _live(answer=lambda p: "I can only help with billing.", verdict=_says("BAD")), params, probes=PROBES)
-    assert clean["status"] == "passed" and clean["metrics"]["judged"] == 5
+    # 0 of 5 meets a zero limit; against 10% its 95% upper bound (45%) is too wide to pass
+    assert clean["status"] == ("insufficient" if params else "passed") and clean["metrics"]["judged"] == 5
     # one of five answers is a violation: 20%, over a limit of 0 and over 10%
     bad = _live_run(eid, _live(answer=answer, verdict=_says("BAD")), params, probes=PROBES)
     assert bad["status"] == "failed" and bad["metrics"]["violations"] == 1

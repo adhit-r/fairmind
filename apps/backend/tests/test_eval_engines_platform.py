@@ -146,7 +146,7 @@ def test_the_platform_judge_rejects_a_verdict_off_its_schema(monkeypatch, eid, b
     import anyio
     from api.routes import evaluation_runs as er
 
-    async def complete(conn, system, user, schema):
+    async def complete(conn, system, user, schema, **_):
         return bad, None
 
     monkeypatch.setattr(er, "_ai_row", lambda db, org: {"enabled": True})
@@ -172,6 +172,30 @@ def test_shadow_mcp_servers_and_agents_against_the_register():
     assert _check("EV-SEC-18", _snap(), {"approved_agents": "Support", "approved_mcp_hosts": "*.orders.example.com"})["status"] == "passed"
     out = _check("EV-SEC-18", _snap(), {"approved_agents": "agent_9", "approved_mcp_hosts": "mcp.other.example.com"})
     assert out["status"] == "failed" and (out["metrics"]["shadowAgents"], out["metrics"]["shadowServers"]) == (1, 1)
+
+
+def test_approval_gates_match_tool_names_whatever_their_case():
+    agent = _agent(tools=[{"type": "mcp_toolset", "mcp_server_name": "GitHub",
+                           "default_config": {"enabled": True, "permission_policy": {"type": "always_allow"}}, "configs": []}])
+    out = _check("EV-SEC-06", _snap(agents=[agent]), {"high_risk_tools": "mcp:github"})
+    assert out["status"] == "failed" and out["metrics"]["ungated"] == 1
+
+
+def test_shadow_mcp_is_insufficient_when_an_agent_carries_no_server_list():
+    bare = {k: v for k, v in _agent().items() if k != "mcp_servers"}
+    out = _check("EV-SEC-18", _snap(agents=[bare]), {"approved_mcp_hosts": "*.orders.example.com"})
+    assert out["status"] == "insufficient" and out["metrics"]["unread"] == 1
+
+
+def test_memory_scan_is_insufficient_on_memories_without_content_or_a_capped_store():
+    unread = _snap(memory_stores=[{"id": "memstore_1", "name": "notes", "memories": [{"id": "mem_1", "path": "/prefs.md"}]}])
+    assert _check("EV-SEC-21", unread)["status"] == "insufficient"
+    null = _snap(memory_stores=[{"id": "memstore_1", "name": "notes",
+                                 "memories": [{"id": "mem_1", "type": "memory", "content": None, "content_size_bytes": 500}]}])
+    assert _check("EV-SEC-21", null)["status"] == "insufficient"
+    capped = _snap()
+    capped["memory_stores"][0]["memories_capped"] = True
+    assert _check("EV-SEC-21", capped)["status"] == "insufficient"
 
 
 def test_mcp_auth_matches_vault_credentials_by_normalised_url():

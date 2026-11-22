@@ -99,7 +99,14 @@ def test_fairness_drift_rule():
 
 @known_answer("EV-ENV-01")
 def test_energy_rule():
-    # The catalogue threshold is "Reported": any recorded assessment passes.
-    assert _rule("EV-ENV-01", {"total_kwh": 12.5, "total_kg_co2e_location": 3}) == ("passed", "12.5 kWh, 3 kg CO2e")
-    assert _rule("EV-ENV-01", {"total_kg_co2e_market": 1.5}) == ("passed", "1.5 kg CO2e")
-    assert _rule("EV-ENV-01", {}) == ("passed", "Assessment recorded")
+    # The stored assessment keeps its numbers under assessment.metrics and its verdict under result: only a go with
+    # numbers passes, a no_go fails, anything else is open.
+    def env(reco, **metrics):
+        return {"assessment": {"metrics": metrics}, "result": {"recommendation": reco}}
+
+    assert _rule("EV-ENV-01", env("go", total_kwh=12.5, total_kg_co2e_location=3)) == ("passed", "Recommendation go; 12.5 kWh, 3 kg CO2e")
+    assert _rule("EV-ENV-01", env("go", total_kg_co2e_market=1.5)) == ("passed", "Recommendation go; 1.5 kg CO2e")
+    assert _rule("EV-ENV-01", env("no_go", total_kwh=12.5)) == ("failed", "Recommendation no_go; 12.5 kWh")
+    assert _rule("EV-ENV-01", env("go")) == ("insufficient", "Recommendation go; no kWh or kg CO2e reported")
+    assert _rule("EV-ENV-01", env("conditional_go", total_kwh=1)) == ("insufficient", "Recommendation conditional_go; 1 kWh")
+    assert _rule("EV-ENV-01", {})[0] == "insufficient"

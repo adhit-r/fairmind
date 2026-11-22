@@ -26,6 +26,7 @@ Mounted under /api/v1/packs beside the packs router and sharing its organisation
 """
 
 import asyncio
+import functools
 import hashlib
 import json
 import logging
@@ -34,6 +35,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import anyio
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -45,17 +47,18 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import CLOSED_RISK_STATUSES, RISK_ACCEPTANCE_PENDING, _ensure_tables, _risk_score, _utc_now_iso, _without_pending
 from api.routes import llm, platform_connections
-from api.routes.agent_traces import TRACE_ENGINES, TRACE_READERS, save_explanations
+from api.routes.agent_traces import TRACE_ENGINES, TRACE_READERS, WEEK, _since, save_explanations
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
-from api.routes.pack_catalogue import EVALUATIONS
+from api.routes.pack_catalogue import EVALUATIONS, VERSION as CATALOGUE_VERSION
 from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
 from database.governance_models import GovernanceEvidenceRun
-from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
+from src.application.services.eval_engines import ALTERNATES, ENGINE_VERSION, REGISTRY, EngineError, Judge
 from src.application.services.eval_engines.common import matches_schema
-from src.application.services.eval_engines.behaviour import CallError, Live
+from src.application.services.eval_engines.behaviour import GEN_SYSTEM, CallError, Live
 from src.application.services.eval_engines.platform import load_export
 from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService, OrgMembership
+from src.application.services.system_kinds import fit, system_kind
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -67,6 +70,22 @@ RUNNER_GONE_S = 60  # a runner that has not asked for prompts for this long has 
 RUNNER_ANSWER_S = TIMEOUT_S + 30  # the runner's own call to the system, plus its round trips to FairMind
 RUN_RESULT = {"passed": "passed", "failed": "failed", "insufficient": "insufficient_data"}
 PLATFORM = "claude_managed_agents"  # ponytail: the one connector; take it from the form when a second platform lands
+PLATFORM_PROVIDER = "anthropic"  # the llm provider whose models run on PLATFORM
+# Sample-size floors: a smaller group is listed but skipped, so raising one hides more groups and loosens the test.
+FLOORS = ("min_support", "min_rows", "min_slice")
+
+
+def _vacuous(evaluation_id: str, name: str, value: float, params: Dict[str, Any]) -> bool:
+    """An agreed setting with no catalogue default that accepts every result."""
+    if name == "max_rate":
+        return value >= 100  # a violation rate of 100%
+    if name != "baseline":
+        return False
+    if evaluation_id == "EV-FAI-05":
+        return abs(value) >= 2  # a ceiling on WEAT effect size, which lies within -2 to 2
+    if evaluation_id == "EV-TST-01" and str(params.get("task") or "").lower() == "regression":
+        return False  # a ceiling on MAE: 0 is the strictest, and no finite value accepts everything
+    return value <= 0  # a floor on accuracy or success rate
 
 
 def _engine(evaluation_id: str, mode: str = ""):
@@ -81,15 +100,17 @@ def _engine(evaluation_id: str, mode: str = ""):
 
 
 def _judge(db: Session, org_id: str) -> Optional[Judge]:
-    """The organisation's own model as a judge, called from the engine's worker thread; None when none is set."""
+    """The organisation's own model as a judge, called from the engine's worker thread; None when none is set.
+    judge.connection is that model and judge.calls counts its verdicts, so the run records who judged."""
     row = _ai_row(db, org_id)
     if not row or not row["enabled"]:
         return None
     conn = _stored_connection(row)
 
     def judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+        judge.calls += 1
         try:
-            answer = anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
+            answer = anyio.from_thread.run(functools.partial(llm.complete, conn, system, user, schema, deterministic=True))[0]
         except llm.LLMError:
             # ponytail: the provider's reason is dropped here; the AI provider test in settings shows it
             raise EngineError("Your model could not judge this; test it under organization settings, AI provider")
@@ -97,7 +118,44 @@ def _judge(db: Session, org_id: str) -> Optional[Judge]:
             raise EngineError("Your model's answer was not in the expected format; test it under organization settings, AI provider")
         return answer
 
+    judge.connection, judge.calls = conn, 0
     return judge
+
+
+def _host(url: str) -> Optional[str]:
+    return urlparse(url or "").hostname
+
+
+def _judge_json(conn, shares: Optional[bool]) -> Dict[str, Any]:
+    """Who judged a run; sharesProviderWithSystem is None when the system under test's provider is unknown."""
+    return {"provider": conn.provider.id, "model": conn.model, "sharesProviderWithSystem": shares}
+
+
+def _loosened(engine, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Threshold settings looser than the catalogue default the engine declares, or an agreed setting that accepts anything."""
+    out = []
+    for p in engine.params:
+        try:
+            value = float(params[p.name])
+        except (KeyError, TypeError, ValueError):
+            continue  # unset, or not a number: the engine uses its default or rejects it
+        up = p.name.startswith("max_") or p.name in ("psi_limit", "tolerance", *FLOORS)
+        down = (p.name.startswith("min_") and p.name not in FLOORS) or p.name == "similarity"
+        if p.kind == "number" and isinstance(p.default, (int, float)) and ((up and value > p.default) or (down and value < p.default)):
+            out.append({"param": p.name, "value": value, "catalogue": p.default})
+        elif p.default is None and _vacuous(engine.id, p.name, value, params):
+            out.append({"param": p.name, "value": value, "catalogue": None})
+    return out
+
+
+def _record(engine, evaluation_id: str, path: str, files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
+    """What a run needs to be checked or repeated: a sha256 of every input, the engine and catalogue versions, and any loosened threshold."""
+    loosened = _loosened(engine, params)
+    return {
+        "inputs": {name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()},
+        "engine": {"id": evaluation_id, "path": path, "catalogueVersion": CATALOGUE_VERSION, "codeVersion": ENGINE_VERSION},
+        **({"thresholdLoosened": loosened} if loosened else {}),
+    }
 
 
 def _run_json(row, full: bool) -> Dict[str, Any]:
@@ -117,8 +175,11 @@ def _run_json(row, full: bool) -> Dict[str, Any]:
     }
     if content.get("judge"):
         out.update({"judge": content["judge"], "target": content.get("target")})
+    # runs stored before provenance classes carry none
+    out.update({"provenance": content.get("provenance"), "thresholdLoosened": content.get("thresholdLoosened")})
     if full:
-        out.update({"params": content.get("params", {}), "detail": content.get("detail", []), "detailTotal": content.get("detailTotal", 0)})
+        out.update({"params": content.get("params", {}), "detail": content.get("detail", []), "detailTotal": content.get("detailTotal", 0),
+                    "inputs": content.get("inputs"), "engine": content.get("engine"), "probes": content.get("probes")})
     return out
 
 
@@ -128,12 +189,49 @@ _RUN_COLS = (
 )
 
 
+def system_setup(db: Session, org_id: str, system_id: str) -> Dict[str, Any]:
+    """The system's kind and which ways of running it are set up; 404 for a system outside the organisation."""
+    _ensure_tables(db)
+    row = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    if not row or str(row[0]) != org_id:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    return {
+        "kind": system_kind(db, system_id),
+        "calls_system": db.execute(text("SELECT 1 FROM governance_ai_system_targets WHERE system_id = :id"), {"id": system_id}).first() is not None,
+        "live_runs": db.execute(
+            text("SELECT 1 FROM governance_agent_traces WHERE system_id = :id AND received_at >= :since LIMIT 1"), {"id": system_id, "since": _since(WEEK)}
+        ).first() is not None,
+        "platform": db.execute(
+            text("SELECT 1 FROM org_platform_connections WHERE org_id = :org AND platform = :p"), {"org": org_id, "p": PLATFORM}
+        ).first() is not None,
+    }
+
+
+def fit_and_ways(evaluation_id: str, setup: Dict[str, Any]) -> Dict[str, Any]:
+    """Whether the evaluation fits the system's kind, and each way FairMind can run it with whether that way is ready."""
+    engines = [e for e in (REGISTRY.get(evaluation_id), ALTERNATES.get(evaluation_id)) if e]
+    has = {
+        "calls_system": any(e.live == "target" for e in engines),
+        "live_runs": evaluation_id in TRACE_READERS,
+        "platform": any(e.platform for e in engines),
+        "files": any(e.slots and not e.live for e in engines),  # a live engine's slots are optional extra probes
+    }
+    # an engine of its own for live runs replays them on the system's connection, so it needs that connection too
+    replays = evaluation_id in TRACE_ENGINES
+    ways = [{"way": w, "ready": setup.get(w, True) and not (w == "live_runs" and replays and not setup["calls_system"])} for w, ok in has.items() if ok]
+    return {"fit": fit(EVALUATIONS[evaluation_id].appliesTo, setup["kind"]), "ways": ways}
+
+
 @router.get("/evaluations/{evaluation_id}/engine")
-def get_engine(evaluation_id: str, _m: OrgMembership = Depends(_member)):
+def get_engine(evaluation_id: str, system: Optional[str] = Query(default=None), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     alternate = ALTERNATES.get(evaluation_id)
     own = TRACE_ENGINES.get(evaluation_id)  # an engine of its own for live runs, whose settings differ from the upload's
-    return {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None, "liveRuns": evaluation_id in TRACE_READERS,
-            "liveRunsEngine": own.spec() if own else None}
+    out = {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None, "liveRuns": evaluation_id in TRACE_READERS,
+           "liveRunsEngine": own.spec() if own else None}
+    if system:
+        setup = system_setup(db, m.org_id, system)
+        out.update({"kind": setup["kind"], **fit_and_ways(evaluation_id, setup)})
+    return out
 
 
 @router.post("/evaluations/{evaluation_id}/runs")
@@ -203,7 +301,15 @@ async def create_run(
         raise HTTPException(status_code=422, detail=platform_connections.public_message(exc))
     except EngineError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    evidence_id = _store_run(db, m.org_id, m.user_id, system_id, evaluation_id, {**outcome, "params": params, "files": names, "source": source})
+    judged = bool(judge and judge.calls)
+    outcome = {
+        **outcome, "params": params, "files": names, "source": source,
+        **_record(engine, evaluation_id, "platform" if reads_platform else "file", files, params),
+        # a connection is read live from the platform; an export, an upload or stored records are computed from the file
+        "provenance": {"class": "measured_live" if source == "connection" else "computed_from_upload", "modelJudged": judged},
+        **({"judge": _judge_json(judge.connection, judge.connection.provider.id == PLATFORM_PROVIDER)} if judged else {}),
+    }
+    evidence_id = _store_run(db, m.org_id, m.user_id, system_id, evaluation_id, outcome)
     row = db.execute(text(_RUN_COLS + "WHERE e.id = :id"), {"id": evidence_id}).mappings().fetchone()
     return _run_json(row, full=True)
 
@@ -211,6 +317,7 @@ async def create_run(
 def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluation_id: str, outcome: Dict[str, Any]) -> str:
     now = _utc_now_iso()
     evidence_id = str(uuid.uuid4())
+    provenance = outcome.get("provenance") or {}
     content = json.dumps({"evaluationId": evaluation_id, **outcome}, default=str)
     # The run row lists the run under Evidence > Evaluation runs and lets a reviewer map it to a control.
     # It is no Evidence Passport, so it has no passport revision; only a passed result can support a control.
@@ -247,16 +354,21 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             # Measured by the engine from the data itself; an insufficient run measured nothing.
             "confidence": 0.0 if outcome["status"] == "insufficient" else 1.0,
             "by": user_id,
-            "metadata": json.dumps({"provenance_class": "measured", "engine": evaluation_id, "source": outcome.get("source", "upload"), "computed_at": now}),
+            "metadata": json.dumps({
+                "provenance_class": provenance.get("class", "computed_from_upload"), "model_judged": bool(provenance.get("modelJudged")),
+                "engine": evaluation_id, "source": outcome.get("source", "upload"), "computed_at": now,
+            }),
             "now": now,
         },
     )
-    if outcome["status"] == "passed":  # proposes the ISO 42001 clauses its control reaches, for a reviewer to accept
+    # a pass on thresholds looser than the catalogue's shows its own result but proves nothing: no mappings, no resolved finding
+    proves = outcome["status"] == "passed" and not outcome.get("thresholdLoosened")
+    if proves:  # proposes the ISO 42001 clauses its control reaches, for a reviewer to accept
         GovernanceAssuranceService(db).map_catalogue_run(org_id, system_id, run_pk, evidence_id, EVALUATIONS[evaluation_id].commonControl)
     # A failed run opens one finding for this evaluation on this system; a passing run resolves it.
     finding = {"sys": system_id, "source": "fairmind.eval_engines", "tag": f'%"evaluationId": "{evaluation_id}"%', "closed": list(CLOSED_RISK_STATUSES), "now": now}
     where = "WHERE system_id = :sys AND source = :source AND metadata_json LIKE :tag AND status NOT IN :closed"
-    if outcome["status"] == "passed":
+    if proves:
         pending = db.execute(text(f"SELECT id, metadata_json FROM governance_risks {where} AND status = :pending").bindparams(bindparam("closed", expanding=True)), {**finding, "pending": RISK_ACCEPTANCE_PENDING})
         for risk_id, metadata in pending.fetchall():  # resolving drops a waiting acceptance with it
             db.execute(text("UPDATE governance_risks SET metadata_json = :metadata WHERE id = :id"), {"metadata": _without_pending(metadata), "id": risk_id})
@@ -365,18 +477,20 @@ def make_live(target: Optional[Target], judge, facts: Dict[str, Any], progress, 
             raise CallError(f"System under test: {e}")
 
     async def call_judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+        live.judged += system != GEN_SYSTEM
         try:
-            return (await llm.complete(judge, system, user, schema, attempts=llm.RETRY_ATTEMPTS))[0]
+            return (await llm.complete(judge, system, user, schema, attempts=llm.RETRY_ATTEMPTS, deterministic=True))[0]
         except llm.LLMError as e:
             raise CallError(f"Judge: {e}")
 
     async def call_agent(agent_facts: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            return (await llm.complete(judge, AGENT_SYSTEM, json.dumps(agent_facts, default=str, sort_keys=True), AGENT_SCHEMA, attempts=llm.RETRY_ATTEMPTS))[0]
+            return (await llm.complete(judge, AGENT_SYSTEM, json.dumps(agent_facts, default=str, sort_keys=True), AGENT_SCHEMA,
+                                       attempts=llm.RETRY_ATTEMPTS, deterministic=True))[0]
         except llm.LLMError as e:
             raise CallError(f"FairMind agent: {e}")
 
-    return Live(
+    live = Live(
         ask=ask_override or call_target,
         judge=call_judge,
         progress=progress,
@@ -386,6 +500,7 @@ def make_live(target: Optional[Target], judge, facts: Dict[str, Any], progress, 
         previous=previous,
         agent=call_agent,
     )
+    return live
 
 
 async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engine, files, names, params, judge, target: Optional[Target], facts, previous):
@@ -402,13 +517,20 @@ async def _run_job(bind, job_id, org_id, user_id, system_id, evaluation_id, engi
     live = make_live(target, judge, facts, progress, previous, relay.ask if relay else None)
     try:
         outcome = await engine.run(files, params, live)
+        traces = "traces" in files
+        # FairMind's agent runs on the judge's own connection; live runs say nothing of the provider behind them
+        shares = (_host(judge.base_url) == _host(target.url)) if target else None if traces else True
         outcome.update({
             "params": params,
             "files": names,
-            "judge": {"provider": judge.provider.id, "model": judge.model},
+            "judge": _judge_json(judge, shares),
             "target": ({"kind": target.kind, "url": target.url, **({"via": "runner"} if target.via_runner else {})}
-                       if target else {"kind": "live-runs"} if "traces" in files else {"kind": "fairmind-agent"}),
-            **({"source": "traces"} if "traces" in files else {}),
+                       if target else {"kind": "live-runs"} if traces else {"kind": "fairmind-agent"}),
+            **({"source": "traces"} if traces else {}),
+            **_record(engine, evaluation_id, "live", files, params),
+            # live runs read alone are records the system sent; replayed on the connection (EV-OVS-04), FairMind made the calls
+            "provenance": {"class": "computed_from_upload" if traces and not target else "measured_live", "modelJudged": live.judged > 0},
+            **({"probes": live.generated} if live.generated else {}),  # restricted suites never generate, so never land here
         })
         evidence_id = await run_in_threadpool(_store_run, db, org_id, user_id, system_id, evaluation_id, outcome)
         if "traces" in files and evaluation_id in TRACE_ENGINES:  # each run tested opens explained

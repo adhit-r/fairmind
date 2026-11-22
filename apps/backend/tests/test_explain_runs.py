@@ -79,6 +79,11 @@ def test_explanation_quality_on_live_runs_tests_each_stated_reason(tmp_database,
     run = client.get(f"{PACKS}/evaluation-runs/{job['evidenceId']}").json()
     m = run["metrics"]
     assert run["source"] == "traces" and run["status"] == "failed"  # 2 of 3 reasons held, under the agreed 0.8
+    # replayed on the connection, so measured live and judged; the record names the live path and hashes the traces read
+    assert run["provenance"] == {"class": "measured_live", "modelJudged": True} and "sharesProviderWithSystem" in run["judge"]
+    assert run["engine"]["path"] == "live" and "traces" in run["inputs"]
+    fitted = client.get(f"{PACKS}/evaluations/EV-OVS-04/engine", params={"system": system}).json()
+    assert fitted["liveRunsEngine"] and fitted["kind"] and {"way": "live_runs", "ready": True} in fitted["ways"]
     assert (m["runs"], m["notReproducible"], m["reasonTested"], m["reasonHeld"], m["faithTested"], m["faithful"]) == (4, 1, 3, 2, 3, 1)
     assert m["flipsFound"] == 3 and m["drivers"][0] == {"factor": "employment", "mean": pytest.approx(0.667, abs=0.001), "runs": 3}
     assert {"factor": "employment", "from": "declined", "to": "approved", "runs": 2} in m["flipsBy"]
@@ -135,6 +140,8 @@ def test_the_gate_names_explanation_quality_once_decisions_arrive(tmp_database, 
     assert oversight_steps() and all("evaluationId" not in s for s in oversight_steps())
     client.post(f"{PACKS}/ai-systems/{system}/traces", json=_decision("d1", "contract", "Declined.", "Contract employment"))
     assert all("evaluationId" not in s for s in oversight_steps())  # no model connection to replay on yet
+    ways = client.get(f"{PACKS}/evaluations/EV-OVS-04/engine", params={"system": system}).json()["ways"]
+    assert {"way": "live_runs", "ready": False} in ways  # live runs arrived, but there is no connection to replay them on
     _provider(client)
     _target(client, system)
     assert {(s["evaluationId"], s["source"]) for s in oversight_steps()} == {("EV-OVS-04", "traces")}

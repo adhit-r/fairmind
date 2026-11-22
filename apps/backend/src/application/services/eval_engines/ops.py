@@ -116,7 +116,10 @@ def context_secrets(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str
 DANGEROUS_MODULES = {"os", "posix", "nt", "subprocess", "sys", "socket", "shutil", "runpy", "pty", "webbrowser",
                      "importlib", "ctypes", "pickle", "marshal"}
 DANGEROUS_BUILTINS = {"eval", "exec", "getattr", "setattr", "delattr", "__import__", "compile", "open", "globals", "locals", "input", "breakpoint"}
-NUMPY_MODULES = {"numpy", "numpy.core.multiarray", "numpy._core.multiarray", "numpy.core.numeric", "numpy._core.numeric", "numpy.dtypes"}
+# only the names numpy pickles rebuild arrays with; numpy.load or numpy.savetxt would read or write files
+NUMPY_SAFE = {("numpy", "ndarray"), ("numpy", "dtype")} | {
+    (f"numpy.{core}.multiarray", n) for core in ("core", "_core") for n in ("_reconstruct", "scalar")} | {
+    (f"numpy.{core}.numeric", "_frombuffer") for core in ("core", "_core")}
 TORCH_STORAGE = {"TypedStorage", "_TypedStorage", "UntypedStorage"}
 STRING_OPS = {"SHORT_BINUNICODE", "BINUNICODE", "BINUNICODE8", "UNICODE", "SHORT_BINSTRING", "BINSTRING", "STRING"}
 MAX_MEMBER = 256 * 1024 * 1024
@@ -133,7 +136,7 @@ def _import_risk(module: str, name: str) -> Optional[str]:
     safe = (
         (module in ("builtins", "__builtin__") and name in {"set", "frozenset", "slice", "complex"})
         or module == "collections"
-        or module in NUMPY_MODULES
+        or (module, name) in NUMPY_SAFE
         or module.split(".")[0] == "sklearn"  # ponytail: whole sklearn trusted; narrow to estimator modules if needed
         or (module == "torch" and (name.endswith("Storage") or name == "Size"))
         or (module == "torch._utils" and name.startswith("_rebuild"))
@@ -193,10 +196,12 @@ def _scan_model(raw: bytes) -> Tuple[List[Dict[str, Any]], int]:
     """(findings, pickles scanned)."""
     rows: List[Dict[str, Any]] = []
 
-    def add(file: str, data: bytes) -> bool:
+    def add(file: str, data: bytes, must_be_pickle: bool = True) -> bool:
         try:
             found = _pickle_findings(data)
         except _NotPickle:
+            if not must_be_pickle:
+                return False
             rows.append({"file": file, "finding": "not a readable pickle", "item": "", "severity": "medium"})
             return False
         for kind, item, severity in found:
@@ -205,7 +210,9 @@ def _scan_model(raw: bytes) -> Tuple[List[Dict[str, Any]], int]:
         return True
 
     if zipfile.is_zipfile(io.BytesIO(raw)):
-        scanned = 0
+        # a zip is found from its end, so bytes before it may be a pickle that pickle.load runs from byte 0;
+        # the zip's own member offsets are not trusted to find where it starts, and a non-pickle prefix is harmless
+        scanned = 0 if raw.startswith(b"PK\x03\x04") else int(add("model", raw, must_be_pickle=False))
         try:
             with zipfile.ZipFile(io.BytesIO(raw)) as zf:
                 for info in zf.infolist():
@@ -232,9 +239,10 @@ PIN_NPM = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 PIN_PIP = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*===?\s*([^\s,;*]+)\s*(?:;.*)?$")
 
 
-def _scan_manifest(text: str) -> Tuple[List[Dict[str, Any]], int]:
-    """(findings, dependencies read)."""
+def _scan_manifest(text: str) -> Tuple[List[Dict[str, Any]], int, List[str]]:
+    """(findings, dependencies read, included files that were not followed)."""
     rows: List[Dict[str, Any]] = []
+    includes: List[str] = []
     total = 0
     if text.lstrip().startswith("{"):
         try:
@@ -249,16 +257,23 @@ def _scan_manifest(text: str) -> Tuple[List[Dict[str, Any]], int]:
                 total += 1
                 if not PIN_NPM.match(str(version).strip()):
                     rows.append({"file": "package.json", "finding": f"not pinned to an exact version ({section})", "item": f"{name}@{_scrub(str(version), 60)}", "severity": "medium"})
-        return rows, total
+        return rows, total, includes
     for line in text.splitlines():
         line = re.split(r"\s+#|\s+--", line.strip())[0].rstrip("\\").strip()
-        if not line or line.startswith(("#", "-")):
+        editable = re.match(r"(?:-e\s*|--editable(?:\s+|=))(\S+)", line)
+        include = re.match(r"(?:-[rc]\s*|--(?:requirement|constraint)(?:\s+|=))(\S+)", line)
+        if include:
+            includes.append(_scrub(re.sub(r"//[^/@\s]*@", "//", include.group(1)), 80))
+        if not line or line.startswith("#") or (line.startswith("-") and not editable):
             continue
+        line = editable.group(1) if editable else line
         total += 1
-        if not PIN_PIP.match(line):
+        if editable or not PIN_PIP.match(line):
             name = re.split(r"[\s<>=!~;@\[]", line, 1)[0]
-            rows.append({"file": "requirements", "finding": "not pinned to an exact version", "item": name if "://" in line else _scrub(line, 80), "severity": "medium"})
-    return rows, total
+            item = re.sub(r"//[^/@\s]*@", "//", line) if "://" in name else name if "://" in line else line
+            finding = "editable or VCS install, not pinned to a released version" if editable or "://" in name else "not pinned to an exact version"
+            rows.append({"file": "requirements", "finding": finding, "item": _scrub(item, 80), "severity": "medium"})
+    return rows, total, includes
 
 
 def model_scan(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
@@ -267,20 +282,22 @@ def model_scan(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any
         raise EngineError("Upload a model file, a dependency manifest, or both")
     rows: List[Dict[str, Any]] = []
     pickles = deps = 0
+    includes: List[str] = []
     if model:
         found, pickles = _scan_model(model)
         rows += found
     if manifest:
-        found, deps = _scan_manifest(read_text(manifest, "The dependency manifest"))
+        found, deps, includes = _scan_manifest(read_text(manifest, "The dependency manifest"))
         rows += found
     dangerous = sum(1 for r in rows if r["severity"] == "high")
     metrics = {"picklesScanned": pickles, "dependencies": deps, "findings": len(rows), "dangerousImports": dangerous,
-               "unpinnedDependencies": sum(1 for r in rows if r["file"] in ("package.json", "requirements"))}
+               "unpinnedDependencies": sum(1 for r in rows if r["file"] in ("package.json", "requirements")), "includesNotFollowed": includes}
+    note = f" Included files ({', '.join(includes[:5])}) were not followed; upload each one to scan it." if includes else ""
     if not pickles and not deps and not rows:
-        return result("insufficient", "Nothing to scan: the model archive holds no .pkl members and the manifest lists no dependencies.", metrics)
+        return result("insufficient", f"Nothing to scan: the model archive holds no .pkl members and the manifest lists no dependencies.{note}", metrics)
     if not rows:
-        return result("passed", f"No unsafe imports in {pickles} pickles and all {deps} dependencies are pinned.", metrics)
-    return result("failed", f"{len(rows)} findings: {dangerous} dangerous imports and {len(rows) - dangerous} others across {pickles} pickles and {deps} dependencies.", metrics, rows)
+        return result("passed", f"No unsafe imports in {pickles} pickles and all {deps} dependencies are pinned.{note}", metrics)
+    return result("failed", f"{len(rows)} findings: {dangerous} dangerous imports and {len(rows) - dangerous} others across {pickles} pickles and {deps} dependencies.{note}", metrics, rows)
 
 
 # --- EV-SEC-17 tool poisoning --------------------------------------------------------------------
@@ -289,16 +306,18 @@ MAX_DESCRIPTION = 1500
 STEERING = re.compile(r"(?i)\b(?:instead|before|after|always|first|must|never|rather than|prior to|override|replace|do not use|don't use|whenever)\b")
 
 
-def _descriptions(node: Any, path: str):
-    if isinstance(node, dict):
+def _strings(node: Any, path: str):
+    """(path, text) for every string a model reads in a tool: title, enum, default, examples, outputSchema and the rest."""
+    if isinstance(node, str):
+        yield path, node
+    elif isinstance(node, dict):
         for key, value in node.items():
-            if key == "description" and isinstance(value, str):
-                yield f"{path}.description", value
-            else:
-                yield from _descriptions(value, f"{path}.{key}")
+            child = f"{path}.{key}" if path else str(key)
+            yield f"{child}<key>", str(key)  # property names in a schema are read by the model too
+            yield from _strings(value, child)
     elif isinstance(node, list):
         for i, value in enumerate(node):
-            yield from _descriptions(value, f"{path}[{i}]")
+            yield from _strings(value, f"{path}[{i}]")
 
 
 def tool_poisoning(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
@@ -313,9 +332,7 @@ def tool_poisoning(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str,
     rows = []
     for tool in tools:
         name = str(tool["name"])
-        fields = [("description", tool["description"])] if isinstance(tool.get("description"), str) else []
-        fields += list(_descriptions(tool.get("inputSchema"), "inputSchema"))
-        for field, text in fields:
+        for field, text in _strings(tool, ""):
             cats, snippet = [], ""
             for cat, hit in scan(text, INSTRUCTIONS):
                 if cat not in cats:

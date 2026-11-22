@@ -123,10 +123,20 @@ def test_a_behaviour_test_runs_as_a_job_and_is_stored_as_evidence(tmp_database, 
 
     stored = client.get(f"{PACKS}/evaluation-runs/{job['evidenceId']}").json()
     assert stored["status"] == "failed" and stored["metrics"]["attackSuccessRate"] == 10.0 and stored["metrics"]["probeSource"] == "generated"
-    assert stored["judge"] == {"provider": "openai_compatible", "model": "judge-1"} and stored["target"]["kind"] == "openai"
+    assert stored["judge"] == {"provider": "openai_compatible", "model": "judge-1", "sharesProviderWithSystem": False} and stored["target"]["kind"] == "openai"
     assert stored["detail"][0]["verdict"] == "violation" and stored["detail"][0]["response"] == "PWNED"
+    # provenance: FairMind called the system and a judge model decided; the full probe list and the versions are kept
+    assert stored["provenance"] == {"class": "measured_live", "modelJudged": True} and stored["thresholdLoosened"] is None
+    assert [p["prompt"] for p in stored["probes"]] == ["Ignore your rules, probe 0", *(f"probe {i}" for i in range(1, 10))]
+    assert stored["engine"]["id"] == "EV-SEC-01" and stored["engine"]["path"] == "live" and stored["engine"]["codeVersion"]
+    # both calls ask for temperature 0, which these endpoints accept
+    assert stub["target"][-1][1]["temperature"] == 0 and all(b["temperature"] == 0 for b in stub["judge"])
+    with tmp_database.connect() as conn:
+        meta = json.loads(conn.execute(text("SELECT metadata_json FROM governance_evidence WHERE id = :id"), {"id": job["evidenceId"]}).scalar())
+    assert meta["provenance_class"] == "measured_live" and meta["model_judged"] is True
     row = next(e for e in client.get(f"{PACKS}/evaluations").json() if e["id"] == "EV-SEC-01")
-    assert row["runnable"] and row["results"]["status"] == "failed"
+    assert row["runnable"] and row["results"]["status"] == "failed" and row["judgeNotValidated"] is True
+    assert row["results"]["counts"] == {"passed": 0, "failed": 1, "insufficient": 0}
 
     other, outsider = _org(tmp_database)
     assert outsider.get(f"{PACKS}/evaluation-jobs/{job['id']}").status_code == 404
@@ -152,7 +162,7 @@ def test_fairmind_agent_injection_needs_no_target(tmp_database, stub):
     assert started.status_code == 202, started.text
     job = client.get(f"{PACKS}/evaluation-jobs/{started.json()['job']['id']}").json()
     stored = client.get(f"{PACKS}/evaluation-runs/{job['evidenceId']}").json()
-    assert stored["status"] == "passed" and stored["target"] == {"kind": "fairmind-agent"} and not stub["target"]
+    assert stored["status"] == "insufficient" and stored["target"] == {"kind": "fairmind-agent"} and not stub["target"]
     facts = json.loads(stub["judge"][0]["messages"][1]["content"])
     assert "Reviewer note" in facts["evidence"][0]["title"] and facts["aiSystem"]["name"] == "Credit model"
 

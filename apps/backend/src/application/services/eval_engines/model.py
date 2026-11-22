@@ -12,7 +12,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, f1_score, precision_recall_fscore_support, roc_auc_score, roc_curve
 
-from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_text, result, split
+from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_text, result, sampled, samples_needed, split
 
 
 def _name(params: Dict[str, Any], key: str, default: str) -> str:
@@ -63,6 +63,9 @@ def _r(value: Optional[float], digits: int = 4) -> Optional[float]:
     return None if value is None else round(float(value), digits)
 
 
+MIN_GROUP = 30  # the fewest rows a language or intersection needs to be compared; a smaller min_rows or min_slice is raised to it
+
+
 def _verdict(ok: bool) -> str:
     return "passed" if ok else "failed"
 
@@ -111,7 +114,8 @@ def task_accuracy(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, 
         metrics["dropVsLastRelease"] = _r(drop)
         ok = ok and drop <= max_drop
         summary += f" and {last:g} in the last release ({'drop' if task == 'classification' else 'relative increase'} {drop:.4f}, limit {max_drop:g})"
-    return result(_verdict(ok), summary + ".", metrics, detail)
+    status, why = sampled(_verdict(ok), int((t != p).sum()), len(d), 1 - baseline) if task == "classification" else (_verdict(ok), "")
+    return result(status, summary + "." + why, metrics, detail)
 
 
 # EV-TST-02 -------------------------------------------------------------------------------------------------
@@ -148,7 +152,8 @@ def answer_consistency(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[
     share = 1 - len(bad) / total
     metrics["consistentShare"] = round(share, 4)
     bad.sort(key=lambda r: r["lowestSimilarity"])
-    return result(_verdict(share >= min_share), f"{share:.1%} of {total} prompts with repeated answers are consistent (limit {min_share:.0%}); {len(bad)} are not.", metrics, bad)
+    status, why = sampled(_verdict(share >= min_share), len(bad), total, 1 - min_share)
+    return result(status, f"{share:.1%} of {total} prompts with repeated answers are consistent (limit {min_share:.0%}); {len(bad)} are not." + why, metrics, bad)
 
 
 # EV-TST-07 -------------------------------------------------------------------------------------------------
@@ -172,7 +177,12 @@ def calibration(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, An
         ece += m.mean() * abs(y[m].mean() - s[m].mean())
         detail.append({"bin": f"{b / bins:.2f}-{(b + 1) / bins:.2f}", "count": int(m.sum()), "meanScore": _r(s[m].mean()), "observedRate": _r(y[m].mean())})
     metrics = {"rows": len(d), "bins": bins, "ece": _r(ece)}
-    return result(_verdict(ece <= max_ece), f"Expected calibration error is {ece:.4f} over {bins} equal-width bins (limit {max_ece:g}).", metrics, detail)
+    summary = f"Expected calibration error is {ece:.4f} over {bins} equal-width bins (limit {max_ece:g})."
+    need = samples_needed(max_ece) if 0 < max_ece < 1 else 0
+    if ece <= max_ece and len(d) < need:
+        # The smallest sample in which a gap the size of the limit could show at 95% confidence even with no miss at all.
+        return result("insufficient", summary + f" {len(d)} rows cannot show calibration within {max_ece:g}; that takes at least {need}.", metrics, detail)
+    return result(_verdict(ece <= max_ece), summary, metrics, detail)
 
 
 # EV-TST-08 -------------------------------------------------------------------------------------------------
@@ -197,7 +207,7 @@ def ood_detection(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, 
 
 def multilingual_parity(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     yt, yp, lc = _name(params, "y_true", "y_true"), _name(params, "y_pred", "y_pred"), _name(params, "language", "language")
-    max_gap, min_rows = number(params, "max_gap", 0.05), int(number(params, "min_rows", 30))
+    max_gap, min_rows = number(params, "max_gap", 0.05), max(MIN_GROUP, int(number(params, "min_rows", MIN_GROUP)))
     d = _rows(files, "predictions", "The predictions", [yt, yp, lc])
     d["ok"] = (_labels(d[yt]) == _labels(d[yp])).to_numpy()
     detail = []
@@ -234,7 +244,8 @@ def selective_accuracy(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[
     metrics = {"rows": n, "coverage": coverage, "answered": kept, "selectiveAccuracy": _r(selective), "overallAccuracy": _r(correct.mean()), "minAccuracy": min_acc}
     if min_acc is None:
         return result("insufficient", f"Accuracy on the most confident {coverage:.0%} is {selective:.4f}, but no agreed minimum accuracy was given.", metrics, curve)
-    return result(_verdict(selective >= min_acc), f"Accuracy on the most confident {coverage:.0%} of {n} records is {selective:.4f} against an agreed minimum of {min_acc:g} (overall {correct.mean():.4f}).", metrics, curve)
+    status, why = sampled(_verdict(selective >= min_acc), int(kept - correct[:kept].sum()), kept, 1 - min_acc)
+    return result(status, f"Accuracy on the most confident {coverage:.0%} of {n} records is {selective:.4f} against an agreed minimum of {min_acc:g} (overall {correct.mean():.4f})." + why, metrics, curve)
 
 
 # EV-FAI-03 -------------------------------------------------------------------------------------------------
@@ -245,10 +256,13 @@ def intersectional_slices(files: Dict[str, bytes], params: Dict[str, Any]) -> Di
         raise EngineError("attributes needs at least two column names, comma-separated")
     yp, yt = _name(params, "y_pred", "y_pred"), params.get("y_true") and _name(params, "y_true", "y_true")
     fav = _label(params.get("favorable", 1) if params.get("favorable") not in (None, "") else 1)
-    max_gap, min_slice = number(params, "max_gap", 0.1), int(number(params, "min_slice", 30))
+    max_gap, min_slice = number(params, "max_gap", 0.1), max(MIN_GROUP, int(number(params, "min_slice", MIN_GROUP)))
     d = _rows(files, "decisions", "The decisions", attrs + [yp] + ([yt] if yt else []))
     sel = (_labels(d[yp]) == fav).to_numpy()
     pos = (_labels(d[yt]) == fav).to_numpy() if yt else None
+    if not sel.any():  # every selection rate would be 0, so any gap check would pass on nothing
+        present = sorted(set(_labels(d[yp])))
+        raise EngineError(f"The favourable value {fav} is in no {yp} row; the values present are {', '.join(present[:10])}")
 
     detail = []
     for key, idx in d.groupby(attrs, sort=True).indices.items():
@@ -302,7 +316,8 @@ def counterfactual_fairness(files: Dict[str, bytes], params: Dict[str, Any]) -> 
         return result("insufficient", "No complete pairs were found, so the flip rate cannot be measured.", metrics)
     rate = len(flipped) / total
     metrics["flipRate"] = round(rate, 4)
-    return result(_verdict(rate <= max_flip), f"{len(flipped)} of {total} pairs changed prediction when the protected attribute changed: flip rate {rate:.2%} (limit {max_flip:.0%}).", metrics, flipped)
+    status, why = sampled(_verdict(rate <= max_flip), len(flipped), total, max_flip)
+    return result(status, f"{len(flipped)} of {total} pairs changed prediction when the protected attribute changed: flip rate {rate:.2%} (limit {max_flip:.0%})." + why, metrics, flipped)
 
 
 # EV-MON-01 -------------------------------------------------------------------------------------------------
@@ -543,7 +558,7 @@ ENGINES: List[Engine] = [
             Param("y_pred", "Prediction column", "Column holding the model output.", default="y_pred"),
             Param("language", "Language column", "Column naming the language of each row.", default="language"),
             Param("max_gap", "Largest gap", "Accuracy gap allowed between best and worst language.", "number", 0.05),
-            Param("min_rows", "Minimum rows", "Languages with fewer rows are listed but not compared.", "number", 30),
+            Param("min_rows", "Minimum rows", f"Languages with fewer rows are listed but not compared; at least {MIN_GROUP}.", "number", MIN_GROUP),
         ),
         run=multilingual_parity,
     ),
@@ -570,7 +585,7 @@ ENGINES: List[Engine] = [
             Param("y_true", "True label column", "Optional. Adds the true positive rate gap.", default=None),
             Param("favorable", "Favourable value", "The decision value that counts as favourable.", default=1),
             Param("max_gap", "Largest gap", "Largest allowed gap in selection rate (and true positive rate).", "number", 0.1),
-            Param("min_slice", "Minimum slice size", "Intersections with fewer records are listed but skipped.", "number", 30),
+            Param("min_slice", "Minimum slice size", f"Intersections with fewer records are listed but skipped; at least {MIN_GROUP}.", "number", MIN_GROUP),
         ),
         run=intersectional_slices,
     ),

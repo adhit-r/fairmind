@@ -91,8 +91,8 @@ def test_reproducibility_is_agreement_between_two_runs_under_one_configuration()
     b = _csv("id,result", "1,1", "2,0", "3,0", "4,1")  # item 3 differs: 3 of 4 agree = 0.75
     files = dict(run_a=a, run_b=b, config_a=CFG, config_b=CFG)
     assert _run("EV-TST-09", {}, **files)["status"] == "failed"
-    ok = _run("EV-TST-09", {"min_agreement": 0.7}, **files)
-    assert ok["status"] == "passed" and ok["metrics"]["agreement"] == 0.75
+    ok = _run("EV-TST-09", {"min_agreement": 0.7}, **files)  # 0.75 is within 0.7, but 4 items cannot show it at 95% confidence
+    assert ok["status"] == "insufficient" and ok["metrics"]["agreement"] == 0.75 and "could be as high as" in ok["summary"]
     same = _run("EV-TST-09", {}, run_a=a, run_b=a, config_a=CFG, config_b=CFG)
     assert same["status"] == "passed" and same["metrics"]["agreement"] == 1.0
     # numbers agree within the tolerance: |0.50 - 0.52| = 0.02 <= 0.05, |0.1 - 0.3| = 0.2 > 0.05
@@ -173,7 +173,7 @@ def _decisions(b_selected):
     return _csv("group,y_true,y_pred", *rows)
 
 
-PREDICTIONS = _csv("y_true,y_pred", *["1,1"] * 5, *["0,0"] * 4, "1,0")  # 9 of 10 correct: accuracy 0.9
+PREDICTIONS = _csv("y_true,y_pred", *(["1,1"] * 5 + ["0,0"] * 4 + ["1,0"]) * 20)  # 180 of 200 correct: accuracy 0.9, enough to show >= 0.85
 SUITE_PARAMS = {"attributes": "group", "baseline": 0.85}
 
 
@@ -226,3 +226,37 @@ def test_hiring_suite_checks_intersections_and_credit_suite_the_india_attribute_
     # without an India-specific attribute the India check has nothing to read
     plain = _run("EV-USE-02", {**credit, "attributes": "gender"}, predictions=PREDICTIONS, decisions=decisions, explanations=EXPLAIN)
     assert plain["metrics"]["EV-FAI-06"] == "insufficient" and plain["status"] == "insufficient"
+
+
+def _stored_results(*rows):
+    return json.dumps([{"evaluationId": e, "status": s, "detail": f"{e} {s}", "at": "2026-11-01"} for e, s in rows])
+
+
+def test_a_suite_reads_the_stored_result_of_each_component_it_cannot_run_from_files():
+    # EV-USE-05: accuracy runs on the predictions; EV-RSK-01, EV-OVS-03 and EV-PRV-04 are not given as files in this run.
+    files = {"predictions": PREDICTIONS}
+    alone = _run("EV-USE-05", {"baseline": 0.85}, **files)
+    assert alone["status"] == "insufficient" and alone["metrics"]["components"] == 4 and alone["metrics"]["passed"] == 1
+    stored = _stored_results(("EV-RSK-01", "passed"), ("EV-OVS-03", "passed"), ("EV-PRV-04", "passed"))
+    ok = _run("EV-USE-05", {"baseline": 0.85}, **files, results=stored)
+    assert ok["status"] == "passed" and ok["metrics"]["passed"] == 4
+    assert {r["evaluation"]: r["source"] for r in ok["detail"]}["EV-PRV-04"] == "stored result of 2026-11-01"
+    assert "EV-TST-01 passed (this run)" in ok["summary"]
+    leak = _run("EV-USE-05", {"baseline": 0.85}, **files, results=_stored_results(("EV-RSK-01", "passed"), ("EV-OVS-03", "passed"), ("EV-PRV-04", "failed")))
+    assert leak["status"] == "failed" and leak["metrics"]["EV-PRV-04"] == "failed"
+    # the sandbox escape check of the coding agent suite is no longer dropped
+    assert "EV-SEC-20" in _run("EV-USE-06", {})["metrics"]
+
+
+def test_suite_params_read_from_different_files_do_not_collide():
+    # the predictions name the outcome "actual" and the decisions keep y_true; one y_true param used to set both
+    preds = PREDICTIONS.replace("y_true", "actual")
+    params = {**SUITE_PARAMS, "predictions_y_true": "actual"}
+    assert {"predictions_y_true", "decisions_y_true"} <= {p.name for p in REGISTRY["EV-USE-09"].params}
+    ok = _run("EV-USE-09", params, predictions=preds, decisions=_decisions(50))
+    assert ok["status"] == "passed", ok["summary"]
+
+
+def test_suite_params_are_optional_so_a_stored_component_needs_no_value():
+    # EV-USE-05 with only the escalations file: EV-TST-01 reads its stored result, so baseline must not be required
+    assert not any(p.required for p in REGISTRY["EV-USE-05"].params + REGISTRY["EV-USE-09"].params)

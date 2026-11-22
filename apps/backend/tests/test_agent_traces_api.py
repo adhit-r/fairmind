@@ -224,3 +224,6 @@ def test_autopilot_reruns_tool_call_monitoring_with_the_settings_a_person_chose(
         by = db.execute(text("SELECT uploaded_by FROM governance_evidence WHERE id = :id"), {"id": evidence_id}).scalar()
     assert "on this week's live runs" in detail and by == "agent:autopilot"
     assert content["params"]["max_score"] == 0.1 and content["source"] == "traces" and content["status"] == "failed"
+    # stored as a person-started run is: hashed inputs, engine versions, provenance
+    assert content["provenance"] == {"class": "computed_from_upload", "modelJudged": False}
+    assert content["engine"]["id"] == "EV-MON-02" and content["inputs"] and all(len(h) == 64 for h in content["inputs"].values())

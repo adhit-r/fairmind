@@ -71,8 +71,8 @@ def code_scan(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]
         count = _unpack(raw, tmp)
         if not count:
             raise EngineError("The archive has no Python files; this scan reads Python")
-        # bandit parses the code and never runs it
-        proc = subprocess.run([sys.executable, "-m", "bandit", "-r", tmp, "-f", "json", "-q"], capture_output=True, text=True, timeout=300)
+        # bandit parses the code and never runs it; --ignore-nosec so a '# nosec' comment cannot hide a finding
+        proc = subprocess.run([sys.executable, "-m", "bandit", "-r", tmp, "-f", "json", "-q", "--ignore-nosec"], capture_output=True, text=True, timeout=300)
         try:
             report = json.loads(proc.stdout)
         except ValueError:
@@ -219,7 +219,7 @@ def accessibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, 
     required = {r.casefold() for r in split(params.get("required_rules"))}
     passes: List[tuple] = []
     fails: List[tuple] = []
-    incomplete = 0
+    incomplete, ran = 0, set()
     for n, page in enumerate(pages):
         if not isinstance(page, dict) or "violations" not in page or "passes" not in page:
             raise EngineError("The report must be an axe-core result with passes and violations")
@@ -227,14 +227,19 @@ def accessibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, 
         passes += [(where, r["id"], None) for r in page["passes"] if not required or r["id"].casefold() in required]
         fails += [(where, r["id"], r.get("impact")) for r in page["violations"] if not required or r["id"].casefold() in required]
         incomplete += len(page.get("incomplete", []))
+        ran |= {r["id"].casefold() for key in ("passes", "violations", "inapplicable") for r in page.get(key, [])}
+    missing = sorted(required - ran)  # a required rule with no verdict on any page (absent, or only needing review) was not checked
     total = len(passes) + len(fails)
     if not total:
         return result("insufficient", "The report holds no applicable check" + (" for the required rules" if required else "") + ".", {"checks": 0}, [])
     detail = [{"page": w, "rule": r, "impact": i} for w, r, i in fails]
     rate = _pct(len(passes), total)
-    return result("passed" if not fails else "failed",
-                  f"{len(passes)} of {total} accessibility checks passed ({rate:g}%, threshold 100%); {incomplete} need manual review.",
-                  {"checks": total, "passed": len(passes), "violations": len(fails), "passRate": rate, "needsReview": incomplete, "threshold": 100}, detail)
+    summary = f"{len(passes)} of {total} accessibility checks passed ({rate:g}%, threshold 100%); {incomplete} need manual review."
+    if missing and not fails:
+        summary += f" Required rules the report does not check: {', '.join(missing[:10])}."
+    return result("failed" if fails else "insufficient" if missing else "passed", summary,
+                  {"checks": total, "passed": len(passes), "violations": len(fails), "passRate": rate, "needsReview": incomplete, "threshold": 100,
+                   "requiredNotChecked": len(missing)}, detail)
 
 
 # --- EV-SEC-09 vector and embedding weaknesses ----------------------------------------------------------

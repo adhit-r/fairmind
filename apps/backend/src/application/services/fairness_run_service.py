@@ -13,7 +13,7 @@ import itertools
 import json
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import numpy as np
@@ -689,18 +689,59 @@ def evaluation_status(record: Dict[str, Any]) -> Optional[str]:
     return str(content.get("status")) if isinstance(content, dict) else "insufficient"
 
 
+PROOF_MAX_AGE = timedelta(days=365)  # a pass older than this is stale: it no longer proves anything
+
+
+def _loosened(record: Dict[str, Any]) -> bool:
+    """A pass judged on thresholds looser than the catalogue's (evaluation_runs stores which)."""
+    return evaluation_status(record) == "passed" and bool(record["content"].get("thresholdLoosened"))
+
+
+def proof_status(record: Dict[str, Any], now: Optional[datetime] = None) -> Optional[str]:
+    """evaluation_status as proof reads it: a pass on loosened thresholds, or older than PROOF_MAX_AGE, proves nothing (insufficient)."""
+    status = evaluation_status(record)
+    at = _record_time(record)
+    if status == "passed" and (_loosened(record) or (at is not None and (now or datetime.now(timezone.utc)) - at > PROOF_MAX_AGE)):
+        return "insufficient"
+    return status
+
+
+def deciding_runs(records: Iterable[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Each evaluation's deciding run, by evaluation id: its newest run, except that a failure stands behind a newer run
+    that proves nothing either way (insufficient, or passed on loosened thresholds) until a pass on the catalogue's terms."""
+    held: Dict[str, Dict[str, Any]] = {}
+    for r in sorted((r for r in records if evaluation_status(r)), key=lambda r: _record_time(r) or _NO_TIME):
+        content = r.get("content")
+        key = str(content.get("evaluationId")) if isinstance(content, dict) else ""
+        prior = held.get(key)
+        if prior is not None and evaluation_status(prior) == "failed" and (evaluation_status(r) == "insufficient" or _loosened(r)):
+            continue
+        held[key] = r
+    return held
+
+
+def counted_runs(records: List[Dict[str, Any]], now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    """The records the gate weighs: each evaluation counts through its deciding run only, and one that proves nothing
+    (insufficient, loosened, stale) counts nowhere; every other record stays."""
+    counted = {id(r) for r in deciding_runs(records).values() if proof_status(r, now) != "insufficient"}
+    return [r for r in records if not evaluation_status(r) or id(r) in counted]
+
+
 def gate_checks(include_environmental: bool = True) -> tuple:
     """The checks the gate weighs. An organisation may leave environmental impact out of its release gate."""
     return GATE_CHECKS if include_environmental else tuple(c for c in GATE_CHECKS if c[0] != "environmental")
 
 
 TIER_TO_IMPACT = {"low": "low", "medium": "medium", "high": "high", "critical": "high"}
-PROVEN_CLASSES = {"measured", "tool_estimated"}
+# Evaluation runs record how they measured (evaluation_runs._store_run); the gate weighs both as measured.
+MEASURED_CLASSES = {"measured_live", "computed_from_upload"}
+PROVEN_CLASSES = {"measured", "tool_estimated", *MEASURED_CLASSES}
 
 
 def _provenance(record: Dict[str, Any]) -> str:
     meta = record.get("metadata") or {}
-    return str(meta.get("provenance_class") or meta.get("provenance") or "manual").lower()
+    prov = str(meta.get("provenance_class") or meta.get("provenance") or "manual").lower()
+    return "measured" if prov in MEASURED_CLASSES else prov
 
 
 def _weigh(record: Dict[str, Any]) -> tuple:
@@ -773,8 +814,7 @@ def release_gate(
     """
     checks: List[Dict[str, Any]] = []
     reasons: List[str] = []
-    # an insufficient evaluation run measured nothing, so it counts nowhere
-    evidence = [r for r in evidence if evaluation_status(r) in (None, "passed", "failed") and _csv_fairness_status(r) != "insufficient"]
+    evidence = [r for r in counted_runs(evidence, now) if _csv_fairness_status(r) != "insufficient"]
     for key, label, types in gate_checks(include_environmental):
         matching = [r for r in evidence if gate_check(r) == key]
         if key == "environmental" and environmental_assessed and not matching:

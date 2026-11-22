@@ -377,7 +377,9 @@ async def _live_run_evaluation(db: Session, org_id: str, system_id: str, evaluat
         raise AutopilotError(str(e))
     by = f"agent:{AUTOPILOT_ACTOR}"
     evidence_id = evaluation_runs._store_run(db, org_id, by, system_id, evaluation_id,
-                                             {**outcome, "params": params, "files": {"traces": "Live runs, last 7 days"}, "source": "traces"})
+                                             {**outcome, "params": params, "files": {"traces": "Live runs, last 7 days"}, "source": "traces",
+                                              **evaluation_runs._record(engine, evaluation_id, "file", files, params),
+                                              "provenance": {"class": "computed_from_upload", "modelJudged": False}})
     return evidence_id, f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on this week's live runs; {outcome['status']}"
 
 

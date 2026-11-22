@@ -258,6 +258,15 @@ async def post_with_retry(client: httpx.AsyncClient, url: str, attempts: int = 1
     raise ValueError("attempts must be at least 1")
 
 
+async def post_at_zero(client: httpx.AsyncClient, url: str, attempts: int, body: Dict[str, Any]) -> httpx.Response:
+    """A Chat Completions call at temperature 0, so a run can be repeated; a provider that rejects the setting (OpenAI's
+    reasoning models do) is asked again at its own default."""
+    resp = await post_with_retry(client, url, attempts, json={**body, "temperature": 0})
+    if resp.status_code == 400 and "temperature" in resp.text.lower():
+        resp = await post_with_retry(client, url, attempts, json=body)
+    return resp
+
+
 async def list_models(conn: Connection) -> List[str]:
     if not conn.provider.lists_models:
         return []
@@ -284,9 +293,13 @@ async def list_models(conn: Connection) -> List[str]:
     return sorted({m["id"] for m in resp.json().get("data", []) if isinstance(m, dict) and m.get("id")})
 
 
-async def complete(conn: Connection, system: str, user: str, schema: Dict[str, Any], attempts: int = 1) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+async def complete(
+    conn: Connection, system: str, user: str, schema: Dict[str, Any], attempts: int = 1, deterministic: bool = False
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """One JSON answer and what it cost: (data, {"model", "latencyMs", "usage"}). attempts > 1 retries an
-    OpenAI-compatible provider's rate limits and gateway errors; the Anthropic SDK retries on its own."""
+    OpenAI-compatible provider's rate limits and gateway errors; the Anthropic SDK retries on its own.
+    deterministic asks an OpenAI-compatible provider for temperature 0 (post_at_zero); current Claude models
+    reject sampling settings, so the Anthropic call sends none."""
     if not conn.model:
         raise LLMError("Choose a model first")
     started = time.monotonic()
@@ -334,7 +347,8 @@ async def complete(conn: Connection, system: str, user: str, schema: Dict[str, A
         }
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT_S, headers=_headers(conn)) as client:
-                resp = await post_with_retry(client, f"{conn.base_url}/chat/completions", attempts, json=body)
+                url = f"{conn.base_url}/chat/completions"
+                resp = await (post_at_zero(client, url, attempts, body) if deterministic else post_with_retry(client, url, attempts, json=body))
         except httpx.TimeoutException:
             raise LLMError(f"{conn.provider.name} did not answer in time")
         except httpx.HTTPError:

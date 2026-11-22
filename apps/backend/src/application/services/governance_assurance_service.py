@@ -697,6 +697,8 @@ class GovernanceAssuranceService:
         run = run_row.id
         if run_row.schema_version == CATALOGUE_RUN_SCHEMA and run_row.result != "passed":
             raise ValueError("Only a passed run can support a control")
+        if run_row.schema_version == CATALOGUE_RUN_SCHEMA and run in self._outdated_catalogue_runs(org_id, artifact["system_id"]):
+            raise ValueError("This run no longer proves anything: it passed on loosened thresholds, is over a year old, or a newer run decides")
         existing = self.db.execute(select(mappings.c.id).where(mappings.c.evidence_id == run, mappings.c.control_assessment_id == assessment_id)).scalar_one_or_none()
         if existing:
             return self._mapping(existing), False
@@ -747,26 +749,39 @@ class GovernanceAssuranceService:
         }
 
     def _outdated_catalogue_runs(self, org_id: str, system_id: str) -> set[str]:
-        """Catalogue runs that no longer support a control, by the latest-run rule the release gate reads:
-        the evaluation's newest pass or fail on this system failed, or a material change came after the run."""
-        from src.application.services.fairness_run_service import _record_time
+        """Catalogue runs that no longer support a control, by the rules the release gate reads: the run itself proves nothing
+        (a loosened or year-old pass), its evaluation's deciding run on this system proves nothing (a newer failure or
+        insufficient run), or a material change came after the run."""
+        from src.application.services.fairness_run_service import EVALUATION_RUN, _record_time, deciding_runs, proof_status
         from src.application.services.system_lifecycle_service import reopened_since
 
-        runs = GovernanceEvidenceRun.__table__
+        runs, evidence = GovernanceEvidenceRun.__table__, GovernanceEvidence.__table__
         rows = self.db.execute(
-            select(runs.c.id, runs.c.source_identifier, runs.c.result, runs.c.captured_at)
-            .where(runs.c.org_id == org_id, runs.c.system_id == system_id, runs.c.schema_version == CATALOGUE_RUN_SCHEMA,
-                   runs.c.result.in_(("passed", "failed")))
-            .order_by(runs.c.captured_at, runs.c.created_at)
+            select(runs.c.id, runs.c.captured_at, evidence.c.content_json)
+            .join(evidence, evidence.c.id == runs.c.evidence_id)
+            .where(runs.c.org_id == org_id, runs.c.system_id == system_id, runs.c.schema_version == CATALOGUE_RUN_SCHEMA)
+            .order_by(runs.c.captured_at, runs.c.created_at)  # same-time runs: the later write decides
         ).all()
-        latest = {row.source_identifier: row.result for row in rows}
+        records = {}
+        for row in rows:
+            try:
+                content = json.loads(row.content_json or "{}")
+            except ValueError:
+                content = None
+            records[row.id] = {"evidenceType": EVALUATION_RUN, "content": content, "createdAt": row.captured_at}
+        deciding = {id(r) for r in deciding_runs(records.values()).values() if proof_status(r) == "passed"}
+        proving = {r["content"].get("evaluationId") for r in records.values() if id(r) in deciding}
         cut = max((at for at, _ in reopened_since(self.db, system_id).values()), default=None)
 
         def before_cut(raw: str | None) -> bool:  # undated goes with it, as in drop_superseded
             at = _record_time({"createdAt": raw})
             return at is None or at < cut
 
-        return {row.id for row in rows if latest[row.source_identifier] == "failed" or (cut is not None and before_cut(row.captured_at))}
+        return {
+            run_id for run_id, r in records.items()
+            if proof_status(r) != "passed" or not isinstance(r["content"], dict) or r["content"].get("evaluationId") not in proving
+            or (cut is not None and before_cut(r["createdAt"]))
+        }
 
     def readiness(self, org_id: str, assignment_id: str, include_policy: bool = True) -> dict | None:
         """Control counts for an assignment. Policy rules read it with include_policy=False, since
