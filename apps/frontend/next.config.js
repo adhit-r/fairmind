@@ -29,7 +29,7 @@ const nextConfig = {
     return [
       {
         source: '/audit-reports',
-        destination: '/reports?view=builder',
+        destination: '/reports/system',
         permanent: false,
       },
       {

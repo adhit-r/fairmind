@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
-from ..services.report_generator import generate_snapshot_docx, generate_snapshot_pdf
+from ..services.report_generator import generate_snapshot_csv, generate_snapshot_docx, generate_snapshot_pdf
 from .ai_governance import _require_report_access, _serialize_audit_report_row
 
 router = APIRouter(
@@ -25,7 +25,11 @@ router = APIRouter(
 )
 
 _DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-_FORMATS = {"pdf": ("application/pdf", generate_snapshot_pdf), "docx": (_DOCX, generate_snapshot_docx)}
+_FORMATS = {
+    "pdf": ("application/pdf", generate_snapshot_pdf),
+    "docx": (_DOCX, generate_snapshot_docx),
+    "csv": ("text/csv; charset=utf-8", generate_snapshot_csv),
+}
 
 
 class StoredReportExport(BaseModel):
@@ -37,10 +41,13 @@ class StoredReportExport(BaseModel):
 
 def _export(report_id: str, fmt: str, current_user: TokenData, db: Session) -> Response:
     row = _require_report_access(db, report_id, current_user)  # 404 across organizations
-    content_hash = hashlib.sha256((row.data_json or "").encode()).hexdigest()
+    # A sealed role report carries its seal (model plus approved summary); older snapshots hash their data at export.
+    content_hash = getattr(row, "sha256", None) or hashlib.sha256((row.data_json or "").encode()).hexdigest()
+    report = {**_serialize_audit_report_row(row), "narrative": getattr(row, "narrative", None),
+              "approvedBy": getattr(row, "approved_by", None), "approvedAt": getattr(row, "approved_at", None)}
     media_type, render = _FORMATS[fmt]
     return Response(
-        render(_serialize_audit_report_row(row), content_hash),
+        render(report, content_hash),
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename=audit_report_{row.id}.{fmt}"},
     )
@@ -62,6 +69,15 @@ def export_snapshot_docx(
     db: Session = Depends(get_db),
 ):
     return _export(report_id, "docx", current_user, db)
+
+
+@router.get("/snapshots/{report_id}/csv")
+def export_snapshot_csv(
+    report_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return _export(report_id, "csv", current_user, db)
 
 
 @router.post("/bias-evaluation/pdf")

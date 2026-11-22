@@ -4062,6 +4062,12 @@ class GovernanceAuditReport(Base):
     config_json = Column(Text, nullable=True)  # JSON: frameworks, date_range, sections
     data_json = Column(Text, nullable=True)  # Full snapshot of report data at generation time
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    # Role reports (report_type "role:<role>"): org-wide when system_id is null, sealed when a person approves them.
+    org_id = Column(String, nullable=True, index=True)
+    sha256 = Column(String, nullable=True)  # of the canonical {model, narrative}
+    narrative = Column(Text, nullable=True)  # the page-one summary as the approver left it
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(String, nullable=True)
 
     __table_args__ = (
         Index("idx_governance_audit_reports_system_id", "system_id"),
