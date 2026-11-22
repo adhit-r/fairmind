@@ -42,6 +42,22 @@ class Param:
 Judge = Callable[[str, str, Dict[str, Any]], Dict[str, Any]]
 
 
+def matches_schema(value: Any, schema: Dict[str, Any]) -> bool:
+    """A judge's answer has every required key and the declared booleans, integers, arrays and objects; strings are only read with str()."""
+    kind = schema.get("type")
+    if kind == "object":
+        props = schema.get("properties", {})
+        return (isinstance(value, dict) and all(k in value for k in schema.get("required", ()))
+                and all(matches_schema(value[k], sub) for k, sub in props.items() if k in value))
+    if kind == "array":
+        return isinstance(value, list) and all(matches_schema(v, schema.get("items", {})) for v in value)
+    if kind == "boolean":
+        return isinstance(value, bool)  # "false" is not false
+    if kind == "integer":  # JSON Schema counts 2.0 as an integer
+        return (isinstance(value, int) and not isinstance(value, bool)) or (isinstance(value, float) and value.is_integer())
+    return True
+
+
 @dataclass(frozen=True)
 class Engine:
     id: str
@@ -80,11 +96,12 @@ def result(status: str, summary: str, metrics: Dict[str, Any], detail: Optional[
     return {"status": status, "summary": summary, "metrics": metrics, "detail": rows[:MAX_DETAIL_ROWS], "detailTotal": len(rows)}
 
 
-def read_csv(raw: bytes, what: str) -> pd.DataFrame:
+def read_csv(raw: bytes, what: str, text: bool = False) -> pd.DataFrame:
+    """text keeps every cell as a string, so ids and yes/no flags never turn into floats like 1.0 when a cell is blank."""
     if not raw:
         raise EngineError(f"{what} is empty")
     try:
-        frame = pd.read_csv(io.BytesIO(raw))
+        frame = pd.read_csv(io.BytesIO(raw), dtype=str if text else None)
     except Exception as exc:  # pandas raises several parser errors
         raise EngineError(f"{what} is not a readable CSV: {exc}")
     if frame.empty:

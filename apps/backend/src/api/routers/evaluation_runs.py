@@ -52,6 +52,7 @@ from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, Targe
 from database.connection import get_db
 from database.governance_models import GovernanceEvidenceRun
 from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError, Judge
+from src.application.services.eval_engines.common import matches_schema
 from src.application.services.eval_engines.behaviour import CallError, Live
 from src.application.services.eval_engines.platform import load_export
 from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService, OrgMembership
@@ -88,10 +89,13 @@ def _judge(db: Session, org_id: str) -> Optional[Judge]:
 
     def judge(system: str, user: str, schema: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            return anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
+            answer = anyio.from_thread.run(llm.complete, conn, system, user, schema)[0]
         except llm.LLMError:
             # ponytail: the provider's reason is dropped here; the AI provider test in settings shows it
             raise EngineError("Your model could not judge this; test it under organization settings, AI provider")
+        if not matches_schema(answer, schema):  # a missing key or "false" for false is no verdict, never a pass
+            raise EngineError("Your model's answer was not in the expected format; test it under organization settings, AI provider")
+        return answer
 
     return judge
 

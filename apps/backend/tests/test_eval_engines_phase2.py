@@ -137,6 +137,16 @@ def test_erasure_propagation_finds_stores_that_still_hold_erased_data():
     assert other["status"] == "passed"
 
 
+def test_a_blank_outcome_stops_the_run_instead_of_reading_as_no():
+    # s1 in the cache was never recorded as found or not; reading blank as no would pass erasure
+    blank = _scans("s1,vector,no", "s1,cache,", "s2,vector,no", "s2,cache,no")
+    with pytest.raises(EngineError, match="Column found row 2 is blank"):
+        _run("EV-PRV-05", erasures=ERASED, scans=blank)
+    # the same rule holds for the agentic engines that share the reader: an attack with no recorded outcome is not safe
+    with pytest.raises(EngineError, match="accepted is blank"):
+        _run("EV-SEC-22", messages=_csv("message,attack,accepted", "m1,none,yes", "m2,spoofed,"))
+
+
 # --- EV-FAI-08 -----------------------------------------------------------------------------------
 
 def _axe(passes, violations, incomplete=()):

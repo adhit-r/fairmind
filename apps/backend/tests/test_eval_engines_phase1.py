@@ -55,6 +55,12 @@ def test_explanation_stability_is_mean_cosine_similarity_of_paired_attributions(
         _run("EV-OVS-05", {"min_similarity": 0.9}, pairs=_pairs("a,f1,0,1", "a,f2,0,1"))
 
 
+def test_a_blank_pair_id_stops_the_run_instead_of_dropping_rows():
+    # only the first row of the pair is labelled; groupby would drop the other two and report similarity 1
+    with pytest.raises(EngineError, match="column pair row 2 is blank"):
+        _run("EV-OVS-05", {"min_similarity": 0.9}, pairs=_pairs("1,a,1,1", ",b,1,-1", ",c,1,-1", "2,a,1,1", "2,b,2,2"))
+
+
 # --- EV-REL-01 -----------------------------------------------------------------------------------
 
 def _stored(*rows):
@@ -99,6 +105,12 @@ def test_reproducibility_is_agreement_between_two_runs_under_one_configuration()
     assert short["metrics"]["agreement"] == 0.75 and short["metrics"]["onlyInOneRun"] == 1
 
 
+def test_a_blank_id_in_both_runs_stops_the_run_instead_of_pairing():
+    a, b = _csv("id,result", "1,0.5", ",0.7"), _csv("id,result", "1,0.5", ",0.9")
+    with pytest.raises(EngineError, match="column id row 2 is blank"):
+        _run("EV-TST-09", {"tolerance": 0.5}, run_a=a, run_b=b, config_a=CFG, config_b=CFG)
+
+
 # --- EV-INC-01 -----------------------------------------------------------------------------------
 
 def test_incident_regression_counts_closed_incidents_with_a_test():
@@ -113,6 +125,12 @@ def test_incident_regression_counts_closed_incidents_with_a_test():
     missing = _run("EV-INC-01", {}, incidents=_csv("id,status,regression_test", "INC-1,closed,T1", "INC-3,closed,T9"), tests=_csv("id", "T1"))
     assert missing["status"] == "failed" and missing["metrics"]["withTest"] == 1
     assert _run("EV-INC-01", {}, incidents=_csv("id,status,regression_test", "INC-4,open,"))["status"] == "insufficient"
+
+
+def test_numeric_ids_still_match_when_a_cell_is_blank():
+    # an open incident with no test leaves a blank, which must not turn test 101 into 101.0 and miss the test list
+    inc = _csv("id,status,regression_test", "INC-1,closed,101", "INC-2,open,")
+    assert _run("EV-INC-01", {}, incidents=inc, tests=_csv("id", "101", "102"))["status"] == "passed"
 
 
 # --- EV-SLF-03 -----------------------------------------------------------------------------------

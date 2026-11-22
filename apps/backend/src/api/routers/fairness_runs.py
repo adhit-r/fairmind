@@ -50,6 +50,7 @@ from src.application.services.clause_map_service import POLICY_CONTROL, _catalog
 from src.application.services.decision_seal_service import list_seals
 from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
 from src.application.services.fairness_run_service import (
+    point_estimate_status,
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
     TIERS,
@@ -507,12 +508,14 @@ def list_fairness_runs(
     runs: List[Dict[str, Any]] = []
     for row in rows:
         content = json.loads(row[2] or "{}")
+        status = point_estimate_status(content)  # the same rule as EV-FAI-01/02 and the gate, not the significance-gated checks
         runs.append(
             {
                 "evidenceId": row[0],
                 "title": row[1],
                 "rows": content.get("rows"),
-                "allChecksPass": content.get("all_checks_pass"),
+                "allChecksPass": content.get("all_checks_pass") if status is None else status == "passed",
+                "status": status,
                 "attributes": [
                     {
                         "attribute": a.get("attribute"),
