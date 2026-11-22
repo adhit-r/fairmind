@@ -72,6 +72,8 @@ def test_full_audit_flow(tmp_database, monkeypatch):
     assert prepared.status_code == 200 and prepared.json() == {"prepared": 3, "wordedByModel": False}
     assert _counts(tmp_database) == before  # preparing wrote nothing outside internal_audit_*
 
+    mine = lambda who: sorted((i["areaName"], i["kind"], i["open"]) for i in who.get(f"{BASE}/mine").json()["items"])
+    assert mine(ann) == [("Risk", "conclude", 2), ("Support", "conclude", 1)] and mine(lead) == [] and mine(cy) == []
     area = ann.get(f"{BASE}/areas/{risk['id']}").json()
     assert area["area"]["checksTotal"] == 2 and area["area"]["checksDone"] == 0
     first, second = area["checks"]
@@ -106,6 +108,7 @@ def test_full_audit_flow(tmp_database, monkeypatch):
     # hand-over: not before every check is concluded, and only to and by the lead
     assert ann.post(f"{BASE}/areas/{support['id']}/send-to-lead").status_code == 409
     assert ann.post(f"{BASE}/areas/{risk['id']}/send-to-lead").status_code == 200
+    assert mine(lead) == [("Risk", "accept", 0)] and mine(ann) == [("Support", "conclude", 1)]
     assert lead.post(f"{BASE}/areas/{risk['id']}/send-to-lead").status_code == 403
     assert ann.post(f"{BASE}/areas/{risk['id']}/accept").status_code == 403
     assert lead.post(f"{BASE}/{audit}/issue").status_code == 409

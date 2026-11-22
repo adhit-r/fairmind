@@ -299,6 +299,23 @@ def list_audits(m: OrgMembership = Depends(_member), db: Session = Depends(get_d
     return {"audits": [_audit_json(r, people) for r in rows]}
 
 
+@router.get("/mine")
+def my_work(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    """The signed-in person's open audit work: areas to conclude, and areas sent to them as lead to accept."""
+    _ensure_tables(db)
+    rows = db.execute(
+        text("SELECT a.id AS audit_id, a.title, r.id AS area_id, r.name, "
+             "CASE WHEN r.status = 'fieldwork' THEN 'conclude' ELSE 'accept' END AS kind, "
+             "(SELECT COUNT(*) FROM internal_audit_checks c WHERE c.area_id = r.id AND c.grade IS NULL) AS open "
+             "FROM internal_audit_areas r JOIN internal_audits a ON a.id = r.audit_id "
+             "WHERE a.org_id = :org AND a.status = 'fieldwork' AND ((r.status = 'fieldwork' AND r.auditor_id = :me) "
+             "OR (r.status = 'sent_to_lead' AND a.lead_auditor_id = :me)) ORDER BY a.created_at, r.name"),
+        {"org": m.org_id, "me": m.user_id},
+    ).mappings().all()
+    items = [{"auditId": r["audit_id"], "auditTitle": r["title"], "areaId": r["area_id"], "areaName": r["name"], "kind": r["kind"], "open": r["open"]} for r in rows]
+    return {"items": [i for i in items if i["kind"] == "accept" or i["open"]]}
+
+
 @router.get("/areas/{area_id}")
 def read_area(area_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
