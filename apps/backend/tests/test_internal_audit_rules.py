@@ -80,7 +80,7 @@ def test_chain_detects_tampering():
 def test_a_failing_check_is_never_softened_and_the_basis_names_the_state():
     assert r.suggest_grade("fails", True)[0] == "major_nc"
     grade, basis = r.suggest_grade("none", True)
-    assert grade == "minor_nc" and "none" in basis and "open" not in basis
+    assert grade == "minor_nc" and "no evidence reaches this clause" in basis and "open" not in basis
 
 
 def test_unverifiable_owners_are_reported():

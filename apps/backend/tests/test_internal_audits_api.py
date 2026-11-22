@@ -188,14 +188,15 @@ def test_only_the_systems_own_people_soften_a_grade(tmp_database, monkeypatch):
     org, manager, lead, ann, audit, credit = _started(tmp_database, monkeypatch, lambda e: f"Risk,9.2,Credit model,{e},ops@acme.test\n", owner_of_credit="owner@acme.test")
     manager.post(f"{BASE}/{audit}/prepare")
     area, (check,) = _first_area(ann, audit)
-    assert check["suggestedGrade"] == "major_nc" and "none" in check["suggestedBasis"] + (check["cellState"] or "")
-    answer = lambda email: ann.post(f"/api/v1/public/owner-check/{ann.post(f'{BASE}/checks/{check['id']}/ask-owner', json={'email': email, 'text': 'Evidence?'}).json()['link'].rsplit('/', 1)[1]}/questions",
+    assert check["suggestedGrade"] == "major_nc" and "no evidence reaches this clause" in check["suggestedBasis"]
+    cid = check["id"]
+    answer = lambda email: ann.post(f"/api/v1/public/owner-check/{ann.post(f'{BASE}/checks/{cid}/ask-owner', json={'email': email, 'text': 'Evidence?'}).json()['link'].rsplit('/', 1)[1]}/questions",
                                     json={"answers": {"answer": "yes", "evidence": "https://x.acme.test"}})
     assert answer("stranger@acme.test").status_code == 200
     assert ann.get(f"{BASE}/areas/{area['id']}").json()["checks"][0]["suggestedGrade"] == "major_nc"  # not the process owner or the system's owner
     assert answer("owner@acme.test").status_code == 200
     softened = ann.get(f"{BASE}/areas/{area['id']}").json()["checks"][0]
-    assert softened["suggestedGrade"] == "minor_nc" and "none" in softened["suggestedBasis"]
+    assert softened["suggestedGrade"] == "minor_nc" and "no evidence reaches this clause" in softened["suggestedBasis"]
 
 
 def test_the_chain_vouches_for_the_grades_and_the_head(tmp_database, monkeypatch):

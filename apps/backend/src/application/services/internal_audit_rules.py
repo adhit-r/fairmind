@@ -20,6 +20,9 @@ MAX_ROWS = 5000
 MAX_COLS = 20
 
 
+_STATE_WHY = {"none": "no evidence reaches this clause", "open": "the clause is open"}
+
+
 def suggest_grade(cell_state: str, owner_answered_with_evidence: bool = False) -> Tuple[str, str]:
     """The grade the evidence suggests and the rule behind it. Only a person grades; this is the starting point."""
     if cell_state == "proven":
@@ -32,9 +35,10 @@ def suggest_grade(cell_state: str, owner_answered_with_evidence: bool = False) -
         return "minor_nc", f"Rule: a {cell_state} clause is a Minor NC."
     if cell_state == "fails":
         return "major_nc", "Rule: a clause with a failing check is a Major NC, whatever the owner says."
+    why = _STATE_WHY.get(cell_state, f"the clause is {cell_state}")
     if owner_answered_with_evidence:
-        return "minor_nc", f"Rule: a clause that is {cell_state} is a Major NC, but its owner answered with evidence, so it is a Minor NC."
-    return "major_nc", f"Rule: a clause that is {cell_state} with no evidence from its owner is a Major NC."
+        return "minor_nc", f"Rule: where {why}, the grade is a Major NC, but its owner answered with evidence, so it is a Minor NC."
+    return "major_nc", f"Rule: where {why} and the owner gave no evidence, the grade is a Major NC."
 
 
 def _ids(*values: Optional[str]) -> set:

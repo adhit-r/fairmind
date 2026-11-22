@@ -33,6 +33,7 @@ export default function AuditPage() {
   const [approver, setApprover] = useState('')
   const [reassigning, setReassigning] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [preparing, setPreparing] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -62,7 +63,7 @@ export default function AuditPage() {
   const isLead = mine(user?.id, audit.leadAuditorId)
   const planning = audit.status === 'planning'
   const issued = audit.status === 'issued'
-  const locked = busy || issued
+  const locked = busy || preparing || issued
   const conflictFor = (a: AuditArea) => blockingConflict(conflicts, a.id)
   const warnFor = (a: AuditArea) => warningFor(conflicts, a.id)
   const leadConflicts = conflicts.filter((c) => !c.areaId || c.kind?.startsWith('lead_'))
@@ -181,7 +182,7 @@ export default function AuditPage() {
                         <Link className="name" href={`/internal-audit/${id}/areas/${a.id}`}>{a.name}</Link>
                         <small>{a.clauses.join(' · ')}</small>
                       </span>
-                      <span>{a.systemIds.length} system{a.systemIds.length === 1 ? '' : 's'}{a.processOwner ? ` · ${a.processOwner}` : ''}</span>
+                      <span>{a.systemNames.join(', ') || 'No systems'}{a.processOwner ? ` · ${a.processOwner}` : ''}</span>
                       <span className={conflict ? 'ia-bad' : ''}>
                         {reassigning === a.id ? (
                           <Selector label="Auditor" size="sm" options={options} value={a.auditorId ?? ''} onChange={(v) => { setReassigning(null); void act(() => reassignArea(orgId, a.id, String(v))) }} />
@@ -203,7 +204,7 @@ export default function AuditPage() {
                         )}
                       </span>
                       <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                        <span>{STATUS[a.status] ?? a.status}</span>
+                        <span>{planning ? 'Planned' : (STATUS[a.status] ?? a.status)}</span>
                         {isLead && !issued && conflict && reassigning !== a.id && <Button label="Reassign" size="sm" variant="secondary" isDisabled={locked} onClick={() => setReassigning(a.id)} />}
                         {isLead && a.status === 'sent_to_lead' && <Button label="Accept area" size="sm" variant="primary" isDisabled={locked} onClick={() => void act(() => acceptArea(orgId, a.id))} />}
                       </span>
@@ -213,8 +214,12 @@ export default function AuditPage() {
               </div>
             )}
             {isLead && audit.status === 'fieldwork' && (
-              <div>
-                <Button label="Prepare evidence" variant="secondary" isDisabled={locked} onClick={() => void act(() => prepareEvidence(orgId, id), 'The assistant read the evidence for every check not yet graded.')} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+                <Button label={preparing ? 'Preparing…' : 'Prepare evidence'} variant="secondary" isDisabled={locked} onClick={() => {
+                  setPreparing(true)
+                  void act(() => prepareEvidence(orgId, id), 'The assistant read the evidence for every check not yet graded.').finally(() => setPreparing(false))
+                }} />
+                {preparing && <Text color="secondary">The assistant is reading the evidence. This can take a minute.</Text>}
               </div>
             )}
           </VStack>

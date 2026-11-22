@@ -73,7 +73,7 @@ function Paper({ check, mayWrite, busy, orgId, act }: { check: AuditCheck; mayWr
         <div className="ia-grades" role="radiogroup" aria-label="Grade">
           {GRADES.map((g) => (
             <label key={g.value}>
-              <input type="radio" name="grade" checked={grade === g.value} disabled={!mayWrite || !!check.grade} onChange={() => setGrade(g.value)} /> {g.label}
+              <input type="radio" name="grade" aria-label={g.label} checked={grade === g.value} disabled={!mayWrite || !!check.grade} onChange={() => setGrade(g.value)} /> {g.label}
             </label>
           ))}
         </div>

@@ -43,6 +43,7 @@ export interface AuditArea {
   name: string
   clauses: string[]
   systemIds: string[]
+  systemNames: string[]
   processOwner: string | null
   auditorId: string | null
   auditorEmail: string | null

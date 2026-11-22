@@ -245,11 +245,11 @@ def _audit_json(audit, people) -> Dict[str, Any]:
     }
 
 
-def _area_json(area, people, progress) -> Dict[str, Any]:
+def _area_json(area, people, progress, systems: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     total, done, waiting = progress.get(area["id"], (0, 0, 0))
     return {
         "id": area["id"], "auditId": area["audit_id"], "name": area["name"], "clauses": _json(area["clauses"], []),
-        "systemIds": _json(area["system_ids"], []), "processOwner": area["process_owner"], "auditorId": area["auditor_id"],
+        "systemIds": _json(area["system_ids"], []), "systemNames": [(systems or {}).get(i, {}).get("name") or i for i in _json(area["system_ids"], [])], "processOwner": area["process_owner"], "auditorId": area["auditor_id"],
         "auditorEmail": people.get(area["auditor_id"]) if area["auditor_id"] else None, "status": area["status"],
         "checksTotal": total, "checksDone": done, "waitingOnOwner": waiting,
     }
@@ -308,7 +308,7 @@ def read_area(area_id: str, m: OrgMembership = Depends(_member), db: Session = D
     checks = db.execute(text("SELECT * FROM internal_audit_checks WHERE area_id = :a ORDER BY clause, system_id"), {"a": area_id}).mappings().all()
     titles = _titles(audit["framework_key"])
     return {
-        "area": {**_area_json(area, people, _progress(db, audit["id"])), "auditStatus": audit["status"], "leadAuditorId": audit["lead_auditor_id"],
+        "area": {**_area_json(area, people, _progress(db, audit["id"]), systems), "auditStatus": audit["status"], "leadAuditorId": audit["lead_auditor_id"],
                  "conflicts": _area_conflicts(area, people, systems)},
         "checks": [_check_json(db, c, systems, titles) for c in checks],
     }
@@ -332,7 +332,7 @@ def read_audit(audit_id: str, m: OrgMembership = Depends(_member), db: Session =
     for grade, n in db.execute(text("SELECT grade, COUNT(*) FROM internal_audit_checks WHERE audit_id = :a AND grade IS NOT NULL GROUP BY grade"), {"a": audit_id}).fetchall():
         counts[grade] = n
     return {
-        "audit": _audit_json(audit, people), "team": list(team.values()), "areas": [_area_json(a, people, progress) for a in areas],
+        "audit": _audit_json(audit, people), "team": list(team.values()), "areas": [_area_json(a, people, progress, systems) for a in areas],
         "conflicts": _all_conflicts(db, audit, people, systems),
         "gradeCounts": {**counts, "notConcluded": sum(p[0] - p[1] for p in progress.values())},
         "unmatchedLines": _json(audit["unmatched_lines"], []),
