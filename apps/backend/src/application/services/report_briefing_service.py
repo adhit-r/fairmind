@@ -137,16 +137,17 @@ REWRITE_SYSTEM = (
 REWRITE_SCHEMA = {"type": "object", "properties": {"sentences": {"type": "array", "items": {"type": "string"}}}, "required": ["sentences"], "additionalProperties": False}
 
 
-async def briefing_with_model(conn: Any, model: Dict[str, Any]) -> Dict[str, Any]:
-    """Ask the organisation's model to reword the template; keep the template unless the reply passes accept_rewrite."""
-    import json
+async def briefing_with_model(complete: Any, conn: Any, model: Dict[str, Any]) -> Dict[str, Any]:
+    """Ask the organisation's model to reword the template; keep the template unless the reply passes accept_rewrite.
 
-    from api.routes import llm
+    complete is the api layer's llm.complete(conn, system, user, schema), handed in by the route.
+    """
+    import json
 
     sentences, facts = _sentences(model)
     prompt = json.dumps({"reader": model["role"], "draft": sentences, "facts": {k: {"note": v["note"]} for k, v in facts.items()}})
     try:
-        data, _ = await llm.complete(conn, REWRITE_SYSTEM, prompt, REWRITE_SCHEMA)
+        data, _ = await complete(conn, REWRITE_SYSTEM, prompt, REWRITE_SCHEMA)
     except Exception:  # any provider failure keeps the template
         return {"source": "template", "parts": _parts(sentences, facts)}
     parts = accept_rewrite(data.get("sentences") or [], facts)

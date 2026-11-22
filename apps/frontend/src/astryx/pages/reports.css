@@ -80,7 +80,7 @@
 .rp-seg i { display: block; border-radius: 999px; min-width: 0; }
 .rp-seg.tall { height: 30px; } .rp-seg.tall i { border-radius: 6px; }
 .f-m { background: var(--rp-measured); }
-.f-e { background: radial-gradient(var(--rp-measured) 1.1px, var(--rp-attested-x) 1.4px) 0 0 / 5px 5px; }
+.f-e { background: color-mix(in oklab, var(--rp-measured) 45%, var(--color-background-card)); }
 .f-a { background: var(--rp-attested); }
 .f-o { box-shadow: inset 0 0 0 1.5px var(--color-border-emphasized); }
 .f-ok { background: var(--color-success); } .f-cond { background: var(--rp-amber); } .f-err { background: var(--color-error); } .f-none { background: var(--rp-sunk); box-shadow: inset 0 0 0 1px var(--rp-line); }
@@ -162,7 +162,7 @@
 .rp-heat td.c { height: 28px; min-width: 56px; border-radius: 6px; text-align: center; }
 .rp-heat td.c.v { background: none; min-width: 120px; }
 .rp-heat td.grp { padding: 10px 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--color-text-secondary); }
-.rp-heat td.na { background: repeating-linear-gradient(135deg, var(--rp-grid) 0 2px, transparent 2px 6px); }
+.rp-heat td.na { background: none; outline: 1px dashed var(--rp-line); outline-offset: -1px; }
 .t-met { background: var(--color-success); } .t-progress { background: var(--rp-amber); } .t-attention { background: var(--color-error); } .t-notstarted { background: var(--rp-sunk); box-shadow: inset 0 0 0 1px var(--rp-line); }
 .rp-gridscroll { max-height: 520px; overflow: auto; }
 .rp-gridscroll thead th { position: sticky; top: 0; background: var(--color-background-card); z-index: 1; }
@@ -196,7 +196,7 @@
 .rp-mos .sq i { width: 24px; height: 24px; border-radius: 5px; display: block; }
 .m-met { background: var(--color-success); } .m-part { background: var(--rp-amber); } .m-bad { background: var(--color-error); }
 .m-open { box-shadow: inset 0 0 0 2px var(--color-warning); }
-.m-exc { background: repeating-linear-gradient(135deg, var(--color-border-emphasized) 0 2px, transparent 2px 6px); box-shadow: inset 0 0 0 1px var(--rp-line); }
+.m-exc { background: none; outline: 1.5px dashed var(--color-border-emphasized); outline-offset: -1.5px; }
 .rp-legend .m-open { width: 10px; height: 10px; }
 @media (max-width: 560px) { .rp-mos .g { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
 

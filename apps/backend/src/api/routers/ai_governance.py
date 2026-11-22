@@ -3243,11 +3243,14 @@ ROLE_REPORT_TITLES = {
 
 
 def _role_report_model(db: Session, http: Request, current_user: TokenData, role: str, system_id: Optional[str], framework: Optional[str]) -> Dict[str, Any]:
-    from src.application.services.report_model_service import build_overview
+    from api.routes.fairness_runs import _gate_payload  # function-level: that router imports this one
+    from api.routes.packs import _verify_chain
+    from src.application.services.report_model_service import Sources, build_overview
 
     if system_id:
         _require_system_access(db, system_id, current_user)
-    return build_overview(db, _caller_org(http), role, system_id or None, framework or None)
+    sources = Sources(gate_payload=_gate_payload, verify_run_chain=_verify_chain)
+    return build_overview(db, _caller_org(http), role, sources, system_id or None, framework or None)
 
 
 @router.get("/reports/overview", dependencies=[Depends(org_member)])
@@ -3272,6 +3275,7 @@ async def reword_report_briefing(
     db: Session = Depends(get_db),
 ):
     """The briefing reworded by the organisation's own model, citing only the model's facts; the template otherwise."""
+    from api.routes import llm
     from api.routes.packs import _ai_row, _stored_connection
     from src.application.services.report_briefing_service import briefing_with_model
 
@@ -3282,7 +3286,7 @@ async def reword_report_briefing(
         return model["briefing"]
     conn = _stored_connection(row)
     db.rollback()  # hold no transaction open while the model works
-    return await briefing_with_model(conn, model)
+    return await briefing_with_model(llm.complete, conn, model)
 
 
 @router.post("/reports/snapshots", dependencies=[Depends(org_mutator)])

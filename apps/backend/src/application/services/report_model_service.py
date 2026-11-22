@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import random
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -63,11 +64,23 @@ def _pct(part: float, whole: float) -> int:
     return round(100 * part / whole) if whole else 0
 
 
+@dataclass(frozen=True)
+class Sources:
+    """What the model reads that lives in the api layer, handed in by the route so this layer never imports it.
+
+    gate_payload(db, system_id, tier) is the release gate with its path forward (fairness_runs._gate_payload);
+    verify_run_chain(events) recomputes one workflow run's hash chain (packs._verify_chain).
+    """
+
+    gate_payload: Callable[[Session, str, str], Dict[str, Any]]
+    verify_run_chain: Callable[[List[Dict[str, Any]]], bool]
+
+
 class Estate:
     """The systems in scope and, lazily, each one's gate and clause map, so every section shares one computation."""
 
-    def __init__(self, db: Session, org_id: str, system_id: Optional[str], framework: Optional[str]):
-        self.db, self.org_id = db, org_id
+    def __init__(self, db: Session, org_id: str, system_id: Optional[str], framework: Optional[str], sources: "Sources"):
+        self.db, self.org_id, self.sources = db, org_id, sources
         catalogue = _catalogue()["frameworks"]
         self.plan = [k for k in plan_frameworks(db, org_id) if k in catalogue]
         rows = db.execute(
@@ -94,9 +107,7 @@ class Estate:
 
     def gate(self, system: Dict[str, Any]) -> Dict[str, Any]:
         if system["id"] not in self._gates:
-            from api.routes.fairness_runs import _gate_payload  # function-level: routers import services
-
-            self._gates[system["id"]] = _gate_payload(self.db, system["id"], system["tier"])
+            self._gates[system["id"]] = self.sources.gate_payload(self.db, system["id"], system["tier"])
         return self._gates[system["id"]]
 
     def clauses(self, system: Dict[str, Any], framework: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -417,7 +428,6 @@ def engineering_section(e: Estate) -> Dict[str, Any]:
 
 def _chains(e: Estate) -> Dict[str, Any]:
     """Every hash chain the organisation has, verified now; the newest entries for the strip."""
-    from api.routes.packs import _verify_chain
     from src.application.services.internal_audit_rules import verify_chain as verify_audit
     from src.application.services.system_lifecycle_service import verify_chain as verify_lifecycle
 
@@ -435,7 +445,7 @@ def _chains(e: Estate) -> Dict[str, Any]:
     for r in rows:
         by_run.setdefault(r["run_id"], []).append(dict(r))
         recent.append({"at": r["created_at"], "kind": "decision" if r["kind"] == "gate.decided" else "agent" if _json(r["payload_json"], {}).get("source") == "agent" else "step", "hash": r["hash"]})
-    broken = [run for run, ev in by_run.items() if not _verify_chain(ev)]
+    broken = [run for run, ev in by_run.items() if not e.sources.verify_run_chain(ev)]
     chains.append({"kind": "Workflow runs", "chains": len(by_run), "entries": len(rows), "broken": len(broken)})
     try:
         audit_rows = e.db.execute(
@@ -551,12 +561,12 @@ SECTIONS: Dict[str, Tuple[str, ...]] = {
 }
 
 
-def build_overview(db: Session, org_id: str, role: str, system_id: Optional[str] = None, framework: Optional[str] = None,
+def build_overview(db: Session, org_id: str, role: str, sources: Sources, system_id: Optional[str] = None, framework: Optional[str] = None,
                    today: Optional[date] = None) -> Dict[str, Any]:
     if role not in ROLES:
         raise ValueError(f"Unknown role {role!r}")
     today = today or datetime.now(timezone.utc).date()
-    e = Estate(db, org_id, system_id, framework)
+    e = Estate(db, org_id, system_id, framework, sources)
     model: Dict[str, Any] = {
         "role": role,
         "scope": {"systemId": system_id, "systemName": e.systems[0]["name"] if system_id and e.systems else None},
