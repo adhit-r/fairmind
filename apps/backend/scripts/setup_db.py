@@ -75,6 +75,7 @@ ALWAYS = (
     "016_registration_requests.sql",
     "017_org_ai_providers.sql",
     "028_framework_scope.sql",
+    "029_internal_audits.sql",
 )
 
 

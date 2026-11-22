@@ -4778,3 +4778,87 @@ class GovernanceAgentTraceStep(Base):
     error = Column(Text, nullable=True)
     started_at = Column(String, nullable=True)
     ended_at = Column(String, nullable=True)
+
+
+class InternalAudit(Base):
+    """An internal audit programme (ISO/IEC 42001 clause 9.2); see api/routers/internal_audits.py."""
+
+    __tablename__ = "internal_audits"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    framework_key = Column(String, nullable=False)
+    period_start = Column(String, nullable=True)
+    period_end = Column(String, nullable=True)
+    fieldwork_start = Column(String, nullable=True)
+    fieldwork_end = Column(String, nullable=True)
+    lead_auditor_id = Column(String, nullable=False)
+    plan_filename = Column(String, nullable=True)
+    plan_sha256 = Column(String, nullable=True)
+    plan_approved_by = Column(String, nullable=True)
+    plan_approved_at = Column(String, nullable=True)
+    unmatched_lines = Column(Text, nullable=False, default="[]")  # JSON: plan values that matched nothing
+    status = Column(String, nullable=False, default="planning")  # planning, fieldwork or issued
+    issued_by = Column(String, nullable=True)
+    issued_at = Column(String, nullable=True)
+    trace_head = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class InternalAuditArea(Base):
+    """One area of the audit plan, with its auditor and process owner."""
+
+    __tablename__ = "internal_audit_areas"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    audit_id = Column(String, ForeignKey("internal_audits.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    clauses = Column(Text, nullable=False, default="[]")  # JSON list
+    system_ids = Column(Text, nullable=False, default="[]")  # JSON list
+    process_owner = Column(String, nullable=True)  # an email or a user id
+    auditor_id = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="fieldwork")  # fieldwork, sent_to_lead or accepted
+
+
+class InternalAuditCheck(Base):
+    """One clause audited on one AI system, and the auditor's conclusion."""
+
+    __tablename__ = "internal_audit_checks"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    audit_id = Column(String, ForeignKey("internal_audits.id"), nullable=False, index=True)
+    area_id = Column(String, ForeignKey("internal_audit_areas.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=False)
+    clause = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    question = Column(Text, nullable=True)
+    assistant_summary = Column(Text, nullable=True)
+    evidence = Column(Text, nullable=False, default="[]")  # JSON list of {kind, ref, text, found}
+    cell_state = Column(String, nullable=True)
+    suggested_grade = Column(String, nullable=True)
+    suggested_basis = Column(Text, nullable=True)
+    grade = Column(String, nullable=True)  # conformity, observation, minor_nc or major_nc; set by the auditor
+    statement = Column(Text, nullable=True)
+    override_reason = Column(Text, nullable=True)
+    concluded_by = Column(String, nullable=True)
+    concluded_at = Column(String, nullable=True)
+    owner_check_id = Column(String, nullable=True)
+    remediation_task_id = Column(String, nullable=True)
+
+
+class InternalAuditEvent(Base):
+    """One link of an audit's hash chain."""
+
+    __tablename__ = "internal_audit_events"
+
+    audit_id = Column(String, ForeignKey("internal_audits.id"), primary_key=True)
+    seq = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)
+    actor = Column(String, nullable=True)
+    payload = Column(Text, nullable=False, default="{}")
+    prev_hash = Column(String, nullable=False)
+    hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
