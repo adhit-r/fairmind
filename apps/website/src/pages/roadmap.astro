@@ -246,7 +246,7 @@ const structuredData = {
           <span class="rm-signal">{ACTIVITY.totalCommits.toLocaleString()} commits on main</span>
           <div class="rm-split-bar"><i style={`--w:${claudeShare * 100}%`} /></div>
           <div class="rm-k"><i style="background:var(--rm-ink)" /><span>Written with Claude</span><b data-count={ACTIVITY.claudeCommits}>{ACTIVITY.claudeCommits.toLocaleString()}</b></div>
-          <div class="rm-k"><i style="background:#c9cbc8" /><span>Written by people alone</span><b>{(ACTIVITY.totalCommits - ACTIVITY.claudeCommits).toLocaleString()}</b></div>
+          <div class="rm-k"><i style="background:#c9cbc8" /><span>Without a Claude co-author line</span><b>{(ACTIVITY.totalCommits - ACTIVITY.claudeCommits).toLocaleString()}</b></div>
           <div class="rm-k"><i style="background:var(--rm-teal)" /><span>OpenAI Codex</span><b>writes and reviews pull requests</b></div>
           <span class="rm-fine">Claude commits are those whose message names Claude as a co-author. Counted on {ACTIVITY.generatedAt}.</span>
         </div>
