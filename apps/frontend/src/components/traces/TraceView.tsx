@@ -92,6 +92,7 @@ export function TraceView({ systemId, traceId, flag }: { systemId: string; trace
                 ) : EXPLAINS.has(s.kind) && s.status !== 'running' ? (
                   <span className="flex gap-1.5 text-[12.5px] text-[#8a5200]"><CircleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />No reason given</span>
                 ) : null}
+                {s.status === 'blocked' && <span className="text-[12.5px] text-[#8a5200]">Blocked by a guardrail</span>}
                 {s.error && <span className="text-[12.5px] text-[#b4232c]">{s.error}</span>}
                 {text(s.output) && (
                   <span className={`break-words rounded-[8px] border border-[var(--fm-line)] bg-white px-2.5 py-1.5 font-mono text-[11.5px] ${MUTED}`}>{text(s.output).slice(0, 600)}</span>

@@ -5,7 +5,7 @@ import itertools
 import json
 import math
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -124,6 +124,32 @@ def _normalise(text: Any) -> str:
     return re.sub(r"\s+", " ", str(text).lower()).strip().rstrip(" .,!?;:")
 
 
+YES = {"yes", "yeah", "yep", "correct", "true", "right", "sure", "definitely", "absolutely"}
+NO = {"no", "nope", "incorrect", "false", "wrong", "never"}
+# "no" negates only before a word ("no refund"), not as a reply ("No, ...") or in an idiom ("no problem").
+# shortcut: the idiom list is short and English only; extend it when real answers show others.
+NEGATION = re.compile(r"\b(?:not|never|none|nothing|nobody|neither|nor|cannot)\b|n['\u2019]t\b"
+                      r"|\bno\b(?! (?:problem|worries|doubt|question)\b)(?= [a-z])")
+NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
+
+
+def _stance(norm: str) -> Tuple[Optional[str], bool, frozenset]:
+    """What lexical similarity misses in a normalised answer: a leading yes or no, whether it is negated, and its numbers."""
+    first = re.match(r"[a-z]+(?=[,.;:!?]|$)", norm)  # a reply word stands alone: "yes, ..." but not "right now ..."
+    word = first.group(0) if first else ""
+    lead = "yes" if word in YES else "no" if word in NO else None
+    return lead, bool(NEGATION.search(norm)), frozenset(float(n.replace(",", "")) for n in NUMBER.findall(norm))
+
+
+def _contradiction(a: Tuple[Optional[str], bool, frozenset], b: Tuple[Optional[str], bool, frozenset]) -> str:
+    """Why two answers disagree however many words they share, or "" when nothing lexical says so."""
+    if a[2] and b[2] and a[2] != b[2]:  # one answer adding a figure the other leaves out is not a disagreement
+        return "different numbers"
+    if a[0] and b[0]:
+        return "yes against no" if a[0] != b[0] else ""
+    return "one answer is negated" if a[1] != b[1] else ""
+
+
 def answer_consistency(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     pc, ac = _name(params, "prompt_column", "prompt"), _name(params, "answer_column", "answer")
     threshold = number(params, "similarity", 0.8)
@@ -135,6 +161,7 @@ def answer_consistency(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[
     except ValueError:  # every answer is empty or only stop-characters
         vectors = None
     norm = d["norm"].to_numpy()
+    stances = [_stance(n) for n in norm]
 
     total, bad = 0, []
     for prompt, idx in d.groupby(pc, sort=False).indices.items():
@@ -144,9 +171,11 @@ def answer_consistency(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[
         same = norm[idx][:, None] == norm[idx][None, :]
         sim = (vectors[idx] @ vectors[idx].T).toarray() if vectors is not None else np.zeros((len(idx), len(idx)))
         lowest = float(np.where(same, 1.0, sim)[np.triu_indices(len(idx), 1)].min())
-        if lowest < threshold - 1e-9:
-            bad.append({"prompt": str(prompt)[:200], "answers": len(idx), "lowestSimilarity": round(lowest, 4)})
-    metrics: Dict[str, Any] = {"prompts": int(d[pc].nunique()), "promptsWithRepeats": total, "inconsistentPrompts": len(bad)}
+        clash = next((why for i, j in zip(*np.triu_indices(len(idx), 1)) if (why := _contradiction(stances[idx[i]], stances[idx[j]]))), "")
+        if lowest < threshold - 1e-9 or clash:
+            bad.append({"prompt": str(prompt)[:200], "answers": len(idx), "lowestSimilarity": round(lowest, 4), "contradiction": clash})
+    metrics: Dict[str, Any] = {"prompts": int(d[pc].nunique()), "promptsWithRepeats": total, "inconsistentPrompts": len(bad),
+                               "contradictedPrompts": sum(1 for r in bad if r["contradiction"])}
     if total == 0:
         return result("insufficient", "No prompt has two or more answers, so consistency cannot be measured.", metrics)
     share = 1 - len(bad) / total
@@ -516,7 +545,8 @@ ENGINES: List[Engine] = [
     ),
     Engine(
         id="EV-TST-02",
-        method="A prompt is consistent when every pair of its answers matches after normalising or has TF-IDF cosine similarity at or above the threshold.",
+        method="A prompt is consistent when every pair of its answers matches after normalising or has TF-IDF cosine similarity at or above the "
+               "threshold, and no pair answers yes against no, negates the other or gives different numbers.",
         slots=(Slot("answers", "Answers", "CSV with several answers per prompt."),),
         params=(
             Param("prompt_column", "Prompt column", "Column identifying the prompt.", default="prompt"),

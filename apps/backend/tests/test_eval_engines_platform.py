@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from src.application.services.eval_engines import REGISTRY, EngineError
 from src.application.services.eval_engines.platform import load_export, tools
+from tests.known_answer import clause_judge
 from tests.test_packs_routes import PACKS, _org, _system, no_rate_limit, tmp_database  # noqa: F401  (fixtures)
 
 FAKE_GH = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"
@@ -63,7 +64,8 @@ def test_tools_resolve_defaults_and_overrides():
 
 
 def test_system_prompts_need_every_clause_in_every_agent():
-    assert _check("EV-DEV-01", _snap())["status"] == "passed"
+    assert _check("EV-DEV-01", _snap())["status"] == "insufficient"  # keywords only
+    assert _check("EV-DEV-01", _snap(), judge=clause_judge())["status"] == "passed"
     bad = _check("EV-DEV-01", _snap(agents=[_agent(), _agent(id="agent_2", name="Bare", system=None)]))
     assert bad["status"] == "failed" and bad["metrics"]["agentsMissingClauses"] == 1
 
@@ -157,8 +159,8 @@ def test_the_platform_judge_rejects_a_verdict_off_its_schema(monkeypatch, eid, b
         anyio.run(anyio.to_thread.run_sync, lambda: _check(eid, _snap(**snap), judge=judge))
 
 
-def test_session_isolation_fails_on_shared_writable_memory_and_never_passes_by_assumption():
-    assert _check("EV-SEC-20", _snap())["status"] == "insufficient"
+def test_session_isolation_fails_on_shared_writable_memory_and_passes_with_no_configured_path_out():
+    assert _check("EV-SEC-20", _snap())["status"] == "passed"  # cloud env, egress limited, store written by one agent
     shared = _snap()
     shared["sessions"].append({"id": "sesn_2", "agent": {"id": "agent_2"}, "environment_id": "env_1",
                                "resources": [{"type": "memory_store", "memory_store_id": "memstore_1"}]})
@@ -200,7 +202,7 @@ def test_memory_scan_is_insufficient_on_memories_without_content_or_a_capped_sto
 
 def test_mcp_auth_matches_vault_credentials_by_normalised_url():
     out = _check("EV-SEC-19", _snap())
-    assert out["status"] == "insufficient" and out["metrics"]["unauthenticated"] == 0  # authenticated; per-tool authorisation is the server's
+    assert out["status"] == "passed" and out["metrics"]["unauthenticated"] == 0  # authenticated; every tool on but always_ask
     no_cred = _snap(vaults=[{"id": "vlt_1", "credentials": []}])
     assert _check("EV-SEC-19", no_cred)["status"] == "failed"
     assert _check("EV-SEC-19", _snap(agents=[_agent(mcp_servers=[])]))["status"] == "passed"
@@ -282,6 +284,7 @@ def test_the_reader_lists_everything_and_drops_session_copies_of_agents(fake_pla
     assert platform_connections.counts(snap) == {"agents": 1, "environments": 1, "deployments": 1, "vaults": 1, "credentials": 1,
                                                  "memoryStores": 1, "memories": 1, "sessions": 1}
     assert "system" not in snap["sessions"][0]["agent"]
+    assert snap["sessions_capped"] is False  # 1 session, under MAX_SESSIONS: EV-SEC-20 may treat the list as whole
     assert {name for name, _, _ in fake_platform} == {"agents", "environments", "deployments", "vaults", "credentials", "memory_stores", "memories", "sessions"}
     assert next(kw for name, _, kw in fake_platform if name == "memories")["view"] == "full"
 

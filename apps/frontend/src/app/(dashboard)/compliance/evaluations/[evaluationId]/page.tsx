@@ -4,7 +4,7 @@ import '@/astryx/pages/evaluations.css'
 import Link from 'next/link'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Activity, ArrowLeftRight, Bot, Boxes, Check, Cloud, Code, Cpu, Info, MessageSquare, Network, Play, Plug, Scale, Server, Upload } from 'lucide-react'
+import { Activity, ArrowLeftRight, Bot, Boxes, Check, Cloud, Code, Cpu, Database, Info, MessageSquare, Network, Play, Plug, Scale, Server, Upload } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { FileInput } from '@astryxdesign/core/FileInput'
@@ -106,6 +106,7 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
       <div className="flex flex-wrap items-center gap-2.5">
         <ResultPill status={run.status} />
         {run.thresholdLoosened && <Pill tone="warn">Loosened thresholds: not counted as proof</Pill>}
+        {run.partialRead && run.status === 'passed' && <Pill tone="warn">Read part of the week's live runs: not counted as proof</Pill>}
         <span className={`text-[13px] ${MUTED}`}>
           {run.systemName}, {when(run.createdAt)}
           {Object.values(run.files).length > 0 && `, from ${run.source === 'connection' ? 'the connection to ' : ''}${Object.values(run.files).join(' and ')}`}
@@ -134,16 +135,17 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
   )
 }
 
-const WAY_LABEL: Record<RunWay, string> = { calls_system: 'Call the system', live_runs: 'Live runs', platform: 'Platform connection', files: 'Upload files' }
-const WAY_ICON: Record<RunWay, typeof Plug> = { calls_system: Plug, live_runs: Activity, platform: Network, files: Upload }
+const WAY_LABEL: Record<RunWay, string> = { calls_system: 'Call the system', live_runs: 'Live runs', platform: 'Platform connection', fairmind_data: "FairMind's data", files: 'Upload files' }
+const WAY_ICON: Record<RunWay, typeof Plug> = { calls_system: Plug, live_runs: Activity, platform: Network, fairmind_data: Database, files: Upload }
 /** What a ready or missing way reads as beside the system. */
 const WAY_STATE: Partial<Record<RunWay, [ready: string, missing: string]>> = {
   calls_system: ['Connected', 'Not connected'],
   live_runs: ['Live runs this week', 'No live runs'],
   platform: ['Platform connected', 'Platform not connected'],
+  fairmind_data: ['On file in FairMind', 'Nothing on file yet'],
 }
 /** What the chosen way asks of the system, for the header. */
-const WAY_HEAD: Record<RunWay, string> = { calls_system: 'Calls the system', live_runs: 'Reads live runs', platform: 'Reads the platform', files: 'Needs a file' }
+const WAY_HEAD: Record<RunWay, string> = { calls_system: 'Calls the system', live_runs: 'Reads live runs', platform: 'Reads the platform', fairmind_data: "Reads FairMind's records", files: 'Needs a file' }
 const KIND_ICON: Record<string, typeof Plug> = { llm_app: MessageSquare, ml_model: Boxes, agent: Bot, ai_service: Cloud, ai_assisted_dev: Code, mcp_server: Server }
 
 function Node({ icon, title, sub, state }: { icon: ReactNode; title: string; sub?: string; state?: 'ok' | 'missing' }) {
@@ -323,7 +325,7 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
   }, [])
   const connections = usePlatformConnections()
   const connection = connections.data?.find((c) => c.connected && c.keyReadable) ?? null
-  const from = way === 'live_runs' ? 'traces' : way === 'platform' ? 'connection' : 'upload'
+  const from = way === 'live_runs' ? 'traces' : way === 'platform' ? 'connection' : way === 'fairmind_data' ? 'fairmind' : 'upload'
   // Reading live runs may use an engine of its own (Explanation quality replays them), with its own settings.
   const active = from === 'traces' && liveRunsOwn ? liveRunsOwn : spec
 
@@ -334,9 +336,11 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
   const choosing = from === 'upload' && !!probeSlot && !!countParam
   const [probes, setProbes] = useState('write') // 'write', 'upload' or a benchmark name
   const slots = choosing ? spec.slots.filter((s) => s !== probeSlot) : spec.slots
-  // Column names describe an uploaded file; the server sets them when it reads live runs.
+  // Column names describe an uploaded file, and which columns to compare; the server sets them when it reads live runs.
   const settings = (choosing ? spec.params.filter((p) => p !== countParam && p !== benchParam) : active.params)
-    .filter((p) => from !== 'traces' || !p.name.endsWith('_column'))
+    .filter((p) => from !== 'traces' || !(p.name.endsWith('_column') || p.name === 'features' || p.name === 'ignore'))
+  // Files a person may add to live runs, such as a drift reference in place of the weeks before.
+  const liveUploads = from === 'traces' ? (spec.liveRunsUploads ?? []).flatMap((u) => spec.slots.filter((s) => s.name === u.name).map((s) => ({ ...s, help: u.help }))) : []
   const sampling = choosing ? spec.sampling : null
   const agreed = Number((params.max_rate ?? '').trim())
   const limit = sampling ? sampling.limit ?? ((params.max_rate ?? '').trim() && !Number.isNaN(agreed) ? agreed : null) : null
@@ -345,7 +349,7 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
   const psiParam = spec.params.find((p) => p.name === 'psi_limit' && typeof p.default === 'number')
   const psi = psiParam ? Number((params.psi_limit ?? '').trim() || psiParam.default) : null
 
-  const filesReady = from === 'traces' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
+  const filesReady = from === 'traces' || from === 'fairmind' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
   const ready = (!active.live || connected) && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
   /** A behaviour test answers with a job; follow it until the run is stored. */
@@ -398,6 +402,7 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
     form.append('source', from)
     if (from === 'upload')
       for (const s of spec.slots) if (files[s.name] && (!choosing || s !== probeSlot || probes === 'upload')) form.append(s.name, files[s.name] as File)
+    for (const s of liveUploads) if (files[s.name]) form.append(s.name, files[s.name] as File)
     const res = await runEvaluation(evaluationId, form)
     if (res.error || !res.data) setFailure(res.error)
     else if ('job' in res.data) await follow(res.data.job)
@@ -474,15 +479,16 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
           </span>
         )}
         {from === 'connection' && spec.judge && <JudgeNote />}
-        {from === 'upload' && slots.length > 0 && (
+        {from === 'fairmind' && <span className="fm-ev-muted fm-ev-small">FairMind reads what it already holds for {system.name}; nothing is uploaded.</span>}
+        {(from === 'upload' ? slots : liveUploads).length > 0 && (
           <div className="fm-ev-drops">
-            {slots.map((s) => (
+            {(from === 'upload' ? slots : liveUploads).map((s) => (
               <FileInput
                 key={s.name}
                 mode="dropzone"
                 label={s.label}
                 description={s.help}
-                isOptional={!s.required}
+                isOptional={!s.required || from === 'traces'}
                 accept={ACCEPT[s.kind] || undefined}
                 value={files[s.name] ?? null}
                 onChange={(f) => setFiles((v) => ({ ...v, [s.name]: Array.isArray(f) ? f[0] ?? null : f }))}
@@ -692,7 +698,7 @@ export default function EvaluationPage() {
             {system && spec && <Token size="sm" color={kind ? 'blue' : 'gray'} label={kind ? KIND_LABEL[kind] ?? kind : 'Kind not set'} />}
             {spec?.fit === 'other' && ways.length > 0 && <Token size="sm" color="orange" label={`Meant for ${e.appliesTo || 'another kind'}`} />}
             {ways.map((w) => WAY_STATE[w.way] && (
-              <Token key={w.way} size="sm" color={w.ready ? 'green' : w.way === 'calls_system' ? 'orange' : 'gray'} label={WAY_STATE[w.way]![w.ready ? 0 : 1]} />
+              <Token key={w.way} size="sm" color={w.ready ? 'green' : w.way === 'calls_system' ? 'orange' : 'gray'} label={w.reason ? 'Runner only' : WAY_STATE[w.way]![w.ready ? 0 : 1]} />
             ))}
           </div>
         </div>
@@ -728,11 +734,12 @@ export default function EvaluationPage() {
                 <SegmentedControl label="Run by" value={way} onChange={(v) => setChosenWay(v as RunWay)} size="sm">
                   {ways.map((w) => {
                     const Icon = WAY_ICON[w.way]
-                    const off = !w.ready && (w.way === 'live_runs' || w.way === 'platform')
-                    return <SegmentedControlItem key={w.way} value={w.way} label={off ? `${WAY_LABEL[w.way]}, none yet` : WAY_LABEL[w.way]} icon={<Icon size={14} aria-hidden />} isDisabled={off} />
+                    const off = !w.ready && (w.way === 'live_runs' || w.way === 'platform' || w.way === 'fairmind_data')
+                    return <SegmentedControlItem key={w.way} value={w.way} label={off ? `${WAY_LABEL[w.way]}, ${w.reason ? 'runner only' : 'none yet'}` : WAY_LABEL[w.way]} icon={<Icon size={14} aria-hidden />} isDisabled={off} />
                   })}
                 </SegmentedControl>
               )}
+              {ways.map((w) => !w.ready && w.reason && <span key={w.way} className="fm-ev-muted fm-ev-small">{w.reason}.</span>)}
               <RunForm
                 key={`${system.id}-${way}`}
                 evaluationId={e.id}

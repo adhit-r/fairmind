@@ -4,6 +4,8 @@ GET  /evaluations/{id}/engine        the files and settings the engine takes; 40
 POST /evaluations/{id}/runs          multipart: system_id, params (JSON), source, then one file per slot;
                                      source=connection reads the organisation's agent platform instead of files,
                                      source=traces reads the system's live runs of the last week (agent_traces.TRACE_READERS),
+                                     with any slot in agent_traces.TRACE_UPLOADS as an optional file beside them,
+                                     source=fairmind reads records FairMind already holds for the system (eval_engines.stored.READERS),
                                      mode=live runs an evaluation's alternate behaviour test
 GET  /evaluations/{id}/runs          recent runs, optionally for one AI system
 GET  /evaluation-runs/{evidence_id}  one run in full
@@ -47,16 +49,18 @@ from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import CLOSED_RISK_STATUSES, RISK_ACCEPTANCE_PENDING, _ensure_tables, _risk_score, _utc_now_iso, _without_pending
 from api.routes import llm, platform_connections
-from api.routes.agent_traces import TRACE_ENGINES, TRACE_READERS, WEEK, _since, save_explanations
+from api.routes.agent_traces import (LIVE_RUNS, TRACE_ENGINES, TRACE_READERS, TRACE_UPLOADS, Insufficient, has_runs_this_week,
+                                     read_live_runs, save_explanations)
 from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS, VERSION as CATALOGUE_VERSION
 from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
 from database.governance_models import GovernanceEvidenceRun
 from src.application.services.eval_engines import ALTERNATES, ENGINE_VERSION, REGISTRY, EngineError, Judge
-from src.application.services.eval_engines.common import matches_schema
+from src.application.services.eval_engines.common import matches_schema, result
 from src.application.services.eval_engines.behaviour import GEN_SYSTEM, CallError, Live
 from src.application.services.eval_engines.platform import load_export
+from src.application.services.eval_engines.stored import READERS as STORED_READERS
 from src.application.services.governance_assurance_service import CATALOGUE_RUN_SCHEMA, GovernanceAssuranceService, OrgMembership
 from src.application.services.system_kinds import fit, system_kind
 
@@ -176,7 +180,7 @@ def _run_json(row, full: bool) -> Dict[str, Any]:
     if content.get("judge"):
         out.update({"judge": content["judge"], "target": content.get("target")})
     # runs stored before provenance classes carry none
-    out.update({"provenance": content.get("provenance"), "thresholdLoosened": content.get("thresholdLoosened")})
+    out.update({"provenance": content.get("provenance"), "thresholdLoosened": content.get("thresholdLoosened"), "partialRead": bool(content.get("partialRead"))})
     if full:
         out.update({"params": content.get("params", {}), "detail": content.get("detail", []), "detailTotal": content.get("detailTotal", 0),
                     "inputs": content.get("inputs"), "engine": content.get("engine"), "probes": content.get("probes")})
@@ -195,16 +199,22 @@ def system_setup(db: Session, org_id: str, system_id: str) -> Dict[str, Any]:
     row = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
     if not row or str(row[0]) != org_id:
         raise HTTPException(status_code=404, detail="AI system not found")
+    target = db.execute(text("SELECT fields_json FROM governance_ai_system_targets WHERE system_id = :id"), {"id": system_id}).first()
     return {
         "kind": system_kind(db, system_id),
-        "calls_system": db.execute(text("SELECT 1 FROM governance_ai_system_targets WHERE system_id = :id"), {"id": system_id}).first() is not None,
-        "live_runs": db.execute(
-            text("SELECT 1 FROM governance_agent_traces WHERE system_id = :id AND received_at >= :since LIMIT 1"), {"id": system_id, "since": _since(WEEK)}
-        ).first() is not None,
+        "calls_system": target is not None,
+        # the runner inside the customer's network calls the system; a run started here cannot (stored_target, Target.via_runner)
+        "via_runner": target is not None and json.loads(target[0] or "{}").get("via") == "runner",
+        "live_runs": has_runs_this_week(db, system_id),
         "platform": db.execute(
             text("SELECT 1 FROM org_platform_connections WHERE org_id = :org AND platform = :p"), {"org": org_id, "p": PLATFORM}
         ).first() is not None,
+        # the evaluations whose inputs FairMind already holds for this system
+        "fairmind_data": frozenset(ev for ev, r in STORED_READERS.items() if r.exists(db, org_id, system_id)),
     }
+
+
+REPLAY_VIA_RUNNER = "This system is called by your runner inside your network, and FairMind replays live runs only on a connection it calls itself"
 
 
 def fit_and_ways(evaluation_id: str, setup: Dict[str, Any]) -> Dict[str, Any]:
@@ -214,11 +224,18 @@ def fit_and_ways(evaluation_id: str, setup: Dict[str, Any]) -> Dict[str, Any]:
         "calls_system": any(e.live == "target" for e in engines),
         "live_runs": evaluation_id in TRACE_READERS,
         "platform": any(e.platform for e in engines),
+        "fairmind_data": evaluation_id in STORED_READERS,
         "files": any(e.slots and not e.live for e in engines),  # a live engine's slots are optional extra probes
     }
-    # an engine of its own for live runs replays them on the system's connection, so it needs that connection too
-    replays = evaluation_id in TRACE_ENGINES
-    ways = [{"way": w, "ready": setup.get(w, True) and not (w == "live_runs" and replays and not setup["calls_system"])} for w, ok in has.items() if ok]
+    ready = {**setup, "fairmind_data": evaluation_id in setup.get("fairmind_data", ())}
+    ways = [{"way": w, "ready": ready.get(w, True)} for w, ok in has.items() if ok]
+    # an engine of its own for live runs replays them on the system's connection, so it needs a connection FairMind calls itself
+    for way in ways:
+        if way["way"] == "live_runs" and evaluation_id in TRACE_ENGINES:
+            if setup.get("via_runner"):
+                way.update(ready=False, reason=REPLAY_VIA_RUNNER)
+            elif not setup["calls_system"]:
+                way["ready"] = False
     return {"fit": fit(EVALUATIONS[evaluation_id].appliesTo, setup["kind"]), "ways": ways}
 
 
@@ -227,7 +244,9 @@ def get_engine(evaluation_id: str, system: Optional[str] = Query(default=None), 
     alternate = ALTERNATES.get(evaluation_id)
     own = TRACE_ENGINES.get(evaluation_id)  # an engine of its own for live runs, whose settings differ from the upload's
     out = {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None, "liveRuns": evaluation_id in TRACE_READERS,
-           "liveRunsEngine": own.spec() if own else None}
+           "liveRunsEngine": own.spec() if own else None,
+           # files a person may add to a run on live runs, with help for the form
+           "liveRunsUploads": [{"name": n, "help": h} for n, h in TRACE_UPLOADS.get(evaluation_id, {}).items()]}
     if system:
         setup = system_setup(db, m.org_id, system)
         out.update({"kind": setup["kind"], **fit_and_ways(evaluation_id, setup)})
@@ -257,24 +276,34 @@ async def create_run(
     except (ValueError, AssertionError):
         raise HTTPException(status_code=422, detail="params must be a JSON object")
     source = str(form.get("source") or "upload")
-    if source not in ("upload", "connection", "traces") or (source == "connection" and not engine.platform) or (source == "traces" and evaluation_id not in TRACE_READERS):
+    if (source not in ("upload", "connection", "traces", "fairmind") or (source == "connection" and not engine.platform)
+            or (source == "traces" and evaluation_id not in TRACE_READERS) or (source == "fairmind" and (engine.live or evaluation_id not in STORED_READERS))):
         raise HTTPException(status_code=422, detail="source must be upload, connection for an evaluation that reads platform configuration, "
-                            "or traces for one that reads live runs")
-    files, names = {}, {}
-    if source == "traces":
-        engine = TRACE_ENGINES.get(evaluation_id, engine)
-        files = TRACE_READERS[evaluation_id](db, system_id, params)
-        names = {"traces": "Live runs, last 7 days"}
-    for slot in engine.slots if source == "upload" else ():
+                            "traces for one that reads live runs, or fairmind for one that reads records FairMind holds")
+    files, names, insufficient, partial = {}, {}, None, False
+    if source == "fairmind":
+        stored = STORED_READERS[evaluation_id]
+        files = stored.read(db, m.org_id, system_id)
+        if not files:
+            raise HTTPException(status_code=409, detail=f"{stored.label}: none on file yet; upload the file instead")
+        names = {name: stored.label for name in files}
+    for slot in engine.slots if source == "upload" else [s for s in engine.slots if s.name in TRACE_UPLOADS.get(evaluation_id, {})]:
         upload = form.get(slot.name)
         if upload is None or not hasattr(upload, "read"):
-            if slot.required:
+            if slot.required and source == "upload":
                 raise HTTPException(status_code=422, detail=f"Add the {slot.label.lower()}")
             continue
         raw = await upload.read(MAX_UPLOAD_BYTES + 1)
         if len(raw) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=f"{slot.label} is over 25 MB")
         files[slot.name], names[slot.name] = raw, upload.filename
+    if source == "traces":
+        engine = TRACE_ENGINES.get(evaluation_id, engine)
+        try:
+            live, live_names, partial = read_live_runs(db, evaluation_id, system_id, params, frozenset(files))
+            files, names = {**live, **files}, {**live_names, **names}
+        except Insufficient as exc:  # runs arrived but lack what it reads: kept as insufficient, like an engine's own
+            insufficient, names = result("insufficient", exc.detail, {}), {"traces": LIVE_RUNS}
     if engine.collect:
         files.update(engine.collect(db, m.org_id, system_id))
     for p in engine.params:
@@ -285,7 +314,7 @@ async def create_run(
         return _start_job(db, background, m, evaluation_id, engine, system, system_id, files, names, params, runner,
                           use_target=source != "traces" or evaluation_id in TRACE_ENGINES)
     reads_platform = source == "connection" or engine.run is None
-    judge = _judge(db, m.org_id) if engine.judge and reads_platform else None
+    judge = _judge(db, m.org_id) if (engine.judge if reads_platform else engine.file_judge) else None
     key = None
     if source == "connection":
         key = platform_connections.stored_key(db, m.org_id, PLATFORM)
@@ -296,16 +325,16 @@ async def create_run(
             snap = await platform_connections.snapshot(key) if key else load_export(files["export"])
             outcome = await run_in_threadpool(engine.platform, snap, params, judge)
         else:
-            outcome = await run_in_threadpool(engine.run, files, params)
+            outcome = insufficient or await run_in_threadpool(engine.run, files, params, *((judge,) if engine.file_judge else ()))
     except platform_connections.PlatformError as exc:
         raise HTTPException(status_code=422, detail=platform_connections.public_message(exc))
     except EngineError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     judged = bool(judge and judge.calls)
     outcome = {
-        **outcome, "params": params, "files": names, "source": source,
+        **outcome, "params": params, "files": names, "source": source, **({"partialRead": True} if partial else {}),
         **_record(engine, evaluation_id, "platform" if reads_platform else "file", files, params),
-        # a connection is read live from the platform; an export, an upload or stored records are computed from the file
+        # a connection is read live from the platform; an export, an upload or records FairMind holds are computed from the file
         "provenance": {"class": "measured_live" if source == "connection" else "computed_from_upload", "modelJudged": judged},
         **({"judge": _judge_json(judge.connection, judge.connection.provider.id == PLATFORM_PROVIDER)} if judged else {}),
     }
@@ -361,8 +390,9 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             "now": now,
         },
     )
-    # a pass on thresholds looser than the catalogue's shows its own result but proves nothing: no mappings, no resolved finding
-    proves = outcome["status"] == "passed" and not outcome.get("thresholdLoosened")
+    # a pass on thresholds looser than the catalogue's, or a zero-tolerance pass on part of the live runs,
+    # shows its own result but proves nothing: no mappings, no resolved finding
+    proves = outcome["status"] == "passed" and not outcome.get("thresholdLoosened") and not outcome.get("partialRead")
     if proves:  # proposes the ISO 42001 clauses this evaluation tests directly, for a reviewer to accept
         GovernanceAssuranceService(db).map_catalogue_run(org_id, system_id, run_pk, evidence_id, evaluation_id)
     # A failed run opens one finding for this evaluation on this system; a passing run resolves it.

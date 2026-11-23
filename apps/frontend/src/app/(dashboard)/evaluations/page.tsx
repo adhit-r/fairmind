@@ -3,7 +3,7 @@
 import '@/astryx/pages/evaluations.css'
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Activity, ChevronDown, ChevronRight, FileText, Network, Plug } from 'lucide-react'
+import { Activity, ChevronDown, ChevronRight, Database, FileText, Network, Plug } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Divider } from '@astryxdesign/core/Divider'
@@ -91,7 +91,7 @@ function Panel({ row, onClose }: { row: EvaluationRow; onClose: () => void }) {
 const ALL = 'all'
 const SHOWN = 8
 const BUCKET: Record<Bucket, string> = { ready: 'Ready now', file: 'Need a file', setup: 'Need setup', other: 'Do not apply' }
-const ROW_ICON: Record<RunWay, typeof Plug> = { calls_system: Plug, live_runs: Activity, platform: Network, files: FileText }
+const ROW_ICON: Record<RunWay, typeof Plug> = { calls_system: Plug, live_runs: Activity, platform: Network, fairmind_data: Database, files: FileText }
 /** The way a row's icon shows: the first one set up, else the first listed. */
 const rowWay = (r: EvaluationRow): RunWay => (r.ways?.find((w) => w.ready) ?? r.ways?.[0])?.way ?? 'files'
 

@@ -88,7 +88,10 @@ def _cell(value: Any) -> Any:
         return int(value)
     if isinstance(value, (float, np.floating)):
         return round(float(value), 4)
-    return str(value)[:120]
+    text = str(value)
+    for _, hit in scan(text, SECRETS + PERSONAL):  # a sample row is stored as evidence and outlives the prompt it came from
+        text = text.replace(hit, mask(hit))
+    return text[:120]
 
 
 def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
