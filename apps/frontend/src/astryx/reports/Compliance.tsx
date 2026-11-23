@@ -13,7 +13,7 @@ export function CrosswalkCard({ c }: { c: Crosswalk }) {
   const mid = (L + NW + R) / 2
   const followed = c.frameworks.find((f) => f.followed)
   return (
-    <Card span={7} title="One proof, many frameworks" sub="Your proof, followed through the clause map. Grey is coverage you hold for frameworks you do not follow.">
+    <Card span={7} title="Where your proof comes from" sub="Each source of proof, followed through the clause map into the frameworks you follow.">
       {c.frameworks.length === 0 || s.total === 0 ? (
         <Empty title="No links yet" text="Once evidence is mapped to clauses, the flow into each framework shows here." />
       ) : (

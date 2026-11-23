@@ -81,7 +81,16 @@ export type GateSystem = {
 export type Engineering = {
   toolExposure: { systemId: string; systemName: string; agent: string | null; tool: string; policy: string | null; gated: boolean; effect: string | null }[]
   fairnessDrift: { systemId: string; systemName: string; threshold: number | null; points: { at: string; value: number }[] }[]
-  fixes: { title: string; systemName: string; priority: string; status: string; owner: string | null }[]
+  fixes: {
+    title: string
+    systemName: string
+    priority: string
+    status: string
+    owner: string | null
+    kind: 'evaluation' | 'task'
+    evaluationId: string | null
+    summary: string | null
+  }[]
 }
 
 export type Auditor = {
@@ -117,6 +126,7 @@ export type ReportModel = {
   framework: { key: string | null; name: string | null }
   followed: string[]
   systemsCount: number
+  outOfScope: number
   generatedAt: string
   briefing: Briefing
   readiness?: Readiness

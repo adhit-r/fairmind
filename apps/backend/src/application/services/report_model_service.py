@@ -19,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.application.services.clause_map_service import CHECK_CONTROLS, _catalogue, clause_map, evaluation_links
-from src.application.services.plan_assignment_service import plan_frameworks
+from src.application.services.plan_assignment_service import plan_frameworks, scoped_out
 
 ROLES = ("executive", "compliance", "engineering", "auditor", "risk")
 
@@ -83,12 +83,13 @@ class Estate:
         self.db, self.org_id, self.sources = db, org_id, sources
         catalogue = _catalogue()["frameworks"]
         self.plan = [k for k in plan_frameworks(db, org_id) if k in catalogue]
+        self.out = scoped_out(db, org_id)
         rows = db.execute(
             text("SELECT id, name, risk_tier, metadata_json FROM governance_ai_systems "
                  "WHERE org_id = :org AND COALESCE(lifecycle_stage, '') <> 'retired' ORDER BY name"),
             {"org": org_id},
         ).fetchall()
-        self.all = [{"id": r[0], "name": r[1], "tier": r[2] or "medium", "frameworks": self._frameworks(_json(r[3], {}))} for r in rows]
+        self.all = [{"id": r[0], "name": r[1], "tier": r[2] or "medium", "frameworks": self._frameworks(r[0], _json(r[3], {}))} for r in rows]
         followed = list(dict.fromkeys(self.plan + [k for s in self.all for k in s["frameworks"]]))
         self.framework = framework if framework in catalogue else (followed[0] if followed else None)
         self.framework_name = catalogue.get(self.framework, {}).get("name") if self.framework else None
@@ -98,12 +99,15 @@ class Estate:
         self._gates: Dict[str, Dict[str, Any]] = {}
         self._maps: Dict[str, Dict[str, Any]] = {}
 
-    def _frameworks(self, metadata: Dict[str, Any]) -> List[str]:
-        """A system answers to its confirmed frameworks; without a confirmation it inherits the plan's."""
+    def _frameworks(self, system_id: str, metadata: Dict[str, Any]) -> List[str]:
+        """A system answers to its confirmed frameworks; without a confirmation it inherits the plan's.
+        A framework a person scoped the system out of is never among them."""
         applicability = metadata.get("applicability")
         if isinstance(applicability, dict):
-            return [f["key"] for f in applicability.get("frameworks") or [] if isinstance(f, dict) and f.get("key")]
-        return list(self.plan)
+            keys = [f["key"] for f in applicability.get("frameworks") or [] if isinstance(f, dict) and f.get("key")]
+        else:
+            keys = list(self.plan)
+        return [k for k in keys if (k, system_id) not in self.out]
 
     def gate(self, system: Dict[str, Any]) -> Dict[str, Any]:
         if system["id"] not in self._gates:
@@ -225,9 +229,14 @@ def proof_section(e: Estate) -> Dict[str, Any]:
     return {**total, "bySystem": by_system, "byGroup": [{"group": g, **v} for g, v in by_group.items()]}
 
 
+def gate_systems(e: Estate) -> List[Dict[str, Any]]:
+    """The systems a gate view lists: with a framework chosen, only those in its scope."""
+    return e.in_scope if e.framework else e.systems
+
+
 def systems_section(e: Estate) -> List[Dict[str, Any]]:
     out = []
-    for s in e.systems:
+    for s in gate_systems(e):
         g = e.gate(s)
         out.append({
             "id": s["id"], "name": s["name"], "tier": s["tier"], "verdict": g.get("verdict"), "approvalStatus": g.get("approvalStatus"),
@@ -322,14 +331,17 @@ def _source_of(check: Dict[str, Any]) -> str:
     return "Attested by people"
 
 
-def crosswalk_section(e: Estate, top: int = 3) -> Dict[str, Any]:
-    """What evidence already covers, per framework, through the clause map: the followed one and the best others."""
+def crosswalk_section(e: Estate) -> Dict[str, Any]:
+    """What evidence covers, per framework the organisation follows, through the clause map and by source.
+    Frameworks it does not follow are left out: coverage of those is not something it asked to be measured on."""
     cat = _catalogue()["frameworks"]
     covered: Dict[str, Dict[str, str]] = {}  # framework -> clause key -> source of its strongest backing
     for s in e.systems:
         self_maps = e._maps.get(s["id"]) or {fw["key"]: fw for fw in clause_map(e.gate(s))["frameworks"]}
         e._maps[s["id"]] = self_maps
         for key, fw in self_maps.items():
+            if key not in s["frameworks"]:  # only the frameworks this system answers to
+                continue
             for c in fw["clauses"]:
                 if readiness(c["cell"]) in ("met", "progress"):
                     backing = next((x for x in c.get("checks") or [] if not x.get("fails") and x.get("state") in ("proven", "attested")), None)
@@ -337,9 +349,7 @@ def crosswalk_section(e: Estate, top: int = 3) -> Dict[str, Any]:
                         covered.setdefault(key, {}).setdefault(c["key"], _source_of(backing))
     totals = {k: len(_catalogue()["by_framework"].get(k, [])) for k in covered}
     coverage = {k: _pct(len(v), totals[k]) for k, v in covered.items() if totals.get(k)}
-    followed = [k for k in e.followed if k in coverage] or ([e.framework] if e.framework in coverage else [])
-    others = sorted((k for k in coverage if k not in e.followed), key=lambda k: -coverage[k])[:top]
-    frameworks = followed[:1] + others
+    frameworks = [k for k in e.followed if k in coverage]
     sources = sorted({src for k in frameworks for src in covered[k].values()})
     links = [[sum(1 for v in covered[k].values() if v == src) for k in frameworks] for src in sources]
     return {
@@ -376,7 +386,7 @@ def tasks_section(e: Estate, today: date) -> Dict[str, Any]:
 
 def _latest_runs(e: Estate, evaluation_id: str) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
     out = []
-    for s in e.systems:
+    for s in gate_systems(e):
         rows = e.db.execute(
             text("SELECT content_json FROM governance_evidence WHERE system_id = :sid AND evidence_type = 'evaluation_run' "
                  "AND content_json LIKE :like ORDER BY created_at DESC LIMIT 5"),
@@ -396,7 +406,7 @@ def engineering_section(e: Estate) -> Dict[str, Any]:
                 tools.append({"systemId": s["id"], "systemName": s["name"], "agent": r.get("agent"), "tool": r["tool"], "policy": r.get("policy"),
                               "gated": bool(r.get("gated")), "effect": r.get("effect")})
     drift = []
-    for s in e.systems:
+    for s in gate_systems(e):
         rows = e.db.execute(
             text("SELECT content_json, created_at FROM governance_evidence WHERE system_id = :sid AND evidence_type = 'fairness_test' ORDER BY created_at LIMIT 26"),
             {"sid": s["id"]},
@@ -411,19 +421,39 @@ def engineering_section(e: Estate) -> Dict[str, Any]:
                 threshold = (body.get("thresholds") or {}).get("disparate_impact_ratio", threshold)
         if len(points) >= 2:
             drift.append({"systemId": s["id"], "systemName": s["name"], "threshold": threshold, "points": points})
-    ids = [s["id"] for s in e.systems]
-    fixes = []
-    if ids:
-        marks = ", ".join(f":s{i}" for i in range(len(ids)))
-        fixes = [
-            {"title": r[0], "systemName": r[1], "priority": r[2], "status": r[3], "owner": r[4]}
-            for r in e.db.execute(
-                text(f"SELECT t.title, s.name, t.priority, t.status, t.owner FROM governance_remediation_tasks t JOIN governance_ai_systems s ON s.id = t.system_id "
-                     f"WHERE t.system_id IN ({marks}) AND t.status NOT IN ('done', 'closed', 'resolved') ORDER BY CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 8"),
-                {f"s{i}": sid for i, sid in enumerate(ids)},
-            ).fetchall()
-        ]
-    return {"toolExposure": tools, "fairnessDrift": drift, "fixes": fixes}
+    return {"toolExposure": tools, "fairnessDrift": drift, "fixes": fixes_section(e)}
+
+
+PRIORITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def fixes_section(e: Estate) -> List[Dict[str, Any]]:
+    """What to fix on the systems the gate view lists: each failed catalogue evaluation (the open finding its run
+    opened, source fairmind.eval_engines) and each open remediation task. A passing rerun resolves the finding."""
+    ids = [s["id"] for s in gate_systems(e)]
+    if not ids:
+        return []
+    marks = ", ".join(f":s{i}" for i in range(len(ids)))
+    params = {f"s{i}": sid for i, sid in enumerate(ids)}
+    findings = [
+        {"title": r[0], "systemName": r[1], "priority": r[2], "status": r[3], "owner": None, "kind": "evaluation",
+         "evaluationId": _json(r[4], {}).get("evaluationId"), "summary": r[5] or None}
+        for r in e.db.execute(
+            text(f"SELECT r.title, s.name, r.severity, r.status, r.metadata_json, r.description FROM governance_risks r "
+                 f"JOIN governance_ai_systems s ON s.id = r.system_id WHERE r.system_id IN ({marks}) "
+                 f"AND r.source = 'fairmind.eval_engines' AND r.status IN ('open', 'acceptance_pending') ORDER BY r.created_at DESC"),
+            params,
+        ).fetchall()
+    ]
+    tasks = [
+        {"title": r[0], "systemName": r[1], "priority": r[2], "status": r[3], "owner": r[4], "kind": "task", "evaluationId": None, "summary": None}
+        for r in e.db.execute(
+            text(f"SELECT t.title, s.name, t.priority, t.status, t.owner FROM governance_remediation_tasks t JOIN governance_ai_systems s ON s.id = t.system_id "
+                 f"WHERE t.system_id IN ({marks}) AND t.status NOT IN ('done', 'closed', 'resolved')"),
+            params,
+        ).fetchall()
+    ]
+    return sorted(findings + tasks, key=lambda f: PRIORITY_ORDER.get(f["priority"], 4))[:20]
 
 
 def _chains(e: Estate) -> Dict[str, Any]:
@@ -573,6 +603,8 @@ def build_overview(db: Session, org_id: str, role: str, sources: Sources, system
         "framework": {"key": e.framework, "name": e.framework_name},
         "followed": e.followed,
         "systemsCount": len(e.systems),
+        # registered systems outside the chosen framework's scope (not answering to it, or scoped out by a person)
+        "outOfScope": len(e.systems) - len(e.in_scope) if e.framework else 0,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
     }
     ready = readiness_section(e)
