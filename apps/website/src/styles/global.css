@@ -329,6 +329,8 @@ code,
   right: 0;
   display: grid;
   width: min(18rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 5rem);
+  overflow-y: auto;
   padding: 0.5rem;
   border: var(--line);
   border-radius: var(--radius);
@@ -836,7 +838,7 @@ code,
 
 /* Responsive */
 
-@media (max-width: 64rem) {
+@media (max-width: 72rem) {
   .desktop-navigation,
   .header-actions {
     display: none;
@@ -846,6 +848,9 @@ code,
     display: block;
   }
 
+}
+
+@media (max-width: 64rem) {
   .grid-3,
   .grid-4 {
     grid-template-columns: 1fr;

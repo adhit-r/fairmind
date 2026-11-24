@@ -5,6 +5,7 @@ const enabled = import.meta.env.PUBLIC_POSTHOG_KEY?.trim() &&
 ---
 {enabled && (
   <div data-analytics-preferences hidden>
+    <span data-privacy-notice hidden>Your browser privacy signal has turned off website analytics.</span>
     <button class="button button-compact" type="button" data-edit>Analytics settings</button>
     <section aria-label="Analytics preferences" data-panel hidden>
       <strong>Allow website analytics?</strong>
@@ -18,7 +19,13 @@ const enabled = import.meta.env.PUBLIC_POSTHOG_KEY?.trim() &&
 )}
 <script>
   const root = document.querySelector<HTMLElement>('[data-analytics-preferences]');
-  if (root && !(navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl && !['1', 'yes'].includes(navigator.doNotTrack || '')) {
+  const blocked = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl ||
+    ['1', 'yes'].includes(navigator.doNotTrack || '');
+  if (root && blocked) {
+    root.hidden = false;
+    root.querySelector<HTMLButtonElement>('[data-edit]')!.hidden = true;
+    root.querySelector<HTMLElement>('[data-privacy-notice]')!.hidden = false;
+  } else if (root) {
     const key = 'fairmind_analytics_choice_v1';
     const panel = root.querySelector<HTMLElement>('[data-panel]')!;
     const edit = root.querySelector<HTMLButtonElement>('[data-edit]')!;
@@ -57,6 +64,7 @@ const enabled = import.meta.env.PUBLIC_POSTHOG_KEY?.trim() &&
   }
 </script>
 <style>
+  [hidden] { display: none !important; }
   [data-panel] {
     position: fixed;
     inset: auto 1rem 1rem auto;
@@ -66,9 +74,10 @@ const enabled = import.meta.env.PUBLIC_POSTHOG_KEY?.trim() &&
     overflow: auto;
     padding: 1rem;
     color: var(--ink);
-    background: white;
-    border: 2px solid currentColor;
-    box-shadow: 4px 4px 0 currentColor;
+    background: var(--paper);
+    border: var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
   }
   [data-panel] p { margin: .5rem 0 1rem; }
   .actions { display: flex; flex-wrap: wrap; gap: .75rem; }
