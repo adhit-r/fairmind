@@ -1,39 +1,51 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import PageHero from '../components/marketing/PageHero.astro';
-import '../styles/pages.css';
+import '../styles/roadmap.css';
+import catalogue from '../../../backend/src/api/routers/pack_catalogue_data/catalogue.json';
+import { registryTotals } from '../lib/registry';
+import { releases } from '../lib/releases';
+import {
+  ACTIVITY, ERAS, LATER, MONTHS, MONTH_NAMES, NEXT, NOW, QUARTERS, RESEARCH, STOPS, TODAY,
+  commitsIn, eraOf, monthLabel,
+} from '../lib/roadmap';
 
-const phases = [
-  {
-    when: 'Shipped',
-    items: [
-      { title: 'System file and six-stage journey', body: 'Derived stage, one next action per stage, decision recorded and evidence sealed.' },
-      { title: 'Packs catalogue v2.3', body: '50 frameworks, 21 packs, 90 workflows, 109 evaluations, 8 bundles, 28 framework journeys.' },
-      { title: 'Workflow builder and run engine', body: 'Drafts, immutable published versions, validation that keeps a human gate, hash-chained run ledger.' },
-      { title: 'Release gate, CLI, GitHub Action', body: 'Five checks, confidence-weighted verdict, exit codes a pipeline can act on.' },
-      { title: 'Fairness test and environmental evaluation', body: 'Measured evidence with confidence intervals; FairMind-E measurement path.' },
-      { title: 'MLflow and GitHub connectors', body: 'Suggested tier and stage; a person promotes assets into governance.' },
-    ],
-  },
-  {
-    when: 'Next',
-    items: [
-      { title: 'Agent-executed steps', body: 'Collect, check and suggest steps run by the FairMind agent, behind the same gates, with citations required and abstain-over-guess. Starting with workflows whose inputs are already connected.' },
-      { title: 'Producers for the attest-only gate checks', body: 'Data governance and human oversight evidence from workflows and connectors rather than attestations alone.' },
-      { title: 'Autonomy levels enforced in the engine', body: 'A1 to A3 as runtime policy per workflow, not catalogue labels.' },
-      { title: 'More connectors', body: 'Model registries and experiment trackers beyond MLflow; agent frameworks and MCP server inventories.' },
-    ],
-  },
-  {
-    when: 'Later',
-    items: [
-      { title: 'Evidence Passport v2', body: 'Admission, trust and signing routes; cross-tenant portability of sealed evidence.' },
-      { title: 'External anchoring of the ledger', body: 'The run ledger is tamper-evident today; anchoring makes it independently verifiable.' },
-      { title: 'Python SDK and MCP server', body: 'Gate, test and systems as library calls and as tools an agent can use.' },
-      { title: 'Separation of duties in code', body: 'The catalogue declares it for 32 workflows; the engine should refuse the same person on both sides.' },
-    ],
-  },
+// Merged pull requests, from GitHub at build time; hidden when GitHub cannot be reached.
+const merged: number | null = await fetch('https://api.github.com/search/issues?q=repo:adhit-r/fairmind+is:pr+is:merged&per_page=1', {
+  headers: { Accept: 'application/vnd.github+json', ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) },
+}).then((r) => (r.ok ? r.json() : null)).then((d) => (d && typeof d.total_count === 'number' ? d.total_count : null)).catch(() => null);
+const latest = (await releases())[0] ?? null;
+const released = new Map((await releases()).map((r) => [r.date?.slice(0, 7), r]));
+
+// The line: x by month, y climbing gently, width by that month's commits (square root, so November 2026 does not drown the rest).
+const W = 1400, L = 48, R = 1352, MID = 178;
+const step = (R - L) / (MONTHS.length - 1);
+const peak = Math.sqrt(Math.max(...MONTHS.map((m) => commitsIn(m) ?? 0)));
+const x = (m: string) => L + MONTHS.indexOf(m) * step;
+const y = (m: string) => { const i = MONTHS.indexOf(m); return MID + 46 - (i / (MONTHS.length - 1)) * 92 + Math.sin(i / 2.2) * 8; };
+const width = (m: string) => { const c = commitsIn(m); return c === null ? 2 : 2.5 + (Math.sqrt(c) / peak) * 26; };
+const segments = MONTHS.slice(0, -1).map((a, i) => {
+  const b = MONTHS[i + 1];
+  const kind = b > TODAY ? 'planned' : commitsIn(b) === null ? 'local' : 'public';
+  return { d: `M${x(a)} ${y(a)} C${x(a) + step / 2} ${y(a)} ${x(b) - step / 2} ${y(b)} ${x(b)} ${y(b)}`, kind, color: eraOf(b).color, w: (width(a) + width(b)) / 2, i };
+});
+const stops = STOPS.map((s, k) => ({ ...s, x: x(s.month), y: y(s.month), up: k % 2 === 0, k }));
+
+const facts = [
+  { value: 'Dec 2024', label: 'the idea' },
+  { value: 'Jul 2025', label: 'first public commit' },
+  { count: ACTIVITY.totalCommits, label: 'commits on main' },
+  ...(merged !== null ? [{ count: merged, label: 'pull requests merged' }] : []),
+  ...(latest ? [{ value: `v${latest.version}`, label: `latest release, ${new Date(latest.date ?? '').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}` }] : []),
 ];
+const today = [
+  { count: registryTotals.frameworks, label: 'frameworks in the registry' },
+  { count: registryTotals.requirements, label: 'requirements mapped' },
+  { count: registryTotals.evaluations, label: 'evaluations catalogued' },
+  { count: registryTotals.workflows, label: 'governance workflows' },
+  { count: catalogue.packs.length, label: 'packs' },
+  { count: registryTotals.crosswalk, label: 'crosswalk links between frameworks' },
+];
+const claudeShare = ACTIVITY.claudeCommits / ACTIVITY.totalCommits;
 
 const structuredData = {
   '@context': 'https://schema.org',
@@ -46,40 +58,233 @@ const structuredData = {
 ---
 
 <Layout
-  title="FairMind roadmap: shipped, next, later"
-  description="What FairMind has shipped, what is next and what comes later, including agent-executed workflow steps behind human gates and Evidence Passport v2."
+  title="FairMind roadmap: from the first idea to 2027"
+  description="How FairMind grew from a December 2024 idea into agentic AI governance, quarter by quarter, and what is planned for 2027."
   structuredData={structuredData}
 >
-  <div class="route-page">
-    <PageHero
-      signal="Roadmap"
-      title="Shipped, next,"
-      accent="later."
-      description="We publish the state of the product rather than a wish list. If a capability is listed under Shipped, it is on main and in the walkthrough. If it is under Next, it is being built behind the same human gates."
-      proofs={[
-        { label: 'Principle', value: 'Evidence before claims', note: 'Nothing moves to Shipped without a test behind it.' },
-        { label: 'Constant', value: 'A person at every gate', note: 'Automation widens what the agent prepares, never what it decides.' },
-        { label: 'Cadence', value: 'Monthly', note: 'This page is updated with each release.' },
-      ]}
-      primary={{ label: 'Request access', href: '/request-access/' }}
-      secondary={{ label: 'Research notes', href: '/research/' }}
-    />
+  <div class="rm">
+    <header class="rm-hero rm-wrap">
+      <p class="rm-signal">Roadmap · Dec 2024 to 2027</p>
+      <h1 class="rm-rise">One line, from a question <em>to a release gate.</em></h1>
+      <p class="rm-lede rm-rise" style="--d:.1s">FairMind began in December 2024 as a question: how would you know an AI system is fair before it ships? It was planned and coded on a laptop through early 2025, went public in July, and is now governance for every AI system and agent an organisation runs. This is the whole line, and where it goes next.</p>
+    </header>
 
-    {phases.map((p) => (
-      <section class:list={['route-section', p.when === 'Next' && 'route-section-dark']} aria-labelledby={`phase-${p.when}`}>
-        <header class="route-section-heading"><h2 id={`phase-${p.when}`}>{p.when}</h2></header>
-        <div class="route-ledger">
-          {p.items.map((it) => (
-            <article class="route-ledger-row"><span>{p.when}</span><h3>{it.title}</h3><p>{it.body}</p></article>
-          ))}
+    <div class="rm-journey" data-journey>
+      <svg viewBox={`0 0 ${W} 340`} role="img" aria-labelledby="rm-journey-title">
+        <title id="rm-journey-title">FairMind from the first idea in December 2024 to plans for 2027</title>
+        {ERAS.map((e) => {
+          const x1 = x(e.from) - step / 2, x2 = x(e.to) + step / 2;
+          return (
+            <g class="rm-era">
+              <rect x={x1} y="20" width={x2 - x1} height="4" rx="2" fill={e.color} opacity={e.key === 'idea' || e.key === 'next' ? 0.35 : 0.9} />
+              {e.key === 'next'
+                ? <text x={x2 - 2} y="13" class="rm-era-name" text-anchor="end">{e.name}</text>
+                : <text x={x1 + 2} y="13" class="rm-era-name">{e.name}</text>}
+            </g>
+          );
+        })}
+        <line x1={x(TODAY)} x2={x(TODAY)} y1="34" y2="292" class="rm-today-line" />
+        {segments.map((s) => (
+          <path d={s.d} class={`rm-seg rm-seg-${s.kind}`} stroke={s.kind === 'planned' ? '#6f7580' : s.color}
+            stroke-width={s.kind === 'public' ? s.w : 2} style={`--i:${s.i}`} />
+        ))}
+        {MONTHS.map((m) => {
+          const c = commitsIn(m);
+          return (
+            <g class="rm-month">
+              <rect x={x(m) - step / 2} y="30" width={step} height="270" fill="transparent" />
+              <title>{`${monthLabel(m)}: ${m > TODAY ? 'planned' : c === null ? 'before the repository' : `${c.toLocaleString()} commits`}${released.get(m) ? `, released ${released.get(m)!.tag}` : ''}`}</title>
+              <text x={x(m)} y="308" class="rm-mon" text-anchor="middle">{MONTH_NAMES[Number(m.slice(5)) - 1][0]}</text>
+              {(m.endsWith('-01') || m === MONTHS[0]) && <text x={x(m)} y="328" class="rm-yr" text-anchor="middle">{m.slice(0, 4)}</text>}
+            </g>
+          );
+        })}
+        {stops.map((s) => {
+          const ty = s.up ? s.y - 84 : s.y + 82;
+          const anchor = s.k === 0 ? 'start' : s.k === stops.length - 1 ? 'end' : 'middle';
+          return (
+            <g class={`rm-stop${s.planned ? ' rm-stop-planned' : ''}`} style={`--k:${s.k}`}>
+              <line x1={s.x} y1={s.y} x2={s.x} y2={s.up ? s.y - 64 : s.y + 64} class="rm-stem" />
+              {s.release && <circle cx={s.x} cy={s.y} r="16" class="rm-pulse" />}
+              <circle cx={s.x} cy={s.y} r={s.release ? 9 : 6} class={s.release ? 'rm-dot-release' : s.planned ? 'rm-dot-planned' : 'rm-dot'} />
+              <text x={s.x} y={ty} class="rm-stop-title" text-anchor={anchor}>{s.title}</text>
+              <text x={s.x} y={ty + 16} class="rm-stop-note" text-anchor={anchor}>{`${monthLabel(s.month)} · ${s.note}`}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+    <div class="rm-wrap rm-keys">
+      <span><svg width="34" height="8" aria-hidden="true"><line x1="0" y1="4" x2="34" y2="4" stroke="#15171a" stroke-width="2" stroke-dasharray="1 5" stroke-linecap="round" /></svg>On a laptop</span>
+      <span><svg width="34" height="10" aria-hidden="true"><path d="M0 7 C10 7 20 3 34 2" stroke="#15171a" stroke-width="5" fill="none" stroke-linecap="round" /></svg>On GitHub, thicker in busier months</span>
+      <span><svg width="34" height="8" aria-hidden="true"><line x1="0" y1="4" x2="34" y2="4" stroke="#6f7580" stroke-width="2" stroke-dasharray="7 6" /></svg>Planned</span>
+      <span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="#1f9d7a" /></svg>Release</span>
+      <span class="rm-hint">Hover a month for its commits</span>
+    </div>
+
+    <div class="rm-wrap">
+      <div class="rm-facts rm-reveal">
+        {facts.map((f) => (
+          <div><b>{'count' in f ? <span data-count={f.count}>{f.count!.toLocaleString()}</span> : f.value}</b><span>{f.label}</span></div>
+        ))}
+      </div>
+    </div>
+
+    <section class="rm-wrap rm-section">
+      <p class="rm-signal">Then and now</p>
+      <h2 class="rm-reveal">How it started, what it is now</h2>
+      <p class="rm-sub rm-reveal">The same name, a different product. The question grew from "is this dataset biased?" to "can this AI system ship, and who decided?"</p>
+      <div class="rm-lens">
+        <article class="rm-card rm-card-then rm-reveal">
+          <div class="rm-fig" aria-hidden="true">
+            <svg width="220" height="90" viewBox="0 0 220 90"><g fill="#c9cbc8"><rect class="rm-bar" x="20" y="40" width="22" height="40" rx="3" /><rect class="rm-bar" x="50" y="24" width="22" height="56" rx="3" /><rect class="rm-bar" x="80" y="52" width="22" height="28" rx="3" /><rect class="rm-bar" x="110" y="30" width="22" height="50" rx="3" /></g><text x="150" y="50" font-size="11" fill="#6f7580">bias score</text><text x="150" y="66" font-size="11" fill="#9096a0">a report</text></svg>
+          </div>
+          <span class="rm-when">Early 2025</span>
+          <h3>A bias checker</h3>
+          <dl>
+            <div><dt>Covered</dt><dd>Datasets and models uploaded by hand</dd></div>
+            <div><dt>Checks</dt><dd>A handful of fairness metrics, partly simulated</dd></div>
+            <div><dt>Rules</dt><dd>India-focused compliance notes</dd></div>
+            <div><dt>Who decides</dt><dd>Nobody: a report to read</dd></div>
+            <div><dt>Agents</dt><dd>Not in scope</dd></div>
+          </dl>
+        </article>
+        <div class="rm-arrow" aria-hidden="true"><svg width="40" height="24" viewBox="0 0 40 24"><path d="M2 12h32M26 4l8 8-8 8" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg></div>
+        <article class="rm-card rm-reveal" style="--d:.15s">
+          <div class="rm-fig" aria-hidden="true">
+            <svg width="260" height="96" viewBox="0 0 260 96"><g font-size="10.5"><rect x="10" y="14" width="58" height="22" rx="11" fill="#fff" stroke="rgba(21,23,26,.14)" /><text x="22" y="29" fill="#15171a">Discover</text><rect x="10" y="44" width="58" height="22" rx="11" fill="#fff" stroke="rgba(21,23,26,.14)" /><text x="28" y="59" fill="#15171a">Test</text><rect x="10" y="74" width="58" height="22" rx="11" fill="#fff" stroke="rgba(21,23,26,.14)" /><text x="20" y="89" fill="#15171a">Evidence</text><path class="rm-flow" d="M68 25 C110 25 110 55 150 55 M68 55 H150 M68 85 C110 85 110 55 150 55" stroke="#15171a" stroke-width="1.5" fill="none" /><rect x="150" y="38" width="96" height="34" rx="17" fill="#15171a" /><text x="168" y="59" fill="#fff" font-weight="600">Release gate</text></g></svg>
+          </div>
+          <span class="rm-when">November 2026</span>
+          <h3>Agentic AI governance</h3>
+          <dl>
+            <div><dt>Covers</dt><dd>Every AI system and agent, found across clouds, vendors and laptops</dd></div>
+            <div><dt>Checks</dt><dd>{registryTotals.evaluations} catalogued evaluations; fairness with intervals and p-values</dd></div>
+            <div><dt>Rules</dt><dd>{registryTotals.frameworks} frameworks, {catalogue.packs.length} packs, {registryTotals.workflows} workflows</dd></div>
+            <div><dt>Who decides</dt><dd>A person at every gate; agents prepare the work</dd></div>
+            <div><dt>Agents</dt><dd>Live runs with stated reasons, checked by replaying decisions</dd></div>
+          </dl>
+        </article>
+      </div>
+    </section>
+
+    <section class="rm-wrap rm-section">
+      <p class="rm-signal">Today, by the numbers</p>
+      <h2 class="rm-reveal">What FairMind holds now</h2>
+      <p class="rm-sub rm-reveal">Counted from the catalogue the app runs on, when this page was built.</p>
+      <div class="rm-numbers">
+        {today.map((n, i) => (
+          <div class="rm-reveal" style={`--d:${i * 0.06}s`}><b data-count={n.count}>{n.count.toLocaleString()}</b><span>{n.label}</span></div>
+        ))}
+      </div>
+    </section>
+
+    <section class="rm-wrap rm-section">
+      <p class="rm-signal">Quarter by quarter</p>
+      <h2 class="rm-reveal">What happened, and when</h2>
+      <p class="rm-sub rm-reveal">Six eras so far. Each month says what changed for the people using FairMind; months before the repository are dashed.</p>
+      <div class="rm-quarters">
+        {QUARTERS.map((q) => {
+          const era = ERAS.find((e) => e.key === q.era)!;
+          return (
+            <div class="rm-q">
+              <div class="rm-qh rm-reveal">
+                <b>{q.label}</b><span>{q.span}</span>
+                <i class="rm-era-chip" style={`--c:${era.color}`}>{era.name}</i>
+              </div>
+              <div class="rm-moments">
+                {q.moments.map((m, i) => (
+                  <article class={`rm-m rm-reveal${m.local ? ' rm-m-local' : ''}`} style={`--d:${i * 0.07}s`}>
+                    <span class="rm-m-when">{m.when}{m.tag && <span class="rm-tag">{m.tag}</span>}</span>
+                    <b>{m.title}</b>
+                    <p>{m.text}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+
+    <section class="rm-wrap rm-section rm-ahead">
+      <p class="rm-signal">The future</p>
+      <h2 class="rm-reveal">Now, next, later</h2>
+      <p class="rm-sub rm-reveal">The plan from ROADMAP.md on main. When an item ships it moves to the <a href="/changelog/">changelog</a>.</p>
+      <div class="rm-lanes">
+        <div class="rm-lane rm-lane-now rm-reveal">
+          <div class="rm-lh"><b>{NOW.label}</b><span>{NOW.span}</span></div>
+          {NOW.themes.map((t) => <div class="rm-theme"><span class="rm-dot-go" /><div><b>{t.title}</b><p>{t.text}</p></div></div>)}
         </div>
-      </section>
-    ))}
+        <div class="rm-lane rm-lane-next rm-reveal" style="--d:.1s">
+          <div class="rm-lh"><b>{NEXT.label}</b><span>{NEXT.span}</span></div>
+          <div class="rm-groups">
+            {NEXT.groups.map((g) => (
+              <div><span class="rm-gh">{g.title}</span><ul>{g.items.map((i) => <li><span class="rm-dot-plan" />{i}</li>)}</ul></div>
+            ))}
+          </div>
+        </div>
+        <div class="rm-lane rm-reveal" style="--d:.2s">
+          <div class="rm-lh"><b>{LATER.label}</b><span>{LATER.span}</span></div>
+          <ul>{LATER.items.map((i) => <li><span class="rm-dot-plan" />{i}</li>)}</ul>
+        </div>
+      </div>
+      <div class="rm-research rm-reveal">
+        <span class="rm-gh">Research ideas, not yet scheduled</span>
+        <div class="rm-chips">{RESEARCH.map((r, i) => <span class="rm-chip" style={`--d:${i * 0.03}s`}>{r}</span>)}</div>
+        <p>Have a view on what comes first? <a href="https://github.com/adhit-r/fairmind/discussions">Propose it on GitHub</a> or <a href="/contact/">talk to us</a>.</p>
+      </div>
+    </section>
 
-    <section class="route-closing" aria-labelledby="roadmap-closing-title">
-      <h2 id="roadmap-closing-title">Want something moved up?</h2>
-      <p>Tell us the framework, the workflow, or the connector. Design partners shape the order.</p>
-      <div class="route-actions"><a class="button button-primary" href="/contact/">Contact us</a><a class="button" href="/changelog/">See what shipped</a></div>
+    <section class="rm-wrap rm-section">
+      <p class="rm-signal">Made with</p>
+      <div class="rm-made">
+        <div>
+          <h2 class="rm-reveal">People decide. AI coding agents helped build it.</h2>
+          <p class="rm-reveal">FairMind is built by a small team, with Claude and OpenAI Codex as coding partners. They turned ideas into working code fast enough for a small team to build a product of this scope. Every change was directed and reviewed by a person: the same rule FairMind applies to the AI it governs.</p>
+        </div>
+        <div class="rm-split rm-reveal">
+          <span class="rm-signal">{ACTIVITY.totalCommits.toLocaleString()} commits on main</span>
+          <div class="rm-split-bar"><i style={`--w:${claudeShare * 100}%`} /></div>
+          <div class="rm-k"><i style="background:var(--rm-ink)" /><span>Written with Claude</span><b data-count={ACTIVITY.claudeCommits}>{ACTIVITY.claudeCommits.toLocaleString()}</b></div>
+          <div class="rm-k"><i style="background:#c9cbc8" /><span>Without a Claude co-author line</span><b>{(ACTIVITY.totalCommits - ACTIVITY.claudeCommits).toLocaleString()}</b></div>
+          <div class="rm-k"><i style="background:var(--rm-teal)" /><span>OpenAI Codex</span><b>writes and reviews pull requests</b></div>
+          <span class="rm-fine">Claude commits are those whose message names Claude as a co-author. Counted on {ACTIVITY.generatedAt}.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="rm-wrap rm-closing">
+      <h2>Want something moved up?</h2>
+      <p>Tell us the framework, the workflow or the connector. Design partners shape the order.</p>
+      <div class="rm-actions"><a class="button button-primary" href="/contact/">Contact us</a><a class="button" href="/changelog/">See every release</a></div>
     </section>
   </div>
 </Layout>
+
+<script>
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelector('.rm')?.classList.add('rm-js'); // content stays visible without JavaScript; motion only with it
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('is-in');
+      io.unobserve(e.target);
+      for (const el of e.target.querySelectorAll<HTMLElement>('[data-count]')) countUp(el);
+      if ((e.target as HTMLElement).dataset.count) countUp(e.target as HTMLElement);
+    }
+  }, { threshold: 0.2 });
+  function countUp(el: HTMLElement) {
+    const target = Number(el.dataset.count);
+    if (reduce || !target) return;
+    const start = performance.now(), dur = 1200;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur), v = Math.round(target * (1 - Math.pow(1 - p, 3)));
+      el.textContent = v.toLocaleString();
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  document.querySelectorAll('.rm-reveal, [data-journey], .rm-numbers b, .rm-chips').forEach((el) => io.observe(el));
+  // set each solid segment's length so it can draw itself
+  document.querySelectorAll<SVGPathElement>('.rm-seg-public').forEach((p) => p.style.setProperty('--len', String(p.getTotalLength())));
+</script>

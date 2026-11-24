@@ -107,7 +107,7 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
       <div className="flex flex-wrap items-center gap-2.5">
         <ResultPill status={run.status} />
         {run.thresholdLoosened && <Pill tone="warn">Loosened thresholds: not counted as proof</Pill>}
-        {run.partialRead && run.status === 'passed' && <Pill tone="warn">Read part of the week's live runs: not counted as proof</Pill>}
+        {run.partialRead && run.status === 'passed' && <Pill tone="warn">Read part of the week&apos;s live runs: not counted as proof</Pill>}
         <span className={`text-[13px] ${MUTED}`}>
           {run.systemName}, {when(run.createdAt)}
           {Object.values(run.files).length > 0 && `, from ${run.source === 'connection' ? 'the connection to ' : ''}${Object.values(run.files).join(' and ')}`}

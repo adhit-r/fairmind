@@ -10,13 +10,16 @@ const verdict = (v: string | null): ['ok' | 'cond' | 'fail' | 'none', string] =>
   return ['none', word(v)]
 }
 
-export function GateCard({ systems }: { systems: GateSystem[] }) {
+export function GateCard({ systems, framework, outOfScope }: { systems: GateSystem[]; framework: string | null; outOfScope: number }) {
   const cols: { key: string; label: string }[] = []
   for (const s of systems) for (const c of s.checks) if (!cols.some((x) => x.key === c.key)) cols.push({ key: c.key, label: c.label ?? word(c.key) })
+  const sub = framework
+    ? `Systems in scope for ${framework}, against every check the release gate runs.${outOfScope ? ` ${outOfScope} registered ${outOfScope === 1 ? 'system is' : 'systems are'} outside its scope and not listed.` : ''}`
+    : 'Every system against every check the release gate runs.'
   return (
-    <Card span={8} title="Release gate checks" sub="Every system against every check the release gate runs.">
+    <Card span={8} title="Release gate checks" sub={sub}>
       {systems.length === 0 ? (
-        <Empty title="No systems yet" text="Register a system to see its release gate checks." />
+        <Empty title={framework ? 'No system in scope' : 'No systems yet'} text={framework ? `No registered system is in scope for ${framework}.` : 'Register a system to see its release gate checks.'} />
       ) : (
         <div className="rp-scroll">
           <table className="rp-heat">
@@ -145,16 +148,19 @@ export function DriftCard({ drift }: { drift: Engineering['fairnessDrift'] }) {
 
 export function FixesCard({ fixes }: { fixes: Engineering['fixes'] }) {
   return (
-    <Card span={5} title="Fixes to make" sub="Open findings with the system, priority and owner.">
+    <Card span={5} title="Fixes to make" sub="Failed evaluations and open remediation tasks. A passing rerun closes a failed evaluation.">
       {fixes.length === 0 ? (
-        <Empty title="No fixes waiting" text="There are no open findings to fix." />
+        <Empty title="No fixes waiting" text="No failed evaluation and no open remediation task." />
       ) : (
         <ul className="rp-list">
           {fixes.map((f, i) => (
             <li key={`${f.title}-${i}`}>
               <div>
                 <div className="t">{f.title}</div>
-                <div className="s">{f.systemName} · {f.owner ?? 'Unassigned'} · {word(f.status)}</div>
+                <div className="s">
+                  {f.systemName}
+                  {f.kind === 'evaluation' ? <> · <span className="rp-mono">{f.evaluationId}</span> · Run it again once fixed</> : <> · {f.owner ?? 'Unassigned'} · {word(f.status)}</>}
+                </div>
               </div>
               <Pill tone={/crit|high/i.test(f.priority) ? 'fail' : /med/i.test(f.priority) ? 'cond' : 'none'}>{word(f.priority)}</Pill>
             </li>

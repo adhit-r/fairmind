@@ -96,6 +96,28 @@ def test_backfill_covers_every_org_with_a_plan(db):
     assert all(system != "elsewhere" for system, _ in _assigned(db))
 
 
+def test_a_system_scoped_out_of_the_plan_framework_never_gets_it(db):
+    _seed(db)
+    db.execute(text(
+        "INSERT INTO framework_scope_drafts (id, org_id, framework_key, system_id, verdict, reason, confidence, evidence_json, test_version, drafted_at, "
+        "status, decided_verdict) VALUES ('d1', :org, 'ISO42001', 'claims', 'out', 'Not an AI system', 'high', '[]', 'v1', '2026-11-20', 'confirmed', 'out')"
+    ), {"org": ORG})
+    db.commit()
+    assert ensure_plan_assignments(db, ORG) == 1
+    assert _assigned(db) == [("loan", "iso-v1")]
+
+
+def test_a_catalogue_run_proposes_only_annex_a_clauses_it_tests():
+    from src.application.services.clause_map_service import _catalogue
+    from src.application.services.framework_catalog_service import evaluation_clauses, is_management_system_clause
+
+    assert evaluation_clauses("EV-SEC-14", "iso-42001") == {"A.4.4"}  # dependency scanning: tooling resources only
+    assert evaluation_clauses("EV-DEV-02", "iso-42001") == set()  # a secrets scan tests no ISO 42001 clause directly
+    assert evaluation_clauses("EV-TST-01", "iso-42001") == {"A.6.2.4"}
+    every = set().union(*(evaluation_clauses(ev, "iso-42001") for ev in _catalogue()["evaluations"]))
+    assert every and not any(is_management_system_clause(c) for c in every)
+
+
 def test_version_label_maps_back_to_catalogue_key(db):
     _seed(db)
     assert catalogue_key_for_label(db, "AIUC-1 April, 2026") == "AIUC1"

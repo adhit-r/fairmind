@@ -425,16 +425,30 @@ def test_an_acknowledged_published_policy_attests_the_policy_clauses_of_its_own_
     assert clause["state"] == "attested" and any(ch.get("source") == "policy_acknowledgement" for ch in clause["checks"])
 
 
-def test_a_passed_catalogue_run_proposes_the_iso_clauses_its_control_reaches(tmp_database):
+def test_a_passed_catalogue_run_proposes_only_the_clauses_its_evaluation_tests(tmp_database):
+    from database.governance_models import GovernanceControlDefinition, GovernanceFrameworkVersion
+
     org_id, client = _org(tmp_database)
     system = _system(tmp_database, org_id)
-    gov, _, _, missing = _assigned_control(tmp_database, client, org_id, system)  # A.6.2.4, crosswalked from FMC-DAT-01
-
+    # A.6.2.4 is crosswalked from EV-DAT-01's common control but not tested by it: no longer proposed
+    gov, _, _, missing = _assigned_control(tmp_database, client, org_id, system)
     passed, failed = _run(client, system, 0.0).json(), _run(client, system, 1.0).json()
     runs = {r["evidenceId"]: r for r in client.get(f"{gov}/systems/{system}/evidence-runs").json()}
-    assert [m["state"] for m in runs[passed["id"]]["candidateMappings"]] == ["candidate"]
-    assert runs[failed["id"]]["candidateMappings"] == []
-    assert missing() == 1  # a candidate supports nothing until a reviewer accepts it
+    assert runs[passed["id"]]["candidateMappings"] == [] and runs[failed["id"]]["candidateMappings"] == []
+    assert missing() == 1
+
+    # A.6.2.6 is in EV-DAT-01's own tests list: a passed run proposes it, as a candidate for a reviewer
+    with tmp_database.begin() as conn:
+        conn.execute(GovernanceFrameworkVersion.__table__.insert().values(
+            id="iso-ops", framework_key="iso-42001", name="ISO/IEC 42001", version_label="2023 ops", source_hash="h-ops", status="active"))
+        conn.execute(GovernanceControlDefinition.__table__.insert().values(
+            id="iso-ops-c", framework_version_id="iso-ops", external_id="A.6.2.6", title="Operation and monitoring",
+            statement="Operate and monitor the AI system", frequency="Annual", active=1))
+    other = _system(tmp_database, org_id)
+    client.post(f"{gov}/systems/{other}/framework-assignments", json={"frameworkVersionId": "iso-ops"})
+    proposed = _run(client, other, 0.0).json()
+    runs = {r["evidenceId"]: r for r in client.get(f"{gov}/systems/{other}/evidence-runs").json()}
+    assert [m["state"] for m in runs[proposed["id"]]["candidateMappings"]] == ["candidate"]
 
 
 def test_a_material_change_takes_a_mapped_catalogue_run_off_its_control(tmp_database):

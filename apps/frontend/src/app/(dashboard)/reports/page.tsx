@@ -58,7 +58,7 @@ function Body({ m, role }: { m: ReportModel; role: Role }) {
     case 'engineering':
       return (
         <>
-          {m.systems ? <GateCard systems={m.systems} /> : null}
+          {m.systems ? <GateCard systems={m.systems} framework={m.framework.name} outOfScope={m.outOfScope ?? 0} /> : null}
           {m.engineering ? (
             <>
               <ToolsCard tools={m.engineering.toolExposure} />
@@ -180,8 +180,9 @@ function ReportsHub() {
         )}
       </VStack>
 
-      {drawer && shown ? (
-        <ReportDrawer item={drawer.item} format={drawer.format} model={shown} scopeName={scopeName} onClose={() => setDrawer(null)} onSealed={recent.reload} />
+      {/* The page-one draft is the record's own wording, the same figures the page shows: never the model's rewording. */}
+      {drawer && model ? (
+        <ReportDrawer item={drawer.item} format={drawer.format} model={model} scopeName={scopeName} onClose={() => setDrawer(null)} onSealed={recent.reload} />
       ) : null}
     </div>
   )

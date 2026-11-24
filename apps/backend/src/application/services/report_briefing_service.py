@@ -60,17 +60,23 @@ def _sentences(model: Dict[str, Any]) -> Tuple[List[str], Dict[str, Dict[str, An
         open_n, late_n = tasks["open"], tasks["overdue"]
         out.append(f"{f.add('tasks.open', str(open_n), 'Open tasks')} {_plural(open_n, 'task is', 'tasks are')} open and "
                    f"{f.add('tasks.overdue', str(late_n), 'Tasks past their due date', 'bad' if late_n else '')} {_plural(late_n, 'is', 'are')} overdue.")
-    cross = model.get("crosswalk")
-    other = next((x for x in (cross or {}).get("frameworks", []) if not x["followed"]), None)
-    if other:
-        out.append(f"Evidence you hold already covers {f.add('crosswalk.top', str(other['coverage']) + '%', 'Clauses covered through the clause map')} of {other['name']}.")
     systems = model.get("systems")
     if systems is not None:
-        failing = [s for s in systems if any(c["fails"] for c in s["checks"])]
-        out.append(f"{f.add('systems.failing', str(len(failing)), 'Systems with a failing gate check', 'bad' if failing else '')} "
-                   f"{_plural(len(failing), 'system fails', 'systems fail')} a release gate check.")
+        # the same verdicts the release gate table shows, one per listed system
+        no_go = sum(1 for s in systems if s.get("verdict") == "no_go")
+        scope = f"in scope for {fw}" if (model.get("framework") or {}).get("key") else "registered"
+        if systems:
+            out.append(f"{f.add('systems.nogo', str(no_go), 'Systems whose release gate verdict is No go', 'bad' if no_go else '')} of "
+                       f"{f.add('systems.listed', str(len(systems)), 'Systems listed in the release gate table')} systems {scope} "
+                       f"{_plural(no_go, 'is', 'are')} not cleared for release.")
+        else:
+            out.append(f"No system is {scope} yet.")
     eng = model.get("engineering")
     if eng:
+        failed_runs = sum(1 for x in eng.get("fixes") or [] if x.get("kind") == "evaluation")
+        if failed_runs:
+            out.append(f"{f.add('fixes.evaluations', str(failed_runs), 'Failed catalogue evaluations with an open finding', 'bad')} failed "
+                       f"{_plural(failed_runs, 'evaluation waits', 'evaluations wait')} to be fixed and run again.")
         ungated = [t for t in eng["toolExposure"] if not t["gated"]]
         if eng["toolExposure"]:
             out.append(f"{f.add('tools.ungated', str(len(ungated)), 'High-risk agent tools that run without a person approving', 'bad' if ungated else '')} high-risk agent "
@@ -116,9 +122,14 @@ def template_briefing(model: Dict[str, Any]) -> Dict[str, Any]:
     return {"source": "template", "parts": _parts(sentences, facts)}
 
 
-def accept_rewrite(sentences: List[str], facts: Dict[str, Dict[str, Any]]) -> Optional[List[Part]]:
-    """The model's sentences, or None when they cite an unknown fact, drop a fact or write a digit of their own."""
+def accept_rewrite(sentences: List[str], facts: Dict[str, Dict[str, Any]], draft_count: Optional[int] = None) -> Optional[List[Part]]:
+    """The model's sentences, or None when they cite an unknown fact, drop a fact, write a digit of their own, add a
+    sentence with no fact in it (a claim the figures do not carry), or run longer than the draft."""
     if not sentences or not all(isinstance(s, str) for s in sentences):
+        return None
+    if draft_count is not None and len(sentences) > draft_count:
+        return None
+    if any(not PLACEHOLDER.search(s) for s in sentences):
         return None
     text = " ".join(sentences)
     cited = set(PLACEHOLDER.findall(text))
@@ -130,9 +141,10 @@ def accept_rewrite(sentences: List[str], facts: Dict[str, Dict[str, Any]]) -> Op
 
 
 REWRITE_SYSTEM = (
-    "You write the two-to-four sentence briefing at the top of an AI governance report for the named reader. "
+    "You reword the briefing at the top of an AI governance report for the named reader, sentence by sentence. "
     "Use every {{fact-id}} placeholder exactly once and never write a number yourself; the placeholders are replaced "
-    "with the real figures. Plain, calm, specific English. No advice the facts do not support."
+    "with the real figures. Every sentence must contain at least one placeholder. Add no sentence, cause, judgement or "
+    "conclusion the draft does not state. Plain, calm, specific English."
 )
 REWRITE_SCHEMA = {"type": "object", "properties": {"sentences": {"type": "array", "items": {"type": "string"}}}, "required": ["sentences"], "additionalProperties": False}
 
@@ -150,5 +162,5 @@ async def briefing_with_model(complete: Any, conn: Any, model: Dict[str, Any]) -
         data, _ = await complete(conn, REWRITE_SYSTEM, prompt, REWRITE_SCHEMA)
     except Exception:  # any provider failure keeps the template
         return {"source": "template", "parts": _parts(sentences, facts)}
-    parts = accept_rewrite(data.get("sentences") or [], facts)
+    parts = accept_rewrite(data.get("sentences") or [], facts, len(sentences))
     return {"source": "model", "parts": parts} if parts else {"source": "template", "parts": _parts(sentences, facts)}

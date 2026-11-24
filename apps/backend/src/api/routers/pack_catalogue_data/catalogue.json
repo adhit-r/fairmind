@@ -36400,7 +36400,8 @@
     "OWASPMCP|MCP04",
     "NISTADV|Supply chain",
     "ATLAS|Initial Access",
-    "CSAAICM|STA"
+    "CSAAICM|STA",
+    "ISO42001|A.4.4"
    ],
    "maturity": "L4",
    "maturityLabel": "Known-answer tested (not independently benchmarked)"
