@@ -30,7 +30,7 @@ export function useWhatsNew() {
     else setError(message(r))
   }, [])
   useEffect(() => { void load() }, [load])
-  const latest = data?.releases[0] ?? null
+  const latest = data?.releases?.[0] ?? null // a reply without releases must not take the whole shell down
   return {
     data,
     error,

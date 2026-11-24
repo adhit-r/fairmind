@@ -362,6 +362,29 @@ def crosswalk_clauses(common_control: str | None, framework_key: str) -> set[str
     return {c["control"] for c in _crosswalk().get(common_control or "", ()) if c["framework"] == source_key}
 
 
+@lru_cache(maxsize=1)
+def _evaluation_tests() -> dict[str, tuple[str, ...]]:
+    """Catalogue evaluation id -> the requirement keys it tests directly (its own ``tests`` list)."""
+    data = json.loads(CATALOGUE_PATH.read_bytes())
+    return {e["id"]: tuple(e.get("tests") or ()) for e in data["evaluations"]}
+
+
+def is_management_system_clause(control: str) -> bool:
+    """ISO/IEC 42001 clauses 4 to 10 describe the management system as a whole; Annex A controls start with "A."."""
+    return not control.startswith("A.")
+
+
+def evaluation_clauses(evaluation_id: str, framework_key: str) -> set[str]:
+    """The store framework's clause ids one catalogue evaluation's own evidence can support: the clauses it tests directly.
+
+    Its common control's whole crosswalk is far wider (a secrets scan would reach every life-cycle clause), so that is
+    not used. A management-system clause (4.x to 10.x) is never proposed from a single technical check.
+    """
+    source_key = CATALOGUE_FRAMEWORKS[framework_key]
+    controls = {key.split("|", 1)[1] for key in _evaluation_tests().get(evaluation_id, ()) if key.startswith(f"{source_key}|")}
+    return {c for c in controls if not is_management_system_clause(c)}
+
+
 def parse_catalogue_framework(framework_key: str) -> ParsedFrameworkCatalog:
     """Build a store framework from the pack catalogue's active clauses; the hash covers only that framework's rows."""
     data = json.loads(CATALOGUE_PATH.read_bytes())

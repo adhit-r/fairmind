@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,8 +95,9 @@ def test_tasks_risks_and_decisions_come_from_the_record():
     loan = _system(client, "Acme loan scoring", "high")
     _plan(loan, "ISO42001")
     org = _org_of(loan)
-    late = (date.today() - timedelta(days=4)).isoformat()
-    soon = (date.today() + timedelta(days=4)).isoformat()
+    today = datetime.now(timezone.utc).date()  # the service counts days late in UTC
+    late = (today - timedelta(days=4)).isoformat()
+    soon = (today + timedelta(days=4)).isoformat()
     for n, (due, status) in enumerate([(late, "open"), (soon, "open"), (late, "done")], start=1):
         _exec("INSERT INTO org_tasks (id, org_id, number, title, description, status, priority, created_by, due_date, subject_type, created_at, updated_at) "
               "VALUES (:id, :org, :n, :t, '', :st, 'medium', 'owner', :due, 'none', '2026-11-01', '2026-11-01')",
@@ -170,3 +171,49 @@ def test_a_reworded_briefing_must_cite_every_fact_and_add_no_number():
     assert accept_rewrite(["Readiness stands at {{readiness.pct}} after 3 steps.", "{{road.steps}} {{road.forecast}}"], facts) is None  # its own digit
     assert accept_rewrite(["Readiness is {{readiness.pct}}."], facts) is None  # drops facts
     assert accept_rewrite(ok + ["{{made.up}}"], facts) is None  # unknown fact
+    # a sentence with no fact is a claim the figures do not carry; a reply longer than the draft adds one
+    padded = ok + ["The failing checks indicate non-compliance with the defined release criteria."]
+    assert accept_rewrite(padded, facts) is None
+    assert accept_rewrite(["{{readiness.pct}} met.", "{{road.steps}} steps.", "Reaching {{road.forecast}}."], facts, draft_count=2) is None
+
+
+def _scope_out(org: str, sid: str, framework: str = "ISO42001") -> None:
+    _exec("INSERT INTO framework_scope_drafts (id, org_id, framework_key, system_id, verdict, reason, confidence, evidence_json, test_version, drafted_at, "
+          "status, decided_verdict, decided_by, decided_at) VALUES (:id, :org, :fk, :sid, 'out', 'Not an AI system', 'high', '[]', 'v1', '2026-11-20', "
+          "'confirmed', 'out', 'acme reviewer', '2026-11-20')", id=str(uuid.uuid4()), org=org, fk=framework, sid=sid)
+
+
+def _failed_run_finding(sid: str, evaluation_id: str) -> None:
+    _exec("INSERT INTO governance_risks (id, system_id, title, severity, status, likelihood, risk_score, source, metadata_json, description, created_at, updated_at) "
+          "VALUES (:id, :sid, :t, 'high', 'open', 'likely', 0.52, 'fairmind.eval_engines', :m, 'The run found 2 unpinned packages.', '2026-11-20', '2026-11-20')",
+          id=str(uuid.uuid4()), sid=sid, t=f"{evaluation_id} Model file and dependency scanning failed", m=json.dumps({"evaluationId": evaluation_id}))
+
+
+def test_engineering_lists_in_scope_systems_and_its_headline_matches_the_verdicts():
+    client = _client()
+    loan = _system(client, "Acme loan scoring", "high")
+    chat = _system(client, "Acme assistant", "medium")
+    payroll = _system(client, "Acme payroll export", "low")  # registered, but not an AI system
+    _plan(loan, "ISO42001")
+    _scope_out(_org_of(loan), payroll)
+    _failed_run_finding(loan, "EV-SEC-14")
+    _failed_run_finding(payroll, "EV-SEC-14")  # outside the scope: not a fix on this view
+
+    body = client.get(f"{AIG}/reports/overview", params={"role": "engineering"}).json()
+    listed = {s["id"]: s["verdict"] for s in body["systems"]}
+    assert set(listed) == {loan, chat} and body["outOfScope"] == 1
+    no_go = sum(1 for v in listed.values() if v == "no_go")
+    facts = {p["fact"]: p["value"] for p in body["briefing"]["parts"] if "fact" in p}
+    assert (facts["systems.nogo"], facts["systems.listed"]) == (str(no_go), "2")  # the headline counts the rows it heads
+    fixes = body["engineering"]["fixes"]
+    assert [(f["kind"], f["evaluationId"], f["systemName"]) for f in fixes] == [("evaluation", "EV-SEC-14", "Acme loan scoring")]
+    assert facts["fixes.evaluations"] == "1"
+
+
+def test_compliance_crosswalk_shows_only_followed_frameworks():
+    client = _client()
+    loan = _system(client, "Acme loan scoring", "high")
+    _plan(loan, "ISO42001")
+    assert client.post(f"{AIG}/systems/{loan}/attestations", json={"check": "human_oversight", "statement": "A reviewer reads every flagged case before it is actioned."}).status_code == 200
+    cross = client.get(f"{AIG}/reports/overview", params={"role": "compliance"}).json()["crosswalk"]
+    assert [f["key"] for f in cross["frameworks"]] == ["ISO42001"] and all(f["followed"] for f in cross["frameworks"])

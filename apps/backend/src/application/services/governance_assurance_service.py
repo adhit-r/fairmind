@@ -666,14 +666,14 @@ class GovernanceAssuranceService:
         if values:
             self.db.execute(insert(GovernanceControlEvidence.__table__), values)
 
-    def map_catalogue_run(self, org_id: str, system_id: str, run_id: str, evidence_id: str, common_control: str | None) -> None:
-        """A passed catalogue run proposes the ISO 42001 clauses its evaluation's common control is crosswalked to.
-        Candidates only: a reviewer accepts or rejects each one."""
-        from src.application.services.framework_catalog_service import crosswalk_clauses
+    def map_catalogue_run(self, org_id: str, system_id: str, run_id: str, evidence_id: str, evaluation_id: str) -> None:
+        """A passed catalogue run proposes only the ISO 42001 Annex A clauses its evaluation tests directly (the
+        catalogue's per-evaluation list), never a management-system clause. Candidates only: a reviewer decides each."""
+        from src.application.services.framework_catalog_service import evaluation_clauses
 
         self.add_candidate_mappings(
-            org_id, system_id, run_id, evidence_id, crosswalk_clauses(common_control, "iso-42001"),
-            f"Catalogue crosswalk: {common_control} reaches this clause.", framework_key="iso-42001",
+            org_id, system_id, run_id, evidence_id, evaluation_clauses(evaluation_id, "iso-42001"),
+            f"Catalogue: {evaluation_id} tests this clause directly.", framework_key="iso-42001",
         )
 
     def list_evidence_runs(self, org_id: str, system_id: str) -> list[dict] | None:

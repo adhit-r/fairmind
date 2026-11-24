@@ -56,16 +56,30 @@ def assign_frameworks(db: Session, org_id: str, system_id: str, keys: Iterable[s
     return created
 
 
+def scoped_out(db: Session, org_id: str) -> set:
+    """(framework key, system id) pairs a person confirmed out of that framework's scope (framework scoping)."""
+    try:
+        rows = db.execute(
+            text("SELECT framework_key, system_id FROM framework_scope_drafts WHERE org_id = :org AND status = 'confirmed' AND decided_verdict = 'out'"),
+            {"org": org_id},
+        ).fetchall()
+    except Exception:  # the scoping table is created by migration 028
+        db.rollback()
+        return set()
+    return {(r[0], r[1]) for r in rows}
+
+
 def ensure_plan_assignments(db: Session, org_id: str, system_ids: Optional[Iterable[str]] = None) -> int:
     """Assign the plan's frameworks to every live system that inherits them.
 
     A system that confirmed its own frameworks keeps that list: one without a plan framework has opted out of it.
-    Idempotent. Returns how many assignments were created.
+    A system a person scoped out of a framework never gets that framework. Idempotent. Returns how many were created.
     """
     plan = plan_frameworks(db, org_id)
     if not plan:
         return 0
     wanted = set(system_ids) if system_ids is not None else None
+    out = scoped_out(db, org_id)
     rows = db.execute(
         text("SELECT id, metadata_json FROM governance_ai_systems WHERE org_id = :org AND COALESCE(lifecycle_stage, '') <> 'retired'"),
         {"org": org_id},
@@ -76,7 +90,7 @@ def ensure_plan_assignments(db: Session, org_id: str, system_ids: Optional[Itera
             continue
         if isinstance(_json(metadata).get("applicability"), dict):
             continue
-        created += assign_frameworks(db, org_id, system_id, plan)
+        created += assign_frameworks(db, org_id, system_id, [k for k in plan if (k, system_id) not in out])
     return created
 
 

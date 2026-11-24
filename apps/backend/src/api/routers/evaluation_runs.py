@@ -393,8 +393,8 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
     # a pass on thresholds looser than the catalogue's, or a zero-tolerance pass on part of the live runs,
     # shows its own result but proves nothing: no mappings, no resolved finding
     proves = outcome["status"] == "passed" and not outcome.get("thresholdLoosened") and not outcome.get("partialRead")
-    if proves:  # proposes the ISO 42001 clauses its control reaches, for a reviewer to accept
-        GovernanceAssuranceService(db).map_catalogue_run(org_id, system_id, run_pk, evidence_id, EVALUATIONS[evaluation_id].commonControl)
+    if proves:  # proposes the ISO 42001 clauses this evaluation tests directly, for a reviewer to accept
+        GovernanceAssuranceService(db).map_catalogue_run(org_id, system_id, run_pk, evidence_id, evaluation_id)
     # A failed run opens one finding for this evaluation on this system; a passing run resolves it.
     finding = {"sys": system_id, "source": "fairmind.eval_engines", "tag": f'%"evaluationId": "{evaluation_id}"%', "closed": list(CLOSED_RISK_STATUSES), "now": now}
     where = "WHERE system_id = :sys AND source = :source AND metadata_json LIKE :tag AND status NOT IN :closed"

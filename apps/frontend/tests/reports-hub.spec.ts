@@ -51,6 +51,29 @@ const risk = {
   },
 }
 
+const engineering = {
+  ...base('engineering'),
+  outOfScope: 8,
+  briefing: {
+    source: 'template',
+    parts: [
+      { fact: 'systems.nogo', value: '2', note: 'Systems whose release gate verdict is No go', tone: 'bad' },
+      { text: ' of ' },
+      { fact: 'systems.listed', value: '2', note: 'Systems listed in the release gate table', tone: '' },
+      { text: ' systems in scope are not cleared for release.' },
+    ],
+  },
+  systems: [
+    { id: 's1', name: 'Acme loan model', tier: 'high', verdict: 'no_go', approvalStatus: null, confidence: 0.2, checks: [{ key: 'fairness', label: 'Fairness measured', state: 'open', fails: false, stale: false }] },
+    { id: 's2', name: 'Acme claims agent', tier: 'high', verdict: 'no_go', approvalStatus: null, confidence: 0.1, checks: [{ key: 'fairness', label: 'Fairness measured', state: 'open', fails: true, stale: false }] },
+  ],
+  engineering: {
+    toolExposure: [],
+    fairnessDrift: [],
+    fixes: [{ title: 'EV-SEC-14 Model file and dependency scanning failed', systemName: 'Acme claims agent', priority: 'high', status: 'open', owner: null, kind: 'evaluation', evaluationId: 'EV-SEC-14', summary: '2 unpinned packages' }],
+  },
+}
+
 const sealed = { id: 'snap-1', title: 'Executive summary', role: 'executive', systemId: null, sha256: 'b84e'.repeat(16), approvedBy: 'reviewer', approvedAt: '2026-11-22T10:05:00Z' }
 
 async function install(page: Page) {
@@ -64,7 +87,11 @@ async function install(page: Page) {
     const method = route.request().method()
     if (path === '/api/v1/auth/me') return json(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@acme.test' })
     if (path === '/api/v1/organizations') return json(route, { organizations: [{ id: 'org-1', name: 'Acme org', slug: 'acme-org', owner_id: 'user-1', created_at: '2026-01-01T00:00:00Z', role: 'admin' }] })
-    if (path === '/api/v1/ai-governance/reports/overview') return json(route, url.searchParams.get('role') === 'risk' ? risk : executive)
+    if (path === '/api/v1/ai-governance/reports/overview') {
+      const role = url.searchParams.get('role')
+      return json(route, role === 'risk' ? risk : role === 'engineering' ? engineering : executive)
+    }
+    if (path === '/api/v1/whats-new') return json(route, { releases: [], seen: null, emails: false })
     if (path === '/api/v1/ai-governance/reports/briefing') return json(route, { source: 'template', parts: [] })
     if (path === '/api/v1/ai-governance/reports/snapshots') return json(route, method === 'POST' ? sealed : [])
     if (path === '/api/v1/shadow-ai') return json(route, { findings: [], resolved: [], map: { tools: [], teams: [], cells: {} }, coverage: { proxyLogs: false, okta: false, entra: false, gateway: false, mcpRegistry: false, people: 0, approvedTools: 0, ssoTools: 0 } })
@@ -93,6 +120,15 @@ test.describe('Reports hub', () => {
     await expect(page).toHaveURL(/role=risk/)
     await expect(page.getByRole('heading', { name: 'Heat map' })).toBeVisible()
     await expect(page.getByLabel(/Likely, critical impact/)).toBeVisible()
+  })
+
+  test('engineering lists in-scope systems and shows a failed evaluation as a fix', async ({ page }) => {
+    await page.goto('/reports?role=engineering')
+    await expect(page.getByRole('heading', { name: 'Release gate checks' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(/8 registered systems are outside its scope and not listed/)).toBeVisible()
+    await expect(page.locator('.rp-cite', { hasText: '2' }).first()).toBeVisible()
+    await expect(page.getByText('EV-SEC-14 Model file and dependency scanning failed')).toBeVisible()
+    await expect(page.getByText('Run it again once fixed')).toBeVisible()
   })
 
   test('approving in the drawer shows the seal', async ({ page }) => {
