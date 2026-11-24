@@ -11,6 +11,7 @@ import zipfile
 import pytest
 
 from src.application.services.eval_engines import REGISTRY, EngineError
+from src.application.services.eval_engines.common import reviewed
 from tests.known_answer import known_answer
 from tests.test_known_answer_behaviour import _bad, _live, _probes
 from tests.test_known_answer_behaviour import _run as _live_run
@@ -42,19 +43,20 @@ LOW_ONLY = "def check(x):\n    assert x\n"  # Bandit B101 (assert) is low severi
 
 @known_answer("EV-DEV-03")
 def test_code_scan_counts_high_severity_findings():
-    """SHELL holds one shell=True call with a variable command: exactly one high finding (B602) in one file. Threshold 0: failed."""
+    """SHELL holds one shell=True call with a variable command: exactly one high finding (B602) in one file. Threshold zero
+    unresolved: insufficient, with that finding waiting for a person to mark it resolved or accepted."""
     out = run("EV-DEV-03", {"code": SHELL})
-    assert out["status"] == "failed" and out["metrics"]["high"] == 1 and out["metrics"]["files"] == 1
+    assert out["status"] == "insufficient" and out["metrics"]["high"] == 1 and out["metrics"]["files"] == 1 and out["metrics"]["unreviewed"] == 1
     assert out["detail"][0]["test"].startswith("B602") and out["detail"][0]["severity"] == "high"
 
 
 @known_answer("EV-DEV-03")
 def test_code_scan_threshold_is_zero_high_findings_and_lower_severities_do_not_count():
-    """No finding passes; one low finding (assert) leaves high at 0, so it still passes; one high finding fails."""
+    """No finding passes; one low finding (assert) leaves high at 0, so it still passes; one high finding waits for review."""
     assert run("EV-DEV-03", {"code": CLEAN})["metrics"]["high"] == 0
     low = run("EV-DEV-03", {"code": LOW_ONLY})
     assert low["status"] == "passed" and low["metrics"]["high"] == 0 and low["metrics"]["low"] == 1
-    assert run("EV-DEV-03", {"code": CLEAN + SHELL})["status"] == "failed"
+    assert run("EV-DEV-03", {"code": CLEAN + SHELL})["status"] == "insufficient"
 
 
 @known_answer("EV-DEV-03")
@@ -62,8 +64,21 @@ def test_code_scan_archive_counts_files_and_findings():
     """An archive with ok.py, two shell calls in deploy.py and a non-code README: 2 Python files scanned, 2 high findings."""
     two = SHELL + "\ndef again(cmd):\n    subprocess.call(cmd, shell=True)\n"
     out = run("EV-DEV-03", {"code": zipped(**{"pkg/ok.py": CLEAN, "pkg/deploy.py": two, "README.md": "not code"})})
-    assert out["status"] == "failed" and out["metrics"]["files"] == 2 and out["metrics"]["high"] == 2
+    assert out["status"] == "insufficient" and out["metrics"]["files"] == 2 and out["metrics"]["high"] == 2
     assert {r["file"] for r in out["detail"]} == {"pkg/deploy.py"}
+
+
+@known_answer("EV-DEV-03", path="review")
+def test_code_scan_passes_once_every_high_finding_is_resolved_or_accepted():
+    """Two high findings in deploy.py, at lines 4 and 7: one resolved leaves 1 open; resolved and accepted passes."""
+    two = SHELL + "\ndef again(cmd):\n    subprocess.call(cmd, shell=True)\n"
+    out = run("EV-DEV-03", {"code": zipped(**{"deploy.py": two})})
+    items = [i["item"] for i in out["review"]["items"]]
+    assert items == ["finding 1", "finding 2"] and [r["finding"] for r in out["detail"] if "finding" in r] == [1, 2]
+    labels = [i["label"] for i in out["review"]["items"]]
+    assert [x.split(" ")[0] for x in labels] == ["deploy.py:4", "deploy.py:7"] and all(" B602 " in x for x in labels)
+    assert reviewed("EV-DEV-03", items, {items[0]: "resolved"}) == ("insufficient", 1)
+    assert reviewed("EV-DEV-03", items, {items[0]: "resolved", items[1]: "accepted"}) == ("passed", 0)
     with pytest.raises(EngineError, match="outside"):
         run("EV-DEV-03", {"code": zipped(**{"../evil.py": CLEAN})})
 

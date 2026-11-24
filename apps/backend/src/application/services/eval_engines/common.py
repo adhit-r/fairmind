@@ -102,6 +102,34 @@ def result(status: str, summary: str, metrics: Dict[str, Any], detail: Optional[
     return {"status": status, "summary": summary, "metrics": metrics, "detail": rows[:MAX_DETAIL_ROWS], "detailTotal": len(rows)}
 
 
+# Evaluations whose catalogue threshold needs a person to review every flagged item (POST /evaluation-runs/{id}/reviews):
+# decision -> whether it clears the item. The run passes once every item is cleared and fails once any is confirmed.
+REVIEW_DECISIONS: Dict[str, Dict[str, bool]] = {
+    "EV-DAT-02": {"benign": True, "poisoned": False},
+    "EV-DAT-07": {"benign": True, "poisoned": False},
+    "EV-DEV-03": {"resolved": True, "accepted": True},
+}
+
+
+def awaiting_review(measured: str, metrics: Dict[str, Any], detail: List[Dict[str, Any]], items: Dict[str, str]) -> Dict[str, Any]:
+    """A run whose measurement is within the threshold but whose flagged items (key -> what it is) no person has reviewed yet."""
+    n = len(items)
+    out = result("insufficient", f"{measured} {n} flagged {'item awaits' if n == 1 else 'items await'} a person's review; "
+                 "the run passes once every one is reviewed and cleared.", {**metrics, "unreviewed": n}, detail)
+    out["review"] = {"measured": measured, "items": [{"item": k, "label": v} for k, v in items.items()]}
+    return out
+
+
+def reviewed(evaluation_id: str, items: List[str], decisions: Dict[str, str]) -> Tuple[str, int]:
+    """The verdict on a run awaiting review, from each item's latest decision: failed once any decision confirms an item,
+    insufficient while any item has none, else passed; with how many items are still unreviewed."""
+    clears = REVIEW_DECISIONS[evaluation_id]
+    left = sum(1 for i in items if i not in decisions)
+    if any(not clears[decisions[i]] for i in items if i in decisions):
+        return "failed", left
+    return ("insufficient" if left else "passed"), left
+
+
 def upper_bound(bad: int, n: int) -> float:
     """The one-sided 95% Clopper-Pearson upper bound on a rate seen as bad of n, as a fraction."""
     if bad >= n:

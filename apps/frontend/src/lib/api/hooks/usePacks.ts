@@ -587,6 +587,14 @@ export interface EngineRun {
   thresholdLoosened?: Array<{ param: string; value: number; catalogue: number | null }> | null
   /** A zero-tolerance check that read only part of the week's live runs: a pass proves nothing. */
   partialRead?: boolean
+  /** Flagged items a person must review before the run can pass (EV-DAT-02, EV-DAT-07, EV-DEV-03). */
+  review?: {
+    items: Array<{ item: string; label: string }>
+    decisions?: Array<{ item: string; decision: string; note: string; by: string; at: string }>
+    choices?: string[]
+  } | null
+  /** Set on the run that stores the verdict once every flagged item of the run it names was reviewed. */
+  reviewOf?: string | null
 }
 
 /** One step of a live run, as the system's own code reported it. `rationale` is the reason it stated; FairMind does not check it. */
@@ -734,6 +742,8 @@ export function usePackActions() {
         send<EngineRun | { job: EvaluationJob }>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
       getJob: (jobId: string) => send<EvaluationJob>(API_ENDPOINTS.packs.evaluationJob(jobId), (p) => apiClient.get(p)),
       getRun: (runId: string) => send<EngineRun>(API_ENDPOINTS.packs.evaluationRun(runId), (p) => apiClient.get(p)),
+      reviewRunItem: (runId: string, item: string, decision: string, note: string) =>
+        send<EngineRun>(`${API_ENDPOINTS.packs.evaluationRun(runId)}/reviews`, (p) => apiClient.post(p, { item, decision, note })),
       explainTrace: (systemId: string, traceId: string) =>
         send<{ explanation: TraceExplanation }>(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}/explain`, (p) => apiClient.post(p)),
       saveTarget: (systemId: string, body: SystemTargetBody) =>

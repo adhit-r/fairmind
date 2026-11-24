@@ -19,7 +19,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -126,17 +126,23 @@ def _at(data: Any, path: str) -> Any:
     return data
 
 
-async def ask(target: Target, prompt: str, attempts: int = 1) -> str:
-    """One prompt to the system under test and its answer as text; attempts > 1 retries rate limits and gateway errors."""
+async def ask(target: Target, prompt: Union[str, List[Dict[str, str]]], attempts: int = 1) -> str:
+    """One prompt, or for an openai connection a list of chat messages (a conversation so far, or retrieved content beside the
+    user's question), to the system under test and its answer as text; attempts > 1 retries rate limits and gateway errors."""
     if target.via_runner:
         raise Unreachable("This system is called by your runner inside your network, not by FairMind")
+    if isinstance(prompt, list) and target.kind != "openai":
+        raise BadAnswer("This connection takes one prompt, not a list of messages")
     url = llm._public_https(target.url, "Endpoint")  # again at call time: DNS can change after save
     headers = {}
     if target.kind == "openai":
         if target.auth:
             headers["Authorization"] = f"Bearer {target.auth}"
         messages = [{"role": "system", "content": target.system_prompt}] if target.system_prompt else []
-        body: Any = {"model": target.fields.get("model", ""), "messages": messages + [{"role": "user", "content": prompt}]}
+        turns = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
+        if messages and turns and turns[0]["role"] == "system":  # one leading system message: many servers reject a second
+            messages, turns = [{"role": "system", "content": f"{target.system_prompt}\n\n{turns[0]['content']}"}], turns[1:]
+        body: Any = {"model": target.fields.get("model", ""), "messages": messages + turns}
         url = f"{url}/chat/completions"
     else:
         if target.auth:

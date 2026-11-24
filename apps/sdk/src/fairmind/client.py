@@ -404,18 +404,20 @@ class FairMind:
         started_at: Optional[str] = None,
         ended_at: Optional[str] = None,
         expected_calls: Optional[Sequence[Dict[str, Any]]] = None,
+        cost: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Record or extend a trace of one run; call it again with the same `trace_id` as the run goes on.
 
         Each step is a dict: `kind` (llm, tool, retrieval, memory, decision or other), `name`, `input`,
         `output`, `rationale` (the reason the system stated for the step), and optionally `id` (re-sending
-        the same id updates the step), `parentId`, `status` (blocked for a tool call a guardrail stopped), `error`, `startedAt`, `endedAt`.
+        the same id updates the step), `parentId`, `status` (blocked for a tool call a guardrail stopped), `error`, `startedAt`, `endedAt`,
+        `cost`. `cost`, on a step or the whole run, is a number of zero or more in whatever units you record spend in.
         A test run may send `expected_calls`, the tool calls it should make in order, each {"tool", "args"}; a tool step's input is its arguments.
         Fields left out, here or on a re-sent step, keep what an earlier call stored; the trace id cannot contain `/`.
         """
         body = {"traceId": trace_id, "steps": list(steps), "name": name, "status": status, "input": input, "output": output,
                 "rationale": rationale, "startedAt": started_at, "endedAt": ended_at,
-                "expectedCalls": list(expected_calls) if expected_calls is not None else None}
+                "expectedCalls": list(expected_calls) if expected_calls is not None else None, "cost": cost}
         return self._packs("POST", f"/ai-systems/{system_id}/traces", json={k: v for k, v in body.items() if v is not None})
 
     def traces(self, system_id: str, limit: int = 50) -> List[Dict[str, Any]]:

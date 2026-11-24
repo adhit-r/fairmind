@@ -1,5 +1,6 @@
 """Engines that read datasets: drift, representativeness, completeness, duplicates, personal data, poisoning, labels."""
 
+import hashlib
 import io
 import json
 import re
@@ -16,7 +17,7 @@ from sklearn.metrics import cohen_kappa_score
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.neighbors import NearestNeighbors
 
-from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, result, split
+from .common import Engine, EngineError, Param, Slot, awaiting_review, columns, number, read_csv, result, split
 from .detectors import INSTRUCTIONS, PERSONAL, SECRETS, mask, scan
 
 EPS = 1e-4
@@ -97,10 +98,11 @@ def _cell(value: Any) -> Any:
 def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     ref, cur = read_csv(files["reference"], "The reference set"), read_csv(files["current"], "The current set")
     wanted = split(params.get("features"))
-    skip = set(split(params.get("ignore")))
+    id_col = str(params.get("id_column") or "").strip()
+    skip = set(split(params.get("ignore"))) | {id_col}
     features = wanted or [c for c in ref.columns if c in cur.columns and c not in skip]
     columns(ref, features, "The reference set")
-    columns(cur, features, "The current set")
+    columns(cur, features + ([id_col] if id_col else []), "The current set")
     if not features:
         raise EngineError("The two sets share no columns to compare")
     psi_limit = number(params, "psi_limit", 0.2)
@@ -131,8 +133,14 @@ def data_drift(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any
                     "samplesLowDensity": int((score == 0.5).sum()), "samplesOutOfDistribution": int((score == 0.0).sum())})
     worst = np.argsort(ratio)[:50]
     shown = [c for c in features if c not in text][:4] + [c for c in features if c in text][:1]
+    # with an id column every non-numeric sample value keeps only a hash, text or category (short repeated prompts read as
+    # categorical): the stored run then holds no text after its source is deleted
+    keep = (lambda c, v: f"sha256:{hashlib.sha256(str(v).encode()).hexdigest()}"
+            if id_col and not isinstance(v, (int, float, np.integer, np.floating)) and not pd.isna(v) else _cell(v))
+    ids = pd.read_csv(io.BytesIO(files["current"]), dtype=str, usecols=[id_col])[id_col] if id_col else None  # as written: 007 stays 007
     rows += [{"kind": "sample", "row": int(i) + 1, "score": float(score[i]), "densityRatio": round(float(ratio[i]), 4),
-              **{c: _cell(cur[c].iloc[i]) for c in shown}} for i in worst if score[i] < 1.0]
+              **({id_col: None if pd.isna(ids.iloc[i]) else ids.iloc[i]} if id_col else {}), **{c: keep(c, cur[c].iloc[i]) for c in shown}}
+             for i in worst if score[i] < 1.0]
 
     failed_features = [r["feature"] for r in rows if r.get("drifted")]
     ok, parts = not failed_features, []
@@ -248,8 +256,14 @@ def data_poisoning(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str,
                "triggerTokenSamples": [mask(t) for t in sorted(triggers)[:20]]}
     ok = share_flagged <= limit + 1e-12
     summary = (f"{len(flagged)} of {len(df)} rows ({share_flagged:.2%}) were flagged, "
-               f"{'within' if ok else 'above'} the limit of {limit:.2%}. Every flagged row must be reviewed by a person.")
+               f"{'within' if ok else 'above'} the limit of {limit:.2%}.")
     detail = [{"row": i + 1, "reason": reason, "snippet": snippet} for i, reason, snippet in findings]
+    if ok and flagged:  # the catalogue also asks for 100% of flagged rows reviewed
+        items: Dict[str, str] = {}
+        for i, reason, snippet in findings:
+            key = f"row {i + 1}"
+            items[key] = f"{items[key]}; {reason}" if key in items else f"{reason}: {snippet}"
+        return awaiting_review(summary, metrics, detail, items)
     return result("passed" if ok else "failed", summary, metrics, detail)
 
 
@@ -551,12 +565,15 @@ def rag_poisoning(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, 
         cats = sorted({c for c, _ in hits})
         by_category.update(cats)
         doc = df[id_col].iloc[i] if id_col and not pd.isna(df[id_col].iloc[i]) else f"row {int(i) + 1}"
-        detail.append({"document": str(doc), "categories": cats, "snippet": mask(hits[0][1])})
+        detail.append({"document": str(doc), "categories": cats, "snippet": mask(hits[0][1]), "row": int(i) + 1})
 
     metrics = {"documents": len(df), "flaggedDocuments": len(detail), "byCategory": dict(sorted(by_category.items()))}
-    summary = (f"No document among {len(df)} contains hidden instructions." if not detail else
-               f"{len(detail)} of {len(df)} documents contain hidden instructions ({', '.join(sorted(by_category))}) and must be reviewed.")
-    return result("failed" if detail else "passed", summary, metrics, detail)
+    if not detail:
+        return result("passed", f"No document among {len(df)} contains hidden instructions.", metrics, detail)
+    # the catalogue threshold is zero unreviewed flags; the key is the row, since a document id may repeat
+    items = {f"row {r['row']}": f"{r['document']}: {', '.join(r['categories'])}" for r in detail}
+    return awaiting_review(f"{len(detail)} of {len(df)} documents contain hidden instructions ({', '.join(sorted(by_category))}).",
+                           metrics, detail, items)
 
 
 # --- EV-DAT-08 label quality ------------------------------------------------------------------------------
@@ -619,6 +636,8 @@ ENGINES: List[Engine] = [
             Param("ignore", "Ignore", "Columns to leave out, such as identifiers or timestamps."),
             Param("psi_limit", "PSI limit", "A feature drifts at or above this PSI.", "number", 0.2),
             Param("min_in_distribution", "Minimum share in distribution", "Used when any feature is text.", "number", 0.9),
+            Param("id_column", "Id column", "Optional. A column of the current set naming each row; sample rows then keep that id and a "
+                  "SHA-256 of their text instead of the text."),
         ),
         run=data_drift,
     ),
@@ -627,7 +646,7 @@ ENGINES: List[Engine] = [
         method=(
             "Flags rows that match instruction-injection patterns, contain a long run of one repeated character, or "
             "(when a label column is set) contain a rare token that sits in at least the minimum number of rows, 95% of them "
-            "with one label that is under half the data."
+            "with one label that is under half the data. Within the limit, it passes once a person has reviewed every flagged row."
         ),
         slots=(Slot("dataset", "Dataset", "The training or fine-tuning data as CSV."),),
         params=(
@@ -703,7 +722,8 @@ ENGINES: List[Engine] = [
     ),
     Engine(
         id="EV-DAT-07",
-        method="Scans each document for instructions planted in the text, such as overrides, fake turns, hidden markup and exfiltration links.",
+        method=("Scans each document for instructions planted in the text, such as overrides, fake turns, hidden markup and exfiltration links. "
+                "Passes once a person has reviewed every flagged document and found none poisoned."),
         slots=(Slot("documents", "Documents", "One document per row, as CSV."),),
         params=(
             Param("text_column", "Text column", "The column that holds the document text.", required=True),

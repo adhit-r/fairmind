@@ -309,7 +309,8 @@ def test_customer_service_suite():
 
 @known_answer("EV-USE-06")
 def test_coding_agent_suite():
-    # Clean code and a context with no credentials pass; one shell=True call (Bandit B602, high) fails the code component.
+    # Clean code and a context with no credentials pass; one shell=True call (Bandit B602, high) leaves the code component
+    # waiting for a person to resolve or accept the finding, so the suite is insufficient.
     # EV-SEC-20 reads the platform, so the suite reads its stored result: passed, all 3 pass; none on file, insufficient.
     shell = "import subprocess\n\ndef run(cmd):\n    subprocess.call(cmd, shell=True)\n"
     sandbox = json.dumps([{"evaluationId": "EV-SEC-20", "status": "passed", "detail": "isolated", "at": "2026-11-01"}])
@@ -317,4 +318,4 @@ def test_coding_agent_suite():
     assert ok["status"] == "passed" and ok["metrics"]["components"] == 3
     assert run("EV-USE-06", code="def add(a, b):\n    return a + b\n", context="no secrets here\n")["status"] == "insufficient"
     bad = run("EV-USE-06", code=shell, context="no secrets here\n", results=sandbox)
-    assert bad["status"] == "failed" and bad["metrics"]["EV-DEV-03"] == "failed" and bad["metrics"]["EV-SEC-16"] == "passed"
+    assert bad["status"] == "insufficient" and bad["metrics"]["EV-DEV-03"] == "insufficient" and bad["metrics"]["EV-SEC-16"] == "passed"
