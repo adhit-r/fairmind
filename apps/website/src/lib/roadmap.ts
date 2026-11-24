@@ -28,8 +28,8 @@ export const STOPS: Array<{ month: string; title: string; note: string; release?
   { month: '2026-03', title: 'Audit engine, roles', note: '24 checks, 5 frameworks' },
   { month: '2026-08', title: 'Assurance rebuild', note: 'Signed evidence' },
   { month: '2026-11', title: 'v0.5.0, agents', note: 'Live runs, explained decisions', release: true },
-  { month: '2027-03', title: 'Q1 2027', note: 'India checks, Evidence Passport', planned: true },
-  { month: '2027-09', title: 'Later in 2027', note: 'Sandboxed workers, triggers', planned: true },
+  { month: '2027-03', title: 'Q1 2027', note: 'Audit reporting, evidence intake', planned: true },
+  { month: '2027-09', title: 'Later in 2027', note: 'Isolated workers, triggers', planned: true },
 ];
 
 export interface Moment { when: string; title: string; text: string; tag?: string; local?: boolean; planned?: boolean; items?: string[] }
@@ -77,25 +77,26 @@ export const QUARTERS: Quarter[] = [
 export const NOW = {
   label: 'Now', span: 'Q4 2026',
   themes: [
-    { title: 'Nothing broken, nothing misleading', text: 'Every page people can reach works and says only what the code does.' },
-    { title: 'Trust in every result', text: 'No placeholder scores or sample results anywhere; each evaluation verdict explained.' },
-    { title: 'Agents, end to end', text: 'Live runs, explained decisions and Shadow AI hardened with design partners.' },
+    { title: 'Release the dashboard and report updates', text: 'Verify the path from a failed check to its evidence and retest. Validate scheduled drafts, assigned review and approved export in the target workspace.' },
+    { title: 'Close account and organisation gaps', text: 'Verify invitation delivery and sign-in handoffs, and consolidate team administration in Settings.' },
+    { title: 'Show what the evidence supports', text: 'Distinguish unavailable, stale and failed results. Keep status and counts within the selected organisation.' },
+    { title: 'Align claims with the product', text: 'Update public capability and setup guidance, then remove legacy routes whose callers have moved.' },
   ],
 };
 
 export const NEXT = {
   label: 'Next', span: 'Q1 2027',
   groups: [
-    { title: 'India and evidence', items: ['DPDP, NITI Aayog and RBI checks in the app, with DPDP and GDPR in the catalogue', 'Evidence Passport upload and inspection-pack export from the app, SDK and CLI', 'Organisation audit-report export'] },
-    { title: 'Systems and decisions', items: ['Environmental assessment and approval on the system page', 'Edit, re-tier and archive an AI system', 'Approval workflow editor and decision history', 'The policy gate shown next to the release gate'] },
-    { title: 'Evaluations', items: ['The organisation\'s own model as an LLM judge, with judge comparison', 'Engines for the catalogue evaluations still partial', 'Risk taxonomies from IBM, MIT and OECD on the risks page'] },
-    { title: 'Operations', items: ['Compliance automation: schedules, Run now, violations and reports', 'API key management', 'Workflow version history', 'Accessibility audit and keyboard navigation'] },
+    { title: 'Reporting and auditors', items: ['Organisation audit-report export', 'Auditor-pack handoff with scoped access, expiry and revocation', 'Verified delivery outcomes and persisted compliance report history'] },
+    { title: 'Requirements and evidence', items: ['Trace a framework requirement to the named check and accepted evidence', 'Evidence Passport intake', 'India checks and DPDP/GDPR catalogue scope'] },
+    { title: 'Systems and evaluations', items: ['Environmental review and approval', 'Workspace reuse and workflow version history', 'Reachable LLM judge comparison and evidence handoff'] },
+    { title: 'Verification', items: ['Independent evaluator benchmarks', 'A private pilot for the gated Assurance V2 workbench', 'Keyboard and accessibility coverage, bundle budgets and CI workflow tests'] },
   ],
 };
 
 export const LATER = {
   label: 'Later', span: '2027 and beyond',
-  items: ['Sandboxed evaluation workers', 'Workflows that start on schedules and triggers', 'Ask about any system or finding', 'Internationalisation, starting with the navigation', 'An optional content-safety evaluator'],
+  items: ['Isolated evaluation workers and sandbox verification', 'Idempotent workflow starts from schedules and triggers', 'Source-linked answers about systems and findings', 'Internationalisation, starting with the navigation', 'An optional content-safety evaluator'],
 };
 
 export const RESEARCH = ['Causal DAG builder', 'Bias propagation across agent chains', 'Ingesting regulatory changes', 'Fairness and performance trade-off explorer',
