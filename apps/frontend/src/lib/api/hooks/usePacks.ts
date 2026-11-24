@@ -1,5 +1,6 @@
 'use client'
 
+import { withPackSystem } from '@/lib/assurance/packScope'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { apiClient, type ApiResponse } from '../api-client'
@@ -306,6 +307,7 @@ export interface Resource<T> {
   data: T | null
   loading: boolean
   error: string | null
+  errorStatus?: number
   reload: () => void
 }
 
@@ -327,10 +329,10 @@ export async function loadResource<T>(
 ) {
   update((s) => ({ scopeKey: path, value: s.scopeKey === path ? { ...s.value, loading: true } : pending<T>(path) }))
   const commit = (v: Partial<ResourceValue<T>>) =>
-    update((s) => writeEvaluationScopeState(s, path, { ...s.value, ...v, loading: false }))
+    update((s) => writeEvaluationScopeState(s, path, { data: s.value.data, error: null, ...v, loading: false }))
   try {
     const res = await get(path)
-    commit(res.success && res.data !== undefined ? { data: res.data, error: null } : { error: res.error || res.message || 'Request failed' })
+    commit(res.success && res.data !== undefined ? { data: res.data } : { error: res.error || res.message || 'Request failed', errorStatus: res.apiError?.status })
   } catch (e: unknown) {
     commit({ error: e instanceof Error ? e.message : 'Request failed' })
   }
@@ -372,8 +374,8 @@ export function useOrgResource<T>(path: string | null): Resource<T> {
 
 export const useCatalogue = () => useOrgResource<Catalogue>(API_ENDPOINTS.packs.catalogue)
 export const usePacks = () => useOrgResource<Pack[]>(API_ENDPOINTS.packs.list)
-export const usePackDetail = (packId: string | undefined) =>
-  useOrgResource<PackDetail>(packId ? API_ENDPOINTS.packs.detail(packId) : null)
+export const usePackDetail = (packId: string | undefined, system?: string) =>
+  useOrgResource<PackDetail>(packId ? withPackSystem(API_ENDPOINTS.packs.detail(packId), system) : null)
 /** Pack id -> name, from the pack list; an id with no match shows as itself. */
 export function usePackNames() {
   const packs = usePacks()
@@ -383,21 +385,21 @@ export function usePackNames() {
   }, [packs.data])
 }
 export const useBundles = () => useOrgResource<Bundle[]>(API_ENDPOINTS.packs.bundles)
-export const useJourneys = () => useOrgResource<JourneySummary[]>(API_ENDPOINTS.packs.journeys)
+export const useJourneys = (system?: string) => useOrgResource<JourneySummary[]>(withPackSystem(API_ENDPOINTS.packs.journeys, system))
 /** With systemId, each evaluation's result is that system's own latest result, not the organisation-wide one. */
 export const useJourney = (frameworkKey: string | undefined, systemId?: string) =>
   useOrgResource<Journey>(
-    frameworkKey ? `${API_ENDPOINTS.packs.journey(frameworkKey)}${systemId ? `?system=${encodeURIComponent(systemId)}` : ''}` : null,
+    frameworkKey ? withPackSystem(API_ENDPOINTS.packs.journey(frameworkKey), systemId) : null,
   )
 /** The evaluation catalogue; filters are optional and applied by the server. */
-export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string; system?: string } = {}) {
+export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string; system?: string } = {}, enabled = true) {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v)
   const q = qs.toString()
-  return useOrgResource<EvaluationRow[]>(q ? `${API_ENDPOINTS.packs.evaluations}?${q}` : API_ENDPOINTS.packs.evaluations)
+  return useOrgResource<EvaluationRow[]>(enabled ? API_ENDPOINTS.packs.evaluations + (q ? `?${q}` : '') : null)
 }
-export const useWorkflow = (workflowId: string | undefined) =>
-  useOrgResource<Workflow>(workflowId ? API_ENDPOINTS.packs.workflow(workflowId) : null)
+export const useWorkflow = (workflowId: string | undefined, system?: string) =>
+  useOrgResource<Workflow>(workflowId ? withPackSystem(API_ENDPOINTS.packs.workflow(workflowId), system) : null)
 export const useDraft = (workflowId: string | undefined) =>
   useOrgResource<Draft>(workflowId ? API_ENDPOINTS.packs.draft(workflowId) : null)
 export const useRun = (runId: string | undefined) =>
@@ -683,15 +685,17 @@ export const useExplainedDecisions = () => useOrgResource<ExplainedDecisions>('/
 export const useTrace = (systemId: string | null, traceId: string | null) =>
   useOrgResource<{ trace: Trace }>(systemId && traceId ? `/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}` : null)
 
-const forSystem = (path: string, systemId?: string) => (systemId ? `${path}?system=${encodeURIComponent(systemId)}` : path)
-export const useEvaluation = (evaluationId: string | undefined) =>
-  useOrgResource<EvaluationRow>(evaluationId ? API_ENDPOINTS.packs.evaluation(evaluationId) : null)
+export const useEvaluation = (evaluationId: string | undefined, systemId?: string) =>
+  useOrgResource<EvaluationRow>(evaluationId ? withPackSystem(API_ENDPOINTS.packs.evaluation(evaluationId), systemId) : null)
 /** With systemId, the spec also says the system's kind, the evaluation's fit and which ways are set up. */
 export const useEngine = (evaluationId: string | undefined, runnable: boolean, systemId?: string) =>
-  useOrgResource<EngineSpec>(evaluationId && runnable ? forSystem(API_ENDPOINTS.packs.evaluationEngine(evaluationId), systemId) : null)
-export const useEngineRuns = (evaluationId: string | undefined, runnable: boolean) =>
-  useOrgResource<EngineRun[]>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationRuns(evaluationId) : null)
-export const useEngineRun = (runId: string | null) => useOrgResource<EngineRun>(runId ? API_ENDPOINTS.packs.evaluationRun(runId) : null)
+  useOrgResource<EngineSpec>(evaluationId && runnable ? withPackSystem(API_ENDPOINTS.packs.evaluationEngine(evaluationId), systemId) : null)
+export const useEngineRuns = (evaluationId: string, systemId: string | undefined) =>
+  useOrgResource<EngineRun[]>(systemId ? `${API_ENDPOINTS.packs.evaluationRuns(evaluationId)}?${new URLSearchParams({ system_id: systemId })}` : null)
+export const useEngineRun = (runId: string | undefined, evaluationId: string, systemId: string | undefined) =>
+  useOrgResource<EngineRun>(runId && systemId
+    ? `${API_ENDPOINTS.packs.evaluationRun(runId)}?${new URLSearchParams({ system_id: systemId, evaluation_id: evaluationId })}`
+    : null)
 
 export interface MutationResult<T> {
   data: T | null
@@ -733,7 +737,8 @@ export function usePackActions() {
       runEvaluation: (evaluationId: string, form: FormData) =>
         send<EngineRun | { job: EvaluationJob }>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
       getJob: (jobId: string) => send<EvaluationJob>(API_ENDPOINTS.packs.evaluationJob(jobId), (p) => apiClient.get(p)),
-      getRun: (runId: string) => send<EngineRun>(API_ENDPOINTS.packs.evaluationRun(runId), (p) => apiClient.get(p)),
+      getRun: (runId: string, systemId: string, evaluationId: string) => send<EngineRun>(
+        `${API_ENDPOINTS.packs.evaluationRun(runId)}?${new URLSearchParams({ system_id: systemId, evaluation_id: evaluationId })}`, (p) => apiClient.get(p)),
       explainTrace: (systemId: string, traceId: string) =>
         send<{ explanation: TraceExplanation }>(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}/explain`, (p) => apiClient.post(p)),
       saveTarget: (systemId: string, body: SystemTargetBody) =>

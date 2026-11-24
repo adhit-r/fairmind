@@ -79,6 +79,7 @@ def test_framework_systems_keep_only_confirmed_systems_in_scope():
         assert all({"check", "label", "relation", "confidence", "evidenceId", "evidenceClass"} <= set(ch) for cell in req["cells"] if cell for ch in cell["checks"])
 
     assert client.get(f"{AIG}/frameworks/NOT-A-FRAMEWORK/systems").status_code == 404
+    assert client.get(f"{AIG}/frameworks/EUAIA/systems", params={"org_id": str(uuid.uuid4())}).status_code == 404
 
 
 def test_packs_controls_return_every_control_and_crosswalk_row():

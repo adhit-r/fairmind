@@ -13,15 +13,18 @@ import { Heading, Text } from '@astryxdesign/core/Text'
 import { TextArea } from '@astryxdesign/core/TextArea'
 import { Token } from '@astryxdesign/core/Token'
 import { useOrg } from '@/context/OrgContext'
+import { useSession } from '@/context/SessionContext'
+import { ReportReviewQueue } from './ReportReviewQueue'
 import { usePackActions } from '@/lib/api/hooks/usePacks'
 import { usePolicyActions } from '@/lib/api/hooks/usePolicies'
 import { acceptOverride } from '@/lib/api/hooks/useApplicability'
 import { KIND, useNeedsYou, type Item, type Kind } from '@/astryx/data/needsYou'
 
 export default function NeedsYouPage() {
-  const { selectedOrg } = useOrg()
+  const { selectedOrg, isLoading: orgLoading } = useOrg()
   const orgId = selectedOrg?.id ?? null
-  const { items, loading, errors, reload: reloadAll, records } = useNeedsYou()
+  const { user } = useSession()
+  const { items, reportAssignments, loading, errors, reload: reloadAll, records } = useNeedsYou()
   const packActions = usePackActions()
   const policyActions = usePolicyActions(orgId)
 
@@ -32,6 +35,8 @@ export default function NeedsYouPage() {
   const [message, setMessage] = useState<{ status: 'error' | 'success'; text: string } | null>(null)
 
   const visible = filter === 'all' ? items : items.filter((i) => i.kind === filter)
+  const countsComplete = !loading && errors.length === 0
+  const showInbox = !countsComplete || items.length > 0 || !reportAssignments.data?.length
   const counts = (k: Kind) => items.filter((i) => i.kind === k).length
   const open = items.find((i) => i.id === openId) ?? null
 
@@ -85,24 +90,34 @@ export default function NeedsYouPage() {
       <VStack gap={5}>
         <VStack gap={1}>
           <Heading level={1}>Needs you</Heading>
-          <Text color="secondary">Everything that waits on a person, in one list: decisions, sign-offs and things to read.</Text>
+          <Text color="secondary">Review assigned reports, decisions, sign-offs and policies.</Text>
         </VStack>
 
+        {orgId && user && <ReportReviewQueue />}
+
         {message && <Banner status={message.status} title={message.text} isDismissable onDismiss={() => setMessage(null)} />}
-        {errors.length > 0 && <Banner status="error" title="Some lists could not load" description={errors[0]} endContent={<Button label="Try again" size="sm" onClick={reloadAll} />} />}
+        {errors.length > 0 && <Banner status="error" title="Some lists could not load" description={errors.join(' · ')} endContent={<Button label="Try again" size="sm" onClick={reloadAll} />} />}
 
-        <SegmentedControl label="Filter by type" value={filter} onChange={(v) => setFilter(v as typeof filter)}>
-          <SegmentedControlItem value="all" label={`All ${items.length}`} />
+        {items.length > 0 && <SegmentedControl label="Filter by type" value={filter} onChange={(v) => setFilter(v as typeof filter)}>
+          <SegmentedControlItem value="all" label={countsComplete ? `All ${items.length}` : 'All'} />
           {(Object.keys(KIND) as Kind[]).map((k) => (
-            <SegmentedControlItem key={k} value={k} label={`${KIND[k].label} ${counts(k)}`} />
+            <SegmentedControlItem key={k} value={k} label={countsComplete ? `${KIND[k].label} ${counts(k)}` : KIND[k].label} />
           ))}
-        </SegmentedControl>
+        </SegmentedControl>}
 
-        <section className="fm-card" aria-label="Inbox">
-          {loading ? (
+        {showInbox && <section className="fm-card" aria-label="Inbox">
+          {!selectedOrg && !orgLoading ? (
+            <EmptyState title="Choose an organisation to view its review queue" />
+          ) : loading && visible.length === 0 ? (
             <VStack gap={2}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} height={40} />)}</VStack>
+          ) : visible.length === 0 && (errors.length > 0 || filter !== 'all') ? (
+            <EmptyState
+              title={errors.length ? 'Review queue incomplete' : 'No items match this filter'}
+              description={errors.length ? 'Some sources are unavailable. Other items may still need review.' : 'Choose another type to see other review items.'}
+              actions={filter !== 'all' ? <Button label="Show all types" onClick={() => setFilter('all')} /> : undefined}
+            />
           ) : visible.length === 0 ? (
-            <EmptyState title="Nothing waits on you" description="No decisions, sign-offs or policies need a person right now. New ones appear here as they come up." />
+            <EmptyState title="No other review items" description="New decisions, sign-offs and policy requests appear here." />
           ) : (
             <div className="fm-inbox">
               {visible.map((item) => (
@@ -120,7 +135,7 @@ export default function NeedsYouPage() {
               ))}
             </div>
           )}
-        </section>
+        </section>}
       </VStack>
 
       <Drawer isOpen={open !== null} onOpenChange={(o) => !o && setOpenId(null)} label={open?.title ?? 'Decision'} width={440} padding={5}>

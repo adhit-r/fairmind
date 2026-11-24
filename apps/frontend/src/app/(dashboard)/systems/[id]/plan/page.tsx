@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { withPackSystem } from '@/lib/assurance/packScope'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { CommandBar } from '@/components/layout/CommandBar'
@@ -37,16 +38,16 @@ function BestCell({ cell }: { cell: Cell }) {
   return <i role="img" className={`fm-cel ${k}`} title={t} aria-label={t} />
 }
 
-function PackWorkflows({ pack }: { pack: string }) {
-  const d = usePackDetail(pack)
+function PackWorkflows({ pack, system }: { pack: string; system: string }) {
+  const d = usePackDetail(pack, system)
   if (d.loading) return <p className="pb-3 pl-[46px] pr-[18px] text-[12.5px] text-[var(--fm-ink3)]">Loading workflows</p>
-  if (d.error) return <div className="px-[18px] pb-3"><ErrorNote message={d.error} onRetry={d.reload} /></div>
-  const wfs = d.data?.patterns.flatMap((p) => p.workflows) ?? []
+  if (d.error || d.data?.id !== pack) return <div className="px-[18px] pb-3"><ErrorNote message={d.error ?? 'The requested pack was not returned.'} onRetry={d.reload} /></div>
+  const wfs = d.data.patterns.flatMap((p) => p.workflows)
   return (
     <ul className="grid gap-1 pb-3 pl-[46px] pr-[18px] text-[12.5px]">
       {wfs.map((w) => (
         <li key={w.id} className="flex min-w-0 gap-2">
-          <Link href={`/compliance/workflows/${encodeURIComponent(w.id)}`} className="min-w-0 truncate hover:underline" title={w.name}>{w.name}</Link>
+          <Link href={withPackSystem(`/compliance/workflows/${encodeURIComponent(w.id)}`, system)} className="min-w-0 truncate hover:underline" title={w.name}>{w.name}</Link>
           <span className="flex-none text-[var(--fm-ink3)]">{lifecycleStage(w.stage)}</span>
         </li>
       ))}
@@ -54,8 +55,14 @@ function PackWorkflows({ pack }: { pack: string }) {
   )
 }
 
-function PackRow({ p, on, workflows, onToggle }: { p: PlanPack; on: boolean; workflows: number | undefined; onToggle: () => void }) {
-  const [open, setOpen] = useState(false)
+function PackRow({ p, system, on, workflows, onToggle }: { p: PlanPack; system: string; on: boolean; workflows: number | undefined; onToggle: () => void }) {
+  const open = useSearchParams().getAll('pack').includes(p.pack)
+  const toggleOpen = () => {
+    const url = new URL(window.location.href)
+    if (open) url.searchParams.delete('pack', p.pack)
+    else url.searchParams.append('pack', p.pack)
+    window.history.replaceState(null, '', url)
+  }
   return (
     <li className="border-t border-[var(--fm-line)]">
       <div className="flex min-h-[44px] items-center gap-3 px-[18px] py-2">
@@ -64,11 +71,11 @@ function PackRow({ p, on, workflows, onToggle }: { p: PlanPack; on: boolean; wor
           {p.name}
         </span>
         {p.installed && <Pill tone="done">Installed</Pill>}
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex-none whitespace-nowrap text-[12px] text-[var(--fm-ink2)] underline-offset-2 hover:underline">
+        <button type="button" onClick={toggleOpen} aria-expanded={open} className="flex-none whitespace-nowrap text-[12px] text-[var(--fm-ink2)] underline-offset-2 hover:underline">
           {workflows === undefined ? 'Workflows' : `${workflows} workflow${workflows === 1 ? '' : 's'}`}
         </button>
       </div>
-      {open && <PackWorkflows pack={p.pack} />}
+      {open && <PackWorkflows pack={p.pack} system={system} />}
     </li>
   )
 }
@@ -184,7 +191,7 @@ function PlanBody({ id }: { id: string }) {
                   packs.length ? (
                     <>
                       <ul>
-                        {packs.map((p) => <PackRow key={p.pack} p={p} on={ticked.has(p.pack)} workflows={workflows.get(p.pack)} onToggle={() => toggle(p.pack)} />)}
+                        {packs.map((p) => <PackRow system={id} key={p.pack} p={p} on={ticked.has(p.pack)} workflows={workflows.get(p.pack)} onToggle={() => toggle(p.pack)} />)}
                       </ul>
                       <div className="flex flex-wrap items-center gap-3 border-t border-[var(--fm-line)] px-[18px] py-3">
                         <button type="button" disabled className={BTN} title="Coming soon">Save plan for this system</button>

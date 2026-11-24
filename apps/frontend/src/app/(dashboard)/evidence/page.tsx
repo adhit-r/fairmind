@@ -2,7 +2,7 @@
 
 import '@/astryx/pages/evidence.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog'
@@ -16,10 +16,11 @@ import type { TableColumn } from '@astryxdesign/core/Table'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
 
-import { useSystemContext } from '@/components/workflow/SystemContext'
+import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { useOrg } from '@/context/OrgContext'
-import { useEvidence, type Evidence } from '@/lib/api/hooks/useEvidence'
+import { useEvidence } from '@/lib/api/hooks/useEvidence'
 import { resolveEvidenceHubFeatureGates } from '@/lib/assurance/evidenceHubFeatureGates'
+import { evidenceRecordHref, evidenceSystemHref } from '@/lib/assurance/evidenceLinks'
 import {
   useEvidenceMappingReview,
   useEvidenceRuns,
@@ -30,6 +31,7 @@ import { useSystemSeals } from '@/astryx/data/evidence'
 
 import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
+import { EVIDENCE_GRID_HREF, EvidenceGrid } from './EvidenceGrid'
 import { EvaluationRunList } from './components/EvaluationRunList'
 import { ExplainedDecisions } from './components/ExplainedDecisions'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
@@ -42,7 +44,6 @@ const EVIDENCE_HUB_FEATURE_GATES = resolveEvidenceHubFeatureGates({
 
 interface Row extends Record<string, unknown> {
   id: string
-  evidence: Evidence
   title: string
   type: string
   confidence: number
@@ -62,15 +63,70 @@ const short = (hash: string) => (hash.length > 16 ? `${hash.slice(0, 8)} ${hash.
 
 /** An old link to ?view=evaluations still opens the run list and the evaluator catalog. */
 export default function EvidencePage() {
-  const view = useSearchParams().get('view')
+  const params = useSearchParams()
+  const view = params.has('evidence') ? null : params.get('view')
+  if (view === 'grid' && !params.has('system') && !params.has('check')) return <EvidenceGrid />
   return view === 'evaluations' ? <EvidenceEvaluations /> : view === 'explained' ? <ExplainedDecisions /> : <EvidenceList />
 }
 
 function EvidenceList() {
+  const params = useSearchParams()
+  const router = useRouter()
+  const { systems, selectedSystem, setSelectedSystemId, loading, error, refreshSystems } = useSystemContext()
+  const systemIds = params.getAll('system')
+  const evidenceIds = params.getAll('evidence')
+  const check = params.get('check')
+  const requestedSystem = systemIds[0]
+  const invalid = systemIds.length > 1 || evidenceIds.length > 1 ||
+    (systemIds.length === 1 && !requestedSystem.trim()) ||
+    (evidenceIds.length === 1 && (!evidenceIds[0].trim() || !requestedSystem || check !== null)) ||
+    (check !== null && !requestedSystem)
+  const system = requestedSystem ? systems.find((s) => s.id === requestedSystem) : selectedSystem
+  const resolvedId = !invalid && !loading && !error ? system?.id : undefined
+
+  useEffect(() => {
+    if (!resolvedId) return
+    if (!requestedSystem) {
+      // Give the library's current history entry its own scope before a reviewer changes systems.
+      const query = new URLSearchParams(params)
+      query.set('system', resolvedId)
+      window.history.replaceState(null, '', `/evidence?${query}`)
+    } else if (resolvedId !== selectedSystem.id) {
+      setSelectedSystemId(resolvedId)
+    }
+  }, [params, requestedSystem, resolvedId, selectedSystem.id, setSelectedSystemId])
+
+  if (invalid || (!loading && !error && requestedSystem && !system)) return (
+    <div className="fm-page"><EmptyState title="Evidence link unavailable" description="This link needs one accessible AI system and a valid record reference." actions={<Button label="Browse evidence" href="/evidence" />} /></div>
+  )
+  if (loading) return <div className="fm-page" role="status" aria-label="Loading AI systems"><Skeleton height={120} /></div>
+  if (error) return (
+    <div className="fm-page"><EmptyState title="The AI systems could not load" description={error} actions={<Button label="Try again" onClick={() => void refreshSystems()} />} /></div>
+  )
+  if (!system?.id) return (
+    <div className="fm-page"><EmptyState title="No AI system registered yet" description="Register a system first, then add the evidence behind its release decision." actions={<Button label="Register a system" variant="primary" href="/onboard" />} /></div>
+  )
+  return (
+    <SystemEvidence
+      key={system.id}
+      selectedSystem={system}
+      systems={systems}
+      evidenceId={evidenceIds[0]}
+      check={check}
+      onSelectSystem={(id) => router.push(evidenceSystemHref(id), { scroll: false })}
+    />
+  )
+}
+
+function SystemEvidence({ selectedSystem, systems, evidenceId, check, onSelectSystem }: {
+  selectedSystem: AISystemSummary
+  systems: AISystemSummary[]
+  evidenceId?: string
+  check: string | null
+  onSelectSystem: (id: string) => void
+}) {
+  const router = useRouter()
   const { selectedOrg, isLoading: orgLoading, error: orgError } = useOrg()
-  const { systems, selectedSystem, setSelectedSystemId, loading: systemsLoading, error: systemsError, refreshSystems } = useSystemContext()
-  const real = useMemo(() => systems.filter((s) => s.metadata?.source !== 'fallback'), [systems])
-  const hasSystem = selectedSystem.metadata?.source !== 'fallback' && Boolean(selectedSystem.id)
   const assignments = useFrameworkAssignments(selectedOrg?.id, selectedSystem.id)
   const assignmentIds = useMemo(
     () => assignments.assignments.filter((a) => a.systemId === selectedSystem.id).map((a) => a.id),
@@ -81,29 +137,23 @@ function EvidenceList() {
     selectedOrg?.role === 'admin' || selectedOrg?.role === 'owner' || selectedOrg?.permissions?.includes('model:write') === true
   const roleKnown = !orgLoading && !orgError && Boolean(selectedOrg)
 
-  const { data, summary, loading, error, collectEvidence, updateEvidence, addLink, removeLink, refreshEvidence } = useEvidence(selectedSystem.id)
-  const seal = useSystemSeals(hasSystem ? selectedSystem.id : undefined)
+  const { data, summary, summaryAvailable, loading, error, collectEvidence, updateEvidence, addLink, removeLink, refreshEvidence } = useEvidence(selectedSystem.id, selectedOrg?.id)
+  const seal = useSystemSeals(selectedSystem.id)
 
   const [search, setSearch] = useState('')
   const [adding, setAdding] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
-  const [selected, setSelected] = useState<Evidence | null>(null)
+  const selected = evidenceId ? data.find((item) => item.systemId === selectedSystem.id && item.id === evidenceId) : null
+  const openedFromList = useRef(false)
 
   // A system file's "Record evidence" step links here with ?check=: open the uploader once, set for that check.
-  const check = useSearchParams().get('check')
-  const openedForCheck = useRef(false)
+  const openedForCheck = useRef<string | null>(null)
   useEffect(() => {
-    if (check && hasSystem && canReview && !openedForCheck.current) {
-      openedForCheck.current = true
+    if (check && canReview && openedForCheck.current !== check) {
+      openedForCheck.current = check
       setAdding(true)
     }
-  }, [check, hasSystem, canReview])
-
-  useEffect(() => {
-    setSearch('')
-    setSelected(null)
-    setSaved(null)
-  }, [selectedSystem.id])
+  }, [check, canReview])
 
   const rows = useMemo<Row[]>(() => {
     const q = search.trim().toLowerCase()
@@ -111,7 +161,6 @@ function EvidenceList() {
       .filter((e) => !q || [e.title, e.type, e.folder, ...(e.tags ?? [])].join(' ').toLowerCase().includes(q))
       .map((e) => ({
         id: e.id,
-        evidence: e,
         title: e.title || e.type,
         type: e.type,
         confidence: e.confidence,
@@ -130,7 +179,10 @@ function EvidenceList() {
       width: proportional(3),
       renderCell: (r) => (
         <VStack gap={0}>
-          <Button label={r.title} variant="ghost" size="sm" onClick={() => setSelected(r.evidence)} />
+          <Button label={r.title} variant="ghost" size="sm" onClick={() => {
+            openedFromList.current = true
+            router.push(evidenceRecordHref(selectedSystem.id, r.id), { scroll: false })
+          }} />
           <Text color="secondary" size="sm" maxLines={1}>{r.type}</Text>
         </VStack>
       ),
@@ -172,6 +224,20 @@ function EvidenceList() {
     void seal.reload()
   }
 
+  if (evidenceId && (loading || error || !selected)) {
+    if (loading) return <div className="fm-page" role="status">Loading the evidence record for {selectedSystem.name}…</div>
+    return <div className="fm-page">
+      <EmptyState
+        title={error ? 'The evidence could not load' : 'Evidence record unavailable'}
+        description={error ? error.message : `No accessible record ${evidenceId} was found for ${selectedSystem.name}.`}
+        actions={<HStack gap={2} wrap="wrap">
+          {error && <Button label="Try again" onClick={() => void refreshEvidence()} />}
+          <Button label={`Browse evidence for ${selectedSystem.name}`} href={evidenceSystemHref(selectedSystem.id)} />
+        </HStack>}
+      />
+    </div>
+  }
+
   const chain = seal.loading ? (
     <Skeleton height={20} width={160} />
   ) : seal.error ? (
@@ -192,72 +258,62 @@ function EvidenceList() {
           <VStack gap={1}>
             <Heading level={1}>Evidence</Heading>
             <Text color="secondary">
-              {hasSystem ? `What backs the release decision for ${selectedSystem.name}.` : 'Evidence is collected per AI system.'}
+              What backs the release decision for {selectedSystem.name}.
             </Text>
           </VStack>
           <HStack gap={2} wrap="wrap">
+            <Button label="Evidence grid" variant="secondary" href={EVIDENCE_GRID_HREF} />
             <Button label="Explained decisions" variant="secondary" href="/evidence?view=explained" />
             <Button label="Auditor packs" variant="secondary" href="/auditor-packs" />
-            {hasSystem && canReview && <Button label="Add evidence" variant="primary" onClick={() => setAdding(true)} />}
+            {canReview && <Button label="Add evidence" variant="primary" onClick={() => setAdding(true)} />}
           </HStack>
         </HStack>
 
-        {!hasSystem ? (
-          systemsLoading ? (
-            <Skeleton height={120} />
-          ) : systemsError ? (
-            <EmptyState title="The AI systems could not load" description={String(systemsError)} actions={<Button label="Try again" onClick={() => void refreshSystems()} />} />
-          ) : (
-            <EmptyState title="No AI system registered yet" description="Register a system first, then add the evidence behind its release decision." actions={<Button label="Register a system" variant="primary" href="/onboard" />} />
-          )
+        <div style={{ maxWidth: 360 }}>
+          <Selector
+            label="AI system"
+            value={selectedSystem.id}
+            onChange={onSelectSystem}
+            options={systems.map((s) => ({ value: s.id, label: s.name }))}
+          />
+        </div>
+
+        <section className="fm-card" aria-label="Evidence chain">
+          <dl className="fm-ev-facts">
+            <div><dt>Evidence items</dt><dd>{loading ? 'Loading…' : error ? 'Unavailable' : data.length}</dd></div>
+            <div><dt>Chain</dt><dd>{chain}</dd></div>
+            <div><dt>Last sealed</dt><dd>{seal.loading ? 'Loading…' : seal.error ? 'Unavailable' : seal.latest ? day(seal.latest.createdAt) : 'Never'}</dd></div>
+            <div><dt>Stale items</dt><dd>{loading ? 'Loading…' : error ? 'Unavailable' : data.filter((e) => e.stale).length}</dd></div>
+          </dl>
+        </section>
+
+        {saved && <Banner status="success" title={saved} isDismissable onDismiss={() => setSaved(null)} />}
+        {!loading && !error && !summaryAvailable && <Banner status="warning" title="Evidence gap summary unavailable" />}
+        {summaryAvailable && summary.missingSignals.length > 0 && (
+          <Banner status="warning" title="Evidence gaps reported" description={summary.missingSignals.join(', ')} />
+        )}
+
+        {loading ? (
+          <VStack gap={2}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} height={36} />)}</VStack>
+        ) : error ? (
+          <EmptyState title="The evidence could not load" description={error.message} actions={<Button label="Try again" onClick={() => void refreshEvidence()} />} />
+        ) : data.length === 0 ? (
+          <EmptyState
+            title="No evidence collected yet"
+            description={canReview ? `Upload a file, write a narrative or record an attestation for ${selectedSystem.name}.` : `Nothing has been collected for ${selectedSystem.name}.`}
+            actions={canReview ? <Button label="Add first evidence" variant="primary" onClick={() => setAdding(true)} /> : undefined}
+          />
         ) : (
-          <>
-            <div style={{ maxWidth: 360 }}>
-              <Selector
-                label="AI system"
-                value={selectedSystem.id}
-                onChange={(v: string) => setSelectedSystemId(v)}
-                options={real.map((s) => ({ value: s.id, label: s.name }))}
-              />
+          <VStack gap={3}>
+            <div className="fm-ev-search">
+              <TextInput label="Search evidence" isLabelHidden value={search} onChange={setSearch} placeholder="Search by title, type, folder or tag" />
             </div>
-
-            <section className="fm-card" aria-label="Evidence chain">
-              <dl className="fm-ev-facts">
-                <div><dt>Evidence items</dt><dd>{summary.totalEvidence > 0 ? summary.totalEvidence : data.length}</dd></div>
-                <div><dt>Chain</dt><dd>{chain}</dd></div>
-                <div><dt>Last sealed</dt><dd>{seal.latest ? day(seal.latest.createdAt) : 'Never'}</dd></div>
-                <div><dt>Stale items</dt><dd>{data.filter((e) => e.stale).length}</dd></div>
-              </dl>
-            </section>
-
-            {saved && <Banner status="success" title={saved} isDismissable onDismiss={() => setSaved(null)} />}
-            {summary.missingSignals.length > 0 && (
-              <Banner status="warning" title="Evidence gaps reported" description={summary.missingSignals.join(', ')} />
-            )}
-
-            {loading ? (
-              <VStack gap={2}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} height={36} />)}</VStack>
-            ) : error ? (
-              <EmptyState title="The evidence could not load" description={error.message} actions={<Button label="Try again" onClick={() => void refreshEvidence()} />} />
-            ) : data.length === 0 ? (
-              <EmptyState
-                title="No evidence collected yet"
-                description={canReview ? `Upload a file, write a narrative or record an attestation for ${selectedSystem.name}.` : `Nothing has been collected for ${selectedSystem.name}.`}
-                actions={canReview ? <Button label="Add first evidence" variant="primary" onClick={() => setAdding(true)} /> : undefined}
-              />
+            {rows.length === 0 ? (
+              <EmptyState title="No matching evidence" description="Nothing matches the search." actions={<Button label="Clear search" onClick={() => setSearch('')} />} />
             ) : (
-              <VStack gap={3}>
-                <div className="fm-ev-search">
-                  <TextInput label="Search evidence" isLabelHidden value={search} onChange={setSearch} placeholder="Search by title, type, folder or tag" />
-                </div>
-                {rows.length === 0 ? (
-                  <EmptyState title="No matching evidence" description="Nothing matches the search." actions={<Button label="Clear search" onClick={() => setSearch('')} />} />
-                ) : (
-                  <Table<Row> data={rows} columns={columns} idKey="id" density="balanced" textOverflow="truncate" />
-                )}
-              </VStack>
+              <Table<Row> data={rows} columns={columns} idKey="id" density="balanced" textOverflow="truncate" />
             )}
-          </>
+          </VStack>
         )}
       </VStack>
 
@@ -275,31 +331,21 @@ function EvidenceList() {
       </Dialog>
 
       <EvidenceDetailDrawer
-        evidence={selected?.systemId === selectedSystem.id ? selected : null}
-        open={Boolean(selected) && selected?.systemId === selectedSystem.id}
-        onClose={() => setSelected(null)}
-        onUpdate={async (id, updates) => {
-          const updated = await updateEvidence(id, updates)
-          setSelected(updated)
-          return updated
+        key={evidenceId}
+        systemName={selectedSystem.name}
+        evidence={selected ?? null}
+        open={Boolean(selected)}
+        onClose={() => {
+          if (openedFromList.current) {
+            openedFromList.current = false
+            router.back()
+          } else {
+            router.replace(evidenceSystemHref(selectedSystem.id), { scroll: false })
+          }
         }}
-        onAddLink={async (evidenceId, entityType, entityId) => {
-          const link = await addLink(evidenceId, entityType, entityId)
-          setSelected((prev) => {
-            if (!prev || prev.id !== evidenceId) return prev
-            const links = [...prev.linkedEntities, link]
-            return { ...prev, linkedEntities: links, linkedEntityCount: links.length, workflowState: 'linked' }
-          })
-          return link
-        }}
-        onRemoveLink={async (evidenceId, linkId) => {
-          await removeLink(evidenceId, linkId)
-          setSelected((prev) => {
-            if (!prev || prev.id !== evidenceId) return prev
-            const links = prev.linkedEntities.filter((l) => l.id !== linkId)
-            return { ...prev, linkedEntities: links, linkedEntityCount: links.length, workflowState: links.length > 0 ? 'linked' : 'collected' }
-          })
-        }}
+        onUpdate={updateEvidence}
+        onAddLink={addLink}
+        onRemoveLink={removeLink}
         controlOptions={assessmentState.controls}
         canEdit={roleKnown ? canReview : null}
         canAddLink={canReview && EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}

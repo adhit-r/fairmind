@@ -1,0 +1,41 @@
+.fm-home-proof { margin-top: 12px; }
+.fm-home-proof-detail { display: grid; gap: 12px; }
+.fm-home-proof-detail > strong {
+  display: block;
+  color: var(--fm-ink2);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.fm-home-proof-detail > p { color: var(--fm-ink2); font-size: 13px; line-height: 1.5; }
+.fm-home-proof-measure {
+  display: grid;
+  gap: 9px;
+  padding: 15px 16px 16px;
+  background: var(--fm-bg);
+  border-radius: 10px;
+}
+.fm-home-proof-metric { font-size: 13px; font-weight: 550; line-height: 1.4; }
+.fm-home-proof-values { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 18px; color: var(--fm-ink2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.fm-home-proof-values b { color: var(--fm-ink); font-weight: 600; }
+.fm-home-proof-values .fm-observed b { font-size: 32px; letter-spacing: -.045em; line-height: 1.1; }
+.fm-home-proof-values .fm-bound b { font-size: 17px; letter-spacing: -.025em; }
+.fm-home-proof-scale { display: block; position: relative; height: 5px; border-radius: 5px; background: var(--fm-line); }
+.fm-home-proof-scale { margin: 6px 3px 3px; }
+.fm-home-proof-scale i { display: block; height: 100%; border-radius: inherit; background: var(--fm-ink); }
+.fm-home-proof-scale i { position: relative; }
+.fm-home-proof-scale i::after { content: ''; position: absolute; right: -5px; top: -3px; width: 11px; height: 11px; border: 2px solid var(--fm-bg); border-radius: 50%; background: var(--fm-ink); box-shadow: 0 0 0 1px var(--fm-ink); }
+.fm-home-proof-scale b { position: absolute; top: -4px; width: 2px; height: 13px; background: var(--color-text-error); }
+.fm-home-proof-links { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-top: 18px; }
+.fm-home-proof-links .fm-home-proof-pill { min-height: 44px; color: white; background: var(--fm-ink); text-decoration: none; }
+.fm-home-proof-links .fm-home-proof-pill:hover { background: black; text-decoration: none; }
+.fm-home-compare { display: inline-flex; min-height: 44px; align-items: center; gap: 5px; padding-inline: 0; border: none; background: transparent; color: var(--fm-ink2); font-family: inherit; font-size: 13px; font-weight: 550; cursor: pointer; }
+.fm-home-compare:hover { text-decoration: underline; text-underline-offset: 4px; }
+.fm-home-proof-extra { padding-block: 12px; color: var(--fm-ink2); font-size: 13px; text-decoration: underline; }
+
+@media (max-width: 767px) {
+  .fm-home-proof { margin-top: 5px; }
+  .fm-home-proof-detail { gap: 8px; }
+  .fm-home-proof-measure { padding: 11px 13px 13px; gap: 4px; }
+  .fm-home-proof-links { margin-top: 13px; }
+}

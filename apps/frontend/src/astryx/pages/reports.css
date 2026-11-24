@@ -25,6 +25,18 @@
 .rp-c7 { grid-column: span 7; } .rp-c8 { grid-column: span 8; } .rp-c12 { grid-column: span 12; }
 @media (max-width: 1180px) { .rp-c4, .rp-c5, .rp-c6, .rp-c7, .rp-c8 { grid-column: span 12; } }
 .rp-card { min-width: 0; padding: 18px 20px; box-shadow: var(--fm-shadow, 0 1px 2px rgba(21,23,26,.04), 0 6px 20px rgba(21,23,26,.05)); border-radius: 14px; }
+.rp-saved { display: grid; gap: 12px; }
+.rp-saved-header, .rp-saved-feedback { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+.rp-saved-search { display: grid; gap: 4px; width: min(100%, 18rem); }
+.rp-saved-list { margin: 0; padding: 0; list-style: none; }
+.rp-saved-list li { border-top: 1px solid var(--rp-line); }
+.rp-saved p { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.rp-saved-list a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 52px; padding-block: 7px; color: var(--color-text-primary); text-decoration: none; }
+.rp-saved-list a:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+.rp-saved-list a:focus-visible { outline: 2px solid var(--fm-ink); outline-offset: 2px; }
+.rp-saved-icon { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--rp-line); border-radius: 9px; background: var(--rp-sunk); color: var(--color-text-secondary); }
+.rp-saved-copy { display: grid; min-width: 0; gap: 2px; font-size: 12.5px; line-height: 1.3; overflow-wrap: anywhere; }
+.rp-saved-copy strong { font-size: 14px; font-weight: 600; }
 .rp-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .rp-ct { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
 .rp-ct h3 { margin: 0; font-size: 14.5px; font-weight: 600; }

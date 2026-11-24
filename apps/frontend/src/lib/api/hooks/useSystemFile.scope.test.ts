@@ -103,13 +103,15 @@ describe('system file scope', () => {
     assert.equal(systemFileAwaitsOrg(false, null), false)
   })
 
-  test('scopes the evaluation runs to the organisation, as every packs route requires', async () => {
+  test('fetches all system file records in the selected organisation', async () => {
     const paths: string[] = []
     const get = <T,>(path: string): Promise<ApiResponse<T>> => {
       paths.push(path)
-      return Promise.resolve({ success: true, data: (path.endsWith('/systems/system-a') ? { id: 'system-a' } : []) as T })
+      return Promise.resolve({ success: true, data: (path.split('?')[0].endsWith('/systems/system-a') ? { id: 'system-a' } : []) as T })
     }
     await loadSystemFile(get, 'system-a', SYSTEM_A, () => {}, 'org-1')
     assert.ok(paths.includes('/api/v1/packs/systems/system-a/evaluation-runs?org_id=org-1'))
+    assert.ok(paths.includes('/api/v1/ai-governance/systems/system-a/gate?org_id=org-1'))
+    assert.ok(paths.every((path) => new URL(path, 'http://localhost').searchParams.get('org_id') === 'org-1'))
   })
 })

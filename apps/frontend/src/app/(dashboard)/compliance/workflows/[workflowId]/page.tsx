@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { evaluationHref } from '@/lib/assurance/evaluationLinks'
+import { packSystem, withPackSystem } from '@/lib/assurance/packScope'
+import { useSearchParams, useParams, useRouter } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 import ReactFlow, { Background, Controls } from 'reactflow'
 import 'reactflow/dist/style.css'
@@ -12,12 +14,13 @@ import { useSystemContext } from '@/components/workflow/SystemContext'
 import { cn } from '@/lib/utils'
 
 export default function WorkflowPage() {
+  const system = packSystem(useSearchParams())
   const { workflowId } = useParams<{ workflowId: string }>()
   const router = useRouter()
   const { startRun, createDraft } = usePackActions()
   const { selectedSystem } = useSystemContext()
-  const wf = useWorkflow(workflowId)
-  const run = useRun(wf.data?.latestRun?.id)
+  const wf = useWorkflow(system === '' ? undefined : workflowId, system)
+  const run = useRun(wf.data?.id === workflowId ? wf.data.latestRun?.id : undefined)
   const [overlay, setOverlay] = useState(true)
   const [starting, setStarting] = useState(false)
   const [opening, setOpening] = useState(false)
@@ -25,7 +28,7 @@ export default function WorkflowPage() {
 
   const graph = useMemo(() => {
     const steps = wf.data?.steps ?? []
-    const r = overlay ? run.data : null
+    const r = overlay && (!system || run.data?.systemId === system) ? run.data : null
     const completed = new Set((r?.events ?? []).filter((e) => e.kind === 'step.completed' && e.stepId).map((e) => e.stepId))
     const stateOf = (id: string): NodeState => {
       if (!r) return 'idle'
@@ -34,13 +37,13 @@ export default function WorkflowPage() {
       return completed.has(id) ? 'done' : 'idle'
     }
     return flowGraph(steps, { stateOf, run: r !== null })
-  }, [wf.data, run.data, overlay])
+  }, [wf.data, run.data, overlay, system])
 
   async function start() {
     if (!wf.data) return
     setStarting(true)
     setFailure(null)
-    const res = await startRun(wf.data.id, selectedSystem.id || undefined)
+    const res = await startRun(wf.data.id, system ?? (selectedSystem.id || undefined))
     setStarting(false)
     wf.reload()
     if (res.error || !res.data) setFailure(res.error ?? 'The run could not be started.')
@@ -59,12 +62,13 @@ export default function WorkflowPage() {
     router.push(`/compliance/workflows/${wf.data.id}/edit`)
   }
 
+  if (system === '') return <ErrorNote message="This link needs one valid system identifier." />
   if (wf.loading && !wf.data) return <Loading label="Loading workflow" />
-  if (wf.error || !wf.data) {
+  if (wf.error || wf.data?.id !== workflowId) {
     return (
       <div className="flex flex-col gap-4">
-        <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Workflow' }]} />
-        <ErrorNote message={`This workflow could not be loaded. ${wf.error ?? ''}`} onRetry={wf.reload} />
+        <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', system) }, { label: 'Workflow' }]} />
+        <ErrorNote message={`This workflow could not be loaded. ${wf.error ?? 'The requested workflow was not returned.'}`} onRetry={wf.reload} />
       </div>
     )
   }
@@ -93,7 +97,7 @@ export default function WorkflowPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: w.pack.name, href: `/compliance/packs/${w.pack.id}` }, { label: w.name }]} />
+      <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', system) }, { label: w.pack.name, href: withPackSystem(`/compliance/packs/${encodeURIComponent(w.pack.id)}`, system) }, { label: w.name }]} />
       <Heading title={w.name} lead={w.description}>
         {last && <Link href={`/compliance/runs/${last.id}`} className={BTN}>Open latest run</Link>}
         <button type="button" className={BTN} onClick={edit} disabled={!w.installed || opening}>
@@ -106,7 +110,7 @@ export default function WorkflowPage() {
       {!w.installed && (
         <p id="start-reason" className={cn('-mt-3 m-0 text-[13px]', MUTED)}>
           Start run and editing are off because this workflow&apos;s pack is not installed.{' '}
-          <Link href={`/compliance/packs/${w.pack.id}`} className="font-semibold text-[var(--fm-ink)] underline">Install {w.pack.name}</Link>.
+          <Link href={withPackSystem(`/compliance/packs/${encodeURIComponent(w.pack.id)}`, system)} className="font-semibold text-[var(--fm-ink)] underline">Install {w.pack.name}</Link>.
         </p>
       )}
       {failure && <ErrorNote message={failure} />}
@@ -270,7 +274,7 @@ export default function WorkflowPage() {
               <ul className="m-0 list-none p-0">
                 {w.evaluations.map((e) => (
                   <li key={e.id} className={cn('flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t py-2.5 text-[13px]', LINE)}>
-                    <Link href={`/compliance/evaluations#${encodeURIComponent(e.id)}`} className="min-w-0 flex-[1_1_160px] font-semibold text-[var(--fm-ink)] hover:underline">{e.name}</Link>
+                    <Link href={evaluationHref(e.id, system)} className="min-w-0 flex-[1_1_160px] font-semibold text-[var(--fm-ink)] hover:underline">{e.name}</Link>
                     <EnginePill engine={e.engine} />
                   </li>
                 ))}

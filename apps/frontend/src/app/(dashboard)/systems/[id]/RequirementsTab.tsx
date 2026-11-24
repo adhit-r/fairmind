@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { CheckEvidenceLinks } from '@/components/workflow/CheckEvidenceLinks'
+import { requirementHref } from '../../frameworks/parts'
 import { useMemo, useState } from 'react'
 import { Empty, ErrorNote, Loading, ReqPill } from '@/components/packs/parts'
 import { Button } from '@/components/ui/button'
@@ -51,11 +53,15 @@ export function requirementsGrid(journey: Journey, clauseMap: ClauseMap | null):
 }
 
 /** The system's requirements, one confirmed framework at a time. */
-export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ key: string; name: string }>; clauseMap: ClauseMap | null }) {
+export function RequirementsTab({ confirmed, clauseMap, onConfirmRules }: {
+  confirmed: Array<{ key: string; name: string }>
+  clauseMap: ClauseMap | null
+  onConfirmRules?: () => void
+}) {
   const [soaError, setSoaError] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | undefined>(confirmed[0]?.key)
   const fw = confirmed.some((f) => f.key === picked) ? picked : confirmed[0]?.key
-  const journey = useJourney(fw)
+  const journey = useJourney(fw, clauseMap?.systemId)
   const grid = useMemo(() => (journey.data ? requirementsGrid(journey.data, clauseMap) : null), [journey.data, clauseMap])
   const [cell, setCell] = useState<{ row: string; col: string } | null>(null)
   const short = shortFrameworkName(confirmed.find((f) => f.key === fw)?.name ?? fw ?? '')
@@ -74,7 +80,8 @@ export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ k
   if (!confirmed.length) {
     return (
       <section className="fm-card p-[18px]" aria-label="Requirements">
-        <Empty>No framework is confirmed for this system yet. Confirm tier and rules in the Onboard stage of the Journey tab.</Empty>
+        <Empty>No framework is confirmed for this system yet.</Empty>
+        {onConfirmRules && <Button type="button" variant="outline" size="lg" className="mt-3" onClick={onConfirmRules}>Confirm tier and rules</Button>}
       </section>
     )
   }
@@ -152,8 +159,9 @@ export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ k
                       <b className="font-semibold">{x.label}</b> <span className="text-[var(--fm-ink2)]">· {x.relation}</span>
                     </span>
                     <span className="text-[12px] text-[var(--fm-ink2)]">
-                      {x.evidenceClass ? classLabel(x.evidenceClass) : 'Nothing current on file'} · <span className="font-mono">{x.confidence.toFixed(2)}</span>
+                      {!x.fails && x.evidenceClass ? `${classLabel(x.evidenceClass)} · ` : ''}Check confidence <span className="font-mono">{x.confidence.toFixed(2)}</span>
                     </span>
+                    <CheckEvidenceLinks systemId={clauseMap?.systemId} check={x} failed={Boolean(x.fails)} />
                   </div>
                 ))
               ) : (
@@ -165,6 +173,11 @@ export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ k
         {fw && (
           <Link href={`/frameworks/${encodeURIComponent(fw)}`} className="mt-auto self-start text-[12.5px] text-[var(--fm-ink2)] underline-offset-2 hover:underline">
             Open {short} for every system
+          </Link>
+        )}
+        {fw && found && clauseMap?.systemId && (
+          <Link href={requirementHref(fw, found.r.control, clauseMap.systemId)} className="self-start text-[13px] font-semibold underline">
+            Review {found.r.control} for this system
           </Link>
         )}
       </CellDrawer>

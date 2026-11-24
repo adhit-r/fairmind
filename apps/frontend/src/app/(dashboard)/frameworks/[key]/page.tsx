@@ -13,7 +13,6 @@ import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/Segme
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Heading, Text } from '@astryxdesign/core/Text'
-import { useOrg } from '@/context/OrgContext'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import { useFrameworkSystems } from '@/lib/api/hooks/useEstate'
 import { useJourney } from '@/lib/api/hooks/usePacks'
@@ -40,8 +39,14 @@ function ClauseView() {
   const search = useSearchParams()
   const tabParam = search.get('tab')
   const tab = tabParam === 'systems' || tabParam === 'all' || tabParam === 'audit' ? tabParam : 'requirements'
-  const setTab = (t: string) => router.replace(`/frameworks/${encodeURIComponent(key)}${t === 'requirements' ? '' : `?tab=${t}`}`)
-  useOrg()
+  const setFilter = (param: string, value: string | null) => {
+    const filters = new URLSearchParams(search.toString())
+    if (value === null) filters.delete(param)
+    else filters.set(param, value)
+    const query = filters.toString()
+    router.replace(`/frameworks/${encodeURIComponent(key)}${query ? `?${query}` : ''}`, { scroll: false })
+  }
+  const setTab = (t: string) => setFilter('tab', t === 'requirements' ? null : t)
   const journey = useJourney(key)
   const fw = useFrameworkSystems(key)
   const scope = useFrameworkScope(key)
@@ -56,12 +61,14 @@ function ClauseView() {
         : 'Nobody yet'
   // An open task on a requirement for a system: the queue shows who has it instead of an Assign button.
   const taskFor = useMemo(() => new Map((tasks.data?.tasks ?? []).map((t) => [`${t.subject.id}@${t.systemId}`, t])), [tasks.data])
-  const [system, setSystem] = useState<number | 'all'>('all')
   const [groupPick, setGroupPick] = useState<string | null>(null)
 
   const j = journey.data
   const f = fw.data
   const systems = useMemo(() => f?.systems ?? [], [f])
+  const requested = search.getAll('system')
+  const selected = requested.length === 1 ? systems.find((s) => s.id === requested[0]) : undefined
+  const system = selected && (tab === 'requirements' || tab === 'all') ? systems.indexOf(selected) : 'all'
   const cells = useMemo(() => cellIndex(f ?? null), [f])
   const name = j?.name ?? f?.framework.name ?? key
   const short = shortFrameworkName(name)
@@ -112,7 +119,7 @@ function ClauseView() {
       </VStack>
     )
   }
-  if (journey.error || fw.error || !j) {
+  if (journey.error || fw.error || !j || !f) {
     return (
       <EmptyState
         title={`${short} could not load`}
@@ -120,6 +127,9 @@ function ClauseView() {
         actions={<Button label="Try again" onClick={() => { journey.reload(); fw.reload() }} />}
       />
     )
+  }
+  if (requested.length && !selected) {
+    return <EmptyState title="Requested system unavailable" description={`The link does not identify an available system in this organisation’s scope for ${short}.`} actions={<Button label="View all systems" onClick={() => setFilter('system', null)} />} />
   }
 
   return (
@@ -213,6 +223,7 @@ function ClauseView() {
         </section>
       ) : tab === 'all' ? (
         <section className="fm-card" aria-label="All requirements" style={{ padding: 0 }}>
+          {selected && <div className="fx-pad"><Text type="supporting">Showing requirement status for {selected.name}</Text></div>}
           <div className="fx-scroll">
             <table className="fx-table">
               <thead>
@@ -223,8 +234,8 @@ function ClauseView() {
                   const ready = READINESS_OF[r.state]
                   return (
                     <tr key={r.key}>
-                      <td className="num"><Link href={requirementHref(key, r.control)}>{r.control}</Link></td>
-                      <td><Link href={requirementHref(key, r.control)}>{r.title}</Link></td>
+                      <td className="num"><Link href={requirementHref(key, r.control, selected?.id)}>{r.control}</Link></td>
+                      <td><Link href={requirementHref(key, r.control, selected?.id)}>{r.title}</Link></td>
                       <td>{g.name}</td>
                       <td><span className="fx-state"><i className={`fx-rk r-${ready}`} aria-hidden="true" />{READINESS_LABEL[ready]}</span></td>
                     </tr>
@@ -245,10 +256,10 @@ function ClauseView() {
                   <Text type="supporting">Every requirement in the standard&rsquo;s order. Pick one to open its trace.</Text>
                 </VStack>
                 {systems.length > 0 && (
-                  <SegmentedControl label="Show state for" value={String(system)} onChange={(v) => setSystem(v === 'all' ? 'all' : Number(v))}>
+                  <SegmentedControl label="Show state for" value={selected?.id ?? 'all'} onChange={(v) => setFilter('system', v === 'all' ? null : v)}>
                     <SegmentedControlItem value="all" label="All systems" />
-                    {systems.map((s, i) => (
-                      <SegmentedControlItem key={s.id} value={String(i)} label={s.name} />
+                    {systems.map((s) => (
+                      <SegmentedControlItem key={s.id} value={s.id} label={s.name} />
                     ))}
                   </SegmentedControl>
                 )}
@@ -269,7 +280,7 @@ function ClauseView() {
                   {g.reqs.map((r) => {
                     const label = `${r.control} ${r.title}: ${STATE_LABEL[r.state]}`
                     return (
-                      <Link key={r.key} href={requirementHref(key, r.control, system === 'all' ? undefined : systems[system]?.id)} title={label} aria-label={label}>
+                      <Link key={r.key} href={requirementHref(key, r.control, selected?.id)} title={label} aria-label={label}>
                         <Glyph state={r.state} size="lg" />
                       </Link>
                     )
@@ -305,25 +316,25 @@ function ClauseView() {
                     {group.reqs.map((r) => {
                       const row = cells.get(r.key) ?? []
                       const checks = row.flatMap((c) => c?.checks ?? [])
-                      const evidence = new Set(checks.map((c) => c.evidenceId).filter(Boolean)).size
+                      const evidence = new Set(checks.flatMap((c) => c.fails || c.cell === 'fails' ? c.failureEvidenceIds ?? [] : c.evidenceId ? [c.evidenceId] : [])).size
                       const stale = checks.filter((c) => c.stale).length
                       return (
                         <tr key={r.key}>
                           <td className="num">
-                            <Link href={requirementHref(key, r.control)}>{r.control}</Link>
+                            <Link href={requirementHref(key, r.control, selected?.id)}>{r.control}</Link>
                           </td>
                           <td>
-                            <Link href={requirementHref(key, r.control)}>{r.title}</Link>
+                            <Link href={requirementHref(key, r.control, selected?.id)}>{r.title}</Link>
                           </td>
                           {systems.length ? (
                             systems.map((s, i) => {
                               const st = stateFor(row, r.status, i)
                               return (
                                 <td key={s.id}>
-                                  <span className="fx-state">
+                                  <Link className="fx-state" href={requirementHref(key, r.control, s.id)} aria-label={`${r.control} for ${s.name}: ${STATE_LABEL[st]}`}>
                                     <Glyph state={st} />
                                     {STATE_LABEL[st]}
-                                  </span>
+                                  </Link>
                                 </td>
                               )
                             })
@@ -336,7 +347,7 @@ function ClauseView() {
                             </td>
                           )}
                           <td className="num">{evidence || 'None'}</td>
-                          <td>{stale ? <b style={{ color: '#8a5a00' }}>{stale} stale</b> : checks.length ? 'Current' : 'Not tracked'}</td>
+                          <td>{stale ? <b style={{ color: '#8a5a00' }}>{stale} stale</b> : evidence ? 'Current' : 'Not tracked'}</td>
                         </tr>
                       )
                     })}
@@ -361,8 +372,7 @@ function ClauseView() {
                 <div key={r.key} className="fx-qrow">
                   <Glyph state={state} label={STATE_LABEL[state]} />
                   <span>
-                    <b>{r.control}</b>
-                    {r.title}
+                    <Link href={requirementHref(key, r.control, q.system.id)}><b>{r.control}</b> {r.title}</Link>
                     <small>{why}</small>
                   </span>
                   {(() => {

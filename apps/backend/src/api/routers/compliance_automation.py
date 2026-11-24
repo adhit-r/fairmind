@@ -563,15 +563,7 @@ async def get_automation_status(
             # Use service method to get comprehensive status
             status_data = await compliance_automation_service.get_automation_status(session, m.org_id)
 
-            return AutomationStatusResponse(
-                scheduler_running=status_data.get("scheduler_running", False),
-                active_schedules=status_data.get("active_schedules", 0),
-                pending_jobs=status_data.get("pending_jobs", 0),
-                total_violations=status_data.get("total_violations", 0),
-                critical_violations=status_data.get("critical_violations", 0),
-                reports_generated_today=status_data.get("reports_generated_today", 0),
-                last_scheduler_check=datetime.fromisoformat(status_data.get("last_scheduler_check", datetime.utcnow().isoformat())),
-            )
+            return AutomationStatusResponse(**status_data)
 
         finally:
             session.close()

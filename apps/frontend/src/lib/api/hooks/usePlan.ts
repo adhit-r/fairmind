@@ -100,8 +100,13 @@ export function usePlan() {
     if (!orgId) return
     // Computing the plan reads every system's release gate; give it longer than the client's 10s default.
     const res = await apiClient.get<Plan>(scoped(''), { timeout: 60_000 })
-    if (res.success && res.data) setData(res.data)
-    else setError(res.error || 'Could not load the plan')
+    if (res.success && res.data) {
+      setData(res.data)
+      setError(null)
+    } else {
+      setData(null)
+      setError(res.error || 'Could not load the plan')
+    }
   }, [orgId, scoped])
 
   useEffect(() => {

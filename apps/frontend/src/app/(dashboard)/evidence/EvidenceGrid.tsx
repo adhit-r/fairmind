@@ -1,15 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { CommandBar } from '@/components/layout/CommandBar'
 import { Empty, ErrorNote, Loading } from '@/components/packs/parts'
 import { CellDrawer, CellMeaning, classLabel, DrawerBlock, Matrix } from '@/components/ui/matrix'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import { useControls, useEstateGates } from '@/lib/api/hooks/useEstate'
-import { useEvidencePacks } from '@/lib/api/hooks/useEvidencePacks'
 import { useJourney } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 import { confirmedFrameworks } from '../frameworks/[key]/grid'
@@ -21,6 +19,7 @@ const SEG = 'inline-flex rounded-full border border-[var(--fm-line)] bg-white p-
 const SEG_ITEM = 'inline-flex h-7 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'
 const SEG_ON = 'bg-[var(--fm-ink)] text-white hover:text-white'
 const LINK = 'font-medium text-[var(--fm-ink)] underline-offset-2 hover:underline'
+export const EVIDENCE_GRID_HREF = '/evidence?view=grid'
 export const LIBRARY_HREF = '/evidence?view=artifacts'
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -28,7 +27,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function EvidenceSeg({ grid }: { grid: boolean }) {
   return (
     <nav aria-label="Evidence layout" className={SEG}>
-      <Link href="/evidence" className={cn(SEG_ITEM, grid && SEG_ON)} aria-current={grid ? 'page' : undefined}>
+      <Link href={EVIDENCE_GRID_HREF} className={cn(SEG_ITEM, grid && SEG_ON)} aria-current={grid ? 'page' : undefined}>
         Grid
       </Link>
       <Link href={LIBRARY_HREF} className={cn(SEG_ITEM, !grid && SEG_ON)} aria-current={!grid ? 'page' : undefined}>
@@ -40,15 +39,12 @@ export function EvidenceSeg({ grid }: { grid: boolean }) {
 
 /** Every evidence item a release check reads, by system: its proof, and how far it reaches into each framework. */
 export function EvidenceGrid() {
-  const router = useRouter()
-  const { systems, loading: systemsLoading } = useSystemContext()
+  const { systems, loading: systemsLoading, error: systemsError, refreshSystems } = useSystemContext()
   const real = useMemo(() => systems.filter((s) => s.metadata?.source !== 'fallback'), [systems])
   const gatesRes = useEstateGates()
   const controls = useControls()
-  const { create } = useEvidencePacks()
   const [cell, setCell] = useState<{ row: string; col: string } | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
+  const cellTrigger = useRef<HTMLButtonElement | null>(null)
 
   const grid = useMemo(() => {
     if (!gatesRes.data || !controls.data) return null
@@ -65,30 +61,18 @@ export function EvidenceGrid() {
   const journey = useJourney(fw?.key)
   const titles = useMemo(() => new Map((journey.data?.groups ?? []).flatMap((g) => g.requirements.map((r) => [r.key, r.title]))), [journey.data])
 
-  const exportPack = async () => {
-    if (!grid) return
-    setBusy(true)
-    setExportError(null)
-    const res = await create({ title: 'Evidence inspection pack', frameworks: grid.frameworks.map((f) => f.key), systemIds: grid.systemIds })
-    setBusy(false)
-    if (res.success && res.data) router.push(`/evidence/packs/${res.data.id}`)
-    else setExportError(res.error || 'Could not create the inspection pack')
-  }
-
   const loading = systemsLoading || gatesRes.loading || controls.loading
-  const error = gatesRes.error || controls.error
+  const error = systemsError || gatesRes.error || controls.error
   const n = grid?.items ?? 0
   const m = grid?.systemIds.length ?? 0
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+    <div className="fm-page grid grid-cols-[minmax(0,1fr)] gap-4">
       <CommandBar
         stage="assess"
         title={grid ? `${plural(n, 'evidence item')} across ${plural(m, 'system')}` : 'Evidence'}
         reason="Every record a release check reads, and the framework requirements its control reaches"
-        primary={{ label: busy ? 'Exporting' : 'Export for inspection', onClick: exportPack, busy, disabled: !grid || !n || !grid.frameworks.length }}
       />
-      {exportError && <ErrorNote message={exportError} />}
 
       <section className="fm-card overflow-hidden" aria-label="Evidence">
         <div className="flex items-center gap-2 px-[18px] pb-3 pt-4">
@@ -103,8 +87,9 @@ export function EvidenceGrid() {
             <ErrorNote
               message={error}
               onRetry={() => {
-                gatesRes.reload()
-                controls.reload()
+                if (systemsError) void refreshSystems()
+                if (gatesRes.error) gatesRes.reload()
+                if (controls.error) controls.reload()
               }}
             />
           </div>
@@ -131,7 +116,15 @@ export function EvidenceGrid() {
           </div>
         ) : grid ? (
           <>
-            <Matrix id="evidence" {...grid.matrix} onCell={(row, col) => setCell({ row, col })} />
+            <Matrix
+              id="evidence"
+              {...grid.matrix}
+              keyboardNavigation
+              onCell={(row, col, trigger) => {
+                cellTrigger.current = trigger
+                setCell({ row, col })
+              }}
+            />
             <div className="border-t border-[var(--fm-line)] px-[18px] py-2.5 text-[12px] tabular-nums text-[var(--fm-ink2)]">
               {plural(n, 'item')} read by release checks ·{' '}
               <Link className={LINK} href={LIBRARY_HREF}>
@@ -145,6 +138,11 @@ export function EvidenceGrid() {
       <CellDrawer
         open={!!picked}
         onClose={() => setCell(null)}
+        onCloseAutoFocus={(event) => {
+          if (!cellTrigger.current?.isConnected) return
+          event.preventDefault()
+          cellTrigger.current.focus({ preventScroll: true })
+        }}
         label={picked ? `${picked.system.name} · ${picked.control}` : 'Evidence'}
         title={row?.label ?? ''}
         sub={picked?.check.evidenceClass ? `${classLabel(picked.check.evidenceClass)} · ${picked.check.confidence.toFixed(2)}` : undefined}

@@ -474,6 +474,7 @@ def test_gate_reads_the_newest_record_per_check():
     fairness = lambda gate: next(c for c in gate["checks"] if c["key"] == "fairness")
     gate = release_gate("low", [run("old-pass", 30, 0.97, True), run("new-fail", 1, 0.85, False)], now=now)
     assert fairness(gate)["evidenceId"] == "new-fail" and fairness(gate)["detail"]["all_checks_pass"] is False
+    assert fairness(gate)["failureEvidenceIds"] == ["new-fail"]
     assert "Measured fairness checks fail on at least one attribute" in gate["reasons"]
     # A newer measured failure below 0.70 still replaces the older proven pass; it only lowers the state to attested.
     weak = release_gate("low", [run("old-pass", 30, 0.95, True), run("new-weak-fail", 1, 0.65, False)], now=now)
@@ -662,6 +663,7 @@ def test_a_failed_evaluation_run_stands_until_that_evaluation_passes_again():
     # (a) a newer pass of another evaluation of the same control does not clear the failure
     other = gate([_eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-USE-01", "passed", "10:05")])
     assert check(other, "fairness")["fails"] is True and other["verdict"] != "go"
+    assert check(other, "fairness")["failureEvidenceIds"] == ["EV-FAI-05-10:00"]
     assert any("EV-FAI-05 failed" in r for r in other["reasons"])
     # (b) nor does a newer attestation of the check
     attestation = {"id": "att", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T10:05:00+00:00"}
@@ -670,6 +672,19 @@ def test_a_failed_evaluation_run_stands_until_that_evaluation_passes_again():
     # a newer pass of the same evaluation does
     again = gate([_eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-FAI-05", "passed", "10:05")])
     assert "fails" not in check(again, "fairness") and not any("failed" in r for r in again["reasons"])
+    assert "failureEvidenceIds" not in check(again, "fairness")
+
+
+def test_fairness_failure_sources_include_each_standing_failure():
+    csv_failure = {
+        "id": "csv-failure", "evidenceType": "fairness_test", "confidence": 0.9,
+        "timestamp": "2026-11-06T09:00:00+00:00", "metadata": {"provenance_class": "measured"},
+        "content": {"all_checks_pass": False, "attributes": []},
+    }
+    records = [csv_failure, _eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-USE-01", "passed", "10:05")]
+    check = next(c for c in release_gate("low", records)["checks"] if c["key"] == "fairness")
+    assert check["evidenceId"] == "EV-USE-01-10:05"
+    assert check["failureEvidenceIds"] == ["EV-FAI-05-10:00", "csv-failure"]
 
 
 def test_an_environmental_run_never_shadows_the_assessment():

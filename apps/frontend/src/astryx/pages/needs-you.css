@@ -9,3 +9,15 @@
 .fm-inbox-act { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .fm-panel-card { padding: 4px 0; border-radius: var(--radius-element); }
 @media (max-width: 900px) { .fm-inbox-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } .fm-inbox-act { justify-content: flex-start; } }
+
+.fm-report-review-queue { display: grid; gap: 8px; }
+.fm-report-review-list { margin: 0; padding: 0; list-style: none; border-top: 2px solid var(--fm-ink); }
+.fm-report-review-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px 24px; padding: 12px 0; border-bottom: 1px solid var(--fm-line); }
+.fm-report-review-list li > div { min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.fm-report-review-list strong { color: var(--fm-ink); font-weight: 650; }
+.fm-report-review-list span { color: var(--fm-ink2); font-size: 13px; }
+.fm-report-review-list a { flex-shrink: 0; font-weight: 600; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 600px) {
+  .fm-report-review-list li { align-items: flex-start; flex-direction: column; }
+  .fm-report-review-list a { padding-block: 5px; }
+}

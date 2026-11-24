@@ -224,7 +224,9 @@ a.mx-vh:hover { text-decoration: underline; }
 .mx-grid .mx-off { opacity: 0.35; }
 .mx-ch.mx-off .mx-vh { text-decoration: line-through; }
 .mx-grid tbody tr:not(.mx-grp):hover > *,
+.mx[data-keyboard-navigation] tbody tr:has(button.fm-cel:focus-visible) > *,
 .mx-grid .mx-hc { background: #fbfbfa; }
+.mx[data-keyboard-navigation] .mx-wrap { scroll-padding-inline-start: min(280px, 46vw); }
 .mx-grid .mx-grp td { padding: 12px 0 4px; background: #fff; font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fm-ink3); }
 .mx-grp td span { display: inline-block; position: sticky; left: 0; padding-left: 18px; }
 .mx-grid .mx-tl,

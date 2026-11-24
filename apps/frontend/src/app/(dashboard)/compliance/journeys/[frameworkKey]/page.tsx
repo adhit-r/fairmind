@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { evaluationHref } from '@/lib/assurance/evaluationLinks'
+import { packSystem, withPackSystem } from '@/lib/assurance/packScope'
+import { useSearchParams, useParams } from 'next/navigation'
+import { useMemo } from 'react'
 import { useInstaller, useJourney, usePackNames, type JourneyRequirement, type ReqStatus } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { journeyFigure, type FigWorkflow } from '@/components/packs/figures'
@@ -23,11 +25,19 @@ const counts = (s: ReqStatus) => s === 'covered' || s === 'tested'
 const pct = (n: number, total: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0)
 
 export default function JourneyPage() {
+  const search = useSearchParams()
+  const system = packSystem(search)
   const { frameworkKey } = useParams<{ frameworkKey: string }>()
-  const journey = useJourney(frameworkKey)
+  const journey = useJourney(system === '' ? undefined : frameworkKey, system)
   const installer = useInstaller(journey.reload)
   const packName = usePackNames()
-  const [filter, setFilter] = useState<ReqStatus | null>(null)
+  const filter = REQ_ORDER.find((status) => status === search.get('status')) ?? null
+  function setFilter(status: ReqStatus | null) {
+    const url = new URL(window.location.href)
+    if (status) url.searchParams.set('status', status)
+    else url.searchParams.delete('status')
+    window.history.replaceState(null, '', url)
+  }
 
   const view = useMemo(() => {
     const groups = journey.data?.groups ?? []
@@ -53,12 +63,13 @@ export default function JourneyPage() {
     return { groups, counts, figure, total: groups.reduce((n, g) => n + g.requirements.length, 0), byGroup, waiting: [...waiting.values()] }
   }, [journey.data])
 
+  if (system === '') return <ErrorNote message="This link needs one valid system identifier." />
   if (journey.loading && !journey.data) return <Loading label="Loading journey" />
-  if (journey.error || !journey.data) {
+  if (journey.error || journey.data?.key !== frameworkKey) {
     return (
       <div className="flex flex-col gap-4">
-        <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Journey' }]} />
-        <ErrorNote message={`This journey could not be loaded. ${journey.error ?? ''}`} onRetry={journey.reload} />
+        <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', system) }, { label: 'Journey' }]} />
+        <ErrorNote message={`This journey could not be loaded. ${journey.error ?? 'The requested journey was not returned.'}`} onRetry={journey.reload} />
       </div>
     )
   }
@@ -72,12 +83,12 @@ export default function JourneyPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: j.name }]} />
+      <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', system) }, { label: j.name }]} />
       <Heading
         title={j.name}
         lead={`Readiness against this framework from the packs you have installed.${view.waiting.length ? ` ${view.waiting.length} ${view.waiting.length === 1 ? 'run is' : 'runs are'} waiting for you.` : ''}`}
       >
-        <Link href="/compliance/evaluations" className={BTN}>Browse evaluations</Link>
+        <Link href={withPackSystem('/evaluations', system)} className={BTN}>Browse evaluations</Link>
         {view.waiting.length > 0 && (
           <Link href={`/compliance/runs/${view.waiting[0].run.id}`} className={BTN_P}>
             Review {view.waiting.length} {view.waiting.length === 1 ? 'decision' : 'decisions'}
@@ -181,7 +192,7 @@ export default function JourneyPage() {
                 g.workflows.map((w, k) => (
                   <li key={`${g.name}-${w.id}`} className={cn('flex flex-wrap items-center gap-x-3.5 gap-y-1.5 py-2.5', 'border-t', LINE)}>
                     <span className={cn('w-[120px] flex-none text-[12.5px]', MUTED)}>{k === 0 ? g.name : ''}</span>
-                    <Link href={`/compliance/workflows/${w.id}`} className="min-w-0 flex-[999_1_200px] font-semibold text-[var(--fm-ink)] hover:underline">
+                    <Link href={withPackSystem(`/compliance/workflows/${encodeURIComponent(w.id)}`, system)} className="min-w-0 flex-[999_1_200px] font-semibold text-[var(--fm-ink)] hover:underline">
                       {w.name}
                     </Link>
                     <StagePill stage={w.stage} />
@@ -217,7 +228,7 @@ export default function JourneyPage() {
                 >
                   <span className={`text-[12.5px] tabular-nums ${MUTED}`}>{i + 1}</span>
                   <div className="flex min-w-0 flex-col">
-                    <Link href={`/compliance/packs/${s.pack}`} className="font-semibold leading-snug text-[var(--fm-ink)] hover:underline">
+                    <Link href={withPackSystem(`/compliance/packs/${encodeURIComponent(s.pack)}`, system)} className="font-semibold leading-snug text-[var(--fm-ink)] hover:underline">
                       {s.name}
                     </Link>
                     <span className={`text-[12px] tabular-nums ${MUTED}`}>{s.newlyCovered > 0 ? `+${s.newlyCovered} newly covered` : 'No new requirements'}</span>
@@ -317,7 +328,7 @@ export default function JourneyPage() {
                               {r.workflows.map((w) => (
                                 <li key={`w${w.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                   <Link
-                                    href={`/compliance/workflows/${w.id}`}
+                                    href={withPackSystem(`/compliance/workflows/${encodeURIComponent(w.id)}`, system)}
                                     className={cn('hover:underline', w.installed ? 'font-semibold text-[var(--fm-ink)]' : 'text-[var(--fm-ink2)]')}
                                   >
                                     {w.name}
@@ -326,7 +337,7 @@ export default function JourneyPage() {
                                   {!w.installed && <span className="text-[12px] text-[var(--fm-ink3)]">in {packName(w.pack)}, not installed</span>}
                                 </li>
                               ))}
-                              <EvaluationLinks evaluations={r.evaluations} packName={packName} />
+                              <EvaluationLinks requirement={r.key} system={system} evaluations={r.evaluations} packName={packName} />
                             </ul>
                           )}
                         </td>
@@ -347,13 +358,14 @@ type ReqEvaluation = JourneyRequirement['evaluations'][number]
 const SHOWN = 5
 
 /** The evaluations that count toward a requirement: those with a result first, then strongest relation, five in view. */
-function EvaluationLinks({ evaluations, packName }: { evaluations: ReqEvaluation[]; packName: (id: string) => string }) {
+function EvaluationLinks({ evaluations, packName, requirement, system }: { requirement: string; system?: string; evaluations: ReqEvaluation[]; packName: (id: string) => string }) {
+  const expanded = useSearchParams().getAll('expanded').includes(requirement)
   const hasResult = (e: ReqEvaluation) => (e.result && e.result !== 'not_run' ? 1 : 0)
   const sorted = [...evaluations].sort((a, b) => hasResult(b) - hasResult(a)) // stable: the API sends strongest first
   const row = (e: ReqEvaluation) => (
     <li key={`e${e.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <Link
-        href={`/compliance/evaluations#${encodeURIComponent(e.id)}`}
+        href={evaluationHref(e.id, system)}
         className={cn('hover:underline', e.installed ? 'font-semibold text-[var(--fm-ink)]' : 'text-[var(--fm-ink2)]')}
       >
         {e.name}
@@ -369,8 +381,14 @@ function EvaluationLinks({ evaluations, packName }: { evaluations: ReqEvaluation
       {sorted.slice(0, SHOWN).map(row)}
       {rest.length > 0 && (
         <li>
-          <details>
-            <summary className="cursor-pointer text-[12.5px] font-semibold text-[var(--fm-ink2)]">
+          <details open={expanded}>
+            <summary onClick={(event) => {
+              event.preventDefault()
+              const url = new URL(window.location.href)
+              if (expanded) url.searchParams.delete('expanded', requirement)
+              else url.searchParams.append('expanded', requirement)
+              window.history.replaceState(null, '', url)
+            }} className="cursor-pointer text-[12.5px] font-semibold text-[var(--fm-ink2)]">
               {rest.length} more {rest.length === 1 ? 'evaluation' : 'evaluations'}
             </summary>
             <ul className="m-0 mt-1.5 flex list-none flex-col gap-1.5 p-0">{rest.map(row)}</ul>

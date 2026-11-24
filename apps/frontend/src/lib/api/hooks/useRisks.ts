@@ -2,9 +2,10 @@
  * Risks API Hooks
  */
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
+import { useOrgResource } from './usePacks'
 
 /** Statuses that settle a risk; every other status (open, acceptance_pending, ...) still blocks release, matching the backend. */
 export const CLOSED_RISK_STATUSES = ['accepted', 'closed', 'resolved', 'mitigated']
@@ -21,7 +22,16 @@ export interface Risk {
   timestamp: string
   /** "manual_assessment" when a person typed it in; anything else was raised by FairMind. */
   source?: string
-  metadata?: { pendingAcceptance?: PendingAcceptance }
+  metadata?: {
+    pendingAcceptance?: PendingAcceptance
+    evaluationId?: string
+    evidenceId?: string
+    retestEvidenceIds?: string[]
+    retestEvidenceId?: string
+    latest_snapshot_id?: string
+    assessment_id?: string
+    analysis_id?: string
+  }
 }
 
 /** An acceptance one person proposed, waiting for a different person to approve it (status "acceptance_pending"). */
@@ -56,71 +66,38 @@ export interface RiskSummary {
   bySeverity: Record<'low' | 'medium' | 'high' | 'critical', number>
 }
 
-const EMPTY_SUMMARY: RiskSummary = {
-  total: 0,
-  open: 0,
-  automated: 0,
-  suggested: 0,
-  bySeverity: {
-    low: 0,
-    medium: 0,
-    high: 0,
-    critical: 0,
-  },
+function validSummary(value: RiskSummary | undefined): value is RiskSummary {
+  return Boolean(value && value.bySeverity &&
+    [value.total, value.open, value.automated, value.suggested, ...['low', 'medium', 'high', 'critical'].map(
+      (severity) => value.bySeverity[severity as Risk['severity']]
+    )].every((count) => Number.isInteger(count) && count >= 0))
 }
 
 export function useRisks(systemId?: string) {
-  const [data, setData] = useState<Risk[]>([])
-  const [suggested, setSuggested] = useState<SuggestedRisk[]>([])
-  // null = not known (loading or the load failed). Never a stand-in zero.
-  const [summary, setSummary] = useState<RiskSummary | null>(null)
-  const [loadedFor, setLoadedFor] = useState<string | undefined>(undefined)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-  // Bumped after a recorded finding so the list and counts reload from the server.
-  const [reloads, setReloads] = useState(0)
-
-  useEffect(() => {
-    // Set when the system changes or the component unmounts, so a superseded response is ignored.
-    let cancelled = false
-
-    const fetchRisks = async () => {
-      setLoading(true)
-      setError(null)
-      // A different system must not show the previous one's findings while it loads.
-      setData([])
-      setSuggested([])
-      setSummary(null)
-      try {
-        const endpoint = systemId
-          ? `${API_ENDPOINTS.aiGovernance.riskDashboard}?system_id=${encodeURIComponent(systemId)}`
-          : API_ENDPOINTS.aiGovernance.riskDashboard
-        const response: ApiResponse<any> = await apiClient.get(endpoint)
-        if (cancelled) return
-
-        if (response.success && response.data) {
-          setData(response.data.risks || [])
-          setSuggested(response.data.suggested || [])
-          setSummary({ ...EMPTY_SUMMARY, ...response.data.summary })
-        } else {
-          throw new Error(response.error || 'Failed to fetch risks')
-        }
-      } catch (err) {
-        if (cancelled) return
-        setError(err instanceof Error ? err : new Error('Unknown error'))
-      } finally {
-        if (!cancelled) {
-          setLoadedFor(systemId)
-          setLoading(false)
-        }
-      }
+  const endpoint = API_ENDPOINTS.aiGovernance.riskDashboard
+  const path = systemId ? `${endpoint}?system_id=${encodeURIComponent(systemId)}` : endpoint
+  const response = useOrgResource<{ risks: Array<Risk & { system_id?: string }>; suggested?: SuggestedRisk[]; summary?: RiskSummary }>(path)
+  const { reload } = response
+  const result = useMemo(() => {
+    const empty = { data: [] as Risk[], suggested: [] as SuggestedRisk[], summary: null }
+    if (response.loading) return { ...empty, error: null }
+    if (response.error) return { ...empty, error: new Error(response.error) }
+    const payload = response.data
+    if (!Array.isArray(payload?.risks)) return { ...empty, error: new Error('The findings response was incomplete.') }
+    const risks = payload.risks
+    if (risks.some((r) => !r || !r.id || typeof r.title !== 'string' || !r.status ||
+      !['critical', 'high', 'medium', 'low'].includes(r.severity) ||
+      (r.systemId && r.system_id && r.systemId !== r.system_id) ||
+      (systemId && (r.systemId ?? r.system_id) !== systemId))) {
+      return { ...empty, error: new Error('The findings response was incomplete or included another system.') }
     }
-
-    fetchRisks()
-    return () => {
-      cancelled = true
+    return {
+      data: risks.map((r) => r.systemId || !r.system_id ? r : { ...r, systemId: r.system_id }),
+      suggested: Array.isArray(payload.suggested) ? payload.suggested : [],
+      summary: validSummary(payload.summary) ? payload.summary : null,
+      error: null,
     }
-  }, [systemId, reloads])
+  }, [response.data, response.error, response.loading, systemId])
 
   // Throws on failure. A failed submit is the caller's to report; it is not a list-load error.
   // On success the list reloads for whichever system is current, rather than merging the new
@@ -133,7 +110,7 @@ export function useRisks(systemId?: string) {
     if (!response.success || !response.data) {
       throw new Error(response.error || 'Risk assessment failed')
     }
-    setReloads((n) => n + 1)
+    reload()
     return response.data
   }
 
@@ -141,16 +118,15 @@ export function useRisks(systemId?: string) {
   const treatRisk = async (riskId: string, body: { status: 'accepted' | 'mitigated'; rationale: string; owner?: string | null }) => {
     const response: ApiResponse<unknown> = await apiClient.patch(API_ENDPOINTS.aiGovernance.treatRisk(riskId), body)
     if (!response.success) throw new Error(response.error || 'Could not record the decision')
-    setReloads((n) => n + 1)
+    reload()
   }
 
   // A different person approves a pending acceptance, or either person withdraws it.
   const settleAcceptance = async (riskId: string, action: 'approve' | 'withdraw') => {
     const response: ApiResponse<unknown> = await apiClient.post(API_ENDPOINTS.aiGovernance.riskAcceptance(riskId, action))
     if (!response.success) throw new Error(response.error || 'Could not record the decision')
-    setReloads((n) => n + 1)
+    reload()
   }
 
-  // Also loading while the data on hand belongs to a different system than the one asked for.
-  return { data, suggested, summary, loading: loading || loadedFor !== systemId, error, assessRisks, treatRisk, settleAcceptance }
+  return { ...result, loading: response.loading, reload, assessRisks, treatRisk, settleAcceptance }
 }

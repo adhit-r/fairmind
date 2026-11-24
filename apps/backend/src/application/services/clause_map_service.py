@@ -189,13 +189,14 @@ def clause_map(gate: Dict[str, Any], *, frameworks: Optional[List[str]] = None) 
             "check": check_key, "label": check.get("label"), "state": check["state"], "confidence": check.get("confidence", 0.0),
             "evidenceId": check.get("evidenceId"), "evidenceClass": check.get("evidenceClass"), "cell": cell_state(check),
             **{flag: True for flag in ("stale", "fails") if check.get(flag)},
+            **({"failureEvidenceIds": check.get("failureEvidenceIds") or []} if check.get("fails") else {}),
         }))
     for run in gate.get("evaluations", []):
         ev = cat["evaluations"].get(run["evaluationId"], {})
         entry = {
             "check": run["evaluationId"], "label": f"{run['evaluationId']} {ev.get('name', '')}".strip(), "state": run["state"],
             "confidence": run["confidence"], "evidenceId": run.get("evidenceId"), "evidenceClass": run["evidenceClass"],
-            **({"fails": True} if run["status"] == "failed" else {}),
+            **({"fails": True, "failureEvidenceIds": [run["evidenceId"]] if run.get("evidenceId") else []} if run["status"] == "failed" else {}),
         }
         run_entries.append((run["evaluationId"], {**entry, "cell": cell_state(entry)}))
     # organisation work and workflow runs for controls no gate check reaches: a person's statement, so attested at most
@@ -299,7 +300,14 @@ def statement_of_applicability(framework: Dict[str, Any]) -> str:
     writer = csv.writer(buf)
     writer.writerow(SOA_HEADER)
     for c in framework["clauses"]:
-        evidence = sorted({ch["evidenceId"] for ch in c["checks"] if ch.get("evidenceId")})
+        evidence = set()
+        for check in c["checks"]:
+            if check.get("fails") or check.get("cell") == "fails":
+                sources = check.get("failureEvidenceIds")
+            else:
+                sources = [check.get("evidenceId")]
+            if isinstance(sources, list):
+                evidence.update(source for source in sources if isinstance(source, str) and source.strip())
         writer.writerow([_csv_cell(v) for v in (c["key"], c["control"], c["title"], c["state"], " ".join(sorted(reaching.get(c["key"], ()))),
-                                                  c.get("applicability") or "", c.get("justification") or "", " ".join(evidence))])
+                                                  c.get("applicability") or "", c.get("justification") or "", " ".join(sorted(evidence)))])
     return buf.getvalue()

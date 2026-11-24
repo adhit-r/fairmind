@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { IconTrash, IconX } from '@tabler/icons-react'
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -13,6 +14,7 @@ import type { ControlAssessment } from '@/lib/api/hooks/useGovernanceAssurance'
 
 interface EvidenceDetailDrawerProps {
   evidence: Evidence | null
+  systemName: string
   open: boolean
   onClose: () => void
   onUpdate: (id: string, updates: EvidenceUpdateInput) => Promise<Evidence>
@@ -53,6 +55,7 @@ function formatDate(ts: string) {
 
 export function EvidenceDetailDrawer({
   evidence,
+  systemName,
   open,
   onClose,
   onUpdate,
@@ -157,13 +160,14 @@ export function EvidenceDetailDrawer({
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader className="border-b border-[var(--fm-line)] pb-4 text-left">
           <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <SheetTitle className="text-[20px] font-semibold leading-tight tracking-tight">
                 {displayTitle}
               </SheetTitle>
               <SheetDescription>
-                Evidence details and scoped governance links for {displayTitle}.
+                AI system · <Link className="underline" href={`/systems/${encodeURIComponent(evidence.systemId)}`}>{systemName}</Link>
               </SheetDescription>
+              <p className="m-0 text-[12px]">Evidence ID · <code className="break-all">{evidence.id}</code></p>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Pill>{evidence.type}</Pill>
                 {evidence.stale && <Pill tone="warn">Potentially stale</Pill>}

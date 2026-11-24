@@ -190,6 +190,7 @@ class Settings(BaseSettings):
     autopilot_interval_seconds: int = 3600
     # How often tasks are checked for due-tomorrow and overdue reminders; 0 turns reminders off.
     task_reminder_interval_seconds: int = 3600
+    system_assurance_schedule_interval_seconds: int = 60
     # How often discovery connectors are checked for a due schedule; 0 turns scheduled discovery off.
     discovery_check_interval_seconds: int = 300
     # Where access requests are sent (ADMIN_EMAIL); unset means no notice is sent and a warning is logged.

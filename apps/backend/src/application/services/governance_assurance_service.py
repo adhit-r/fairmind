@@ -743,7 +743,7 @@ class GovernanceAssuranceService:
         row = self.db.execute(select(GovernanceControlEvidence.__table__).where(GovernanceControlEvidence.__table__.c.id == mapping_id)).mappings().one()
         return {
             "id": row["id"], "evidenceId": row["artifact_evidence_id"], "controlAssessmentId": row["control_assessment_id"],
-            "state": row["state"], "rationale": row["mapping_rationale"],
+            "state": row["state"], "relation": row["relation"], "rationale": row["mapping_rationale"],
             "reviewVersion": row["review_version"],
             "reviewHistory": json.loads(row["review_history_json"] or "[]"),
         }
@@ -864,7 +864,7 @@ class GovernanceAssuranceService:
         return counts
 
 
-def _is_stale(created_at: str, frequency: str) -> bool:
+def _is_stale(created_at: str, frequency: str, *, as_of: datetime | None = None) -> bool:
     try:
         captured = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
     except ValueError:
@@ -884,4 +884,4 @@ def _is_stale(created_at: str, frequency: str) -> bool:
         threshold = {3: 92, 6: 183, 12: 366}.get(months, months * 31)
     else:
         threshold = next((days for label, days in frequency_days.items() if label in normalized), 366)
-    return datetime.now(timezone.utc) - captured.astimezone(timezone.utc) > timedelta(days=threshold)
+    return (as_of or datetime.now(timezone.utc)) - captured.astimezone(timezone.utc) > timedelta(days=threshold)

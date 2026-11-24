@@ -3,8 +3,9 @@
 import { pollWhileVisible } from '@/lib/poll'
 import './board.css'
 import Link from 'next/link'
-import { Fragment, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, Clock, PenLine, RefreshCw, X } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { ArrowRight, ArrowUpRight, ChevronDown } from 'lucide-react'
 import { Button } from '@astryxdesign/core/Button'
 import { Drawer } from '@astryxdesign/core/Drawer'
 import { EmptyState } from '@astryxdesign/core/EmptyState'
@@ -13,7 +14,13 @@ import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Token } from '@astryxdesign/core/Token'
 import { VStack } from '@astryxdesign/core/Layout'
-import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { CheckEvidenceLinks } from '@/components/workflow/CheckEvidenceLinks'
+import { HomeFailureBreakdown, HomeFailureEvidence, useHomeFailureRecord } from '@/components/workflow/HomeFailureEvidence'
+import { Card } from '@/components/ui/card'
+import { useOrg } from '@/context/OrgContext'
+import { HomeCheckMatrix } from '@/astryx/HomeCheckMatrix'
+import { HomeLifecycleChart } from '@/astryx/HomeLifecycleChart'
 import { useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
 import { useNeedsYou } from '@/astryx/data/needsYou'
 import type { GateCheck } from '@/lib/api/hooks/useSystemFile'
@@ -27,7 +34,6 @@ const CHECKS: Array<{ key: GateCheck['key']; name: string; group: string }> = [
   { key: 'environmental', name: 'Environment', group: 'Test' },
   { key: 'monitoring', name: 'Monitoring', group: 'Operate' },
 ]
-const GROUPS = ['Data', 'Test', 'Release', 'Operate']
 type Col = { key: string; name: string; group: string }
 const ALL_COLS: Col[] = [...CHECKS.slice(0, 4), { key: 'decision', name: 'Decision', group: 'Release' }, CHECKS[4]]
 
@@ -45,7 +51,7 @@ const DECISION_WORD: Record<DecisionState, string> = {
   fails: 'Rejected',
   planned: 'Not requested',
 }
-const WORD: Record<CellState, string> = {
+const WORD: Record<CellState | 'unavailable', string> = {
   proven: 'Proven',
   estimated: 'Estimated',
   partial: 'Partial',
@@ -56,6 +62,7 @@ const WORD: Record<CellState, string> = {
   fails: 'Fails',
   stale: 'Out of date',
   atorg: 'Held at organisation',
+  unavailable: 'Check result unavailable',
 }
 const TOKEN: Record<string, 'green' | 'red' | 'orange' | 'blue' | 'gray'> = {
   proven: 'green',
@@ -66,34 +73,34 @@ const TOKEN: Record<string, 'green' | 'red' | 'orange' | 'blue' | 'gray'> = {
   needs: 'orange',
 }
 
-function CellMark({ state }: { state: string }) {
-  if (state === 'proven') return <Check size={15} strokeWidth={2.6} aria-hidden />
-  if (state === 'attested') return <PenLine size={13} strokeWidth={2.4} aria-hidden />
-  if (state === 'fails') return <X size={15} strokeWidth={2.6} aria-hidden />
-  if (state === 'stale') return <Clock size={13} strokeWidth={2.4} aria-hidden />
-  if (state === 'needs') return <b />
-  if (state === 'estimated') return <span className="tilde" aria-hidden>~</span>
-  return null
+function wordFor(col: Col, state: string) {
+  return col.key === 'decision' ? DECISION_WORD[state as DecisionState] : WORD[state as keyof typeof WORD]
 }
 
-type Section = 'attention' | 'progress' | 'approved'
-const SECTIONS: Array<{ key: Section; title: string }> = [
-  // A failing or stale check is work on the system; only a pending decision waits on a person
-  // (and is on the Needs you page), so this group is not called Needs you.
-  { key: 'attention', title: 'Needs attention' },
-  { key: 'progress', title: 'Being checked' },
-  { key: 'approved', title: 'Approved and watched' },
-]
-
-type Open = { system: AISystemSummary; gate: EstateGate; col: Col }
+function selectBoardCell(systemId?: string, check?: string) {
+  const url = new URL(window.location.href)
+  if (systemId && check) {
+    url.searchParams.set('system', systemId)
+    url.searchParams.set('check', check)
+  } else {
+    url.searchParams.delete('system')
+    url.searchParams.delete('check')
+  }
+  window.history.replaceState(null, '', url)
+}
 
 /** Every registered system against every release check, from the release gate of each. */
 export function LiveBoard() {
-  const { systems, loading: systemsLoading } = useSystemContext()
+  return <Suspense fallback={<Skeleton height={112} />}><EstateBoard /></Suspense>
+}
+
+function EstateBoard() {
+  const { systems, loading: systemsLoading, error: systemsError, refreshSystems } = useSystemContext()
+  const { selectedOrg } = useOrg()
   const gates = useEstateGates()
   // The menu's Needs you counts everything waiting on a person; the release card counts decisions only.
   const inbox = useNeedsYou()
-  const [open, setOpen] = useState<Open | null>(null)
+  const params = useSearchParams()
   const [checkedAt, setCheckedAt] = useState<Date | null>(null)
 
   // The board is live: it re-reads the gates every minute and says when it last did.
@@ -104,38 +111,28 @@ export function LiveBoard() {
     return pollWhileVisible(() => gates.reload(), 60_000)
   }, [gates])
 
+  const active = useMemo(() => systems.filter((s) => s.stage !== 'retired'), [systems])
   const rows = useMemo(() => {
-    const byId = new Map((gates.data ?? []).map((g) => [g.systemId, g]))
-    return systems.flatMap((s) => {
+    const gateList = Array.isArray(gates.data) ? gates.data : []
+    const byId = new Map(gateList.filter((g) => Array.isArray(g?.checks)).map((g) => [g.systemId, g]))
+    return active.flatMap((s) => {
       const gate = byId.get(s.id)
       return gate ? [{ system: s, gate }] : []
     })
-  }, [systems, gates.data])
+  }, [active, gates.data])
   // An organisation that keeps energy use out of its release gate gets no Environment column.
-  const COLS = gates.data?.some((g) => g.checks.some((c) => c.key === 'environmental')) ? ALL_COLS : ALL_COLS.filter((c) => c.key !== 'environmental')
+  const COLS = rows.some(({ gate }) => gate.checks.some((c) => c.key === 'environmental')) ? ALL_COLS : ALL_COLS.filter((c) => c.key !== 'environmental')
 
   const stateOf = (gate: EstateGate, col: Col): string => {
     if (col.key === 'decision') return decisionCell(gate.approvalStatus)
     const check = gate.checks.find((c) => c.key === col.key)
-    return check ? checkCell(check) : 'open'
+    return check ? checkCell(check) : 'unavailable'
   }
-  const sectionOf = (gate: EstateGate): Section => {
-    const states = COLS.map((c) => stateOf(gate, c))
-    if (states.some((s) => s === 'fails' || s === 'stale' || s === 'needs')) return 'attention'
-    return gate.approvalStatus === 'approved' ? 'approved' : 'progress'
-  }
-  const stats = useMemo(() => {
-    const all = rows.flatMap((r) => COLS.map((c) => stateOf(r.gate, c)))
-    return {
-      proven: all.filter((s) => s === 'proven' || s === 'attested').length,
-      due: all.length,
-      needs: rows.filter((r) => r.gate.approvalStatus === 'pending').length,
-      fails: all.filter((s) => s === 'fails').length,
-      stale: all.filter((s) => s === 'stale').length,
-    }
-    // stateOf is pure over its inputs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows])
+  const failures = rows.flatMap(({ system, gate }) => gate.checks
+    .filter((check) => checkCell(check) === 'fails')
+    .map((check) => ({ system, check })))
+  const lead = failures[0]
+  const proof = useHomeFailureRecord(lead?.system.id, lead?.check)
 
   if ((gates.loading && !gates.data) || systemsLoading) {
     return (
@@ -150,18 +147,18 @@ export function LiveBoard() {
       </section>
     )
   }
-  if (gates.error) {
+  if (systemsError) {
     return (
       <section className="fm-board">
-        <EmptyState title="The board could not load" description={gates.error} actions={<Button label="Try again" onClick={() => gates.reload()} />} />
+        <EmptyState title="The system register could not load" description={systemsError} actions={<Button label="Try again" onClick={() => void refreshSystems()} />} />
       </section>
     )
   }
-  if (!rows.length) {
+  if (!active.length) {
     return (
       <section className="fm-board">
         <EmptyState
-          title="No registered AI systems yet"
+          title={systems.length ? 'No active AI systems' : 'No registered AI systems yet'}
           description="Register systems by hand or from a CSV, or connect a source and let discovery find them. Each registered system gets a row here."
           actions={
             <>
@@ -173,214 +170,153 @@ export function LiveBoard() {
       </section>
     )
   }
+  const covered = new Set(rows.map((r) => r.system.id))
+  const unavailable = gates.error ? active : active.filter((s) => !covered.has(s.id))
+  const missingResults = unavailable.length > 0 && (
+    <section className="fm-card fm-board-act" aria-label="Unavailable release checks">
+      <VStack gap={2}>
+        <Heading level={2}>Release checks unavailable</Heading>
+        <Text>{gates.error ?? 'The gate returned no results for these systems.'}</Text>
+        <ul className="fm-board-names">
+          {unavailable.map((s) => <li key={s.id}><Link href={`/systems/${encodeURIComponent(s.id)}`}>{s.name}</Link></li>)}
+        </ul>
+        <Button label="Retry release checks" variant="secondary" onClick={gates.reload} />
+      </VStack>
+    </section>
+  )
+  if (gates.error || !rows.length) return <>{missingResults}<HomeLifecycleChart systems={active} /></>
+  const partial = unavailable.length > 0 || rows.some(({ gate }) => COLS.some((c) => stateOf(gate, c) === 'unavailable'))
 
-  // A system with nothing on file and no decision asked for would be a row of empty cells: it is listed once above the board instead.
+  // The matrix's disclosure keeps entirely empty systems reachable without adding empty columns.
   const blank = (gate: EstateGate) => COLS.every((c) => ['open', 'planned'].includes(stateOf(gate, c)))
   const empty = rows.filter((r) => blank(r.gate))
   const shown = rows.filter((r) => !blank(r.gate))
   const pending = rows.filter((r) => r.gate.approvalStatus === 'pending')
-  const noEvidence = (gate: EstateGate) => gate.checks.every((c) => checkCell(c) === 'open')
+  const noEvidence = (gate: EstateGate) => COLS.filter((c) => c.key !== 'decision').every((c) => stateOf(gate, c) === 'open')
 
+  const selectedRow = params?.getAll('system').length === 1 && rows.find((r) => r.system.id === params.get('system'))
+  const selectedCol = params?.getAll('check').length === 1 && COLS.find((c) => c.key === params.get('check'))
+  const open = selectedRow && selectedCol ? { ...selectedRow, col: selectedCol } : null
   const sel = open ? stateOf(open.gate, open.col) : null
-  const others = inbox.loading ? 0 : Math.max(0, inbox.items.length - pending.length)
+  const others = inbox.total === undefined ? undefined : Math.max(0, inbox.items.length - pending.length) + (inbox.reportAssignments.data?.length ?? 0)
   const selCheck = open && open.col.key !== 'decision' ? open.gate.checks.find((c) => c.key === open.col.key) : undefined
+  const failureCount = `${failures.length} failed release ${failures.length === 1 ? 'check' : 'checks'}`
+  const checkName = (key: string, fallback: string) => CHECKS.find((col) => col.key === key)?.name ?? fallback
+  const checkHref = (systemId: string, key: string) => {
+    const query = new URLSearchParams(params?.toString())
+    query.set('system', systemId)
+    query.set('check', key)
+    return `/dashboard?${query}`
+  }
+  const otherFailureLinks = failures.slice(1).map(({ system, check }) => {
+    const name = checkName(check.key, check.label)
+    return (
+      <li key={`${system.id}/${check.key}`}>
+        <Link href={checkHref(system.id, check.key)} scroll={false} aria-label={`Review ${name} on ${system.name}`}>
+          <span><strong>{system.name}</strong> · {name}</span><ArrowUpRight size={15} aria-hidden />
+        </Link>
+      </li>
+    )
+  })
+  const realChecks = rows.flatMap(({ gate }) => gate.checks)
+  const systemsWithProof = rows.filter(({ gate }) => gate.checks.some((c) => c.evidenceId || c.failureEvidenceIds?.length)).length
+  const openChecks = realChecks.filter((c) => checkCell(c) === 'open').length
+  const outOfDate = realChecks.filter((c) => checkCell(c) === 'stale').length
+  const higherRisk = active.filter((system) => system.riskTier === 'high' || system.riskTier === 'critical').length
+  const coveragePercent = Math.round(systemsWithProof / active.length * 100)
+  const knownFailures = `${failures.length} failing ${failures.length === 1 ? 'check' : 'checks'}${partial ? ' in available results' : ''}`
+  const scope = <p className="fm-home-scope">{selectedOrg?.name && <>{selectedOrg.name}<span aria-hidden>/</span></>}AI estate</p>
 
   return (
     <>
-    {(pending.length > 0 || empty.length > 0) && (
-      <div className={`fm-board-cards${pending.length && empty.length ? ' two' : ''}`}>
-        {pending.length > 0 && (
-          <section className="fm-card fm-board-act" aria-labelledby="bd-needs">
-            <VStack gap={2}>
-              <span className="fm-board-eyebrow need">Release decision · {pending.length}</span>
-              <Heading level={2} id="bd-needs">
-                {pending.length === 1 ? `${pending[0].system.name} is waiting for a release decision` : `${pending.length} systems are waiting for a release decision`}
-              </Heading>
-              {pending.some((r) => noEvidence(r.gate)) && (
-                <Text color="secondary">
-                  {pending.length === 1 ? 'Nothing has been tested on it yet, so a decision would rest on no evidence.' : 'Some have nothing tested yet, so a decision would rest on no evidence.'} Run a first evaluation before you decide.
-                </Text>
-              )}
-              <VStack gap={1}>
-                {pending.map((r) => (
-                  <Link key={r.system.id} href={`/systems/${encodeURIComponent(r.system.id)}`}>
-                    Open {r.system.name}
-                  </Link>
-                ))}
-                {others > 0 && <Link href="/needs-you">{`${others} more ${others === 1 ? 'thing waits' : 'things wait'} for you on Needs you`}</Link>}
-              </VStack>
-            </VStack>
+      <Card className="fm-home-workspace">
+        {lead ? (
+          <section className="fm-home-focus" aria-label={failureCount}>
+            {scope}
+            <p className="fm-home-status"><i aria-hidden />{failureCount}</p>
+            <h1>{lead.system.name}</h1>
+            <div className="fm-home-byline">
+              <Link href={checkHref(lead.system.id, lead.check.key)} scroll={false} aria-label={`Review ${checkName(lead.check.key, lead.check.label)} on ${lead.system.name}`}>
+                {checkName(lead.check.key, lead.check.label)} check <ArrowUpRight size={14} aria-hidden />
+              </Link>
+              <span>{lead.system.riskTier} risk</span>
+            </div>
+            <HomeFailureEvidence systemId={lead.system.id} check={lead.check} {...proof} />
+            {partial && <p className="fm-home-note">Some release checks could not be read.</p>}
+            {otherFailureLinks.length > 0 && <div className="fm-home-other-failures">
+              <h2>Also needs review</h2>
+              <ul>{otherFailureLinks.slice(0, 2)}</ul>
+              {otherFailureLinks.length > 2 && <details>
+                <summary>{otherFailureLinks.length - 2} more failed {otherFailureLinks.length === 3 ? 'check' : 'checks'} <ChevronDown size={15} aria-hidden /></summary>
+                <ul>{otherFailureLinks.slice(2)}</ul>
+              </details>}
+            </div>}
+          </section>
+        ) : (
+          <section className="fm-home-focus" aria-label="Estate summary">
+            {scope}
+            <h1>{active.length} AI {active.length === 1 ? 'system' : 'systems'} under governance</h1>
+            <p className="fm-home-intro">{pending.length ? 'A human release decision is pending.' : !shown.length ? 'These systems are waiting for their first release evidence.' : outOfDate ? 'Release evidence needs refreshing.' : 'Review the recorded checks for each active system.'}</p>
+            {partial && <p className="fm-home-note">Some release checks could not be read.</p>}
+            <Link className="fm-home-secondary" href={pending.length ? '#bd-needs' : '/systems'}>{pending.length ? 'Review release requests' : 'View system register'} <ArrowRight size={16} aria-hidden /></Link>
           </section>
         )}
-        {empty.length > 0 && (
-          <section className="fm-card fm-board-act" aria-labelledby="bd-empty">
-            <VStack gap={3}>
-              <span className="fm-board-eyebrow">Nothing on file yet · {empty.length}</span>
-              <Heading level={2} id="bd-empty">
-                {empty.length === 1 ? `${empty[0].system.name} has no evidence yet` : `${empty.length} systems have no evidence yet`}
-              </Heading>
-              <ul className="fm-board-names">
-                {empty.map((r) => (
-                  <li key={r.system.id}>
-                    <Link href={`/systems/${encodeURIComponent(r.system.id)}`}>{r.system.name}</Link>
-                  </li>
-                ))}
-              </ul>
-              <ol className="fm-board-steps">
-                <li><Link href="/systems">Name an owner and confirm the risk tier</Link> on each system</li>
-                <li><Link href="/frameworks">Confirm which frameworks apply</Link></li>
-                <li><Link href="/evaluations">Run a first evaluation</Link></li>
-              </ol>
-              <Text type="supporting">A system moves onto the board below as soon as it has a result or a decision is asked for.</Text>
-            </VStack>
-          </section>
-        )}
-      </div>
-    )}
-    <section className="fm-board" aria-label="Every system against every release check">
-      <header className="fm-board-top">
-        <div className="fm-board-live" role="status">
-          <i aria-hidden />
-          <Text weight="semibold">Live</Text>
-          <Text color="secondary" maxLines={1}>
-            {checkedAt ? `Checked at ${checkedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : 'Checking'}
-          </Text>
-          <Button label="Check now" variant="ghost" size="sm" icon={<RefreshCw size={14} />} isIconOnly onClick={() => gates.reload()} />
-        </div>
-        <div className="fm-board-stats">
-          <span>
-            <b>{stats.proven}</b> of {stats.due} proven
-          </span>
-          <span className="need">
-            <b>{stats.needs}</b> waiting for a decision
-          </span>
-          <span className="stale">
-            <b>{stats.stale}</b> out of date
-          </span>
-          <span className="fail">
-            <b>{stats.fails}</b> failing
-          </span>
-        </div>
-      </header>
-      {shown.length === 0 ? (
-        <div className="fm-board-pad">
-          <Text color="secondary">No system has a result yet. Each one appears here with its first evidence.</Text>
-        </div>
-      ) : (
-      <div className="fm-board-scroll">
-        <table>
-          <thead>
-            <tr className="groups">
-              <th scope="col" rowSpan={2} className="name">
-                System
-              </th>
-              {GROUPS.map((g) => (
-                <th key={g} scope="colgroup" colSpan={COLS.filter((c) => c.group === g).length}>
-                  {g}
-                </th>
-              ))}
-              <th scope="col" rowSpan={2} className="sum">
-                Confidence
-              </th>
-            </tr>
-            <tr className="cols">
-              {COLS.map((c, i) => (
-                <th key={c.key} scope="col" className={i > 0 && COLS[i - 1].group !== c.group ? 'gap' : undefined}>
-                  {c.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {SECTIONS.map((sec) => {
-              const mine = shown.filter((r) => sectionOf(r.gate) === sec.key)
-              if (!mine.length) return null
-              return (
-                <Fragment key={sec.key}>
-                  <tr className={`sec sec-${sec.key}`}>
-                    <th colSpan={COLS.length + 2} scope="rowgroup">
-                      {sec.title} <span>{mine.length}</span>
-                    </th>
-                  </tr>
-                  {mine.map(({ system, gate }) => (
-                    <tr key={system.id} className="row">
-                      <th scope="row" className="name">
-                        <Link href={`/systems/${encodeURIComponent(system.id)}`}>
-                          <span>{system.name}</span>
-                          <em>{system.riskTier}</em>
-                        </Link>
-                      </th>
-                      {COLS.map((c, i) => {
-                        const state = stateOf(gate, c)
-                        const word = c.key === 'decision' ? DECISION_WORD[state as DecisionState] : WORD[state as CellState]
-                        return (
-                          <td key={c.key} className={i > 0 && COLS[i - 1].group !== c.group ? 'gap' : undefined}>
-                            <button type="button" className={`cell ${state}`} aria-label={`${c.name} on ${system.name}: ${word}`} title={word} onClick={() => setOpen({ system, gate, col: c })}>
-                              <CellMark state={state} />
-                            </button>
-                          </td>
-                        )
-                      })}
-                      <td className="sum">
-                        <span className="bar">
-                          <b style={{ width: `${Math.round(gate.confidence * 100)}%` }} />
-                        </span>
-                        <span className="n">{gate.confidence.toFixed(2)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      )}
-      <footer className="fm-board-key">
-        <span>
-          <i className="cell proven">
-            <CellMark state="proven" />
-          </i>
-          Proven
-        </span>
-        <span>
-          <i className="cell attested">
-            <CellMark state="attested" />
-          </i>
-          Attested
-        </span>
-        <span>
-          <i className="cell estimated">
-            <CellMark state="estimated" />
-          </i>
-          Estimated
-        </span>
-        <span>
-          <i className="cell needs">
-            <CellMark state="needs" />
-          </i>
-          Needs you
-        </span>
-        <span>
-          <i className="cell stale">
-            <CellMark state="stale" />
-          </i>
-          Out of date
-        </span>
-        <span>
-          <i className="cell fails">
-            <CellMark state="fails" />
-          </i>
-          Fails
-        </span>
-        <span>
-          <i className="cell open" />
-          Nothing on file
-        </span>
-        <span className="hint">Click a cell to see what is behind it.</span>
-      </footer>
+        <HomeCheckMatrix shown={shown} empty={empty} columns={COLS} stateOf={stateOf} wordFor={wordFor}
+          partial={partial} checkedAt={checkedAt} onRefresh={gates.reload} onSelect={selectBoardCell} />
+      </Card>
 
-      <Drawer isOpen={open !== null} onOpenChange={(o) => !o && setOpen(null)} label={open ? `${open.col.name} on ${open.system.name}` : 'Check'} width={440} padding={5}>
+      {missingResults}
+      {pending.length > 0 && (
+        <section className="fm-card fm-board-act" aria-labelledby="bd-needs">
+          <Heading level={2} id="bd-needs">{pending.length === 1 ? `${pending[0].system.name} is waiting for a release decision` : `${pending.length} systems are waiting for a release decision`}</Heading>
+          {pending.some((r) => noEvidence(r.gate)) && <p>Some release requests have no check evidence yet. Run a first evaluation before deciding.</p>}
+          <ul>{pending.map((r) => <li key={r.system.id}>
+            <Link href={`/systems/${encodeURIComponent(r.system.id)}?decide`}>Review release for {r.system.name}</Link>
+          </li>)}</ul>
+          {others !== undefined && others > 0 && <Link href="/needs-you">{others} more {others === 1 ? 'item needs' : 'items need'} review</Link>}
+        </section>
+      )}
+
+      <div className="fm-home-analysis">
+        {lead && <HomeFailureBreakdown record={proof.record} systemName={lead.system.name} />}
+        <HomeLifecycleChart systems={active} />
+      </div>
+
+      <section className="fm-home-overview" aria-labelledby="bd-overview">
+        <header>
+          <h2 id="bd-overview">Estate overview</h2>
+          <div className="fm-home-utilities">
+            <Link href="/discovery">Find unregistered AI <ArrowUpRight size={14} aria-hidden /></Link>
+            <Link href="/systems">Open AI systems <ArrowRight size={14} aria-hidden /></Link>
+          </div>
+        </header>
+        <div className="fm-home-metrics">
+          <Card className="fm-home-metric">
+            <h3>Evidence coverage</h3>
+            <p className="fm-home-number">{partial ? systemsWithProof : `${coveragePercent}%`}</p>
+            {!partial && <span className="fm-home-track" aria-hidden><i style={{ width: `${coveragePercent}%` }} /></span>}
+            <p>{partial ? 'Systems with known linked evidence. Coverage is incomplete.' : `${systemsWithProof} of ${active.length} active systems have linked evidence`}</p>
+          </Card>
+          <Card className="fm-home-metric">
+            <h3>Checks without evidence</h3>
+            <p className="fm-home-number">{openChecks}<small> / {realChecks.length}</small></p>
+            <p>{partial ? 'Across available results' : 'Across the active system gates'}</p>
+          </Card>
+          <Card className="fm-home-metric">
+            <h3>High or critical risk</h3>
+            <p className="fm-home-number">{higherRisk}<small> / {active.length}</small></p>
+            <p>Registered active systems</p>
+          </Card>
+          <Card className="fm-home-metric">
+            <h3>Release decisions pending</h3>
+            <p className="fm-home-number">{pending.length}{partial && <small> known</small>}</p>
+            <p>{knownFailures}</p>
+            {outOfDate > 0 && <p>{outOfDate} {outOfDate === 1 ? 'check' : 'checks'} out of date</p>}
+          </Card>
+        </div>
+      </section>
+
+      <Drawer isOpen={open !== null} onOpenChange={(o) => !o && selectBoardCell()} label={open ? `${open.col.name} on ${open.system.name}` : 'Check'} width={440} padding={5}>
         {open && sel && (
           <VStack gap={5}>
             <VStack gap={2} align="start">
@@ -393,33 +329,28 @@ export function LiveBoard() {
             <MetadataList label={{ width: 120 }}>
               {selCheck ? (
                 <>
-                  <MetadataListItem label="What it means">{KIND_TITLE[sel as CellState] ?? WORD[sel as CellState]}</MetadataListItem>
-                  <MetadataListItem label="How we know">{selCheck.evidenceClass ? classLabel(selCheck.evidenceClass) : 'No evidence yet'}</MetadataListItem>
-                  <MetadataListItem label="Confidence">{selCheck.confidence.toFixed(2)}</MetadataListItem>
-                  <MetadataListItem label="Evidence">{selCheck.evidenceId ? <Text type="code">{selCheck.evidenceId}</Text> : 'None on file'}</MetadataListItem>
+                  <MetadataListItem label="What it means">{sel === 'fails' ? 'One or more results still fail their thresholds.' : KIND_TITLE[sel as CellState] ?? WORD[sel as CellState]}</MetadataListItem>
+                  <MetadataListItem label={sel === 'fails' ? 'Latest record type' : 'How we know'}>{selCheck.evidenceClass ? classLabel(selCheck.evidenceClass) : 'No evidence yet'}</MetadataListItem>
+                  <MetadataListItem label={sel === 'fails' ? 'Check confidence' : 'Confidence'}>{selCheck.confidence.toFixed(2)}</MetadataListItem>
+                  <MetadataListItem label={sel === 'fails' ? 'Failure evidence' : 'Evidence'}>
+                    <CheckEvidenceLinks systemId={open.system.id} check={selCheck} failed={sel === 'fails'} />
+                  </MetadataListItem>
                 </>
-              ) : (
+              ) : open.col.key === 'decision' ? (
                 <>
                   <MetadataListItem label="Release decision">{DECISION_WORD[sel as DecisionState]}</MetadataListItem>
                   <MetadataListItem label="Gate verdict">{open.gate.verdict.replace(/_/g, ' ')}</MetadataListItem>
                   <MetadataListItem label="Confidence">{open.gate.confidence.toFixed(2)}</MetadataListItem>
                 </>
-              )}
+              ) : <MetadataListItem label="Evidence">Check result unavailable</MetadataListItem>}
             </MetadataList>
-            {sel === 'fails' && (
-              <Text color="secondary">
-                <AlertTriangle size={14} aria-hidden /> Measured, and it fails its threshold. The system file shows the path forward.
-              </Text>
-            )}
             <VStack gap={2}>
-              {open.col.key === 'decision' && sel === 'needs' && <Button variant="primary" label="Decide now" href="/needs-you" />}
-              {selCheck?.evidenceId && <Button variant="secondary" label="Open the evidence" href="/evidence" />}
-              <Button variant={sel === 'needs' ? 'secondary' : 'primary'} label="Open the system file" href={`/systems/${encodeURIComponent(open.system.id)}`} />
+              {open.col.key === 'decision' && sel === 'needs' && <Button variant="primary" label="Decide now" href={`/systems/${encodeURIComponent(open.system.id)}?decide`} />}
+              <Button variant={sel === 'needs' || sel === 'fails' ? 'secondary' : 'primary'} label="Open the system file" href={`/systems/${encodeURIComponent(open.system.id)}`} />
             </VStack>
           </VStack>
         )}
       </Drawer>
-    </section>
     </>
   )
 }

@@ -9,63 +9,44 @@
 
 import { pollWhileVisible } from '@/lib/poll'
 import { useState, useEffect } from "react";
+import { useOrgResource, withOrg } from "@/lib/api/hooks/usePacks";
+import { useOrg } from "@/context/OrgContext";
+import type { AutomationStatus, ComplianceSchedule, ComplianceViolation, ComplianceReport } from "@/lib/api/compliance-automation-service";
 import { apiClient } from "@/lib/api/api-client";
 import { useToast } from "@/hooks/use-toast";
 import { IconPlus, IconRefresh, IconCircleCheck, IconCircleX, IconDownload } from "@tabler/icons-react";
 
-interface SystemStatus {
-  scheduler_running: boolean;
-  active_schedules: number;
-  pending_jobs: number;
-  total_violations: number;
-  critical_violations: number;
-  reports_generated_today: number;
-  last_scheduler_check: string;
+function ReadError({ message, retry }: { message: string; retry: () => void }) {
+  return (
+    <div role="alert" className="my-4 rounded-lg border border-[var(--fm-line)] p-4">
+      <p>{message}</p>
+      <button className="mt-2 font-semibold underline" onClick={retry}>Try again</button>
+    </div>
+  );
+}
+
+function useComplianceList<T>(field: string, query: string) {
+  const resource = useOrgResource<{ [key: string]: unknown }>(`/api/v1/compliance/${field}${query}`);
+  const rows = resource.data?.[field];
+  const total = resource.data?.total;
+  const completePage = Array.isArray(rows) && typeof total === "number" && Number.isInteger(total) && total >= rows.length && (rows.length > 0 || total === 0);
+  return {
+    rows: completePage ? rows as T[] : [],
+    total: completePage ? total : null,
+    loading: resource.loading,
+    error: resource.error || (!resource.loading && !completePage ? `The ${field} response was incomplete.` : null),
+    reload: resource.reload,
+  };
 }
 
 export default function ComplianceAutomationPage() {
-  const [status, setStatus] = useState<SystemStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const summary = useOrgResource<AutomationStatus>("/api/v1/compliance/status");
+  const status = summary.data;
+  const valid = status && typeof status.scheduler_running === "boolean" &&
+    [status.active_schedules, status.pending_jobs, status.total_violations, status.critical_violations, status.reports_generated_today].every((count) => Number.isInteger(count) && count >= 0);
+  const error = summary.error || (!summary.loading && !valid ? "The automation summary was incomplete." : null);
   const [activeTab, setActiveTab] = useState<"schedules" | "violations" | "remediation" | "reports">("schedules");
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Fetch system status on mount and periodically
-  useEffect(() => {
-    fetchStatus();
-    return pollWhileVisible(fetchStatus, 30000); // every 30 seconds while the tab is visible
-  }, []);
-
-  const fetchStatus = async () => {
-    try {
-      const response = await apiClient.get<SystemStatus>("/api/v1/compliance/status");
-      if (response.data) setStatus(response.data);
-      setError(null);
-    } catch (err) {
-      console.error("Failed to fetch compliance status:", err);
-      setError("Failed to load system status");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await fetchStatus();
-    setRefreshing(false);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-w-0">
-        <div className="mx-auto max-w-7xl">
-          <div className="flex justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-[2px] border-[var(--fm-line)] border-t-[var(--fm-ink)]" />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => pollWhileVisible(summary.reload, 30000), [summary.reload]);
 
   return (
     <div className="min-w-0">
@@ -80,19 +61,20 @@ export default function ComplianceAutomationPage() {
               </p>
             </div>
             <button
-              onClick={handleRefresh}
-              disabled={refreshing}
+              onClick={summary.reload}
+              disabled={summary.loading}
               className="flex items-center gap-2 rounded-lg border border-[var(--fm-line)] bg-white px-4 py-2 font-bold text-black disabled:opacity-50"
             >
               <IconRefresh size={20} />
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {summary.loading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
 
         {/* Status Cards */}
         <div className="mb-8 grid gap-4 md:grid-cols-4">
-          {status && (
+          {summary.loading && <p role="status">Loading automation summary...</p>}
+          {!summary.loading && !error && valid && (
             <>
               <div className="p-6 fm-card">
                 <div className="text-[24px] font-semibold tracking-tight text-black">{status.active_schedules}</div>
@@ -108,7 +90,7 @@ export default function ComplianceAutomationPage() {
 
               <div className="p-6 fm-card">
                 <div className="text-[24px] font-semibold tracking-tight text-black">{status.total_violations}</div>
-                <div className="mt-2 text-sm font-semibold text-gray-600">Total Violations</div>
+                <div className="mt-2 text-sm font-semibold text-gray-600">Unresolved Violations</div>
                 <div className="mt-1 text-xs text-gray-500">
                   {status.critical_violations > 0 && (
                     <span className="text-red-600">{status.critical_violations} critical</span>
@@ -118,14 +100,14 @@ export default function ComplianceAutomationPage() {
 
               <div className="p-6 fm-card">
                 <div className="text-[24px] font-semibold tracking-tight text-black">{status.pending_jobs}</div>
-                <div className="mt-2 text-sm font-semibold text-gray-600">Pending Jobs</div>
-                <div className="mt-1 text-xs text-gray-500">In queue</div>
+                <div className="mt-2 text-sm font-semibold text-gray-600">Scheduler Jobs</div>
+                <div className="mt-1 text-xs text-gray-500">Across the scheduler</div>
               </div>
 
               <div className="p-6 fm-card">
                 <div className="text-[24px] font-semibold tracking-tight text-black">{status.reports_generated_today}</div>
-                <div className="mt-2 text-sm font-semibold text-gray-600">Reports Today</div>
-                <div className="mt-1 text-xs text-gray-500">Generated</div>
+                <div className="mt-2 text-sm font-semibold text-gray-600">Schedules Run Today</div>
+                <div className="mt-1 text-xs text-gray-500">Since 00:00 UTC</div>
               </div>
             </>
           )}
@@ -159,7 +141,7 @@ export default function ComplianceAutomationPage() {
             }`}
           >
             Violations
-            {status && status.critical_violations > 0 && (
+            {!summary.loading && !error && valid && status.critical_violations > 0 && (
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
                 {status.critical_violations}
               </span>
@@ -222,8 +204,8 @@ const FRAMEWORKS: Array<[string, string]> = [
 ];
 
 function SchedulesSection() {
-  const [schedules, setSchedules] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { selectedOrg } = useOrg();
+  const { rows: schedules, loading: isLoading, error, reload } = useComplianceList<ComplianceSchedule>("schedules", "");
   const [showForm, setShowForm] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -232,26 +214,12 @@ function SchedulesSection() {
   const [recipients, setRecipients] = useState("");
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchSchedules();
-  }, []);
-
-  const fetchSchedules = async () => {
-    try {
-      const response = await apiClient.get("/api/v1/compliance/schedules");
-      setSchedules((response.data as any)?.schedules || []);
-    } catch (err) {
-      console.error("Failed to fetch schedules:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const createSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedOrg) return;
     setCreating(true);
     try {
-      const response = await apiClient.post("/api/v1/compliance/schedules", {
+      const response = await apiClient.post(withOrg("/api/v1/compliance/schedules", selectedOrg.id), {
         framework,
         frequency,
         recipients: recipients.split(",").map((r) => r.trim()).filter(Boolean),
@@ -260,7 +228,7 @@ function SchedulesSection() {
       toast({ title: "Schedule created" });
       setRecipients("");
       setShowForm(false);
-      await fetchSchedules();
+      reload();
     } catch (err) {
       toast({ title: "Could not create the schedule", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
     } finally {
@@ -269,9 +237,10 @@ function SchedulesSection() {
   };
 
   const runNow = async (id: string) => {
+    if (!selectedOrg) return;
     setRunning(id);
     try {
-      const response = await apiClient.post(`/api/v1/compliance/schedules/${id}/run`);
+      const response = await apiClient.post(withOrg(`/api/v1/compliance/schedules/${encodeURIComponent(id)}/run`, selectedOrg.id));
       if (!response.success) throw new Error(response.error || "Failed to start the run");
       toast({ title: "Run started", description: "The compliance check is running now." });
     } catch (err) {
@@ -281,6 +250,7 @@ function SchedulesSection() {
     }
   };
 
+  if (error) return <ReadError message={`Schedules unavailable. ${error}`} retry={reload} />;
   if (isLoading) {
     return <div className="text-center text-gray-600">Loading schedules...</div>;
   }
@@ -362,24 +332,8 @@ function SchedulesSection() {
 }
 
 function ViolationsSection() {
-  const [violations, setViolations] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    fetchViolations();
-  }, []);
-
-  const fetchViolations = async () => {
-    try {
-      const response = await apiClient.get("/api/v1/compliance/violations?limit=50");
-      setViolations((response.data as any)?.violations || []);
-    } catch (err) {
-      console.error("Failed to fetch violations:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  const { selectedOrg } = useOrg();
+  const { rows: violations, total, loading: isLoading, error, reload } = useComplianceList<ComplianceViolation>("violations", "?limit=50");
   const getSeverityColor = (severity: string) => {
     const colors: Record<string, string> = {
       critical: "bg-red-100 border-red-600 text-red-800",
@@ -394,19 +348,21 @@ function ViolationsSection() {
     return <div className="text-center text-gray-600">Loading violations...</div>;
   }
 
+  if (error) return <ReadError message={`Violations unavailable. ${error}`} retry={reload} />;
+
   if (violations.length === 0) {
     return (
-      <div className="rounded-lg border border-green-600 bg-green-50 p-8 text-center">
-        <IconCircleCheck size={48} className="mx-auto mb-4 text-green-600" />
-        <p className="text-lg font-bold text-green-800">No Active Violations</p>
-        <p className="mt-2 text-green-700">Great! Your systems are in compliance.</p>
+      <div className="rounded-lg border border-[var(--fm-line)] p-8 text-center">
+        <h2 className="text-lg font-bold">No recorded violations</h2>
+        <p className="mt-2">The violation register for {selectedOrg?.name} contains no records across all dates. Assessment coverage is unknown.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-black">Compliance Violations</h2>
+      <h2 className="text-2xl font-bold text-black">Compliance Violations</h2>
+      <p className="mb-6">Showing {violations.length} of {total} recorded violations for {selectedOrg?.name} across all dates.</p>
       <div className="space-y-4">
         {violations.map((violation) => (
           <div
@@ -444,26 +400,8 @@ function RemediationSection() {
 }
 
 function ReportsSection() {
-  const [reports, setReports] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [unavailable, setUnavailable] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchReports();
-  }, []);
-
-  const fetchReports = async () => {
-    try {
-      const response = await apiClient.get("/api/v1/compliance/reports?limit=20");
-      if (!response.success) setUnavailable(response.error || "Report history could not be loaded.");
-      setReports((response.data as any)?.reports || []);
-    } catch (err) {
-      console.error("Failed to fetch reports:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  const { rows: reports, loading: isLoading, error, reload } = useComplianceList<ComplianceReport>("reports", "?limit=20");
+  if (error) return <ReadError message={`Report history unavailable. ${error}`} retry={reload} />;
   if (isLoading) {
     return <div className="text-center text-gray-600">Loading reports...</div>;
   }
@@ -473,7 +411,7 @@ function ReportsSection() {
       <h2 className="mb-6 text-2xl font-bold text-black">Generated Reports</h2>
       {reports.length === 0 ? (
         <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-          <p className="text-gray-600">{unavailable ?? "No reports generated yet. Create a schedule to get started."}</p>
+          <p className="text-gray-600">No reports recorded.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--fm-line)]">
@@ -491,7 +429,7 @@ function ReportsSection() {
               {reports.map((report) => (
                 <tr key={report.id} className="border-b border-gray-200 hover:bg-gray-50">
                   <td className="px-6 py-4 font-semibold text-black">{report.framework}</td>
-                  <td className="px-6 py-4 font-bold text-green-600">{report.status}</td>
+                  <td className="px-6 py-4 font-bold">{report.status}</td>
                   <td className="px-6 py-4 text-gray-800">{report.overall_score}%</td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {new Date(report.generated_at).toLocaleDateString()}

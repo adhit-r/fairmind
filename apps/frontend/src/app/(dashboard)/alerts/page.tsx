@@ -12,7 +12,8 @@ import { usePolicyResource, type PolicyAlert } from '@/lib/api/hooks/usePolicies
 export default function AlertsPage() {
   const orgId = useOrgId()
   const { data, loading, error, reload } = usePolicyResource<PolicyAlert[]>(orgId, '/alerts')
-  const alerts = (data ?? []).filter((a) => a.status === 'open')
+  const unavailable = error || (orgId && !loading && !Array.isArray(data) ? 'The alerts response was incomplete.' : null)
+  const alerts = Array.isArray(data) ? data.filter((a) => a.status === 'open') : []
 
   return (
     <div className="space-y-6">
@@ -27,11 +28,11 @@ export default function AlertsPage() {
         </Button>
       </div>
 
-      {error && (
+      {unavailable && (
         <Alert className="border border-[var(--fm-line)]">
           <IconAlertTriangle className="h-4 w-4" />
           <AlertTitle>Alerts Unavailable</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{unavailable}</AlertDescription>
         </Alert>
       )}
 
@@ -40,8 +41,8 @@ export default function AlertsPage() {
           <p className="text-muted-foreground">Select an organisation to see its alerts.</p>
         ) : loading ? (
           <p>Loading alerts...</p>
-        ) : alerts.length === 0 ? (
-          <p className="text-muted-foreground">No open alerts.</p>
+        ) : unavailable ? null : alerts.length === 0 ? (
+          <p className="text-muted-foreground">No open policy alerts recorded for this organisation.</p>
         ) : (
           <div className="space-y-3">
             {alerts.map((a) => (

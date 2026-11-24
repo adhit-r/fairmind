@@ -2,8 +2,8 @@
 
 import '@/astryx/pages/findings.css'
 import Link from 'next/link'
-import { Fragment, Suspense, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Fragment, Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Drawer } from '@astryxdesign/core/Drawer'
@@ -16,6 +16,8 @@ import { TextArea } from '@astryxdesign/core/TextArea'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
 import { VStack } from '@astryxdesign/core/Layout'
+import { evaluationHref, recordParam } from '@/lib/assurance/evaluationLinks'
+import { evidenceRecordHref } from '@/lib/assurance/evidenceLinks'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { isOpenRisk, useRisks, type Risk } from '@/lib/api/hooks/useRisks'
 import { useRemediation, type RemediationPriority, type RemediationStatus } from '@/lib/api/hooks/useRemediation'
@@ -38,10 +40,10 @@ const TASK_STATUS = [
 const PRIORITY = SEVERITIES.map((s) => ({ value: s.key, label: s.title }))
 const words = (s: string) => s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 const sourceName = (s: string | undefined) => (!s ? 'Not recorded' : s === 'manual_assessment' ? 'Entered by a person' : s === 'fairmind.watch' ? 'Monitoring watch' : words(s.replace(/\./g, ' ')))
-const systemIdOf = (r: Risk) => (r as { system_id?: string }).system_id ?? r.systemId
+const hasId = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && id === id.trim()
 
 function Tasks({ risk }: { risk: Risk }) {
-  const systemId = systemIdOf(risk)
+  const systemId = risk.systemId
   const { tasks, loading, saving, error, createTask, updateTaskStatus } = useRemediation(systemId)
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
@@ -118,17 +120,106 @@ function Tasks({ risk }: { risk: Risk }) {
   )
 }
 
+function Retest({ risk }: { risk: Risk }) {
+  const systemId = risk.systemId
+  const router = useRouter()
+  const params = useSearchParams()
+  const historyOpen = params.get('retests') === 'all'
+  function toggleHistory() {
+    const next = new URLSearchParams(params.toString())
+    if (historyOpen) next.delete('retests')
+    else next.set('retests', 'all')
+    router.replace(`/findings?${next}`, { scroll: false })
+  }
+  const metadata = risk.metadata
+  const { systems, loading, error } = useSystemContext()
+  const system = systems.find((item) => item.id === systemId && item.metadata?.source !== 'fallback')
+  const canPrepare = Boolean(!loading && !error && system?.stage && system.stage !== 'retired' && isOpenRisk(risk))
+  if (!systemId) return <Text color="secondary">No system is recorded for this finding. A retest cannot be scoped.</Text>
+
+  if (risk.source === 'fairmind.eval_engines' && hasId(metadata?.evaluationId)) {
+    const evaluationId = metadata.evaluationId
+    const history = Array.isArray(metadata.retestEvidenceIds)
+      ? metadata.retestEvidenceIds.filter((id) => typeof id === 'string' && id && id !== metadata.evidenceId && id !== metadata.retestEvidenceId)
+      : []
+    const href = (runId?: string) => evaluationHref(evaluationId, systemId, runId, risk.id)
+    return (
+      <VStack gap={2} align="start">
+        <Text>{evaluationId}</Text>
+        {hasId(metadata.evidenceId)
+          ? <Link href={href(metadata.evidenceId)}>View original failed run</Link>
+          : <Text color="secondary">The original run ID was not recorded.</Text>}
+        {hasId(metadata.retestEvidenceId) && metadata.retestEvidenceId !== metadata.evidenceId
+          ? <Link href={href(metadata.retestEvidenceId)}>View recorded retest</Link>
+          : <Text color="secondary">No separate retest result is linked to this finding.</Text>}
+        {history.length > 0 && (
+          <details open={historyOpen}>
+            <summary onClick={(event) => { event.preventDefault(); toggleHistory() }}>Earlier retests ({history.length})</summary>
+            <ol>{history.map((id, index) => <li key={id}><Link href={href(id)}>Retest {index + 1}</Link></li>)}</ol>
+          </details>
+        )}
+        {canPrepare && <Button label="Prepare a retest" variant="secondary" href={href()} />}
+      </VStack>
+    )
+  }
+  if (risk.source === 'fairmind.eval_engines' && hasId(metadata?.evidenceId)) {
+    return <VStack gap={2} align="start">
+      <Link href={evidenceRecordHref(systemId, metadata.evidenceId)}>View original evidence</Link>
+      <Text color="secondary">The check ID is missing, so a retest cannot be prepared.</Text>
+    </VStack>
+  }
+  if (risk.source === 'fairmind.watch' && hasId(metadata?.latest_snapshot_id)) {
+    return (
+      <VStack gap={2} align="start">
+        <Link href={evidenceRecordHref(systemId, metadata.latest_snapshot_id)}>View triggering monitoring snapshot</Link>
+        <Text color="secondary">Subsequent snapshots do not close this finding automatically.</Text>
+        {canPrepare && <Button label="Prepare a monitoring snapshot" variant="secondary" href={`/systems/${encodeURIComponent(systemId)}?${new URLSearchParams({ finding: risk.id })}#operate`} />}
+      </VStack>
+    )
+  }
+  if (risk.source === 'environmental_impact' && hasId(metadata?.assessment_id)) {
+    return (
+      <VStack gap={2} align="start">
+        <Text color="secondary">Original assessment ID: {metadata.assessment_id}. No subsequent assessment is linked as a retest.</Text>
+        {canPrepare && <Button label="Prepare an environmental assessment" variant="secondary" href={`/environment?${new URLSearchParams({ system: systemId, action: 'assess', finding: risk.id })}`} />}
+      </VStack>
+    )
+  }
+  return (
+    <Text color="secondary">
+      {risk.source?.startsWith('fairmind.bias_analysis:') && hasId(metadata?.analysis_id)
+        ? `Original bias analysis ID: ${metadata.analysis_id}. No retest is linked to this analysis.`
+        : 'No originating check is recorded for a retest.'}
+    </Text>
+  )
+}
+
 function FindingsView() {
-  const focus = useSearchParams().get('system') ?? undefined
+  const params = useSearchParams()
+  const router = useRouter()
+  const systemParam = recordParam(params, 'system')
+  const openId = recordParam(params, 'finding')
+  const focus = systemParam ?? undefined
   const { systems } = useSystemContext()
-  const { data, summary, loading, error } = useRisks()
-  const [openId, setOpenId] = useState<string | null>(null)
+  const { data: risks, loading, error, reload } = useRisks(focus)
+  function selectFinding(risk: Risk | null) {
+    const next = new URLSearchParams(params.toString())
+    next.delete('retests')
+    if (risk) {
+      const system = risk.systemId
+      if (system) next.set('system', system)
+      next.set('finding', risk.id)
+    } else next.delete('finding')
+    router.push(next.size ? `/findings?${next}` : '/findings', { scroll: false })
+  }
   const nameOf = (id: string | undefined) => systems.find((s) => s.id === id)?.name ?? (id ? 'Unknown system' : 'No system')
 
-  // The org-wide list is filtered here so one fetch serves every ?system= link.
-  const risks = useMemo(() => (focus ? data.filter((r) => systemIdOf(r) === focus) : data), [data, focus])
-  const open = risks.find((r) => r.id === openId) ?? null
-  const counts = (key: Severity) => (focus ? risks.filter((r) => r.severity === key).length : (summary?.bySeverity[key] ?? 0))
+  const open = risks.find((r) => r.id === openId && r.systemId === focus) ?? null
+  const counts = (key: Severity) => risks.filter((r) => r.severity === key).length
+
+  if (systemParam === null || openId === null) return (
+    <div className="fm-page fm-fnd"><Banner status="warning" title="Finding unavailable" description="The link has an empty or repeated system or finding ID." endContent={<Link href="/findings">Show every finding</Link>} /></div>
+  )
 
   return (
     <div className="fm-page fm-fnd">
@@ -136,13 +227,14 @@ function FindingsView() {
         <VStack gap={1}>
           <Heading level={1}>Findings</Heading>
           <Text color="secondary">
-            {focus ? `Findings on ${nameOf(focus)}. ` : 'Everything the checks, the monitoring watch and your reviewers have raised, most serious first. '}
+            {focus ? `Findings on ${nameOf(focus)}. ` : 'Showing up to 50 findings across systems, most serious first. '}
             {focus && <Link href="/findings">Show every system</Link>}
           </Text>
         </VStack>
 
+        {openId && !loading && !error && !open && <Banner status="warning" title="Finding unavailable" description="This finding could not be located in the requested system scope." />}
         {error ? (
-          <Banner status="error" title="Findings could not load" description={error.message} />
+          <Banner status="error" title="Findings could not load" description={error.message} endContent={<Button label="Retry findings" onClick={reload} />} />
         ) : loading ? (
           <VStack gap={2}>
             {[0, 1, 2, 3].map((i) => (
@@ -153,13 +245,13 @@ function FindingsView() {
           <EmptyState title={focus ? 'No findings on this system' : 'No findings'} description="Findings appear when a check fails, the monitoring watch sees a system keep drifting, or someone records one on a system." actions={<Button label="Open AI systems" href="/systems" />} />
         ) : (
           <>
-            <ul className="fm-fnd-counts" aria-label="Findings by severity">
+            <ul className="fm-fnd-counts" aria-label="Findings shown by severity">
               <li>
-                <b>{focus ? risks.length : (summary?.total ?? risks.length)}</b>
-                <span>All findings</span>
+                <b>{risks.length}</b>
+                <span>Findings shown</span>
               </li>
               <li>
-                <b>{focus ? risks.filter(isOpenRisk).length : (summary?.open ?? 0)}</b>
+                <b>{risks.filter(isOpenRisk).length}</b>
                 <span>Open</span>
               </li>
               {SEVERITIES.map((s) => (
@@ -193,11 +285,11 @@ function FindingsView() {
                         {mine.map((r) => (
                           <tr className="item" key={r.id}>
                             <td>
-                              <button type="button" className="title" onClick={() => setOpenId(r.id)}>
+                              <button type="button" className="title" onClick={() => selectFinding(r)}>
                                 {r.title}
                               </button>
                             </td>
-                            <td>{nameOf(systemIdOf(r))}</td>
+                            <td>{nameOf(r.systemId)}</td>
                             <td>{sourceName(r.source)}</td>
                             <td>
                               <Token size="sm" color={isOpenRisk(r) ? sev.color : 'default'} label={words(r.status)} />
@@ -214,7 +306,7 @@ function FindingsView() {
         )}
       </VStack>
 
-      <Drawer isOpen={open !== null} onOpenChange={(o) => !o && setOpenId(null)} label={open ? `Finding: ${open.title}` : 'Finding'} width={480} padding={5}>
+      <Drawer isOpen={open !== null} onOpenChange={(o) => !o && selectFinding(null)} label={open ? `Finding: ${open.title}` : 'Finding'} width={480} padding={5}>
         {open && (
           <VStack gap={5}>
             <VStack gap={2} align="start">
@@ -222,7 +314,8 @@ function FindingsView() {
               <Heading level={2}>{open.title}</Heading>
             </VStack>
             <MetadataList label={{ width: 110 }}>
-              <MetadataListItem label="System">{systemIdOf(open) ? <Link href={`/systems/${encodeURIComponent(systemIdOf(open) as string)}`}>{nameOf(systemIdOf(open))}</Link> : 'Not tied to a system'}</MetadataListItem>
+              <MetadataListItem label="System">{open.systemId ? <Link href={`/systems/${encodeURIComponent(open.systemId)}`}>{nameOf(open.systemId)}</Link> : 'Not tied to a system'}</MetadataListItem>
+              <MetadataListItem label="Finding ID"><code className="break-all">{open.id}</code></MetadataListItem>
               <MetadataListItem label="Status">{words(open.status)}</MetadataListItem>
               <MetadataListItem label="Source">{sourceName(open.source)}</MetadataListItem>
               <MetadataListItem label="Categories">{(open as { categories?: string[] }).categories?.length ? (open as { categories?: string[] }).categories?.map(words).join(', ') : 'None recorded'}</MetadataListItem>
@@ -238,8 +331,8 @@ function FindingsView() {
             <Tasks key={open.id} risk={open} />
             <VStack gap={2}>
               <Heading level={3}>Retest</Heading>
-              <Text color="secondary">Retest by running the check again on the system file. A finding closes when the next result passes.</Text>
-              {systemIdOf(open) && <Button label="Open the system file" variant="secondary" href={`/systems/${encodeURIComponent(systemIdOf(open) as string)}`} />}
+              {systems.some((system) => system.id === open.systemId && system.stage === 'retired') && <Text color="secondary">This system is retired. Only recorded results are available.</Text>}
+              <Retest risk={open} />
             </VStack>
           </VStack>
         )}

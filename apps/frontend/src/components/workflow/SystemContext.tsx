@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react"
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,6 +14,8 @@ import { IconBuildingSkyscraper, IconPlus, IconRouteAltLeft, IconShieldCheck } f
 
 import { apiClient, type ApiResponse } from "@/lib/api/api-client"
 import { API_ENDPOINTS } from "@/lib/api/endpoints"
+import { withOrg } from "@/lib/api/hooks/usePacks"
+import { useOrg } from "@/context/OrgContext"
 
 export interface AISystemSummary {
   id: string
@@ -157,56 +159,56 @@ function normalizeSystem(record: AISystemRecord): AISystemSummary {
   }
 }
 
-export function SystemContextProvider({ children }: { children: React.ReactNode }) {
-  const [systems, setSystems] = useState<AISystemSummary[]>([])
-  const [selectedSystemId, setSelectedSystemId] = useState<string>("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedSystemStatus, setSelectedSystemStatus] = useState<SelectedSystemStatus>(
-    emptyDerivedStatus(NO_SYSTEM)
-  )
+interface SystemRegister {
+  orgId?: string
+  systems: AISystemSummary[]
+  loading: boolean
+  error: string | null
+}
 
-  const refreshSystems = async () => {
-    setLoading(true)
-    setError(null)
+const EMPTY_REGISTER: SystemRegister = { systems: [], loading: true, error: null }
+
+export function SystemContextProvider({ children }: { children: React.ReactNode }) {
+  const { selectedOrg, isLoading: orgLoading, error: orgError, refreshOrgs } = useOrg()
+  const orgId = selectedOrg?.id
+  const [register, setRegister] = useState<SystemRegister>(EMPTY_REGISTER)
+  const { systems, loading, error } = register.orgId === orgId ? register : EMPTY_REGISTER
+  const [selectedSystemId, setSelectedSystemId] = useState<string>("")
+  const request = useRef(0)
+
+  const refreshSystems = useCallback(async () => {
+    if (!orgId) return
+    const version = ++request.current
+    setRegister((current) => ({ ...(current.orgId === orgId ? current : EMPTY_REGISTER), orgId, loading: true, error: null }))
     try {
-      const response: ApiResponse<AISystemRecord[]> = await apiClient.get(API_ENDPOINTS.aiGovernance.systems)
-      if (!response.success || !response.data) {
+      const response = await apiClient.get<AISystemRecord[]>(withOrg(API_ENDPOINTS.aiGovernance.systems, orgId))
+      if (version !== request.current) return
+      if (!response.success || !Array.isArray(response.data)) {
         throw new Error(response.error || "Failed to load AI systems")
       }
-      if (response.data.length > 0) {
-        const nextSystems = response.data.map(normalizeSystem)
-        setSystems(nextSystems)
-        setSelectedSystemId((currentId) => {
-          return chooseSelectedSystemId(
-            nextSystems.map((system) => system.id),
-            currentId,
-            getUrlSystemId() ?? getStoredSystemId(),
-          )
-        })
-      } else {
-        setSystems([])
-        setSelectedSystemId("")
-      }
+      const nextSystems = response.data.map(normalizeSystem)
+      setRegister({ orgId, systems: nextSystems, loading: false, error: null })
+      setSelectedSystemId((current) => chooseSelectedSystemId(
+        nextSystems.map((system) => system.id), current, getUrlSystemId() ?? getStoredSystemId(),
+      ) ?? "")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load AI systems")
-      setSystems([])
+      if (version !== request.current) return
+      setRegister({ orgId, systems: [], loading: false, error: err instanceof Error ? err.message : "Failed to load AI systems" })
       setSelectedSystemId("")
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [orgId])
 
   useEffect(() => {
     void refreshSystems()
-  }, [])
+    return () => { request.current += 1 }
+  }, [refreshSystems])
 
-  const setAndPersist = (systemId: string) => {
+  const setAndPersist = useCallback((systemId: string) => {
     setSelectedSystemId(systemId)
     if (typeof window !== "undefined") {
       window.localStorage.setItem("fairmind:selected-ai-system", systemId)
     }
-  }
+  }, [])
 
   const createWorkspaceAndSystem = async (params: {
     workspaceName: string
@@ -221,8 +223,9 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     complianceFrameworks?: string[]
     ids?: { workspace: string; system: string }
   }) => {
+    if (!orgId) throw new Error("Choose an organisation before registering an AI system.")
     const workspaceResponse: ApiResponse<WorkspaceRecord> = await apiClient.post(
-      API_ENDPOINTS.aiGovernance.workspaces,
+      withOrg(API_ENDPOINTS.aiGovernance.workspaces, orgId),
       {
         ...(params.ids && { id: params.ids.workspace }),
         name: params.workspaceName,
@@ -235,7 +238,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     }
 
     const systemResponse: ApiResponse<AISystemRecord> = await apiClient.post(
-      API_ENDPOINTS.aiGovernance.systems,
+      withOrg(API_ENDPOINTS.aiGovernance.systems, orgId),
       {
         ...(params.ids && { id: params.ids.system }),
         workspace_id: workspaceResponse.data.id,
@@ -259,10 +262,9 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     }
 
     const nextSystem = normalizeSystem(systemResponse.data)
-    setSystems((current) => {
-      const next = [nextSystem, ...current.filter((item) => item.id !== nextSystem.id)]
-      return next
-    })
+    setRegister((current) => current.orgId === orgId
+      ? { ...current, systems: [nextSystem, ...current.systems.filter((item) => item.id !== nextSystem.id)] }
+      : current)
     setAndPersist(nextSystem.id)
     return nextSystem
   }
@@ -271,14 +273,13 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     return systems.find((system) => system.id === selectedSystemId) || systems[0] || NO_SYSTEM
   }, [selectedSystemId, systems])
 
-  useEffect(() => {
+  const selectedSystemStatus = useMemo<SelectedSystemStatus>(() => {
     if (!selectedSystem || selectedSystem.metadata?.source === "fallback") {
-      setSelectedSystemStatus(emptyDerivedStatus(selectedSystem || NO_SYSTEM))
-      return
+      return emptyDerivedStatus(selectedSystem || NO_SYSTEM)
     }
 
     const lifecycleSummary = (selectedSystem.metadata?.lifecycleSummary || {}) as Partial<SelectedSystemStatus>
-    setSelectedSystemStatus({
+    return {
       readiness: typeof lifecycleSummary.readiness === "number" ? lifecycleSummary.readiness : selectedSystem.readiness,
       stage: (lifecycleSummary.stage as AISystemSummary["stage"]) || selectedSystem.stage,
       criticalBlockers: lifecycleSummary.criticalBlockers || 0,
@@ -286,7 +287,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
       missingEvidence: lifecycleSummary.missingEvidence || 0,
       openRisks: lifecycleSummary.openRisks || 0,
       activeRemediation: lifecycleSummary.activeRemediation || 0,
-    })
+    }
   }, [selectedSystem])
 
   const selectedSystemWithStatus = useMemo(
@@ -305,9 +306,9 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         selectedSystem: selectedSystemWithStatus,
         selectedSystemStatus,
         setSelectedSystemId: setAndPersist,
-        loading,
-        error,
-        refreshSystems,
+        loading: orgLoading || Boolean(orgId && loading),
+        error: orgError || (!orgId && !orgLoading ? "Choose an organisation to load its AI systems." : error),
+        refreshSystems: orgId && !orgError ? refreshSystems : refreshOrgs,
         createWorkspaceAndSystem,
       }}
     >

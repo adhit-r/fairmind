@@ -13,13 +13,14 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from contextlib import contextmanager
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
@@ -37,6 +38,9 @@ from src.application.services.governance_assurance_service import (
 )
 from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, counted_runs, gate_check, gate_checks
 from src.application.services.system_kinds import SYSTEM_KINDS
+from src.application.services import system_assurance_schedule as assurance_schedules
+from src.application.services.system_assurance_report import REPORT_TYPE as SYSTEM_ASSURANCE_REPORT
+from src.application.services.system_assurance_report import build_system_assurance_report, report_revision
 
 
 def _caller_org(request: Request) -> str:
@@ -107,6 +111,9 @@ async def _enforce_org_scope(request: Request, db: Session = Depends(get_db)) ->
 def _check_org_scope(request, db: Session, body) -> None:
     _resolve_caller_org(request, db)
     org_id = _caller_org(request)
+    requested_org = request.query_params.get("org_id")
+    if requested_org is not None and requested_org != str(org_id):
+        raise HTTPException(status_code=404, detail="Organization not found")
     sources = [request.path_params, request.query_params]
     if isinstance(body, dict):
         sources.append(body)
@@ -488,7 +495,11 @@ def _require_report_access(
         return row
     if not row or not row.system_id:
         raise HTTPException(status_code=404, detail="Report not found")
-    _require_system_access(db, str(row.system_id), current_user)
+    membership = _require_system_access(db, str(row.system_id), current_user)
+    if row.report_type == SYSTEM_ASSURANCE_REPORT and (
+        row.org_id != membership.org_id or not row.approved_at and not GovernanceAssuranceService.may_mutate(membership)
+    ):
+        raise HTTPException(status_code=404, detail="Report not found")
     return row
 # Columns added after the tables first shipped. create_all() does not alter
 # existing tables, so this runtime patch keeps already-provisioned dev and test
@@ -635,7 +646,7 @@ def _serialize_risk_row(row: Any) -> Dict[str, Any]:
         "riskScore": float(row[8]),
         "source": row[9],
         "categories": json.loads(row[10]),
-        "metadata": json.loads(row[11]),
+        "metadata": _load_json_value(row[11], {}),
         "timestamp": row[12],
         "updatedAt": row[13],
     }
@@ -2391,10 +2402,13 @@ def get_evidence_item(
     evidence_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
+    system_id: Optional[str] = None,
 ):
     """Fetch a single evidence item by ID."""
     _ensure_tables(db)
-    _require_evidence_item_access(db, evidence_id, current_user)
+    record_system_id, _ = _require_evidence_item_access(db, evidence_id, current_user)
+    if system_id is not None and record_system_id != system_id:
+        raise HTTPException(status_code=404, detail="Evidence not found")
     item = _fetch_evidence_item_v2(db, evidence_id)
     if not item:
         raise HTTPException(status_code=404, detail="Evidence not found")
@@ -2923,8 +2937,8 @@ def treat_risk(
         metadata = {**_load_json_value(row[5], {}), "pendingAcceptance": pending}
         # Guarded: a passing run may have resolved the risk since the read above.
         if not db.execute(
-            text("UPDATE governance_risks SET status = :pending, metadata_json = :metadata, updated_at = :now WHERE id = :id AND status = :was"),
-            {"pending": RISK_ACCEPTANCE_PENDING, "metadata": json.dumps(metadata), "now": now, "id": risk_id, "was": row[4]},
+            text("UPDATE governance_risks SET status = :pending, metadata_json = :metadata, updated_at = :now WHERE id = :id AND status = :was AND metadata_json = :previous_metadata"),
+            {"pending": RISK_ACCEPTANCE_PENDING, "metadata": json.dumps(metadata), "now": now, "id": risk_id, "was": row[4], "previous_metadata": row[5]},
         ).rowcount:
             db.rollback()
             raise HTTPException(status_code=409, detail="This risk changed meanwhile; reload it")
@@ -3035,7 +3049,7 @@ def _serialize_audit_report_row(row: Any) -> Dict[str, Any]:
         data = json.loads(row.data_json or "{}")
     except Exception:
         pass
-    return {
+    report = {
         "id": row.id,
         "systemId": row.system_id,
         "reportType": row.report_type,
@@ -3045,6 +3059,13 @@ def _serialize_audit_report_row(row: Any) -> Dict[str, Any]:
         "data": data,
         "createdAt": row.created_at,
     }
+    if row.report_type == SYSTEM_ASSURANCE_REPORT:
+        report.update(
+            revision=row.sha256, status="approved" if row.approved_at else "preview",
+            sha256=row.sha256 if row.approved_at else None, narrative=row.narrative,
+            approvedBy=row.approved_by, approvedAt=row.approved_at,
+        )
+    return report
 
 
 class AuditReportGenerateRequest(BaseModel):
@@ -3067,6 +3088,8 @@ def generate_audit_report(
 ):
     """Generate and persist a governance audit report snapshot."""
     _ensure_tables(db)
+    if request.report_type == SYSTEM_ASSURANCE_REPORT:
+        raise HTTPException(status_code=422, detail="Use a System Assurance Report preview to prepare this report type")
 
     system_id = request.system_id
     _require_system_access(db, system_id, current_user, mutate=True)
@@ -3237,6 +3260,466 @@ def generate_audit_report(
     return _serialize_audit_report_row(row)
 
 
+class SystemAssuranceDefinitionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(max_length=160)
+    system_id: str = Field(min_length=1)
+    assignment_id: str = Field(min_length=1)
+
+    @field_validator("title")
+    @classmethod
+    def _nonempty_title(cls, value: str) -> str:
+        title = value.strip()
+        if not title or any(character in title for character in "\0\r\n"):
+            raise ValueError("Enter a report name on one line")
+        return title
+
+
+def _definition_payload(row: Any) -> dict:
+    return {
+        "id": row.id, "title": row.title, "systemId": row.system_id, "assignmentId": row.assignment_id,
+        "createdBy": row.created_by, "createdAt": row.created_at, "periodPreset": row.period_preset,
+    }
+
+
+def _find_system_assurance_definition(db: Session, org_id: str, definition_id: str) -> Any:
+    return db.execute(text(
+        "SELECT id, title, system_id, assignment_id, created_by, created_at, period_preset "
+        "FROM governance_system_assurance_definitions WHERE id = :id AND org_id = :org"
+    ), {"id": definition_id, "org": org_id}).one_or_none()
+
+
+@router.get("/reports/system-assurance/definitions")
+def list_system_assurance_definitions(
+    system_id: str | None = Query(default=None, min_length=1),
+    membership: OrgMembership = Depends(org_member),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    if system_id is not None:
+        _require_system_access(db, system_id, current_user)
+    rows = db.execute(text(
+        "SELECT id, title, system_id, assignment_id, created_by, created_at, period_preset "
+        "FROM governance_system_assurance_definitions "
+        "WHERE org_id = :org AND (CAST(:sid AS text) IS NULL OR system_id = :sid) "
+        "ORDER BY created_at DESC, id DESC"
+    ), {"org": membership.org_id, "sid": system_id})
+    return [_definition_payload(row) for row in rows]
+
+
+@router.post("/reports/system-assurance/definitions", status_code=201)
+def create_system_assurance_definition(
+    body: SystemAssuranceDefinitionRequest,
+    http: Request,
+    response: Response,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _require_system_access(db, body.system_id, current_user, mutate=True)
+    scope = {"title": body.title, "assignment": body.assignment_id, "sid": body.system_id, "org": _caller_org(http)}
+    row = db.execute(text(
+        "INSERT INTO governance_system_assurance_definitions (id, org_id, system_id, assignment_id, title, created_by, created_at) "
+        "SELECT :id, org_id, system_id, id, :title, :actor, :now FROM governance_framework_assignments "
+        "WHERE id = :assignment AND system_id = :sid AND org_id = :org "
+        "ON CONFLICT (org_id, system_id, assignment_id, title) DO NOTHING "
+        "RETURNING id, title, system_id, assignment_id, created_by, created_at, period_preset"
+    ), {**scope, "id": str(uuid.uuid4()), "actor": _authenticated_actor(current_user), "now": _utc_now_iso()}).one_or_none()
+    if row is None:
+        row = db.execute(text(
+            "SELECT id, title, system_id, assignment_id, created_by, created_at, period_preset "
+            "FROM governance_system_assurance_definitions "
+            "WHERE org_id = :org AND system_id = :sid AND assignment_id = :assignment AND title = :title"
+        ), scope).one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Framework assignment not found for this system")
+        response.status_code = 200
+    db.commit()
+    return _definition_payload(row)
+
+
+@router.get("/reports/system-assurance/definitions/{definition_id}")
+def get_system_assurance_definition(
+    definition_id: str,
+    membership: OrgMembership = Depends(org_member),
+    db: Session = Depends(get_db),
+):
+    row = _find_system_assurance_definition(db, membership.org_id, definition_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Report definition not found")
+    return _definition_payload(row)
+
+
+def _bind_report_definition(result: tuple[str, dict, dict], definition: Any) -> tuple[str, dict, dict]:
+    if definition is None:
+        return result
+    _, config, data = result
+    return definition.title, {**config, "definitionId": definition.id}, data
+
+
+class SystemAssuranceScheduleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cadence: Literal["weekly", "monthly"]
+    time_zone: str = Field(min_length=1, max_length=255)
+    local_time: str = Field(pattern=r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
+
+
+class SystemAssurancePauseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    paused: bool = Field(strict=True)
+
+
+class SystemAssuranceReviewerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewer_id: uuid.UUID | None
+
+
+class SystemAssuranceReturnRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision: str = Field(pattern=r"^[a-f0-9]{64}$")
+    reason: str = Field(max_length=4000)
+
+    @field_validator("reason")
+    @classmethod
+    def _nonempty_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if not reason or "\0" in reason:
+            raise ValueError("Enter a reason for returning this revision")
+        return reason
+
+
+@contextmanager
+def _assurance_schedule_errors():
+    try:
+        yield
+    except assurance_schedules.ScheduleNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except assurance_schedules.ScheduleConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except assurance_schedules.ScheduleInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except assurance_schedules.ScheduleDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+def _schedule_payload(schedule: dict) -> dict:
+    return {
+        "definitionId": schedule["definitionId"], "systemId": schedule["systemId"], "title": schedule["title"],
+        "cadence": schedule["cadence"], "timeZone": schedule["timeZone"], "localTime": schedule["localTime"],
+        "paused": not schedule["active"], "next": schedule["upcoming"],
+        "latestRun": schedule["latestRun"], "attentionRun": schedule["attentionRun"],
+        "defaultReviewer": schedule["defaultReviewer"],
+    }
+
+
+def _check_schedule_system(db: Session, org_id: str, system_id: str, user: TokenData, *, mutate: bool = False):
+    membership = _require_system_access(db, system_id, user, mutate=mutate)
+    if membership.org_id != org_id:
+        raise HTTPException(status_code=404, detail="AI system not found")
+
+
+def _check_schedule_definition(db: Session, org_id: str, definition_id: str, user: TokenData, *, mutate: bool = False):
+    definition = _find_system_assurance_definition(db, org_id, definition_id)
+    if definition is None:
+        raise HTTPException(status_code=404, detail="Report definition not found")
+    _check_schedule_system(db, org_id, definition.system_id, user, mutate=mutate)
+
+
+def _scheduled_run(db: Session, org_id: str, run_id: str) -> dict:
+    with _assurance_schedule_errors():
+        run = assurance_schedules.get_occurrence(db, org_id=org_id, occurrence_id=run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Scheduled run not found")
+    return run
+
+
+@router.get("/reports/system-assurance/schedules")
+def list_system_assurance_schedules(
+    membership: OrgMembership = Depends(org_member),
+    db: Session = Depends(get_db),
+):
+    with _assurance_schedule_errors():
+        schedules = assurance_schedules.list_schedules(db, org_id=membership.org_id)
+    return [_schedule_payload(schedule) for schedule in schedules]
+
+
+@router.get("/reports/system-assurance/reviewers")
+def list_system_assurance_reviewers(
+    membership: OrgMembership = Depends(org_member), db: Session = Depends(get_db),
+):
+    return assurance_schedules.list_reviewers(db, org_id=membership.org_id)
+
+
+@router.get("/reports/system-assurance/review-assignments")
+def list_system_assurance_review_assignments(
+    membership: OrgMembership = Depends(org_member), current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return assurance_schedules.list_review_assignments(db, org_id=membership.org_id, user_id=current_user.user_id)
+
+
+@router.post("/reports/system-assurance/schedules/preview", dependencies=[Depends(org_member)])
+def preview_system_assurance_schedule(body: SystemAssuranceScheduleRequest):
+    with _assurance_schedule_errors():
+        return {"next": assurance_schedules.preview_schedule(**body.model_dump())}
+
+
+@router.put("/reports/system-assurance/schedules/{definition_id}")
+def save_system_assurance_schedule(
+    definition_id: str, body: SystemAssuranceScheduleRequest,
+    membership: OrgMembership = Depends(org_mutator),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _check_schedule_definition(db, membership.org_id, definition_id, current_user, mutate=True)
+    with _assurance_schedule_errors():
+        schedule = assurance_schedules.save_schedule(
+            db, org_id=membership.org_id, definition_id=definition_id, **body.model_dump(),
+            active=None, actor=_authenticated_actor(current_user),
+        )
+    return _schedule_payload(schedule)
+
+
+@router.patch("/reports/system-assurance/schedules/{definition_id}")
+def pause_system_assurance_schedule(
+    definition_id: str, body: SystemAssurancePauseRequest,
+    membership: OrgMembership = Depends(org_mutator),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    # Pausing stops future work and remains available after the underlying system is retired.
+    _check_schedule_definition(db, membership.org_id, definition_id, current_user, mutate=not body.paused)
+    with _assurance_schedule_errors():
+        schedule = assurance_schedules.set_schedule_active(
+            db, org_id=membership.org_id, definition_id=definition_id, active=not body.paused,
+            actor=_authenticated_actor(current_user),
+        )
+    return _schedule_payload(schedule)
+
+
+@router.patch("/reports/system-assurance/schedules/{definition_id}/reviewer")
+def set_system_assurance_schedule_reviewer(
+    definition_id: str, body: SystemAssuranceReviewerRequest,
+    membership: OrgMembership = Depends(org_mutator), current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _check_schedule_definition(db, membership.org_id, definition_id, current_user, mutate=True)
+    with _assurance_schedule_errors():
+        schedule = assurance_schedules.set_default_reviewer(
+            db, org_id=membership.org_id, definition_id=definition_id,
+            reviewer_id=str(body.reviewer_id) if body.reviewer_id else None,
+        )
+    return _schedule_payload(schedule)
+
+
+@router.get("/reports/system-assurance/schedules/{definition_id}/runs")
+def list_system_assurance_scheduled_runs(
+    definition_id: str,
+    membership: OrgMembership = Depends(org_member),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    _check_schedule_definition(db, membership.org_id, definition_id, current_user)
+    with _assurance_schedule_errors():
+        return assurance_schedules.list_occurrences(db, org_id=membership.org_id, definition_id=definition_id)
+
+
+@router.patch("/reports/system-assurance/scheduled-runs/{run_id}/reviewer")
+def set_system_assurance_run_reviewer(
+    run_id: str, body: SystemAssuranceReviewerRequest,
+    membership: OrgMembership = Depends(org_mutator), current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    run = _scheduled_run(db, membership.org_id, run_id)
+    _check_schedule_system(db, membership.org_id, run["systemId"], current_user, mutate=True)
+    with _assurance_schedule_errors():
+        return assurance_schedules.set_occurrence_reviewer(
+            db, org_id=membership.org_id, occurrence_id=run_id, reviewer_id=str(body.reviewer_id) if body.reviewer_id else None,
+        )
+
+
+@router.post("/reports/system-assurance/scheduled-runs/{run_id}/return")
+def return_system_assurance_run(
+    run_id: str, body: SystemAssuranceReturnRequest,
+    membership: OrgMembership = Depends(org_mutator), current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    run = _scheduled_run(db, membership.org_id, run_id)
+    _check_schedule_system(db, membership.org_id, run["systemId"], current_user, mutate=True)
+    with _assurance_schedule_errors():
+        return assurance_schedules.return_occurrence(
+            db, org_id=membership.org_id, occurrence_id=run_id, user_id=current_user.user_id,
+            actor=_authenticated_actor(current_user), revision=body.revision, reason=body.reason,
+        )
+
+
+@router.post("/reports/system-assurance/scheduled-runs/{run_id}/retry")
+def retry_system_assurance_scheduled_run(
+    run_id: str,
+    membership: OrgMembership = Depends(org_mutator),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    run = _scheduled_run(db, membership.org_id, run_id)
+    _check_schedule_system(db, membership.org_id, run["systemId"], current_user, mutate=True)
+    with _assurance_schedule_errors():
+        return assurance_schedules.retry_occurrence(
+            db, org_id=membership.org_id, definition_id=run["definitionId"], occurrence_id=run_id,
+            actor=_authenticated_actor(current_user),
+        )
+
+
+@router.get("/reports/system-assurance/scheduled-runs/{run_id}/review")
+def get_system_assurance_scheduled_review(
+    run_id: str,
+    membership: OrgMembership = Depends(org_member),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    run = _scheduled_run(db, membership.org_id, run_id)
+    _check_schedule_system(db, membership.org_id, run["systemId"], current_user)
+    writer = GovernanceAssuranceService.may_mutate(membership)
+    if run["status"] != "approved" and not writer:
+        raise HTTPException(status_code=403, detail="Organization mutation permission required to review an unapproved run")
+    stage = db.execute(text("SELECT lifecycle_stage FROM governance_ai_systems WHERE id = :id AND org_id = :org"),
+                       {"id": run["systemId"], "org": membership.org_id}).scalar_one_or_none()
+    can_refresh = writer and stage not in {None, "retired"} and run["status"] in {"failed", "ready"}
+    if run["status"] in {"pending", "failed"}:
+        return {"run": run, "report": None, "canReview": False, "canRefresh": can_refresh}
+    if not run["reportId"]:
+        raise HTTPException(status_code=409, detail="The prepared report is unavailable for this scheduled run")
+    row = _require_report_access(db, run["reportId"], current_user)
+    report = _serialize_audit_report_row(row)
+    config = report["config"]
+    if (row.report_type != SYSTEM_ASSURANCE_REPORT or row.org_id != membership.org_id or row.system_id != run["systemId"]
+        or config.get("definitionId") != run["definitionId"] or config.get("assignmentId") != run["assignmentId"]
+        or config.get("dateFrom") != run["dateFrom"] or config.get("dateTo") != run["dateTo"]):
+        raise HTTPException(status_code=404, detail="Prepared report not found for this scheduled run")
+    if row.approved_at:
+        run = {**run, "status": "approved", "reviewState": "approved"}
+    can_review = (can_refresh and not row.approved_at and run["reviewState"] == "awaiting_review"
+                  and assurance_schedules.may_review(db, org_id=membership.org_id, user_id=current_user.user_id,
+                                                     reviewer_id=run["reviewer"]["id"] if run["reviewer"] else None))
+    return {"run": run, "report": report, "canReview": can_review, "canRefresh": can_refresh and not row.approved_at}
+
+
+class SystemAssurancePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    system_id: str = Field(min_length=1)
+    assignment_id: str = Field(min_length=1)
+    date_from: date
+    date_to: date
+    narrative: str | None = Field(default=None, max_length=4000)
+    definition_id: str | None = Field(default=None, min_length=1)
+
+
+class SystemAssuranceApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+@router.post("/reports/system-assurance/preview")
+def preview_system_assurance_report(
+    body: SystemAssurancePreviewRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Persist the precise content a reviewer can approve."""
+    _ensure_tables(db)
+    _require_system_access(db, body.system_id, current_user, mutate=True)
+    if body.date_from > body.date_to:
+        raise HTTPException(status_code=422, detail="The end date must be on or after the start date")
+    org, now = _caller_org(http), _utc_now_iso()
+    definition = None
+    if body.definition_id:
+        definition = _find_system_assurance_definition(db, org, body.definition_id)
+        if definition is None or (definition.system_id, definition.assignment_id) != (body.system_id, body.assignment_id):
+            raise HTTPException(status_code=404, detail="Report definition not found for this scope")
+    result = build_system_assurance_report(
+        db, org_id=org, system_id=body.system_id, assignment_id=body.assignment_id,
+        date_from=body.date_from, date_to=body.date_to, generated_at=now,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Framework assignment not found for this system")
+    title, config, data = _bind_report_definition(result, definition)
+    narrative = (body.narrative or "").strip() or None
+    report_id = str(uuid.uuid4())
+    db.execute(text(
+        "INSERT INTO governance_audit_reports "
+        "(id, system_id, org_id, report_type, title, generated_by, config_json, data_json, created_at, sha256, narrative, definition_id) "
+        "VALUES (:id, :sid, :org, :type, :title, :actor, :config, :data, :now, :revision, :narrative, :definition_id)"
+    ), {
+        "id": report_id, "sid": body.system_id, "org": org, "type": SYSTEM_ASSURANCE_REPORT, "title": title,
+        "actor": _authenticated_actor(current_user), "config": json.dumps(config), "data": json.dumps(data),
+        "now": now, "revision": report_revision(title, config, data, narrative), "narrative": narrative,
+        "definition_id": body.definition_id,
+    })
+    db.commit()
+    return _serialize_audit_report_row(_require_report_access(db, report_id, current_user))
+
+
+@router.post("/reports/system-assurance/{report_id}/approve")
+def approve_system_assurance_report(
+    report_id: str,
+    body: SystemAssuranceApprovalRequest,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Approve the reviewed revision once and keep its stored content intact."""
+    _ensure_tables(db)
+    row = _require_report_access(db, report_id, current_user)
+    if row.report_type != SYSTEM_ASSURANCE_REPORT or row.org_id != _caller_org(http):
+        raise HTTPException(status_code=404, detail="Report not found")
+    _require_system_access(db, row.system_id, current_user, mutate=True)
+    with _assurance_schedule_errors():
+        scheduled = assurance_schedules.check_scheduled_approval(
+            db, org_id=row.org_id, report_id=report_id, user_id=current_user.user_id, revision=body.revision,
+        )
+    if scheduled:
+        row = _require_report_access(db, report_id, current_user)
+    if row.sha256 != body.revision:
+        raise HTTPException(status_code=409, detail="The report revision does not match the preview")
+    if row.approved_at:
+        return _serialize_audit_report_row(row)
+
+    preview = _serialize_audit_report_row(row)
+    config = preview["config"]
+    definition = None
+    if definition_id := config.get("definitionId"):
+        definition = _find_system_assurance_definition(db, row.org_id, definition_id)
+        if definition is None or (definition.system_id, definition.assignment_id) != (row.system_id, config["assignmentId"]):
+            raise HTTPException(status_code=409, detail="The report definition changed. Prepare and review a fresh preview.")
+    current = build_system_assurance_report(
+        db, org_id=row.org_id, system_id=row.system_id, assignment_id=config["assignmentId"],
+        date_from=date.fromisoformat(config["dateFrom"]), date_to=date.fromisoformat(config["dateTo"]),
+        generated_at=row.created_at,
+    )
+    if (report_revision(row.title, config, preview["data"], row.narrative) != body.revision
+        or current is None or report_revision(*_bind_report_definition(current, definition), row.narrative) != body.revision):
+        raise HTTPException(status_code=409, detail="The report sources changed. Prepare and review a fresh preview.")
+
+    # Concurrent approvals can only add one actor and time to this revision.
+    approval = db.execute(text(
+        "UPDATE governance_audit_reports SET approved_by = :actor, approved_at = :now "
+        "WHERE id = :id AND org_id = :org AND approved_at IS NULL AND sha256 = :revision"
+    ), {"id": report_id, "org": row.org_id, "revision": body.revision,
+        "actor": _authenticated_actor(current_user), "now": _utc_now_iso()})
+    if approval.rowcount == 0:
+        latest = _require_report_access(db, report_id, current_user)
+        if latest.sha256 != body.revision or not latest.approved_at:
+            raise HTTPException(status_code=409, detail="The preview was superseded. Review the current revision.")
+    db.commit()
+    return _serialize_audit_report_row(_require_report_access(db, report_id, current_user))
+
+
 class RoleReportSnapshotRequest(BaseModel):
     role: Literal["executive", "compliance", "engineering", "auditor", "risk"]
     system_id: Optional[str] = None
@@ -3349,24 +3832,32 @@ def list_role_reports(http: Request, db: Session = Depends(get_db)):
 def list_audit_reports(
     system_id: str = Query(min_length=1),
     report_type: Optional[str] = Query(None),
+    definition_id: str | None = Query(default=None, min_length=1),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """List previously generated audit reports."""
     _ensure_tables(db)
-    _require_system_access(db, system_id, current_user)
+    membership = _require_system_access(db, system_id, current_user)
 
-    conditions = ["system_id = :system_id"]
-    params: Dict[str, Any] = {"system_id": system_id}
+    conditions = ["system_id = :system_id", "(report_type <> :assurance_type OR (approved_at IS NOT NULL AND org_id = :org))"]
+    params: Dict[str, Any] = {"system_id": system_id, "assurance_type": SYSTEM_ASSURANCE_REPORT, "org": membership.org_id}
     if report_type:
         conditions.append("report_type = :report_type")
         params["report_type"] = report_type
+    if definition_id:
+        definition = _find_system_assurance_definition(db, membership.org_id, definition_id)
+        if definition is None or definition.system_id != system_id:
+            raise HTTPException(status_code=404, detail="Report definition not found for this system")
+        conditions.append("definition_id = :definition_id")
+        params["definition_id"] = definition_id
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     rows = db.execute(
         text(
-            f"SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at "
-            f"FROM governance_audit_reports {where} ORDER BY created_at DESC LIMIT 50"
+            f"SELECT id, system_id, report_type, title, generated_by, config_json, data_json, created_at, "
+            f"sha256, narrative, approved_by, approved_at FROM governance_audit_reports {where} "
+            f"ORDER BY COALESCE(approved_at, created_at) DESC, id DESC LIMIT 50"
         ),
         params,
     ).fetchall()
@@ -3376,6 +3867,7 @@ def list_audit_reports(
 @router.get("/reports/{report_id}")
 def get_audit_report(
     report_id: str,
+    http: Request,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -3383,4 +3875,6 @@ def get_audit_report(
     _ensure_tables(db)
 
     row = _require_report_access(db, report_id, current_user)
+    if row.report_type == SYSTEM_ASSURANCE_REPORT and (row.org_id != _caller_org(http) or not row.approved_at):
+        raise HTTPException(status_code=404, detail="Report not found")
     return _serialize_audit_report_row(row)

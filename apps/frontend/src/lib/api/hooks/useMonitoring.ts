@@ -1,72 +1,29 @@
-/**
- * Monitoring API Hooks
- */
-
+import { useEffect } from 'react'
 import { pollWhileVisible } from '@/lib/poll'
-import { useState, useEffect, useCallback } from 'react'
-import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
+import { useOrgResource } from './usePacks'
 
+interface ServiceProbe {
+  status?: string
+  uptime?: string
+  responseTime?: string
+  response_time?: string
+}
 
 export interface SystemHealth {
-  status: 'healthy' | 'degraded' | 'unhealthy'
-  timestamp: string
-  services?: Record<string, {
-    status: string
-    uptime?: string
-    responseTime?: string
-  }>
+  status: string
+  timestamp?: string
+  services?: Record<string, ServiceProbe | string | null>
 }
-
 
 export function useSystemHealth() {
-  const [health, setHealth] = useState<SystemHealth | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<Error | null>(null)
-
-  const fetchHealth = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      const response: ApiResponse<SystemHealth> = await apiClient.get(
-        API_ENDPOINTS.aiGovernance.status,
-        {
-          enableRetry: true,
-          maxRetries: 3,
-          timeout: 10000,
-        }
-      )
-      
-      if (response.success && response.data) {
-        setHealth(response.data)
-        setError(null)
-      } else {
-        const errorMessage = response.error || 'Failed to fetch system health'
-        setError(new Error(errorMessage))
-        setHealth(null)
-      }
-    } catch (err) {
-      console.error('System health API error:', err)
-      setError(err instanceof Error ? err : new Error('Failed to fetch system health'))
-      setHealth(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      setLoading(false)
-      return
-    }
-
-    fetchHealth()
-    
-    // Auto-refresh every 60 seconds
-    return pollWhileVisible(fetchHealth, 60000)
-  }, [fetchHealth])
-
-  return { health, loading, error, refetch: fetchHealth }
+  const { data, loading, error, reload } = useOrgResource<SystemHealth>(API_ENDPOINTS.aiGovernance.status)
+  useEffect(() => pollWhileVisible(reload, 60000), [reload])
+  const hasStatus = typeof data?.status === 'string' && data.status.trim().length > 0
+  return {
+    health: !loading && !error && hasStatus ? data : null,
+    loading,
+    error: error || (!loading && !hasStatus ? 'The endpoint returned no status.' : null),
+    refetch: reload,
+  }
 }
-

@@ -29,7 +29,7 @@ import {
 } from 'lucide-react'
 
 /** A page in the menu. `count` names a live count the shell reads from the API; the shell never shows a made-up number. */
-export type Place = { href: string; label: string; icon: LucideIcon; count?: 'needs' | 'systems' | 'found' | 'runs' | 'findings' | 'shadow' }
+export type Place = { href: string; label: string; icon: LucideIcon; count?: 'needs' | 'systems' | 'waitingCandidates' | 'runs' | 'findings' | 'shadow' }
 export type Group = { key: string; short: string; title: string; icon: LucideIcon; places: Place[] }
 
 export const NAV: Group[] = [
@@ -51,7 +51,7 @@ export const NAV: Group[] = [
     icon: Layers,
     places: [
       { href: '/systems', label: 'AI systems', icon: Layers, count: 'systems' },
-      { href: '/discovery', label: 'Discovery', icon: Radar, count: 'found' },
+      { href: '/discovery', label: 'Discovery', icon: Radar, count: 'waitingCandidates' },
       { href: '/shadow-ai', label: 'Shadow AI', icon: EyeOff, count: 'shadow' },
     ],
   },

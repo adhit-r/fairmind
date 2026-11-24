@@ -35,10 +35,28 @@ function harness(initialPath: string | null) {
     },
     load: (path: string) => loadResource<Run>(get, path, update),
     respond: (path: string, data: Run) => pending.get(path)!.resolve({ success: true, data }),
+    rejectRead: (path: string, status: number) => pending.get(path)!.resolve({
+      success: false, error: 'Read failed', apiError: { status, type: 'client', message: 'Read failed', canRetry: false },
+    }),
   }
 }
 
 describe('pack resource scope', () => {
+  test('a missing record, a denied read and a successful retry carry their own HTTP status', async () => {
+    const h = harness(RUN_A)
+    for (const status of [404, 403]) {
+      const read = h.load(RUN_A)
+      h.rejectRead(RUN_A, status)
+      await read
+      assert.equal(viewResource(h.state, RUN_A).errorStatus, status)
+      assert.equal(viewResource(h.state, RUN_B).errorStatus, undefined)
+    }
+    const read = h.load(RUN_A)
+    h.respond(RUN_A, { id: 'run-a' })
+    await read
+    assert.equal(viewResource(h.state, RUN_A).errorStatus, undefined)
+  })
+
   test('masks the previous run in the same render once the path changes', async () => {
     const h = harness(RUN_A)
     const loading = h.load(RUN_A)

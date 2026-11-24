@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useOrgResource } from '@/lib/api/hooks/usePacks'
 import { apiClient } from '@/lib/api/api-client'
 
 const root = (orgId: string, systemId: string) =>
@@ -33,26 +34,18 @@ interface EnvPayload {
 
 /** Latest assessment and the version trail for one system. */
 export function useEnvAssessments(orgId: string | undefined, systemId: string) {
-  const [state, setState] = useState<{ latest: EnvAssessment | null; history: EnvAssessment[]; loading: boolean; error: string | null }>({
-    latest: null,
-    history: [],
-    loading: true,
-    error: null,
-  })
-  const load = useCallback(async () => {
-    if (!orgId) return
-    setState((s) => ({ ...s, loading: true, error: null }))
-    const res = await apiClient.get<EnvPayload>(root(orgId, systemId), { enableRetry: false })
-    if (res.success && res.data) {
-      setState({ latest: res.data.latest ?? null, history: res.data.versionTrail ?? [], loading: false, error: null })
-    } else {
-      setState({ latest: null, history: [], loading: false, error: res.error || 'Could not load the environmental assessment' })
-    }
-  }, [orgId, systemId])
-  useEffect(() => {
-    void load()
-  }, [load])
-  return { ...state, reload: load }
+  const resource = useOrgResource<EnvPayload>(orgId ? root(orgId, systemId) : null)
+  const payload = resource.data
+  const valid = payload && typeof payload === 'object' && Array.isArray(payload.versionTrail) &&
+    (payload.latest ? typeof payload.latest === 'object' : payload.latest === null && payload.versionTrail.length === 0)
+  const error = resource.error || (!resource.loading && !valid ? 'The assessment response was incomplete.' : null)
+  return {
+    latest: valid && !error ? payload.latest : null,
+    history: valid && !error ? payload.versionTrail : [],
+    loading: resource.loading,
+    error,
+    reload: resource.reload,
+  }
 }
 
 /** POST /assess with the assessment body; throws the API's message on failure. */

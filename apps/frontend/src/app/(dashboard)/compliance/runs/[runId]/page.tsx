@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation'
 import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
+import { withPackSystem } from '@/lib/assurance/packScope'
 import { GATE_KINDS, decisionsFor, useAIProvider, usePackActions, useRun, useWaitingRuns, useWorkflow, versionName, type Decision, type RunEvent } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { runFigure } from '@/components/packs/figures'
@@ -54,7 +55,7 @@ function RunView({ runId }: { runId: string }) {
   const provider = useAIProvider()
   const [agentBusy, setAgentBusy] = useState<'step' | 'all' | null>(null)
   const [agentFailure, setAgentFailure] = useState<string | null>(null)
-  const workflow = useWorkflow(run.data?.workflowId)
+  const workflow = useWorkflow(run.data?.workflowId, run.data?.systemId ?? undefined)
   const waiting = useWaitingRuns()
   const [notes, setNotes] = useState('')
   const [deciding, setDeciding] = useState<Decision | null>(null)
@@ -158,7 +159,7 @@ function RunView({ runId }: { runId: string }) {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: r.workflowName, href: `/compliance/workflows/${r.workflowId}` }, { label: 'Run' }]} />
+      <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', r.systemId) }, { label: r.workflowName, href: withPackSystem(`/compliance/workflows/${encodeURIComponent(r.workflowId)}`, r.systemId) }, { label: 'Run' }]} />
       <div className="flex max-w-[760px] flex-col gap-2">
         <div className="flex flex-wrap gap-2">
           <StatusPill status={r.status} />

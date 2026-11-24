@@ -1,18 +1,21 @@
 'use client'
 
 import Link from 'next/link'
+import { withPackSystem } from '@/lib/assurance/packScope'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { CommandBar } from '@/components/layout/CommandBar'
 import { Empty, ErrorNote, Loading, ReqPill } from '@/components/packs/parts'
 import { CellDrawer, CellMeaning, classLabel, DrawerBlock, Matrix } from '@/components/ui/matrix'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { CheckEvidenceLinks } from '@/components/workflow/CheckEvidenceLinks'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import { useControls, useFrameworkSystems } from '@/lib/api/hooks/useEstate'
 import { useEvidencePacks } from '@/lib/api/hooks/useEvidencePacks'
 import { useJourney, useJourneys } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 import { STRENGTH, confirmedFrameworks, controlGrid, needsWorkInHighCritical, systemGrid } from './grid'
+import { requirementHref } from '../parts'
 
 const SEG = 'inline-flex rounded-full border border-[var(--fm-line)] bg-white p-0.5'
 const SEG_ITEM = 'inline-flex h-7 items-center whitespace-nowrap rounded-full px-3 text-[12.5px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]'
@@ -24,7 +27,8 @@ const LINK = 'font-medium text-[var(--fm-ink)] underline-offset-2 hover:underlin
 export function MatrixView() {
   const params = useParams<{ key: string }>()
   const key = decodeURIComponent(params.key)
-  const byControl = useSearchParams().get('view') === 'controls'
+  const search = useSearchParams()
+  const byControl = search.get('view') === 'controls'
   const router = useRouter()
   const { systems } = useSystemContext()
   const real = useMemo(() => systems.filter((s) => s.metadata?.source !== 'fallback'), [systems])
@@ -34,8 +38,7 @@ export function MatrixView() {
   const fw = useFrameworkSystems(key)
   const controls = useControls(byControl)
   const { create } = useEvidencePacks()
-  const [showAll, setShowAll] = useState(false)
-  const [cell, setCell] = useState<{ row: string; col: string } | null>(null)
+  const showAll = search.get('all') === '1'
   const [busy, setBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
@@ -45,7 +48,6 @@ export function MatrixView() {
   const ctl = useMemo(() => (journey.data && controls.data ? controlGrid(journey.data, controls.data) : null), [journey.data, controls.data])
   const openN = fw.data ? needsWorkInHighCritical(fw.data) : null
   const inScope = fw.data?.systems ?? []
-  const firstUnconfirmed = real.find((s) => !s.metadata?.applicability)
   const view = byControl ? '?view=controls' : '?view=matrix'
   const fwHref = (k: string) => `/frameworks/${encodeURIComponent(k)}${view}`
   const more = (journeys.data ?? []).filter((j) => !confirmed.some((c) => c.key === j.key))
@@ -66,9 +68,27 @@ export function MatrixView() {
     }
     return null
   }
-  const picked = cell ? reqOf(cell.row) : null
   const loading = journey.loading || (byControl ? controls.loading : fw.loading)
   const error = journey.error || (byControl ? controls.error : fw.error)
+  const rows = search.getAll('row')
+  const cols = search.getAll('col')
+  const matrix = byControl ? ctl?.matrix : sys?.matrix
+  const columnIndex = matrix?.colGroups.flatMap((g) => g.cols).findIndex((column) => column.key === cols[0]) ?? -1
+  const cell = !error && rows.length === 1 && cols.length === 1 && columnIndex >= 0 &&
+    matrix?.groups.some((g) => g.rows.some((r) => r.key === rows[0] && r.cells[columnIndex]))
+    ? { row: rows[0], col: cols[0] } : null
+  const picked = cell ? reqOf(cell.row) : null
+  const cellSystem = !byControl && cell ? inScope.find((s) => s.id === cell.col) : undefined
+  const updateView = (updates: Record<string, string | null>) => {
+    const url = new URL(window.location.href)
+    for (const [param, value] of Object.entries(updates)) {
+      if (value === null) url.searchParams.delete(param)
+      else url.searchParams.set(param, value)
+    }
+    window.history.replaceState(null, '', url)
+  }
+  const openCell = (row: string, col: string) => updateView({ row, col })
+  const closeCell = () => updateView({ row: null, col: null })
   const reload = () => {
     journey.reload()
     if (byControl) controls.reload()
@@ -84,6 +104,9 @@ export function MatrixView() {
         primary={{ label: busy ? 'Exporting' : 'Export for inspection', onClick: exportPack, busy, disabled: !inScope.length }}
       />
       {exportError && <ErrorNote message={exportError} />}
+      {!loading && !error && (rows.length > 0 || cols.length > 0) && !picked && (
+        <div role="status">This matrix cell is unavailable. <button type="button" className={LINK} onClick={closeCell}>Clear selection</button></div>
+      )}
 
       <section className="fm-card overflow-hidden" aria-label={`${short} requirements`}>
         <div className="flex flex-wrap items-center gap-2 px-[18px] pb-3 pt-4">
@@ -128,7 +151,7 @@ export function MatrixView() {
           <span className="ml-auto text-[12px] tabular-nums text-[var(--fm-ink2)]">
             {byControl && ctl && `${ctl.used} of ${ctl.total} controls`}
             {!byControl && sys && inScope.length > 0 && (
-              <button type="button" className={LINK} onClick={() => setShowAll((v) => !v)}>
+              <button type="button" className={LINK} onClick={() => updateView({ all: showAll ? null : '1' })}>
                 {showAll ? `${sys.tracked} tracked only` : `Show all ${sys.total}`}
               </button>
             )}
@@ -144,14 +167,14 @@ export function MatrixView() {
             <ErrorNote message={error} onRetry={reload} />
           </div>
         ) : byControl && ctl ? (
-          <Matrix id="fwctl" {...ctl.matrix} onCell={(row, col) => setCell({ row, col })} />
+          <Matrix id="fwctl" {...ctl.matrix} onCell={openCell} />
         ) : !byControl && sys && inScope.length === 0 ? (
           <div className="px-[18px] pb-[18px]">
             <Empty>
               No system has confirmed {short}.{' '}
-              {firstUnconfirmed || real[0] ? (
-                <Link className={LINK} href={`/systems/${(firstUnconfirmed ?? real[0]).id}`}>
-                  Confirm frameworks for {(firstUnconfirmed ?? real[0]).name}
+              {real.length > 0 ? (
+                <Link className={LINK} href="/systems">
+                  Choose a system to review
                 </Link>
               ) : (
                 <Link className={LINK} href="/onboard">
@@ -162,7 +185,7 @@ export function MatrixView() {
           </div>
         ) : !byControl && sys ? (
           <>
-            <Matrix id="fwsys" {...sys.matrix} onCell={(row, col) => setCell({ row, col })} />
+            <Matrix id="fwsys" {...sys.matrix} onCell={openCell} />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--fm-line)] px-[18px] py-2.5 text-[12px] tabular-nums text-[var(--fm-ink2)]">
               <span>{sys.totals.proven} proven</span>
               <span>{sys.totals.estimated} estimated</span>
@@ -171,11 +194,11 @@ export function MatrixView() {
               {sys.totals.fails > 0 && <span className="text-[#b4232c]">{sys.totals.fails} fail</span>}
               {sys.totals.stale > 0 && <span className="text-[#a14d00]">{sys.totals.stale} stale</span>}
               <span>{sys.totals.atorg} covered by organisation packs</span>
-              {fw.data && fw.data.unconfirmed > 0 && firstUnconfirmed && (
+              {fw.data && fw.data.unconfirmed > 0 && (
                 <span className="ml-auto">
                   {fw.data.unconfirmed} system{fw.data.unconfirmed === 1 ? '' : 's'} not confirmed ·{' '}
-                  <Link className={LINK} href={`/systems/${firstUnconfirmed.id}`}>
-                    Confirm
+                  <Link className={LINK} href="/systems">
+                    Choose a system
                   </Link>
                 </span>
               )}
@@ -186,7 +209,7 @@ export function MatrixView() {
 
       <CellDrawer
         open={!!(cell && picked)}
-        onClose={() => setCell(null)}
+        onClose={closeCell}
         label={picked ? `${short} ${picked.r.control}` : short}
         title={picked?.r.title ?? ''}
         sub={picked?.group}
@@ -216,8 +239,9 @@ export function MatrixView() {
                         <b className="font-semibold">{x.label}</b> <span className="text-[var(--fm-ink2)]">· {x.relation}</span>
                       </span>
                       <span className="text-[12px] text-[var(--fm-ink2)]">
-                        {x.evidenceClass ? classLabel(x.evidenceClass) : 'Nothing current on file'} · <span className="font-mono">{x.confidence.toFixed(2)}</span>
+                        {!x.fails && x.evidenceClass ? `${classLabel(x.evidenceClass)} · ` : ''}Check confidence <span className="font-mono">{x.confidence.toFixed(2)}</span>
                       </span>
+                      <CheckEvidenceLinks systemId={s?.id} check={x} failed={Boolean(x.fails || x.cell === 'fails')} />
                     </div>
                   ))
                 ) : (
@@ -225,7 +249,10 @@ export function MatrixView() {
                 )}
               </DrawerBlock>
               {s && (
-                <Link href={`/systems/${s.id}`} className="self-start text-[13px] font-semibold underline-offset-2 hover:underline">
+                <Link href={requirementHref(key, picked.r.control, s.id)} className={LINK}>Review {picked.r.control} for {s.name}</Link>
+              )}
+              {s && (
+                <Link href={`/systems/${encodeURIComponent(s.id)}`} className="self-start text-[13px] font-semibold underline-offset-2 hover:underline">
                   Open {s.name}
                 </Link>
               )}
@@ -257,7 +284,7 @@ export function MatrixView() {
             </>
           )
         })()}
-        <Link href={`/compliance/journeys/${encodeURIComponent(key)}`} className="mt-auto self-start text-[12.5px] text-[var(--fm-ink2)] underline-offset-2 hover:underline">
+        <Link href={withPackSystem(`/compliance/journeys/${encodeURIComponent(key)}`, cellSystem?.id)} className="mt-auto self-start text-[12.5px] text-[var(--fm-ink2)] underline-offset-2 hover:underline">
           Packs for {short}
         </Link>
       </CellDrawer>

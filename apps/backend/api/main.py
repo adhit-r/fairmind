@@ -138,6 +138,21 @@ async def _task_reminder_loop(interval: int) -> None:
             logger.warning(f"Task reminder sweep failed: {e}")
 
 
+async def _system_assurance_schedule_loop(interval: int, stop: asyncio.Event) -> None:
+    from database.connection import db_manager as orm_db_manager
+    from src.application.services.system_assurance_schedule import run_due_schedules
+
+    while not stop.is_set():
+        try:
+            await asyncio.to_thread(run_due_schedules, orm_db_manager.SessionLocal)
+        except Exception:
+            logger.exception("System assurance schedule sweep failed")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except TimeoutError:
+            continue
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
@@ -227,6 +242,12 @@ async def lifespan(app: FastAPI):
     autopilot = None
     if settings.autopilot_interval_seconds > 0:
         autopilot = asyncio.create_task(_autopilot_loop(settings.autopilot_interval_seconds))
+    schedule_stop = asyncio.Event()
+    report_scheduling = None
+    if settings.system_assurance_schedule_interval_seconds > 0:
+        report_scheduling = asyncio.create_task(
+            _system_assurance_schedule_loop(settings.system_assurance_schedule_interval_seconds, schedule_stop)
+        )
 
     logger.info("Application startup complete")
     
@@ -247,6 +268,9 @@ async def lifespan(app: FastAPI):
         discovery.cancel()
     if task_reminders:
         task_reminders.cancel()
+    if report_scheduling:
+        schedule_stop.set()
+        await report_scheduling
     
     # Close database connections
     try:

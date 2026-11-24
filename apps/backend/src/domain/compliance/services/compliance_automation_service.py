@@ -298,41 +298,35 @@ class ComplianceAutomationService:
 
     async def get_automation_status(self, db: Session, org_id: str) -> Dict[str, Any]:
         """Get current status of compliance automation for one organisation"""
-        try:
-            active_schedules = db.query(ComplianceSchedule).filter(
+        active_schedules = db.query(ComplianceSchedule).filter(
+            ComplianceSchedule.org_id == org_id,
+            ComplianceSchedule.is_active == True
+        ).count()
+
+        pending_violations = db.query(ComplianceViolation).filter(
+            ComplianceViolation.org_id == org_id,
+            ComplianceViolation.resolved == False
+        ).all()
+
+        critical_violations = len([
+            v for v in pending_violations if v.severity == "critical"
+        ])
+
+        return {
+            "scheduler_running": self._scheduler_started,
+            "active_schedules": active_schedules,
+            "pending_jobs": len(self.scheduler.get_jobs()) if self._scheduler_started else 0,
+            "total_violations": len(pending_violations),
+            "critical_violations": critical_violations,
+            "reports_generated_today": db.query(ComplianceSchedule).filter(
                 ComplianceSchedule.org_id == org_id,
-                ComplianceSchedule.is_active == True
-            ).count()
+                ComplianceSchedule.last_run >= datetime.utcnow().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+            ).count(),
+            "last_scheduler_check": datetime.utcnow().isoformat(),
+        }
 
-            pending_violations = db.query(ComplianceViolation).filter(
-                ComplianceViolation.org_id == org_id,
-                ComplianceViolation.resolved == False
-            ).all()
-
-            critical_violations = len([
-                v for v in pending_violations if v.severity == "critical"
-            ])
-
-            return {
-                "scheduler_running": self._scheduler_started,
-                "active_schedules": active_schedules,
-                "pending_jobs": len(self.scheduler.get_jobs()) if self._scheduler_started else 0,
-                "total_violations": len(pending_violations),
-                "critical_violations": critical_violations,
-                "reports_generated_today": db.query(ComplianceSchedule).filter(
-                    ComplianceSchedule.org_id == org_id,
-                    ComplianceSchedule.last_run >= datetime.utcnow().replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                ).count(),
-                "last_scheduler_check": datetime.utcnow().isoformat(),
-            }
-        except Exception as e:
-            logger.error(f"Error getting automation status: {e}", exc_info=True)
-            return {
-                "error": str(e),
-                "scheduler_running": self._scheduler_started,
-            }
 
 # Global instance (scheduler lifecycle is managed by FastAPI lifespan hooks)
 compliance_automation_service = ComplianceAutomationService()
