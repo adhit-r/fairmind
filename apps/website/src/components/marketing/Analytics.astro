@@ -1,5 +1,11 @@
+---
+// Olai is the website's consent manager. Without these values nothing loads and analytics stays off.
+const olaiApi = import.meta.env.PUBLIC_OLAI_API?.trim().replace(/\/+$/, '');
+const olaiCollectionPoint = import.meta.env.PUBLIC_OLAI_COLLECTION_POINT?.trim();
+const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
+---
 <!--
-  Shared consent contract for website settings and external consent managers.
+  Consent contract between Olai (or any consent manager) and PostHog.
 
   Preferred integration:
     window.fairmindConsent.setConsent({
@@ -13,7 +19,19 @@
       detail: { analytics: true, source: 'your-cmp', policyVersion: '2026-08-01' },
     }))
 
+  This component renders no banner. Olai's embed shows the notice and the preferences dialog.
 -->
+
+{olaiApi && olaiCollectionPoint && (
+  <script
+    is:inline
+    defer
+    src={`${olaiApi}/olai/admin/v1/widget.js`}
+    data-olai-collection-point={olaiCollectionPoint}
+    data-olai-api={olaiApi}
+    data-olai-tenant={olaiTenant}
+  ></script>
+)}
 
 <script is:inline>
   (() => {
@@ -54,8 +72,8 @@
   let posthogInstance: typeof import('posthog-js/dist/module.full.no-external').default | null = null;
   let initialization: Promise<boolean> | null = null;
   let active = false;
-  let pageviewSent = false;
   let consentAllowed = false;
+  let pageviewSent = false;
   let cleanupInstrumentation: (() => void) | null = null;
   let storageCleanupGeneration = 0;
 
@@ -599,6 +617,26 @@
   window.addEventListener('fairmind:cmp-consent', ((event: CustomEvent) => {
     void applyConsent(event.detail || {});
   }) as EventListener);
+
+  // Olai bridge: its decision for the analytics purpose drives the contract above.
+  const olaiPurpose = import.meta.env.PUBLIC_OLAI_ANALYTICS_PURPOSE?.trim();
+  if (olaiPurpose) {
+    type OlaiInstance = { isPurposeGranted?: (key: string) => boolean };
+    type OlaiDetail = { consentJson?: Record<string, string>; profileId?: string };
+    // policyVersion carries Olai's notice profile, so PostHog records which notice was answered.
+    const fromOlai = (granted: boolean, detail: OlaiDetail = {}) =>
+      void applyConsent({ analytics: granted, source: 'olai', policyVersion: detail.profileId });
+    // A stored decision is read once the embed has decided whether to show its banner.
+    window.addEventListener('olai:bannerInitialized', ((event: CustomEvent<OlaiDetail>) => {
+      const olai = (window as Window & { Olai?: { instance?: OlaiInstance } }).Olai?.instance;
+      fromOlai(olai?.isPurposeGranted?.(olaiPurpose) === true, event.detail);
+    }) as EventListener);
+    // Every new decision, including withdrawal and decisions made in another tab.
+    window.addEventListener('olai:consentSubmitted', ((event: CustomEvent<OlaiDetail>) => {
+      fromOlai(event.detail?.consentJson?.[olaiPurpose] === 'granted', event.detail);
+    }) as EventListener);
+    window.addEventListener('olai:forgotten', () => fromOlai(false));
+  }
 
   const queuedConsent = (window as Window & { __fairmindConsentState?: { analytics?: boolean; source?: string; policyVersion?: string } })
     .__fairmindConsentState;

@@ -9,16 +9,18 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
   readingTime="5 minutes"
 >
   <Fragment slot="exact">
-    <h2>1. Your analytics choice</h2>
+    <h2>1. The consent manager owns the choice</h2>
     <p>
-      Use Analytics settings in the footer to allow or decline measurement. The website stores your
-      choice in a first-party preference cookie for up to 180 days. Where an external consent
-      manager is configured, its controls and preference storage apply instead.
+      FairMind does not render or store a separate cookie-banner preference. Olai, FairMind's consent
+      manager, presents the choice, records it in its consent ledger, and passes the current analytics
+      decision to this website. Reopen the choice at any time from Privacy choices in the footer. The website keeps that decision in memory only
+      long enough to apply it to the analytics SDK.
     </p>
 
     <h2>2. Analytics is off before opt-in</h2>
     <p>
-      PostHog analytics does not initialize until you explicitly allow analytics. The integration also requires a FairMind-specific PostHog project token
+      PostHog analytics does not initialize unless Olai explicitly passes
+      an analytics opt-in. The integration also requires a FairMind-specific PostHog project token
       and regional ingestion host. Missing configuration, a denied choice, Global Privacy Control,
       or supported Do Not Track signals keep analytics inactive.
     </p>
@@ -53,9 +55,10 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
       FairMind does not store a visitor trail while waiting for consent.</p>
     <h2>5. Withdrawal</h2>
     <p>
-      When the consent manager passes a denial or withdrawal, FairMind removes its analytics event
+      When Olai passes a denial or withdrawal, FairMind removes its analytics event
       listeners, stops session recording, opts the PostHog SDK out of capture, and resets the active
-      anonymous analytics state. You can change your choice in Analytics settings or through the configured consent manager.
+      anonymous analytics state. Olai remains responsible for presenting
+      and retaining the preference record.
     </p>
 
     <h2>6. Consent-manager integration contract</h2>
@@ -71,8 +74,9 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
   <Fragment slot="plain">
     <h2>The short version</h2>
     <p>
-      Choose Allow analytics or Decline. Your browser remembers the choice. Use the footer settings
-      or the configured consent manager to change it.
+      The website has no FairMind-made cookie banner. Olai, FairMind's consent manager, asks and
+      remembers the choice; reopen it from Privacy choices in the footer. FairMind only receives “analytics yes” or “analytics no,” plus the consent source and
+      policy version.
     </p>
     <h2>Before yes</h2>
     <p>No PostHog analytics, replay, analytics cookie, or analytics local-storage record is created.</p>
@@ -91,7 +95,7 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
     <table>
       <thead><tr><th>State</th><th>Website action</th><th>Browser storage</th><th>Network effect</th></tr></thead>
       <tbody>
-        <tr><td>No decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
+        <tr><td>No Olai decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
         <tr><td>Analytics denied</td><td>Keep capture off</td><td>No new analytics storage</td><td>No analytics events or replay</td></tr>
         <tr><td>Analytics allowed</td><td>Initialize and opt in PostHog</td><td>Anonymous SDK and session state may be stored</td><td>Privacy-filtered analytics may be sent</td></tr>
         <tr><td>Consent withdrawn</td><td>Stop, opt out, reset</td><td>Active analytics state is reset</td><td>Future analytics stops</td></tr>
