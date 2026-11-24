@@ -38,7 +38,6 @@ PINS=(
   'app/(dashboard)/model-inventory/components/LifecycleStepper.tsx:1'
   'app/(dashboard)/model-inventory/components/SystemDetailDrawer.tsx:2'
   'app/(dashboard)/remediation/page.tsx:7'
-  'app/(dashboard)/status/page.tsx:1'
   'app/globals.css:1'
   'components/ErrorBoundary.tsx:1'
   'components/OrangeLogo.tsx:1'

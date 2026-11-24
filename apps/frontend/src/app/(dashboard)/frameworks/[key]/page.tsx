@@ -73,41 +73,32 @@ function ClauseView() {
   const name = j?.name ?? f?.framework.name ?? key
   const short = shortFrameworkName(name)
 
-  const groups = useMemo(
-    () =>
-      (j?.groups ?? []).map((g) => {
-        const reqs = g.requirements.map((r) => ({ ...r, state: stateFor(cells.get(r.key), r.status, system) }))
-        return {
-          name: g.name,
-          reqs,
-          proven: reqs.filter((r) => r.state === 'proven').length,
-          work: reqs.filter((r) => NEEDS_WORK.includes(r.state)).length,
-        }
-      }),
-    [j, cells, system],
-  )
+  const groups = (j?.groups ?? []).map((g) => {
+    const reqs = g.requirements.map((r) => ({ ...r, state: stateFor(cells.get(r.key), r.status, system) }))
+    return {
+      name: g.name,
+      reqs,
+      proven: reqs.filter((r) => r.state === 'proven').length,
+      work: reqs.filter((r) => NEEDS_WORK.includes(r.state)).length,
+    }
+  })
   const group = groups.find((g) => g.name === groupPick) ?? groups.find((g) => g.work > 0) ?? groups[0]
 
-  const queue = useMemo(
-    () =>
-      systems
-        .map((s, i) => ({
-          system: s,
-          items: groups
-            .flatMap((g) => g.reqs)
-            .map((r) => {
-              const c = cells.get(r.key)?.[i]
-              return c && NEEDS_WORK.includes(c.state) ? { r, state: c.state as ReqState, why: reason(c.state, c.checks) } : null
-            })
-            .filter((x): x is NonNullable<typeof x> => !!x)
-            .sort((a, b) => WEAKEST_FIRST.indexOf(a.state) - WEAKEST_FIRST.indexOf(b.state)),
-        }))
-        .filter((q) => q.items.length > 0),
-    [systems, groups, cells],
-  )
+  const allReqs = groups.flatMap((g) => g.reqs)
+  const queue = systems
+    .map((s, i) => ({
+      system: s,
+      items: allReqs
+        .map((r) => {
+          const c = cells.get(r.key)?.[i]
+          return c && NEEDS_WORK.includes(c.state) ? { r, state: c.state as ReqState, why: reason(c.state, c.checks) } : null
+        })
+        .filter((x): x is NonNullable<typeof x> => !!x)
+        .sort((a, b) => WEAKEST_FIRST.indexOf(a.state) - WEAKEST_FIRST.indexOf(b.state)),
+    }))
+    .filter((q) => q.items.length > 0)
   const queued = queue.reduce((a, q) => a + q.items.length, 0)
 
-  const allReqs = groups.flatMap((g) => g.reqs)
   const readiness = readinessCounts(allReqs.reduce<Partial<Record<ReqState, number>>>((m, r) => ({ ...m, [r.state]: (m[r.state] ?? 0) + 1 }), {}))
   const attention = allReqs.filter((r) => READINESS_OF[r.state] === 'attention')
 
