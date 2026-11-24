@@ -34,6 +34,8 @@ const nav = [
   { label: 'Frameworks', href: '/frameworks/' },
   { label: 'Use cases', href: '/use-cases/' },
   { label: 'Research', href: '/research/' },
+  { label: 'Roadmap', href: '/roadmap/' },
+  { label: 'Changelog', href: '/changelog/' },
 ];
 const isCurrent = (href: string) => path.startsWith(href);
 
@@ -156,6 +158,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'https://app.fairmind.xyz';
       });
 
       const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reveals = document.querySelectorAll('.reveal');
       const io = new IntersectionObserver(
         (entries) =>
           entries.forEach((entry) => {
@@ -165,7 +168,12 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'https://app.fairmind.xyz';
           }),
         { threshold: 0.15 },
       );
-      document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+      if (!reduceMotion) {
+        reveals.forEach((el) => {
+          if (el.getBoundingClientRect().top >= innerHeight) el.classList.add('pending');
+          io.observe(el);
+        });
+      }
 
       if (!reduceMotion && matchMedia('(pointer: fine)').matches) {
         document.querySelectorAll<HTMLElement>('[data-magnet]').forEach((el) => {

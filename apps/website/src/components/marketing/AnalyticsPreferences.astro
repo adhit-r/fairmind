@@ -1,0 +1,75 @@
+---
+const enabled = import.meta.env.PUBLIC_POSTHOG_KEY?.trim() &&
+  import.meta.env.PUBLIC_POSTHOG_HOST?.trim() &&
+  import.meta.env.PUBLIC_CONSENT_MODE !== 'external';
+---
+{enabled && (
+  <div data-analytics-preferences hidden>
+    <button class="button button-compact" type="button" data-edit>Analytics settings</button>
+    <section aria-label="Analytics preferences" data-panel hidden>
+      <strong>Allow website analytics?</strong>
+      <p>Allow PostHog to measure visits and referral sources, and record how you use the site. Form inputs are masked in recordings. You can change your choice in the footer. <a href="/cookies/">Cookie policy</a></p>
+      <div class="actions">
+        <button class="button button-compact" type="button" data-choice="deny">Decline</button>
+        <button class="button button-compact" type="button" data-choice="allow">Allow analytics</button>
+      </div>
+    </section>
+  </div>
+)}
+<script>
+  const root = document.querySelector<HTMLElement>('[data-analytics-preferences]');
+  if (root && !(navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl && !['1', 'yes'].includes(navigator.doNotTrack || '')) {
+    const key = 'fairmind_analytics_choice_v1';
+    const panel = root.querySelector<HTMLElement>('[data-panel]')!;
+    const edit = root.querySelector<HTMLButtonElement>('[data-edit]')!;
+    const apply = (choice: string) => window.fairmindConsent.setConsent({
+      analytics: choice === 'allow', source: 'fairmind-website', policyVersion: '2026-11-25',
+    });
+    const read = () => document.cookie.split('; ').find(part => part.startsWith(key + '='))?.slice(key.length + 1);
+    let lastChoice: string | undefined;
+    const sync = () => {
+      const saved = read();
+      panel.hidden = saved === 'allow' || saved === 'deny';
+      if (saved !== lastChoice) apply(saved || 'deny');
+      lastChoice = saved;
+    };
+    root.hidden = false;
+    sync();
+    window.addEventListener('pageshow', sync);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) sync();
+    });
+    edit.addEventListener('click', () => {
+      panel.hidden = false;
+      panel.querySelector('button')?.focus();
+    });
+    root.querySelectorAll<HTMLButtonElement>('[data-choice]').forEach(button => {
+      button.addEventListener('click', () => {
+        const choice = button.dataset.choice!;
+        document.cookie = key + '=' + choice + '; Path=/; Max-Age=15552000; SameSite=Lax' +
+          (location.protocol === 'https:' ? '; Secure' : '');
+        lastChoice = choice;
+        apply(choice);
+        panel.hidden = true;
+        edit.focus({ preventScroll: true });
+      });
+    });
+  }
+</script>
+<style>
+  [data-panel] {
+    position: fixed;
+    inset: auto 1rem 1rem auto;
+    z-index: 100;
+    width: min(25rem, calc(100vw - 2rem));
+    max-height: 80vh;
+    overflow: auto;
+    padding: 1rem;
+    color: var(--ink);
+    background: white;
+    border: 2px solid currentColor;
+    box-shadow: 4px 4px 0 currentColor;
+  }
+  [data-panel] p { margin: .5rem 0 1rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+</style>

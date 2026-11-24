@@ -5,7 +5,7 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
 <LegalDocument
   title="Data Retention Policy"
   description="Maximum retention by website data category, with deletion, backup, and exception rules stated plainly."
-  updated="1 August 2026"
+  updated="25 November 2026"
   readingTime="7 minutes"
 >
   <Fragment slot="exact">
@@ -31,10 +31,9 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
 
     <h2>3. Consent-manager records</h2>
     <p>
-      The external consent manager owns the durable preference record and its configured retention.
-      FairMind's website bridge receives only the current analytics decision, source, and policy
-      version in memory. When the manager is selected and configured, its published retention must
-      not exceed the period reasonably required to demonstrate consent and withdrawal.
+      The built-in analytics settings store your choice in the fairmind_analytics_choice_v1 cookie
+      for up to 180 days from your last choice. Where an external consent manager handles
+      preferences, its published retention applies.
     </p>
 
     <h2>4. Deletion and withdrawal</h2>

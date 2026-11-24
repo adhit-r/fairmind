@@ -572,13 +572,13 @@ code,
   color: var(--ink3);
 }
 
-.reveal {
+.reveal.pending {
   opacity: 0;
   transform: translateY(24px);
   transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out);
 }
 
-.reveal.in {
+.reveal.pending.in {
   opacity: 1;
   transform: none;
 }

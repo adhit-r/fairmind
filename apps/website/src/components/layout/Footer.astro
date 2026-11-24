@@ -1,5 +1,6 @@
 ---
 import { registryTotals } from '../../lib/registry';
+import AnalyticsPreferences from '../marketing/AnalyticsPreferences.astro';
 import { frameworks } from '../../lib/frameworks';
 
 const currentYear = new Date().getFullYear();
@@ -69,6 +70,7 @@ const columns = [
         </nav>
       ))}
     </div>
+    <AnalyticsPreferences />
     <div class="site-footer-legal">
       <p>© {currentYear} Axonome. All rights reserved.</p>
       <p>FairMind supports governance decisions. It does not certify AI systems.</p>

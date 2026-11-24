@@ -5,22 +5,20 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
 <LegalDocument
   title="Cookie Policy"
   description="How FairMind uses cookies and consent controls, what PostHog may store, and how withdrawal reaches the SDK."
-  updated="1 August 2026"
+  updated="25 November 2026"
   readingTime="5 minutes"
 >
   <Fragment slot="exact">
-    <h2>1. The consent manager owns the choice</h2>
+    <h2>1. Your analytics choice</h2>
     <p>
-      FairMind does not render or store a separate cookie-banner preference. An external consent
-      management platform presents the choice, records it under its own controls, and passes the
-      current analytics decision to this website. The website keeps that decision in memory only
-      long enough to apply it to the analytics SDK.
+      Use Analytics settings in the footer to allow or decline measurement. The website stores your
+      choice in a first-party preference cookie for up to 180 days. Where an external consent
+      manager is configured, its controls and preference storage apply instead.
     </p>
 
     <h2>2. Analytics is off before opt-in</h2>
     <p>
-      PostHog analytics does not initialize unless the external consent manager explicitly passes
-      an analytics opt-in. The integration also requires a FairMind-specific PostHog project token
+      PostHog analytics does not initialize until you explicitly allow analytics. The integration also requires a FairMind-specific PostHog project token
       and regional ingestion host. Missing configuration, a denied choice, Global Privacy Control,
       or supported Do Not Track signals keep analytics inactive.
     </p>
@@ -53,8 +51,7 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
     <p>
       When the consent manager passes a denial or withdrawal, FairMind removes its analytics event
       listeners, stops session recording, opts the PostHog SDK out of capture, and resets the active
-      anonymous analytics state. The external consent manager remains responsible for presenting
-      and retaining the preference record.
+      anonymous analytics state. You can change your choice in Analytics settings or through the configured consent manager.
     </p>
 
     <h2>6. Consent-manager integration contract</h2>
@@ -70,9 +67,8 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
   <Fragment slot="plain">
     <h2>The short version</h2>
     <p>
-      The website has no FairMind-made cookie banner. Your consent manager makes and remembers the
-      choice. FairMind only receives “analytics yes” or “analytics no,” plus the consent source and
-      policy version.
+      Choose Allow analytics or Decline. Your browser remembers the choice. Use the footer settings
+      or the configured consent manager to change it.
     </p>
     <h2>Before yes</h2>
     <p>No PostHog analytics, replay, analytics cookie, or analytics local-storage record is created.</p>
@@ -91,7 +87,7 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
     <table>
       <thead><tr><th>State</th><th>Website action</th><th>Browser storage</th><th>Network effect</th></tr></thead>
       <tbody>
-        <tr><td>No CMP decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
+        <tr><td>No decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
         <tr><td>Analytics denied</td><td>Keep capture off</td><td>No new analytics storage</td><td>No analytics events or replay</td></tr>
         <tr><td>Analytics allowed</td><td>Initialize and opt in PostHog</td><td>Anonymous SDK and session state may be stored</td><td>Privacy-filtered analytics may be sent</td></tr>
         <tr><td>Consent withdrawn</td><td>Stop, opt out, reset</td><td>Active analytics state is reset</td><td>Future analytics stops</td></tr>
