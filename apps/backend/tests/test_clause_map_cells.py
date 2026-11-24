@@ -156,6 +156,8 @@ def test_a_failing_check_is_not_counted_proven():
     gate = release_gate("medium", [_evaluation("EV-FAI-05", "failed"), _record("fairness_test", 0.3, "manual", ts="2026-11-06T12:00:00+00:00")], now=NOW)
     assert (gate["attested"], gate["failing"]) == (0, 1)
     assert gate["proven"] + gate["attested"] + gate["failing"] + gate["open"] == len(gate["checks"])
+    sources = [ch for f in clause_map(gate)["frameworks"] for c in f["clauses"] for ch in c["checks"] if ch.get("fails")]
+    assert sources and all(ch["failureEvidenceIds"] == ["EV-FAI-05-failed"] for ch in sources)
 
 
 def test_a_failing_test_outweighs_an_attestation_of_the_same_control():
@@ -263,3 +265,21 @@ def test_an_accepted_mapping_is_only_as_strong_as_its_evaluation_path_and_a_fail
     assert row["cell"] == "fails" and row["state"] != "excluded" and row["applicability"] == "not_applicable"
     # free text cannot run as a spreadsheet formula in the Statement of Applicability
     assert "'" + note.replace('"', '""') in statement_of_applicability(fw)
+
+
+def test_statement_of_applicability_cites_the_records_behind_each_check():
+    import csv
+    import io
+
+    from src.application.services.clause_map_service import SOA_HEADER, statement_of_applicability
+
+    clause = {"key": "ISO42001|A.10.2", "control": "A.10.2", "title": "Example", "state": "open"}
+    checks = [
+        {"fails": True, "evidenceId": "newer-pass", "failureEvidenceIds": ["failure-b", "failure-a", "failure-a"]},
+        {"evidenceId": "ordinary"},
+        {"cell": "fails", "evidenceId": "unrelated-latest"},
+    ]
+    framework = {"clauses": [{**clause, "checks": checks}, {**clause, "checks": [checks[-1]]}]}
+    rows = csv.DictReader(io.StringIO(statement_of_applicability(framework)))
+    assert tuple(rows.fieldnames) == SOA_HEADER
+    assert [row["evidence_ids"] for row in rows] == ["failure-a failure-b ordinary", ""]

@@ -8,13 +8,14 @@ with the same organization scoping as GET /api/v1/ai-governance/reports/{id}.
 
 import hashlib
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
+from src.application.services.system_assurance_report import REPORT_TYPE as SYSTEM_ASSURANCE_REPORT, report_revision
 from ..services.report_generator import generate_snapshot_csv, generate_snapshot_docx, generate_snapshot_pdf
 from .ai_governance import _require_report_access, _serialize_audit_report_row
 
@@ -45,11 +46,23 @@ def _export(report_id: str, fmt: str, current_user: TokenData, db: Session) -> R
     content_hash = getattr(row, "sha256", None) or hashlib.sha256((row.data_json or "").encode()).hexdigest()
     report = {**_serialize_audit_report_row(row), "narrative": getattr(row, "narrative", None),
               "approvedBy": getattr(row, "approved_by", None), "approvedAt": getattr(row, "approved_at", None)}
+    headers = {"Content-Disposition": f"attachment; filename=audit_report_{row.id}.{fmt}"}
+    if row.report_type == SYSTEM_ASSURANCE_REPORT:
+        if not row.approved_at:
+            raise HTTPException(status_code=409, detail="Approve this report before exporting it")
+        if not row.sha256 or report_revision(report["title"], report["config"], report["data"], report["narrative"]) != row.sha256:
+            raise HTTPException(status_code=409, detail="The saved report failed its integrity check")
+        if fmt == "csv":
+            raise HTTPException(status_code=422, detail="System Assurance Reports support PDF, DOCX and JSON")
+    elif fmt == "json":
+        raise HTTPException(status_code=422, detail="JSON is available for System Assurance Reports")
+    if fmt == "json":
+        return JSONResponse(report, headers=headers)
     media_type, render = _FORMATS[fmt]
     return Response(
         render(report, content_hash),
         media_type=media_type,
-        headers={"Content-Disposition": f"attachment; filename=audit_report_{row.id}.{fmt}"},
+        headers=headers,
     )
 
 
@@ -69,6 +82,15 @@ def export_snapshot_docx(
     db: Session = Depends(get_db),
 ):
     return _export(report_id, "docx", current_user, db)
+
+
+@router.get("/snapshots/{report_id}/json")
+def export_snapshot_json(
+    report_id: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return _export(report_id, "json", current_user, db)
 
 
 @router.get("/snapshots/{report_id}/csv")

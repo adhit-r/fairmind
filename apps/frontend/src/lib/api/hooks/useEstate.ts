@@ -22,6 +22,7 @@ export interface FrameworkCellCheck {
   relation: string
   confidence: number
   evidenceId: string | null
+  failureEvidenceIds?: string[]
   evidenceClass: GateCheck['evidenceClass']
   /** This check's own cell, as the server derived it; "not in gate" for a check the organisation left out of its gate. */
   cell?: CellState | 'not in gate'

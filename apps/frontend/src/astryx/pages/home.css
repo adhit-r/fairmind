@@ -1,6 +1,116 @@
-.fm-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.fm-stages a { display: grid; gap: 2px; padding: 12px 14px; border-radius: var(--radius-element); background: var(--color-background-muted); color: var(--color-text-primary); text-decoration: none; }
-.fm-stages a:hover { background: var(--color-overlay-hover); }
-.fm-stages b { font-family: var(--font-family-code, ui-monospace, monospace); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.fm-stages span { font-size: 13px; color: var(--color-text-secondary); }
-@media (max-width: 700px) { .fm-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fm-home-page {
+  min-height: 100dvh;
+  padding: 22px clamp(16px, 2vw, 32px) 48px 16px;
+  background: var(--fm-bg);
+  color: var(--fm-ink);
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.fm-home-page > * { max-width: 1440px; margin-inline: auto; }
+.fm-home-page > * + * { margin-top: 22px; }
+.fm-home-page :is(h1, h2, h3, p, ul) { margin-block: 0; }
+.fm-home-page :is(h1, h2, h3) { font-family: var(--font-inter), Arial, sans-serif; }
+.fm-home-workspace {
+  display: grid;
+  grid-template-columns: minmax(290px, .92fr) minmax(0, 1.48fr);
+  align-items: stretch;
+  padding: 0;
+  border: 1px solid var(--fm-line);
+  border-radius: 16px;
+  background: var(--color-background-card);
+  box-shadow: var(--fm-shadow);
+}
+.fm-home-workspace > .fm-home-matrix { border-radius: 0 16px 16px 0; }
+.fm-home-focus {
+  min-width: 0;
+  padding: clamp(24px, 2.5vw, 40px);
+  border-inline-end: 1px solid var(--fm-line);
+  overflow-wrap: anywhere;
+}
+.fm-home-scope {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 9px;
+  color: var(--fm-ink2);
+  font-size: 13px;
+  font-weight: 500;
+}
+.fm-home-scope span { color: var(--fm-ink3); }
+.fm-home-focus .fm-home-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-error);
+}
+.fm-home-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.fm-home-focus h1 {
+  margin: 11px 0 8px;
+  font-size: clamp(1.9rem, 2.55vw, 2.6rem);
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+.fm-home-byline, .fm-home-utilities { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 14px; }
+.fm-home-byline { color: var(--fm-ink2); font-size: 13px; }
+.fm-home-byline > span { text-transform: capitalize; }
+.fm-home-byline a, .fm-home-secondary, .fm-home-utilities a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  color: var(--fm-ink);
+  font-weight: 550;
+  text-decoration: none;
+}
+.fm-home-byline a { text-decoration: underline; text-decoration-color: var(--fm-line); text-underline-offset: 4px; }
+.fm-home-page a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.fm-home-page :is(a, summary, button):focus-visible { outline: 2px solid var(--fm-ink); outline-offset: 2px; }
+.fm-home-note { color: var(--fm-ink2); font-size: 13px; line-height: 1.5; }
+.fm-home-track { display: block; position: relative; height: 5px; border-radius: 5px; background: var(--fm-line); }
+.fm-home-track i { display: block; height: 100%; border-radius: inherit; background: var(--fm-ink); }
+.fm-home-focus .fm-home-note { margin-top: 14px; }
+.fm-home-intro { font-size: 15px; line-height: 1.55; color: var(--fm-ink2); }
+.fm-home-secondary { margin-top: 14px; font-size: 14px; }
+.fm-home-other-failures { margin-top: 20px; border-top: 1px solid var(--fm-line); padding-top: 15px; }
+.fm-home-other-failures h2 { font-size: 14px; font-weight: 600; }
+.fm-home-other-failures ul { list-style: none; padding: 0; }
+.fm-home-other-failures :is(a, summary) { display: flex; min-height: 44px; align-items: center; gap: 6px; color: var(--fm-ink2); font-size: 13px; cursor: pointer; }
+.fm-home-other-failures a { justify-content: space-between; text-decoration: none; }
+.fm-home-other-failures strong { color: var(--fm-ink); font-weight: 550; }
+.fm-home-other-failures summary::-webkit-details-marker { display: none; }
+.fm-home-analysis { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; }
+.fm-home-analysis > :only-child { grid-column: 1 / -1; }
+.fm-home-analysis > * { min-width: 0; }
+.fm-home-overview > header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0 16px; margin: 0 0 8px; }
+.fm-home-overview h2 { font-size: 17px; font-weight: 600; letter-spacing: -.025em; }
+.fm-home-utilities a { color: var(--fm-ink2); font-size: 13px; }
+.fm-home-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fm-home-metric { min-width: 0; padding: 18px; border: 1px solid var(--fm-line); border-radius: 14px; }
+.fm-home-metric h3 { color: var(--fm-ink2); font-size: 13px; font-weight: 550; line-height: 1.35; }
+.fm-home-metric .fm-home-number { margin: 11px 0 6px; font-size: clamp(1.7rem, 2.2vw, 2.1rem); line-height: 1.08; font-weight: 550; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.fm-home-number small { font-size: 14px; letter-spacing: -.01em; color: var(--fm-ink2); font-weight: 400; }
+.fm-home-metric > p:not(.fm-home-number) { font-size: 12px; line-height: 1.45; color: var(--fm-ink2); }
+.fm-home-track { margin: 10px 0 8px; }
+.fm-home-track i { background: var(--fm-brand); }
+@media (max-width: 1020px) {
+  .fm-home-workspace { grid-template-columns: minmax(0, 1fr); }
+  .fm-home-analysis { grid-template-columns: minmax(0, 1fr); }
+  .fm-home-focus { border-inline-end: 0; border-block-end: 1px solid var(--fm-line); }
+  .fm-home-workspace > .fm-home-matrix { border-radius: 0 0 16px 16px; }
+  .fm-home-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .fm-home-page { padding: 12px 14px 32px; }
+  .fm-home-page > * + * { margin-top: 16px; }
+  .fm-home-analysis { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .fm-home-focus { padding: 19px 18px; }
+  .fm-home-focus .fm-home-status { margin-top: 12px; }
+  .fm-home-focus h1 { margin: 8px 0 0; font-size: 29px; }
+  .fm-home-metrics { gap: 8px; }
+  .fm-home-metric { padding: 14px; }
+  .fm-home-utilities { gap: 0 10px; }
+}

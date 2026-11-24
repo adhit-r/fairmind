@@ -619,6 +619,59 @@ def _system(engine, org_id, name="Credit model"):
     return system_id
 
 
+def test_system_journey_returns_only_its_own_workflow_run(tmp_database):
+    org_id, client = _installed_org(tmp_database)
+    first = _system(tmp_database, org_id)
+    second = _system(tmp_database, org_id)
+    first_run = _start(client, system_id=first)
+    key = sorted(pack_catalogue._C.covers[WORKFLOW])[0]
+    url = f"{PACKS}/journeys/{pack_catalogue.REQUIREMENTS[key].framework}"
+
+    def latest(system=None):
+        response = client.get(url, params={"system": system} if system else {})
+        assert response.status_code == 200, response.text
+        return next(w["latestRun"] for g in response.json()["groups"] for r in g["requirements"]
+                    if r["key"] == key for w in r["workflows"] if w["id"] == WORKFLOW)
+
+    assert latest(second) is None
+    second_run = _start(client, system_id=second)
+    org_run = _start(client)
+    assert latest(first)["id"] == first_run["id"]
+    assert latest(second)["id"] == second_run["id"]
+    assert latest()["id"] == org_run["id"]
+    other = _system(tmp_database, _new_org(tmp_database))
+    for system in [other, "unknown", ""]:
+        assert client.get(url, params={"system": system}).status_code == 404
+
+
+
+def test_pack_and_workflow_read_latest_run_for_the_requested_system(tmp_database):
+    org_id, client = _installed_org(tmp_database)
+    first = _system(tmp_database, org_id)
+    second = _system(tmp_database, org_id)
+    first_run = _start(client, system_id=first)
+
+    def latest(system=None):
+        params = {"system": system} if system else {}
+        library = client.get(f"{PACKS}/library/{FOUNDATION}", params=params)
+        workflow = client.get(f"{PACKS}/workflows/{WORKFLOW}", params=params)
+        assert library.status_code == workflow.status_code == 200
+        ref = next(w for p in library.json()["patterns"] for w in p["workflows"] if w["id"] == WORKFLOW)
+        assert ref["latestRun"] == workflow.json()["latestRun"]
+        return ref["latestRun"]
+
+    assert latest(second) is None
+    second_run = _start(client, system_id=second)
+    org_run = _start(client)
+    assert latest(first)["id"] == first_run["id"]
+    assert latest(second)["id"] == second_run["id"]
+    assert latest()["id"] == org_run["id"]
+    foreign = _system(tmp_database, _new_org(tmp_database))
+    for path in [f"library/{FOUNDATION}", f"workflows/{WORKFLOW}", "journeys"]:
+        for bad_id in [foreign, "unknown", ""]:
+            assert client.get(f"{PACKS}/{path}", params={"system": bad_id}).status_code == 404
+
+
 def _store(engine, org_id, system_id, evidence_type, content, at):
     from database.governance_models import GovernanceEvidence
 

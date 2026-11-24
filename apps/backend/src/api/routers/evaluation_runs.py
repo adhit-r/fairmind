@@ -44,18 +44,18 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import bindparam, insert, text
+from sqlalchemy import insert, select, text
 from sqlalchemy.orm import Session
 
-from api.routes.ai_governance import CLOSED_RISK_STATUSES, RISK_ACCEPTANCE_PENDING, _ensure_tables, _risk_score, _utc_now_iso, _without_pending
+from api.routes.ai_governance import CLOSED_RISK_STATUSES, _ensure_tables, _load_json_value, _risk_score, _utc_now_iso
 from api.routes import llm, platform_connections
 from api.routes.agent_traces import (LIVE_RUNS, TRACE_ENGINES, TRACE_READERS, TRACE_UPLOADS, Insufficient, has_runs_this_week,
                                      read_live_runs, save_explanations)
-from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _stored_connection
+from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _member, _require_org_system, _stored_connection
 from api.routes.pack_catalogue import EVALUATIONS, VERSION as CATALOGUE_VERSION
 from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
-from database.governance_models import GovernanceEvidenceRun
+from database.governance_models import GovernanceAISystem, GovernanceEvidenceRun, GovernanceRisk
 from src.application.services.eval_engines import ALTERNATES, ENGINE_VERSION, REGISTRY, EngineError, Judge
 from src.application.services.eval_engines.common import matches_schema, result
 from src.application.services.eval_engines.behaviour import GEN_SYSTEM, CallError, Live
@@ -240,7 +240,7 @@ def fit_and_ways(evaluation_id: str, setup: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/evaluations/{evaluation_id}/engine")
-def get_engine(evaluation_id: str, system: Optional[str] = Query(default=None), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_engine(evaluation_id: str, system: Optional[str] = Query(default=None, min_length=1), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     alternate = ALTERNATES.get(evaluation_id)
     own = TRACE_ENGINES.get(evaluation_id)  # an engine of its own for live runs, whose settings differ from the upload's
     out = {**_engine(evaluation_id).spec(), "alternate": alternate.spec() if alternate else None, "liveRuns": evaluation_id in TRACE_READERS,
@@ -344,7 +344,6 @@ async def create_run(
 
 
 def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluation_id: str, outcome: Dict[str, Any]) -> str:
-    now = _utc_now_iso()
     evidence_id = str(uuid.uuid4())
     provenance = outcome.get("provenance") or {}
     content = json.dumps({"evaluationId": evaluation_id, **outcome}, default=str)
@@ -352,8 +351,11 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
     # It is no Evidence Passport, so it has no passport revision; only a passed result can support a control.
     run_pk = str(uuid.uuid4())
     workspace_id = db.execute(
-        text("SELECT workspace_id FROM governance_ai_systems WHERE id = :id AND org_id = :org"), {"id": system_id, "org": org_id}
+        select(GovernanceAISystem.workspace_id)
+        .where(GovernanceAISystem.id == system_id, GovernanceAISystem.org_id == org_id)
+        .with_for_update()  # serialize finding creation and retests for simultaneous runs of this system
     ).scalar_one()
+    now = _utc_now_iso()
     db.execute(
         insert(GovernanceEvidenceRun.__table__).values(
             id=run_pk, org_id=org_id, system_id=system_id, workspace_id=workspace_id, passport_id=evidence_id,
@@ -396,14 +398,34 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
     if proves:  # proposes the ISO 42001 clauses this evaluation tests directly, for a reviewer to accept
         GovernanceAssuranceService(db).map_catalogue_run(org_id, system_id, run_pk, evidence_id, evaluation_id)
     # A failed run opens one finding for this evaluation on this system; a passing run resolves it.
-    finding = {"sys": system_id, "source": "fairmind.eval_engines", "tag": f'%"evaluationId": "{evaluation_id}"%', "closed": list(CLOSED_RISK_STATUSES), "now": now}
-    where = "WHERE system_id = :sys AND source = :source AND metadata_json LIKE :tag AND status NOT IN :closed"
-    if proves:
-        pending = db.execute(text(f"SELECT id, metadata_json FROM governance_risks {where} AND status = :pending").bindparams(bindparam("closed", expanding=True)), {**finding, "pending": RISK_ACCEPTANCE_PENDING})
-        for risk_id, metadata in pending.fetchall():  # resolving drops a waiting acceptance with it
-            db.execute(text("UPDATE governance_risks SET metadata_json = :metadata WHERE id = :id"), {"metadata": _without_pending(metadata), "id": risk_id})
-        db.execute(text(f"UPDATE governance_risks SET status = 'resolved', updated_at = :now {where}").bindparams(bindparam("closed", expanding=True)), finding)
-    elif outcome["status"] == "failed" and not db.execute(text(f"SELECT id FROM governance_risks {where}").bindparams(bindparam("closed", expanding=True)), finding).fetchone():
+    source = "fairmind.eval_engines"
+    open_findings = db.scalars(
+        select(GovernanceRisk).where(
+            GovernanceRisk.system_id == system_id,
+            GovernanceRisk.source == source,
+            GovernanceRisk.status.not_in(CLOSED_RISK_STATUSES),
+        ).with_for_update()
+    ).all()
+    matched = False
+    for risk in open_findings:
+        metadata = _load_json_value(risk.metadata_json, {})
+        if not isinstance(metadata, dict) or metadata.get("evaluationId") != evaluation_id:
+            continue
+        matched = True
+        # A previously shared retest remains attributable even after another attempt or closure.
+        previous = metadata.get("retestEvidenceIds")
+        attempts = list(previous) if isinstance(previous, list) else []
+        attempts.extend([metadata.get("retestEvidenceId"), evidence_id])
+        metadata["retestEvidenceIds"] = list(dict.fromkeys(
+            attempt for attempt in attempts if isinstance(attempt, str) and attempt and attempt != metadata.get("evidenceId")
+        ))
+        metadata["retestEvidenceId"] = evidence_id
+        if proves:
+            risk.status = "resolved"
+            metadata.pop("pendingAcceptance", None)
+        risk.metadata_json = json.dumps(metadata)
+        risk.updated_at = now
+    if not matched and outcome["status"] == "failed":
         db.execute(
             text(
                 "INSERT INTO governance_risks "
@@ -412,7 +434,7 @@ def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluatio
             ),
             {
                 "sys": system_id,
-                "source": finding["source"],
+                "source": source,
                 "now": now,
                 "id": str(uuid.uuid4()),
                 "title": f"{evaluation_id} {EVALUATIONS[evaluation_id].name} failed",
@@ -669,33 +691,45 @@ def get_job(job_id: str, m: OrgMembership = Depends(_member), db: Session = Depe
 @router.get("/evaluations/{evaluation_id}/runs")
 def list_runs(
     evaluation_id: str,
-    system_id: Optional[str] = Query(None),
+    system_id: Optional[str] = Query(default=None, min_length=1),
     m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
 ):
     if evaluation_id not in EVALUATIONS:
         raise HTTPException(status_code=404, detail="Evaluation not found")
     _ensure_tables(db)
+    if system_id is not None:
+        _require_org_system(db, m.org_id, system_id)
     rows = db.execute(
         text(
-            _RUN_COLS + "WHERE s.org_id = :org AND e.evidence_type = :type AND e.content_json LIKE :tag "
-            "AND (:sys IS NULL OR e.system_id = :sys) ORDER BY e.created_at DESC LIMIT 20"
+            _RUN_COLS + "WHERE s.org_id = :org AND e.evidence_type = :type "
+            "AND CAST(e.content_json AS jsonb) ->> 'evaluationId' = :evaluation_id "
+            "AND (CAST(:sys AS text) IS NULL OR e.system_id = :sys) ORDER BY e.created_at DESC, e.id DESC LIMIT 20"
         ),
-        {"org": m.org_id, "type": EVIDENCE_TYPE, "tag": f'%"evaluationId": "{evaluation_id}"%', "sys": system_id},
+        {"org": m.org_id, "type": EVIDENCE_TYPE, "evaluation_id": evaluation_id, "sys": system_id},
     ).mappings().all()
     return [_run_json(r, full=False) for r in rows]
 
 
 @router.get("/evaluation-runs/{evidence_id}")
-def get_run(evidence_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_run(
+    evidence_id: str,
+    system_id: Optional[str] = Query(default=None, min_length=1),
+    evaluation_id: Optional[str] = Query(default=None, min_length=1),
+    m: OrgMembership = Depends(_member),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
     row = db.execute(
         text(_RUN_COLS + "WHERE e.id = :id AND s.org_id = :org AND e.evidence_type = :type"),
         {"id": evidence_id, "org": m.org_id, "type": EVIDENCE_TYPE},
     ).mappings().fetchone()
-    if not row:
+    if not row or (system_id is not None and row["system_id"] != system_id):
         raise HTTPException(status_code=404, detail="Run not found")
-    return _run_json(row, full=True)
+    run = _run_json(row, full=True)
+    if evaluation_id is not None and run["evaluationId"] != evaluation_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
 
 
 @router.get("/systems/{system_id}/evaluation-runs")

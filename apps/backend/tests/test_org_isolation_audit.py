@@ -1016,6 +1016,22 @@ def test_automation_status_counts_only_the_callers_violations(automation):
     assert status["total_violations"] == 1 and status["critical_violations"] == 1
 
 
+def test_automation_status_failed_query_does_not_report_zero_counts(automation, monkeypatch):
+    from api.routes import compliance_automation
+
+    class UnavailableSession:
+        def query(self, model):
+            raise RuntimeError("summary storage unavailable")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(compliance_automation.db_manager, "get_sync_session", UnavailableSession)
+    response = automation.get("/api/v1/compliance/status", headers=A)
+    assert response.status_code == 500
+    assert "total_violations" not in response.json()
+
+
 # --------------------------------------------------------------------------- the shared guard
 
 

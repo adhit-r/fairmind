@@ -2,8 +2,9 @@
 
 import '@/astryx/pages/system-file.css'
 import NextLink from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ArrowDown, ArrowLeft, ChevronDown } from 'lucide-react'
 import { useMediaQuery } from '@astryxdesign/core/hooks'
 import { Avatar } from '@astryxdesign/core/Avatar'
 import { Badge } from '@astryxdesign/core/Badge'
@@ -11,14 +12,12 @@ import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog'
-import { Divider } from '@astryxdesign/core/Divider'
 import { Drawer } from '@astryxdesign/core/Drawer'
 import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { HStack, StackItem, VStack } from '@astryxdesign/core/Layout'
 import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
 import { Link } from '@astryxdesign/core/Link'
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
-import { ProgressBar } from '@astryxdesign/core/ProgressBar'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Heading, Text } from '@astryxdesign/core/Text'
@@ -26,6 +25,11 @@ import { TextArea } from '@astryxdesign/core/TextArea'
 import { Token } from '@astryxdesign/core/Token'
 import { useOrg } from '@/context/OrgContext'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { FindingRetestDraft } from '@/components/workflow/FindingRetestDraft'
+import { recordParam } from '@/lib/assurance/evaluationLinks'
+import { CheckEvidenceLinks } from '@/components/workflow/CheckEvidenceLinks'
+import { HomeFailureEvidence, useHomeFailureRecord } from '@/components/workflow/HomeFailureEvidence'
+import { Button as Pill } from '@/components/ui/button'
 import { ApplicabilityForm } from '@/components/workflow/ApplicabilityForm'
 import { StoredAnalyses } from '@/components/workflow/StoredAnalyses'
 import { checkCell, classLabel } from '@/components/ui/matrix'
@@ -51,12 +55,17 @@ import { LeavesOpen } from './LeavesOpen'
 import { HASH_PANEL, VerdictExplainer, stepLine, stepTitle, tierOverride } from './VerdictExplainer'
 import { RetiredCard, VersionsCard } from './Lifecycle'
 import { useRetirement, useSystemChanges } from '@/lib/api/hooks/useLifecycle'
+import { SystemReviewHistory, SystemReviewTrail } from './SystemReviewTrail'
 
 // Environmental is left out: an attestation would shadow any later assessment, which the path recommends instead.
 const ATTESTABLE = new Set<string>(['data_governance', 'human_oversight', 'monitoring'])
 const isAttestable = (key: string): key is AttestableCheck => ATTESTABLE.has(key)
 
-const CELL_VARIANT = { proven: 'success', attested: 'success', estimated: 'accent', fails: 'error', stale: 'warning' } as const
+const CHECK_STATE = {
+  proven: 'Passes', attested: 'Attested', estimated: 'Estimated', fails: 'Fails',
+  stale: 'Out of date', open: 'Nothing on file', partial: 'Partial evidence', excluded: 'Out of scope',
+  planned: 'Planned', atorg: 'Covered by the organisation',
+} as const
 const READINESS_LABEL: Record<string, string> = {
   empty: 'No evidence yet',
   needs_evidence: 'Needs evidence',
@@ -67,7 +76,8 @@ const READINESS_LABEL: Record<string, string> = {
 const REQUEST_TONE = { not_requested: 'neutral', pending: 'orange', approved: 'green', rejected: 'red' } as const
 
 type Panel =
-  | { kind: 'fairness' | 'monitoring' | 'watch' | 'target' | 'analyses' | 'explain' | 'tier' | 'decide' | 'owner' }
+  | { kind: 'monitoring'; findingId?: string | null }
+  | { kind: 'fairness' | 'watch' | 'target' | 'analyses' | 'explain' | 'tier' | 'decide' | 'owner' }
   | { kind: 'attest'; check: AttestableCheck }
 
 const PANEL_TITLE: Record<Panel['kind'], string> = {
@@ -87,11 +97,16 @@ const PANEL_TITLE: Record<Panel['kind'], string> = {
 export default function SystemFilePage() {
   const { id } = useParams<{ id: string }>()
   const { selectedOrg } = useOrg()
-  return <SystemFileBody key={systemFileScopeKey(selectedOrg?.id, id)} id={id} />
+  return (
+    <Suspense fallback={<div className="fm-system-file"><Skeleton width="100%" height={280} /></div>}>
+      <SystemFileBody key={systemFileScopeKey(selectedOrg?.id, id)} id={id} />
+    </Suspense>
+  )
 }
 
 function SystemFileBody({ id }: { id: string }) {
   const router = useRouter()
+  const search = useSearchParams()
   const { selectedOrg } = useOrg()
   const { setSelectedSystemId, systems } = useSystemContext()
   const file = useSystemFile(id)
@@ -99,13 +114,25 @@ function SystemFileBody({ id }: { id: string }) {
   const reasons = file.liveRuns?.evaluations.find((e) => e.evaluationId === 'EV-OVS-04')?.metrics ?? null
   const changes = useSystemChanges(id)
   const retirement = useRetirement(id)
-  const { system, evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
+  const { system, evidence, approval, remediation, risks, reports, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, loading, error, refresh } = file
+  const gate = file.gate?.systemId && file.gate.systemId !== id ? null : file.gate
   const ap = useAutopilot(id, `${gate?.confidence ?? ''}-${evidence?.totalEvidence ?? 0}-${approval?.decisions.length ?? 0}`)
   const { confirm: confirmApplicability, acceptOverride } = useApplicability()
   const env = useEnvironmentalImpact(selectedOrg?.id, id)
+  const failures = (gate?.checks ?? []).filter((check) => checkCell(check) === 'fails')
+  const lead = failures[0]
+  const gateSystemId = system?.id === id && gate?.systemId === id ? id : undefined
+  const proof = useHomeFailureRecord(gateSystemId, lead)
 
   const [panel, setPanel] = useState<Panel | null>(null)
-  const [tab, setTab] = useState<'file' | 'requirements' | 'record'>('file')
+  const selectedTab = search.get('tab')
+  const tab = selectedTab === 'requirements' || selectedTab === 'record' ? selectedTab : 'file'
+  const setTab = (value: string) => {
+    const next = new URLSearchParams(search)
+    if (value === 'file') next.delete('tab')
+    else next.set('tab', value)
+    router.push(`/systems/${encodeURIComponent(id)}${next.size ? `?${next}` : ''}`, { scroll: false })
+  }
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [railOpen, setRailOpen] = useState(false)
@@ -114,6 +141,10 @@ function SystemFileBody({ id }: { id: string }) {
   // An evaluation page links here with #target when the model is not connected yet.
   useEffect(() => {
     if (window.location.hash === '#target') setPanel({ kind: 'target' })
+    if (window.location.hash === '#operate') {
+      const findingId = recordParam(new URLSearchParams(window.location.search), 'finding')
+      setPanel({ kind: 'monitoring', findingId })
+    }
   }, [])
 
   // The legacy pages read the system from the URL or the context.
@@ -152,10 +183,10 @@ function SystemFileBody({ id }: { id: string }) {
 
   if (loading && !system) {
     return (
-      <div className="fm-page">
+      <div className="fm-system-file">
         <VStack gap={4}>
           <Skeleton width={220} height={14} />
-          <Skeleton width={420} height={34} />
+          <Skeleton width="min(100%, 420px)" height={34} />
           <Skeleton width="100%" height={220} />
         </VStack>
       </div>
@@ -163,10 +194,10 @@ function SystemFileBody({ id }: { id: string }) {
   }
   if (error || !system) {
     return (
-      <div className="fm-page">
+      <div className="fm-system-file">
         <EmptyState
-          title="This system is not in your estate"
-          description={error || 'It may belong to another organisation or have been removed.'}
+          title="System file unavailable"
+          description={error || 'This record could not be loaded for the selected organisation.'}
           actions={<><Button label="Try again" variant="secondary" onClick={() => void refresh()} /><Button label="Back to AI systems" variant="primary" href="/systems" /></>}
         />
       </div>
@@ -228,6 +259,58 @@ function SystemFileBody({ id }: { id: string }) {
     : status === 'pending' && req
       ? <Button label="Decide" variant="primary" onClick={() => setPanel({ kind: 'decide' })} />
       : null
+  const reviewDecision = status === 'pending' && req && !retired
+  const showRequestInMenu = canRequest && !retired && (Boolean(lead) || gate?.verdict === 'no_go')
+  const visibleChecks = (gate?.checks ?? []).slice().sort((a, b) =>
+    Number(checkCell(b) === 'fails') - Number(checkCell(a) === 'fails'))
+
+  function jumpToChecks() {
+    const checks = document.getElementById('sf-checks')
+    checks?.focus({ preventScroll: true })
+    checks?.scrollIntoView({ block: 'start' })
+  }
+
+  const releaseOverview = (
+    <section className="fm-sf-overview" aria-label="Release overview">
+      <div className="fm-sf-focus">
+        <div className="fm-sf-verdict" data-verdict={gate?.verdict ?? 'unavailable'}>
+          <i aria-hidden />{verdict?.label ?? 'Release status unavailable'}
+        </div>
+        <h2>{lead ? (lead.key === 'fairness' ? 'Fairness check failed' : lead.label) : gate ? 'Release readiness' : 'Release gate unavailable'}</h2>
+        {lead ? (
+          <>
+            <p className="fm-sf-context">{failures.length === 1 ? '1 failing release check' : `${failures.length} failing release checks`}</p>
+            {gateSystemId ? <HomeFailureEvidence systemId={gateSystemId} check={lead} {...proof} showGroupComparison={false} />
+              : <p className="fm-sf-context">Source record unavailable.</p>}
+            {reviewDecision && <div className="fm-sf-release-action">{primary}</div>}
+          </>
+        ) : gate ? (
+          <>
+            <p className="fm-sf-context">{gate.reasons[0] ?? 'Review the checks that support this verdict.'}</p>
+            <div className="fm-sf-release-action">
+              {(!showRequestInMenu && primary) ||
+                <Pill type="button" size="lg" onClick={jumpToChecks}>View release checks <ArrowDown size={15} aria-hidden /></Pill>}
+            </div>
+          </>
+        ) : (
+          <div className="fm-sf-release-action">
+            <Pill type="button" variant="outline" size="lg" onClick={() => void refresh()}>Retry release checks</Pill>
+          </div>
+        )}
+      </div>
+      {lead && gateSystemId ? <SystemReviewTrail systemId={gateSystemId} check={lead} risks={risks} /> : (
+        <div className="fm-sf-readiness">
+          <h2>Check status</h2>
+          {gate && visibleChecks.length > 0 ? (
+            <ul>
+              {visibleChecks.map((check) => <li key={check.key}><span>{check.label}</span>
+                <span className="fm-sf-check-state" data-state={checkCell(check)}>{CHECK_STATE[checkCell(check)]}</span></li>)}
+            </ul>
+          ) : <p className="fm-sf-context">Check results are unavailable for this system.</p>}
+        </div>
+      )}
+    </section>
+  )
 
   const rail = (
     <VStack gap={8}>
@@ -336,7 +419,7 @@ function SystemFileBody({ id }: { id: string }) {
         {evidence?.recommendedNextStep && <Text type="supporting" color="secondary">{evidence.recommendedNextStep}</Text>}
         <HStack gap={2} wrap="wrap">
           <Button label="Evidence" variant="secondary" href={`/evidence?system=${encodeURIComponent(id)}`} />
-          <Button label="Audit reports" variant="secondary" onClick={() => open('/reports/system')} />
+          <Button label="Audit reports" variant="secondary" onClick={() => open('/reports/system?view=assurance')} />
         </HStack>
       </VStack>
     </VStack>
@@ -346,7 +429,13 @@ function SystemFileBody({ id }: { id: string }) {
     if (!panel) return null
     switch (panel.kind) {
       case 'fairness': return <FairnessRunPanel inspect={file.inspectCsv} run={file.runFairness} onDecide={!retired && ((status === 'pending' && req) || canRequest) ? () => openFromExplainer('#decision') : undefined} decideLabel={canRequest ? (status === 'rejected' ? 'Request a new decision' : 'Request release decision') : undefined} />
-      case 'monitoring': return <MonitoringRunPanel inspect={file.inspectCsv} run={file.runMonitoring} hasBaseline={fairnessRuns.length > 0} />
+      case 'monitoring': {
+        if (retired || s.lifecycleStage === 'retired') return <Text>This system is retired.</Text>
+        const form = <MonitoringRunPanel inspect={file.inspectCsv} run={file.runMonitoring} hasBaseline={fairnessRuns.length > 0} />
+        return panel.findingId === undefined ? form : (
+          <FindingRetestDraft systemId={id} findingId={panel.findingId} source="fairmind.watch">{form}</FindingRetestDraft>
+        )
+      }
       case 'watch': return <WatchPanel systemId={id} policy={monitoringPolicy} runs={monitoringRuns} live={file.liveRuns} save={file.saveMonitoringPolicy} />
       case 'target': return <TargetPanel systemId={id} />
       case 'analyses': return <StoredAnalyses systemId={id} sources={['judge', 'advanced']} />
@@ -406,57 +495,36 @@ function SystemFileBody({ id }: { id: string }) {
   })()
 
   const mainFile = (
-    <div className="fm-sf-main" hidden={tab !== 'file'}>
-      {actionError && <Banner status="error" title="That did not work" description={actionError} isDismissable onDismiss={() => setActionError(null)} />}
+    <div className="fm-sf-main">
+      {releaseOverview}
 
-      <section className="fm-card" aria-labelledby="sf-what">
+      <section className="fm-card fm-sf-checks" aria-labelledby="sf-checks">
         <VStack gap={4}>
-          <Heading level={2} id="sf-what">What it is</Heading>
-          {description && <Text type="body">{description}</Text>}
-          <Text type="supporting" color="secondary">
-            {[kind, SOURCE_LABEL[sourceKey] ?? cap(sourceKey), s.createdAt ? `created ${when(s.createdAt)}` : ''].filter(Boolean).join(' · ')}
-          </Text>
-          <HStack gap={2} vAlign="center" wrap="wrap">
-            <Text type="supporting" color="secondary">{applicability ? tierBasis(applicability) : 'Tier not confirmed'}</Text>
-            <Button label={applicability ? 'Change tier or rules' : 'Confirm tier and rules'} variant="secondary" size="sm" onClick={() => setPanel({ kind: 'tier' })} />
-            {awaitingSecond && applicability && (
-              <Button label="Accept the lower tier" variant="secondary" size="sm" isDisabled={busy !== null} isLoading={busy === 'accept'} onClick={() => void act('accept', async () => { await acceptOverride(id, applicability.evidenceId); await refresh() })} />
-            )}
-          </HStack>
-          {override && <Text type="supporting" color="secondary">{override.text}</Text>}
-
-          <Divider />
+          <h2 id="sf-checks" tabIndex={-1}>Release checks</h2>
           {gate && verdict ? (
             <VStack gap={4}>
-              <HStack gap={3} vAlign="center" wrap="wrap">
-                <Heading level={3}>Release gate</Heading>
-                <Badge variant={verdict.tone} label={verdict.label} />
-                <Text type="supporting" color="secondary">Confidence <span className="fm-sf-num">{gate.confidence.toFixed(2)}</span>, {gate.band}. {gate.proven} proven, {gate.attested} attested, {gate.open} open{gate.failing ? `, ${gate.failing} failing` : ''}.</Text>
-              </HStack>
-              <VStack gap={3}>
-                {gate.checks.map((c) => {
+              <p className="fm-sf-context">Gate confidence <strong>{Math.round(gate.confidence * 100)}%</strong> · {gate.proven} proven · {gate.attested} attested · {gate.open} open{gate.failing ? ` · ${gate.failing} failing` : ''}</p>
+              <ul className="fm-sf-check-list">
+                {visibleChecks.map((c) => {
                   const cell = checkCell(c)
-                  const how = c.evidenceClass ? classLabel(c.evidenceClass) : cap(c.state)
                   return (
-                    <div key={c.key} className="fm-sf-check">
-                      <VStack gap={0}>
-                        <Text type="body" weight="semibold">{c.label}</Text>
-                        <Text type="supporting" color="secondary">
-                          {how}{c.stale ? ', out of date' : ''}{c.fails ? ', fails its thresholds' : ''}
-                        </Text>
-                      </VStack>
-                      <ProgressBar label={`${c.label} confidence`} isLabelHidden value={Math.round(c.confidence * 100)} variant={(CELL_VARIANT as Record<string, 'success' | 'accent' | 'error' | 'warning'>)[cell] ?? 'neutral'} />
-                      <Text type="body" hasTabularNumbers>{c.state === 'open' && !c.confidence ? 'Open' : c.confidence.toFixed(2)}</Text>
+                    <li key={c.key} className="fm-sf-check" data-state={cell}>
+                      <div>
+                        <h3>{c.label}</h3>
+                        {c.evidenceClass && <p>{classLabel(c.evidenceClass)}{c.stale ? ' · Out of date' : ''}</p>}
+                        {(c.evidenceId || cell === 'fails') && <CheckEvidenceLinks systemId={gateSystemId} check={c} failed={cell === 'fails'} showRecordId={false} />}
+                      </div>
+                      <span className="fm-sf-check-state" data-state={cell}>{CHECK_STATE[cell]}</span>
                       {c.key === 'human_oversight' && reasons && (
                         <div className="fm-sf-check-more">
                           <ReasonStack held={Number(reasons.reasonHeld ?? 0)} notHeld={Number(reasons.reasonTested ?? 0) - Number(reasons.reasonHeld ?? 0)}
                             notReproducible={Number(reasons.notReproducible ?? 0)} floor={typeof reasons.minReasonHeld === 'number' ? reasons.minReasonHeld : null} />
                         </div>
                       )}
-                    </div>
+                    </li>
                   )
                 })}
-              </VStack>
+              </ul>
               {gate.reasons.length > 0 && (
                 <VStack gap={1}>
                   <Text type="supporting" weight="semibold">Why this verdict</Text>
@@ -502,7 +570,7 @@ function SystemFileBody({ id }: { id: string }) {
       <section className="fm-card" aria-labelledby="sf-needs">
         <VStack gap={4}>
           <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
-            <Heading level={2} id="sf-needs">What it needs</Heading>
+            <Heading level={2} id="sf-needs">Next steps</Heading>
             {option && <Text type="supporting" color="secondary">Confidence <span className="fm-sf-num">{gate?.confidence.toFixed(2)}</span> to <span className="fm-sf-num">{option.confidenceAfter.toFixed(2)}</span>, {VERDICT_META[option.verdictAfter].label}</Text>}
           </HStack>
           {gate && option && option.steps.length > 0 ? (
@@ -545,8 +613,9 @@ function SystemFileBody({ id }: { id: string }) {
               {gate.path.notes.map((n) => <Text key={n} type="supporting" color="secondary">{n}</Text>)}
             </VStack>
           )}
-          <Divider />
-          <HStack gap={2} wrap="wrap">
+          <details className="fm-sf-disclosure">
+            <summary>More assessment actions <ChevronDown size={15} aria-hidden /></summary>
+            <HStack gap={2} wrap="wrap">
             <Button label="Run a fairness test" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'fairness' })} />
             <Button label="Record a monitoring snapshot" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'monitoring' })} />
             <Button label="Monitoring and live runs" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'watch' })} />
@@ -557,7 +626,26 @@ function SystemFileBody({ id }: { id: string }) {
             <Button label="Frameworks" variant="secondary" size="sm" href="/frameworks" />
             <Button label="Workflow runs" variant="secondary" size="sm" href="/runs" />
             <Button label="Monitoring" variant="secondary" size="sm" onClick={() => open('/monitoring')} />
+            </HStack>
+          </details>
+        </VStack>
+      </section>
+
+      <section className="fm-card" aria-labelledby="sf-what">
+        <VStack gap={3}>
+          <Heading level={2} id="sf-what">About this system</Heading>
+          {description && <Text type="body">{description}</Text>}
+          <Text type="supporting" color="secondary">
+            {[kind, SOURCE_LABEL[sourceKey] ?? cap(sourceKey), s.createdAt ? `Created ${when(s.createdAt)}` : ''].filter(Boolean).join(' · ')}
+          </Text>
+          <HStack gap={2} vAlign="center" wrap="wrap">
+            <Text type="supporting" color="secondary">{applicability ? tierBasis(applicability) : 'Tier unconfirmed'}</Text>
+            <Button label={applicability ? 'Change tier or rules' : 'Confirm tier and rules'} variant="secondary" size="sm" onClick={() => setPanel({ kind: 'tier' })} />
+            {awaitingSecond && applicability && (
+              <Button label="Accept the lower tier" variant="secondary" size="sm" isDisabled={busy !== null} isLoading={busy === 'accept'} onClick={() => void act('accept', async () => { await acceptOverride(id, applicability.evidenceId); await refresh() })} />
+            )}
           </HStack>
+          {override && <Text type="supporting" color="secondary">{override.text}</Text>}
         </VStack>
       </section>
 
@@ -610,54 +698,64 @@ function SystemFileBody({ id }: { id: string }) {
   )
 
   return (
-    <div className="fm-page">
+    <div className="fm-system-file">
       <VStack gap={5}>
-        <VStack gap={2}>
-          <HStack gap={2} vAlign="center" className="fm-sf-crumb">
-            <NextLink href="/systems">AI systems</NextLink>
-            <span aria-hidden>/</span>
-            <span>{s.name}</span>
+        <header className="fm-sf-header">
+          <div className="fm-sf-header-bar">
+            <NextLink href="/systems" className="fm-sf-crumb"><ArrowLeft size={15} aria-hidden /> AI systems</NextLink>
+            <div className="fm-sf-tools">
+              <Pill type="button" variant="outline" className="fm-sf-details-button" onClick={() => setRailOpen(true)}>Details</Pill>
+              {!retired && (
+                <details className="fm-sf-manage">
+                  <summary>Manage system <ChevronDown size={15} aria-hidden /></summary>
+                  <div>
+                    {showRequestInMenu && primary}
+                    {lifecycleActions}
+                  </div>
+                </details>
+              )}
+            </div>
+          </div>
+          <HStack gap={3} hAlign="between" vAlign="center" wrap="wrap">
+            <h1>{s.name}</h1>
+            <Pill asChild variant="outline" size="lg" className="px-4">
+              <NextLink href={`/reports/system?system=${encodeURIComponent(id)}`} aria-label="Prepare system assurance report">
+                System assurance report
+              </NextLink>
+            </Pill>
           </HStack>
-          <HStack gap={4} hAlign="between" vAlign="start" wrap="wrap">
-            <Heading level={1} maxLines={2}>{s.name}</Heading>
-            <HStack gap={2} vAlign="center">
-              {primary}
-              {lifecycleActions}
-              <span className="fm-sf-rail-toggle"><Button label="Details" variant="secondary" onClick={() => setRailOpen(true)} /></span>
-            </HStack>
-          </HStack>
-          <HStack gap={2} vAlign="center" wrap="wrap">
-            {verdict && <Badge variant={verdict.tone} label={verdict.label} />}
-            <Badge variant={RISK_TONE[s.riskTier]} label={`${cap(s.riskTier)} risk`} />
-            <HStack gap={1} vAlign="center">
-              <Avatar name={s.owner || 'No owner'} size="xsm" />
-              <Text type="supporting" color="secondary">{s.owner || 'No owner'}</Text>
-            </HStack>
-            {frameworks.map((f) => <Token key={f} label={f} color="blue" size="sm" />)}
-          </HStack>
-        </VStack>
+          <dl className="fm-sf-identity">
+            <div><dt>Owner</dt><dd>{s.owner || 'Unassigned'}</dd></div>
+            <div><dt>Risk</dt><dd>{cap(s.riskTier)}</dd></div>
+            <div><dt>Stage</dt><dd>{STAGE_LABEL[s.lifecycleSummary?.stage ?? s.lifecycleStage] ?? cap(s.lifecycleStage)}</dd></div>
+          </dl>
+        </header>
 
-        <TabList value={tab} onChange={(v) => setTab(v as typeof tab)} hasDivider>
+        <TabList value={tab} onChange={setTab} hasDivider>
           <Tab value="file" label="System file" />
           <Tab value="requirements" label="Requirements" />
           <Tab value="record" label="Record" />
         </TabList>
 
-        <div className="fm-sf">
+        {actionError && <Banner status="error" title="That did not work" description={actionError} isDismissable onDismiss={() => setActionError(null)} />}
+        {tab === 'file' && (retired ? (
           <div className="fm-sf-main">
-            {retired ? (
-              <div className="fm-sf-main" hidden={tab !== 'file'}>
-                <RetiredCard record={retired} createdAt={s.createdAt} replacementName={systems.find((o) => o.id === retired.replacedBy)?.name} chain={retirement.data?.chain} />
-                {versions}
-              </div>
-            ) : mainFile}
-            {tab === 'requirements' && (
-              <div className="fm-sf-embed"><RequirementsTab confirmed={applicability?.frameworks ?? clauseMap?.confirmed ?? []} clauseMap={clauseMap} /></div>
-            )}
-            {tab === 'record' && <div className="fm-sf-embed"><RecordTab seals={seals} approval={approval} /></div>}
+            <RetiredCard record={retired} createdAt={s.createdAt} replacementName={systems.find((o) => o.id === retired.replacedBy)?.name} chain={retirement.data?.chain} />
+            {versions}
           </div>
-          <aside className="fm-sf-rail" aria-label="System details">{rail}</aside>
-        </div>
+        ) : mainFile)}
+        {tab === 'requirements' && (
+          <div className="fm-sf-embed">
+            <RequirementsTab confirmed={applicability?.frameworks ?? clauseMap?.confirmed ?? []} clauseMap={clauseMap}
+              onConfirmRules={retired ? undefined : () => setPanel({ kind: 'tier' })} />
+          </div>
+        )}
+        {tab === 'record' && (
+          <div className="fm-sf-main fm-sf-embed">
+            <RecordTab seals={seals} approval={approval} />
+            <SystemReviewHistory systemId={id} risks={risks} />
+          </div>
+        )}
       </VStack>
 
       <Drawer isOpen={panel !== null} onOpenChange={(o) => !o && setPanel(null)} label={panel ? PANEL_TITLE[panel.kind] : 'Panel'} width={560} padding={5}>
@@ -669,6 +767,9 @@ function SystemFileBody({ id }: { id: string }) {
         )}
       </Drawer>
 
+      <Drawer isOpen={!isNarrow && railOpen} onOpenChange={setRailOpen} label="System details" width={460} padding={5}>
+        {railOpen && rail}
+      </Drawer>
       <Dialog variant="fullscreen" isOpen={isNarrow && railOpen} onOpenChange={setRailOpen}>
         <Layout
           header={<DialogHeader title="System details" onOpenChange={setRailOpen} />}

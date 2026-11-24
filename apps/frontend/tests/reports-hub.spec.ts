@@ -95,6 +95,7 @@ async function install(page: Page) {
     if (path === '/api/v1/ai-governance/reports/briefing') return json(route, { source: 'template', parts: [] })
     if (path === '/api/v1/ai-governance/reports/snapshots') return json(route, method === 'POST' ? sealed : [])
     if (path === '/api/v1/shadow-ai') return json(route, { findings: [], resolved: [], map: { tools: [], teams: [], cells: {} }, coverage: { proxyLogs: false, okta: false, entra: false, gateway: false, mcpRegistry: false, people: 0, approvedTools: 0, ssoTools: 0 } })
+    if (path === '/api/v1/whats-new') return json(route, { releases: [], seen: null, emails: false })
     return json(route, [])
   })
 }

@@ -295,6 +295,12 @@ async function mockWorkbench(page: Page, options: MockOptions = {}) {
     if (path === '/api/v1/ai-governance/systems') {
       return fulfillJson(route, [system, secondSystem])
     }
+    if (path === '/api/v1/shadow-ai') {
+      return fulfillJson(route, { findings: [] })
+    }
+    if (path === '/api/v1/whats-new') {
+      return fulfillJson(route, { releases: [], seen: null, emails: false })
+    }
     if (path === '/api/v1/ai-governance/organizations/org-1/frameworks') {
       if (options.catalogDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.catalogDelayMs))
@@ -1017,7 +1023,7 @@ test('presents a version-pinned assurance summary with evidence hashes and revie
   }
   await mockWorkbench(page, { initiallyAssigned: true, evidenceRuns: [acceptedRun] })
 
-  await page.goto('/reports?view=builder')
+  await page.goto('/reports/system?view=assurance')
   const report = page.getByTestId('assurance-report')
 
   await expect(report.getByRole('heading', { name: 'Reports & Assurance' })).toBeVisible()
@@ -1047,7 +1053,7 @@ test('uses the reports route as a read-only auditor lens and redirects legacy bo
     permissions: ['model:read'],
   })
 
-  await page.goto('/reports')
+  await page.goto('/reports/system?view=assurance')
   const report = page.getByTestId('assurance-report')
   await expect(report.getByText('Auditor mode', { exact: true })).toBeVisible()
   await expect(report).toContainText('Read-only auditor view')
@@ -1055,11 +1061,11 @@ test('uses the reports route as a read-only auditor lens and redirects legacy bo
   await expect(report.getByRole('link', { name: 'Review evidence mappings' })).toHaveCount(0)
 
   await page.goto('/audit-reports')
-  await expect(page).toHaveURL(/\/reports\?view=builder$/)
+  await expect(page).toHaveURL(/\/reports\/system\?view=assurance$/)
   await page.goto('/compliance/dashboard')
   await expect(page).toHaveURL(/\/compliance-dashboard$/)
   await page.goto('/remediation-wizard')
-  await expect(page).toHaveURL(/\/remediation\?mode=guided$/)
+  await expect(page).toHaveURL(/\/findings$/)
 })
 
 test('retains persisted approval decisions and environmental governance on the assurance overview', async ({ page }) => {
@@ -1150,7 +1156,7 @@ test('matches each selected assignment to its own framework version across multi
   await overview.getByRole('combobox', { name: 'Framework scope' }).selectOption('assignment-1')
   await expect(overview.getByRole('region', { name: 'Assurance scope' })).toContainText('AIUC-1 April, 2026')
 
-  await page.goto('/reports?view=builder')
+  await page.goto('/reports/system?view=assurance')
   const report = page.getByTestId('assurance-report')
   await expect(report.getByRole('region', { name: 'Assurance scope' })).toContainText('NIST AI RMF 1.0')
   await report.getByRole('combobox', { name: 'Framework scope' }).selectOption('assignment-1')
@@ -1172,7 +1178,7 @@ test('keeps report generation, preview, saved history, and exports reachable on 
     }],
   })
 
-  await page.goto('/reports?view=builder')
+  await page.goto('/reports/system?view=assurance')
   const studio = page.getByRole('region', { name: 'Report builder and history' })
   await expect(studio.getByRole('heading', { name: 'Assurance Report Studio' })).toBeVisible()
   await expect(studio).toContainText('July assurance snapshot')
@@ -1230,7 +1236,7 @@ test('does not let an old-system refresh strand the newly selected approval scop
   await expect(approval.getByRole('button', { name: 'Submit for approval' })).toBeVisible()
 })
 
-test('keeps report history and preview pinned to the current system across delayed responses', async ({ page }) => {
+test('keeps legacy report history and preview pinned to the system in the address', async ({ page }) => {
   await mockWorkbench(page, {
     initiallyAssigned: true,
     firstReportHistoryDelayMs: 650,
@@ -1256,20 +1262,17 @@ test('keeps report history and preview pinned to the current system across delay
     }],
   })
 
-  await page.goto('/reports?view=builder')
+  await page.goto('/reports/system?view=assurance')
   const studio = page.getByRole('region', { name: 'Report builder and history' })
   await expect(studio.getByRole('heading', { name: 'Assurance Report Studio' })).toBeVisible()
-  await page.getByLabel('Switch system').selectOption({ label: secondSystem.name })
+  await page.goto(`/reports/system?view=assurance&system=${secondSystem.id}`)
 
-  await expect(studio).toContainText('Underwriting assurance snapshot')
-  await expect(studio).not.toContainText('Claims assurance snapshot')
-  await page.waitForTimeout(800)
   await expect(studio).toContainText('Underwriting assurance snapshot')
   await expect(studio).not.toContainText('Claims assurance snapshot')
 
   await studio.getByRole('button', { name: 'Preview' }).click()
   await expect(studio).toContainText('Selected preview · Underwriting assurance snapshot')
-  await page.getByLabel('Switch system').selectOption({ label: system.name })
+  await page.goto(`/reports/system?view=assurance&system=${system.id}`)
   await expect(studio).not.toContainText('Selected preview · Underwriting assurance snapshot')
   await expect(studio).not.toContainText('Underwriting assurance snapshot')
 })

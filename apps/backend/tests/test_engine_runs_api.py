@@ -50,6 +50,34 @@ def test_a_run_is_stored_and_drives_the_evaluation_result(tmp_database):
     assert full["detail"] and full["params"] == {}
 
 
+def test_check_detail_history_and_record_share_the_same_system_scope(tmp_database):
+    org, client = _org(tmp_database)
+    north, south = _system(tmp_database, org), _system(tmp_database, org)
+    foreign_org, _ = _org(tmp_database)
+    foreign = _system(tmp_database, foreign_org)
+    passed = _run(client, north, 0.0).json()
+    failed = _run(client, south, 1.0).json()
+    check = "EV-DAT-01"
+    path = f"{PACKS}/evaluations/{check}"
+
+    assert client.get(path).json()["results"]["status"] == "failed"
+    for system, run in [(north, passed), (south, failed)]:
+        result = client.get(path, params={"system": system}).json()["results"]
+        assert result["status"] == run["status"]
+        assert [s["systemId"] for s in result["systems"]] == [system]
+        history = client.get(f"{path}/runs", params={"system_id": system}).json()
+        assert [r["id"] for r in history] == [run["id"]]
+
+    record = f"{PACKS}/evaluation-runs/{passed['id']}"
+    assert client.get(record, params={"system_id": north, "evaluation_id": check}).json()["id"] == passed["id"]
+    for system, evaluation in [(south, check), (north, "EV-REL-01"), (foreign, check)]:
+        assert client.get(record, params={"system_id": system, "evaluation_id": evaluation}).status_code == 404
+    assert client.get(path, params={"system": foreign}).status_code == 404
+    assert client.get(f"{path}/runs", params={"system_id": foreign}).status_code == 404
+    for url, key in [(f"{PACKS}/evaluations", "system"), (path, "system"), (f"{path}/engine", "system"), (f"{path}/runs", "system_id")]:
+        assert client.get(url, params={key: ""}).status_code == 422
+
+
 def test_runs_check_the_system_files_and_role(tmp_database):
     org_id, client = _org(tmp_database)
     other_org, _ = _org(tmp_database)
@@ -88,14 +116,42 @@ def _findings(engine, system):
 
 
 def test_a_failed_run_opens_one_finding_and_a_passing_run_resolves_it(tmp_database):
+    from sqlalchemy import text
+
     org_id, client = _org(tmp_database)
     system = _system(tmp_database, org_id)
-    assert _run(client, system, 1.0).json()["status"] == "failed"
-    assert _run(client, system, 1.0).json()["status"] == "failed"  # a second failure does not open a second finding
-    [(title, severity, status)] = _findings(tmp_database, system)
-    assert title.startswith("EV-DAT-01 ") and title.endswith(" failed") and (severity, status) == ("high", "open")
-    assert _run(client, system, 0.0).json()["status"] == "passed"
-    assert [r.status for r in _findings(tmp_database, system)] == ["resolved"]
+    other = _system(tmp_database, org_id)
+
+    def findings(sid):
+        response = client.get("/api/v1/ai-governance/dashboard/risk", params={"system_id": sid})
+        assert response.status_code == 200
+        return response.json()["risks"]
+
+    original = _run(client, system, 1.0).json()
+    other_original = _run(client, other, 1.0).json()
+    assert original["status"] == "failed"
+    repeated = _run(client, system, 1.0).json()
+    [finding] = findings(system)
+    assert repeated["status"] == "failed" and finding["status"] == "open"
+    assert finding["title"].startswith("EV-DAT-01 ") and finding["severity"] == "high"
+    assert finding["metadata"] == {"evaluationId": "EV-DAT-01", "evidenceId": original["id"], "retestEvidenceId": repeated["id"], "retestEvidenceIds": [repeated["id"]]}
+
+    # Older stored links may carry the last attempt alone. Preserve it in the durable history.
+    previous_metadata = {k: v for k, v in finding["metadata"].items() if k != "retestEvidenceIds"}
+    with tmp_database.begin() as conn:
+        conn.execute(text("UPDATE governance_risks SET metadata_json = :metadata WHERE id = :id"), {
+            "metadata": json.dumps(previous_metadata), "id": finding["id"],
+        })
+    passed = _run(client, system, 0.0).json()
+    [resolved] = findings(system)
+    assert passed["status"] == "passed" and resolved["status"] == "resolved"
+    assert resolved["id"] == finding["id"]
+    assert resolved["metadata"] == {**finding["metadata"], "retestEvidenceId": passed["id"], "retestEvidenceIds": [repeated["id"], passed["id"]]}
+    [unrelated] = findings(other)
+    assert unrelated["metadata"] == {"evaluationId": "EV-DAT-01", "evidenceId": other_original["id"]}
+    # Later runs on a settled finding's system are not retroactively attributed to it.
+    _run(client, system, 1.0)
+    assert next(r for r in findings(system) if r["id"] == finding["id"])["metadata"] == resolved["metadata"]
 
 
 def _acceptance_records(engine, system):

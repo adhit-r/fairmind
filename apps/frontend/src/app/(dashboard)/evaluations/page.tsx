@@ -2,6 +2,7 @@
 
 import '@/astryx/pages/evaluations.css'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Activity, ChevronDown, ChevronRight, Database, FileText, Network, Plug } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -18,6 +19,7 @@ import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
 import { useEvaluations, type EvaluationRow, type ResultStatus, type RunWay } from '@/lib/api/hooks/usePacks'
 import { useSystemContext } from '@/components/workflow/SystemContext'
+import { evaluationHref, recordParam } from '@/lib/assurance/evaluationLinks'
 import { KIND_LABEL } from '@/astryx/data/discovery'
 import { RESULT_COLOR, RESULT_WORD, fmtWhen, groupRows, type Bucket } from '@/astryx/data/evaluations'
 
@@ -59,7 +61,7 @@ function Panel({ row, onClose }: { row: EvaluationRow; onClose: () => void }) {
             {row.judgeNotValidated && <Token size="sm" color="gray" label="Judge not validated" />}
           </MetadataListItem>
         </MetadataList>
-        <Button label={row.runnable ? 'Open to run' : 'Open details'} variant={row.runnable ? 'primary' : 'secondary'} href={`/compliance/evaluations/${row.id}`} />
+        <Button label={row.runnable ? 'Open to run' : 'Open details'} variant={row.runnable ? 'primary' : 'secondary'} href={evaluationHref(row.id)} />
         <Divider />
         <Heading level={3}>Results by system</Heading>
         {!row.results ? (
@@ -113,7 +115,7 @@ function Group({ bucket, rows, systemId }: { bucket: Bucket; rows: EvaluationRow
           const mine = r.results?.systems.find((s) => s.systemId === systemId)
           return (
             <li key={r.id}>
-              <Link href={`/compliance/evaluations/${encodeURIComponent(r.id)}?system=${encodeURIComponent(systemId)}`}>
+              <Link href={evaluationHref(r.id, systemId)}>
                 <span className="fm-ev-row-icon" aria-hidden><RowIcon size={14} /></span>
                 <span className="fm-ev-row-name">{r.name}</span>
                 <span className="fm-ev-row-limit" title={r.threshold}>{r.threshold}</span>
@@ -166,16 +168,24 @@ function ForSystem({ rows, systemId }: { rows: EvaluationRow[]; systemId: string
 }
 
 export default function EvaluationsPage() {
-  const { systems: allSystems } = useSystemContext()
+  const search = useSearchParams()
+  const router = useRouter()
+  const { systems: allSystems, loading, error, refreshSystems } = useSystemContext()
   const systems = allSystems.filter((s) => s.metadata?.source !== 'fallback')
-  const [systemId, setSystemId] = useState(ALL)
-  // The system file links here with ?system=; read once on load (useSearchParams would need a Suspense boundary on this static page).
+  const systemId = recordParam(search, 'system')
+  const selectedId = recordParam(search, 'check')
+  // Bookmarks from earlier pack, workflow and framework pages used the check ID as a fragment.
   useEffect(() => {
-    const asked = new URLSearchParams(window.location.search).get('system')
-    if (asked) setSystemId(asked)
-  }, [])
+    const followLegacyCheck = () => {
+      const id = window.location.hash.slice(1)
+      if (/^EV-[A-Z0-9-]+$/.test(id)) router.replace(evaluationHref(id) + window.location.search, { scroll: false })
+    }
+    followLegacyCheck()
+    window.addEventListener('hashchange', followLegacyCheck)
+    return () => window.removeEventListener('hashchange', followLegacyCheck)
+  }, [router])
   const forSystem = systems.find((s) => s.id === systemId)
-  const evals = useEvaluations(forSystem ? { system: forSystem.id } : {})
+  const evals = useEvaluations(forSystem ? { system: forSystem.id } : {}, systemId === undefined || Boolean(forSystem))
   const kind = forSystem?.metadata?.asset_kind as string | undefined
   const [q, setQ] = useState('')
   const [pillar, setPillar] = useState('all')
@@ -183,7 +193,15 @@ export default function EvaluationsPage() {
   const [engine, setEngine] = useState('runnable')
   const [pack, setPack] = useState('all')
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const updateSelection = (system: string | undefined, check?: string | null) => {
+    const query = new URLSearchParams(search)
+    if (system) query.set('system', system)
+    else query.delete('system')
+    if (check) query.set('check', check)
+    else query.delete('check')
+    window.history.replaceState(null, '', query.size ? `/evaluations?${query}` : '/evaluations')
+  }
+  const setSelectedId = (id: string | null) => updateSelection(forSystem?.id, id)
 
   const rows = evals.data ?? []
   const counts = useMemo(
@@ -221,6 +239,14 @@ export default function EvaluationsPage() {
       return n
     })
 
+  if (systemId !== undefined && loading) return <div className="fm-page" role="status">Loading the system register…</div>
+  if (systemId !== undefined && error) return <div className="fm-page"><Banner status="error" title="AI systems unavailable" description={error} endContent={<Button label="Try again" onClick={refreshSystems} />} /></div>
+  if (systemId === null || (systemId && !forSystem) || selectedId === null) return (
+    <div className="fm-page"><EmptyState title="Evaluation link unavailable" description="This link needs an accessible system and a single check reference." actions={<Button label="Open evaluation catalogue" href="/evaluations" />} /></div>
+  )
+  if (selectedId && !evals.loading && !evals.error && !selected) return (
+    <div className="fm-page"><EmptyState title="Check unavailable" description="This check is not in the current catalogue." actions={<Button label="Clear selection" onClick={() => setSelectedId(null)} />} /></div>
+  )
   return (
     <div className="fm-page">
       <VStack gap={5}>
@@ -228,9 +254,9 @@ export default function EvaluationsPage() {
         <VStack gap={1}>
           <Heading level={1}>Evaluations</Heading>
           <Text color="secondary">
-            {evals.loading && !evals.data
+            {evals.error ? 'Evaluation counts are unavailable.' : evals.loading && !evals.data
               ? 'Loading the evaluation catalogue.'
-              : `${counts.total} evaluations. ${counts.runnable} can run today, ${counts.installed} are in installed packs, ${counts.withResults} have results on at least one system.`}
+              : `${counts.total} evaluations. ${counts.runnable} can run today, ${counts.installed} are in installed packs, ${counts.withResults} have results ${forSystem ? 'on this system' : 'on at least one system'}.`}
           </Text>
         </VStack>
           {systems.length > 0 && (
@@ -241,10 +267,7 @@ export default function EvaluationsPage() {
                   isLabelHidden
                   options={[{ value: ALL, label: 'All systems' }, ...systems.map((s) => ({ value: s.id, label: s.name }))]}
                   value={forSystem ? forSystem.id : ALL}
-                  onChange={(v) => {
-                    setSystemId(v)
-                    setSelectedId(null)
-                  }}
+                  onChange={(v) => updateSelection(v === ALL ? undefined : v)}
                 />
               </div>
               {forSystem && <Token size="sm" color={kind ? 'blue' : 'gray'} label={kind ? KIND_LABEL[kind] ?? kind : 'Kind not set'} />}

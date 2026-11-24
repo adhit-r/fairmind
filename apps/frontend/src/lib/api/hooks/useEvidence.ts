@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiClient, type ApiResponse } from '../api-client'
 import { API_ENDPOINTS } from '../endpoints'
 import { GovernanceScopeMismatchError, requireResponseScope } from './useGovernanceAssurance'
+import { withOrg } from './usePacks'
 
 export interface Evidence {
   id: string
@@ -113,14 +114,16 @@ function sortEvidence(records: Evidence[]) {
   })
 }
 
-export function useEvidence(systemId?: string) {
+export function useEvidence(systemId?: string, orgId?: string) {
   const [data, setData] = useState<Evidence[]>([])
   const [summary, setSummary] = useState<EvidenceSummary>(EMPTY_SUMMARY)
   const [dataSystemId, setDataSystemId] = useState(systemId || '')
   const [loading, setLoading] = useState(true)
   const [collecting, setCollecting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [summaryAvailable, setSummaryAvailable] = useState(false)
   const requestVersion = useRef(0)
+  const scoped = useCallback((path: string) => orgId ? withOrg(path, orgId) : path, [orgId])
 
   const loadEvidence = useCallback(async (targetSystemId: string) => {
     const currentRequest = ++requestVersion.current
@@ -128,13 +131,14 @@ export function useEvidence(systemId?: string) {
     setDataSystemId(targetSystemId)
     setData([])
     setSummary({ ...EMPTY_SUMMARY, systemId: targetSystemId })
+    setSummaryAvailable(false)
     setLoading(true)
     setError(null)
 
     try {
       const [recordsResponse, summaryResponse] = await Promise.all([
-        apiClient.get<Evidence[]>(API_ENDPOINTS.aiGovernance.evidenceV2(targetSystemId)),
-        apiClient.get<EvidenceSummary>(API_ENDPOINTS.aiGovernance.evidenceSummary(targetSystemId)),
+        apiClient.get<Evidence[]>(scoped(API_ENDPOINTS.aiGovernance.evidenceV2(targetSystemId))),
+        apiClient.get<EvidenceSummary>(scoped(API_ENDPOINTS.aiGovernance.evidenceSummary(targetSystemId))),
       ])
 
       if (currentRequest !== requestVersion.current) {
@@ -148,6 +152,7 @@ export function useEvidence(systemId?: string) {
           : null
         setData(sortEvidence(records))
         setSummary(toSummary(returnedSummary, targetSystemId))
+        setSummaryAvailable(Array.isArray(returnedSummary?.missingSignals))
       } else {
         throw new Error(recordsResponse.error || 'Failed to fetch evidence')
       }
@@ -163,7 +168,7 @@ export function useEvidence(systemId?: string) {
         setLoading(false)
       }
     }
-  }, [])
+  }, [scoped])
 
   useEffect(() => {
     if (!systemId) {
@@ -196,27 +201,28 @@ export function useEvidence(systemId?: string) {
   const refreshSummary = useCallback(async () => {
     if (!systemId) return
     const version = requestVersion.current
-    let next = toSummary(null, systemId)
+    let next: EvidenceSummary | null = null
     let mismatch: GovernanceScopeMismatchError | null = null
     try {
-      const response = await apiClient.get<EvidenceSummary>(API_ENDPOINTS.aiGovernance.evidenceSummary(systemId))
+      const response = await apiClient.get<EvidenceSummary>(scoped(API_ENDPOINTS.aiGovernance.evidenceSummary(systemId)))
       if (response.success && response.data) {
-        next = toSummary(requireResponseScope('evidence summary', response.data, { systemId }), systemId)
+        next = requireResponseScope('evidence summary', response.data, { systemId })
       }
     } catch (reason) {
       // A network failure keeps the unavailable summary; a summary for another system is an error.
       if (reason instanceof GovernanceScopeMismatchError) mismatch = reason
     }
     if (version !== requestVersion.current) return
-    setSummary(next)
+    setSummary(toSummary(next, systemId))
+    setSummaryAvailable(Array.isArray(next?.missingSignals))
     if (mismatch) setError(mismatch)
-  }, [systemId])
+  }, [systemId, scoped])
 
   const collectEvidence = useCallback(async (params: CollectEvidenceInput): Promise<Evidence> => {
     setCollecting(true)
     try {
       const response: ApiResponse<Evidence> = await apiClient.post(
-        API_ENDPOINTS.aiGovernance.evidenceCollectV2,
+        scoped(API_ENDPOINTS.aiGovernance.evidenceCollectV2),
         {
           system_id: params.systemId,
           type: params.type,
@@ -245,11 +251,11 @@ export function useEvidence(systemId?: string) {
     } finally {
       setCollecting(false)
     }
-  }, [refreshEvidence])
+  }, [refreshEvidence, scoped])
 
   const updateEvidence = useCallback(async (evidenceId: string, updates: EvidenceUpdateInput): Promise<Evidence> => {
     const response: ApiResponse<Evidence> = await apiClient.patch(
-      API_ENDPOINTS.aiGovernance.evidenceItem(evidenceId),
+      scoped(API_ENDPOINTS.aiGovernance.evidenceItem(evidenceId)),
       {
         title: updates.title,
         status: updates.status,
@@ -262,18 +268,18 @@ export function useEvidence(systemId?: string) {
       }
     )
     if (response.success && response.data) {
-      const updated = requireResponseScope('evidence', response.data, { id: evidenceId })
+      const updated = requireResponseScope('evidence', response.data, systemId ? { id: evidenceId, systemId } : { id: evidenceId })
       setData((current) =>
         sortEvidence(current.map((e) => (e.id === evidenceId ? updated : e)))
       )
       return updated
     }
     throw new Error(response.error || 'Update failed')
-  }, [])
+  }, [systemId, scoped])
 
   const addLink = useCallback(async (evidenceId: string, entityType: string, entityId: string): Promise<EvidenceLink> => {
     const response: ApiResponse<EvidenceLink> = await apiClient.post(
-      API_ENDPOINTS.aiGovernance.evidenceItemLinks(evidenceId),
+      scoped(API_ENDPOINTS.aiGovernance.evidenceItemLinks(evidenceId)),
       { entity_type: entityType, entity_id: entityId }
     )
     if (response.success && response.data) {
@@ -289,11 +295,11 @@ export function useEvidence(systemId?: string) {
       return link
     }
     throw new Error(response.error || 'Failed to add link')
-  }, [refreshSummary])
+  }, [refreshSummary, scoped])
 
   const removeLink = useCallback(async (evidenceId: string, linkId: string): Promise<void> => {
     const response: ApiResponse<{ deleted: boolean }> = await apiClient.delete(
-      API_ENDPOINTS.aiGovernance.evidenceItemLink(evidenceId, linkId)
+      scoped(API_ENDPOINTS.aiGovernance.evidenceItemLink(evidenceId, linkId))
     )
     if (response.success) {
       setData((current) =>
@@ -307,13 +313,14 @@ export function useEvidence(systemId?: string) {
       return
     }
     throw new Error(response.error || 'Failed to remove link')
-  }, [refreshSummary])
+  }, [refreshSummary, scoped])
 
   const scopeMatches = dataSystemId === (systemId || '')
 
   return {
     data: scopeMatches ? data : [],
     summary: scopeMatches ? summary : { ...EMPTY_SUMMARY, systemId: systemId || '' },
+    summaryAvailable: scopeMatches && summaryAvailable,
     // Until the effect starts the load for a new system the held state belongs to the previous one,
     // so a system whose load has not begun is loading, never empty.
     loading: loading || !scopeMatches,

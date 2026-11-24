@@ -221,11 +221,25 @@ def _summary(db: Session, run) -> dict:
     }
 
 
-def _latest_runs(db: Session, org_id: str, workflow_ids: List[str]) -> Dict[str, Any]:
+def _require_org_system(db: Session, org_id: str, system_id: str) -> None:
+    found = db.execute(
+        text("SELECT id FROM governance_ai_systems WHERE id = :id AND org_id = :org"),
+        {"id": system_id, "org": org_id},
+    ).first()
+    if not found:
+        raise HTTPException(status_code=404, detail="AI system not found")
+
+
+def _latest_runs(db: Session, org_id: str, workflow_ids: List[str], system_id: Optional[str] = None) -> Dict[str, Any]:
+    sql = "SELECT * FROM workflow_runs WHERE org_id = :org_id"
+    params = {"org_id": org_id}
+    if system_id is not None:
+        sql += " AND ai_system_id = :system_id"
+        params["system_id"] = system_id
     rows = (
         db.execute(
-            text("SELECT * FROM workflow_runs WHERE org_id = :org_id ORDER BY created_at DESC"),
-            {"org_id": org_id},
+            text(sql + " ORDER BY created_at DESC, id DESC"),
+            params,
         )
         .mappings()
         .all()
@@ -484,15 +498,15 @@ def list_evaluations(
     pillar: Optional[str] = Query(default=None),
     engine: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
-    system: Optional[str] = Query(default=None),
+    system: Optional[str] = Query(default=None, min_length=1),
     m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
 ):
     _ensure_tables(db)
     installed = set(_installed_ids(db, m.org_id))
-    res = evaluation_results.results(db, m.org_id)
-    needle = q.strip().lower() if q else ""
     add = _for_system(db, m.org_id, system)
+    res = evaluation_results.results(db, m.org_id, system)
+    needle = q.strip().lower() if q else ""
     return [
         add(ev.id, _evaluation_json(ev, installed, res))
         for ev in EVALUATIONS.values()
@@ -504,23 +518,31 @@ def list_evaluations(
 
 @router.get("/evaluations/{evaluation_id}")
 def get_evaluation(
-    evaluation_id: str, system: Optional[str] = Query(default=None), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)
+    evaluation_id: str, system: Optional[str] = Query(default=None, min_length=1), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)
 ):
     ev = EVALUATIONS.get(evaluation_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
     _ensure_tables(db)
-    out = _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
-    return _for_system(db, m.org_id, system)(ev.id, out)
+    add = _for_system(db, m.org_id, system)
+    out = _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id, system))
+    return add(ev.id, out)
 
 
 @router.get("/library/{pack_id}")
-def get_library(pack_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_library(
+    pack_id: str,
+    m: OrgMembership = Depends(_member),
+    db: Session = Depends(get_db),
+    system: Optional[str] = None,
+):
     if pack_id not in PACKS:
         raise HTTPException(status_code=404, detail="Pack not found")
     _ensure_tables(db)
     org_id = m.org_id
-    latest = _latest_runs(db, org_id, set(cat.PACK_WORKFLOWS[pack_id]))
+    if system is not None:
+        _require_org_system(db, m.org_id, system)
+    latest = _latest_runs(db, org_id, set(cat.PACK_WORKFLOWS[pack_id]), system)
     patterns = [
         {
             "id": p.id,
@@ -592,11 +614,18 @@ def install_bundle(bundle_id: str, m: OrgMembership = Depends(_manager), db: Ses
 
 
 @router.get("/journeys")
-def list_journeys(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_journeys(
+    m: OrgMembership = Depends(_member),
+    db: Session = Depends(get_db),
+    system: Optional[str] = None,
+):
     _ensure_tables(db)
-    org = _org_coverage(db, m.org_id, _installed_ids(db, m.org_id))
-    installed = set(_installed_ids(db, m.org_id))
-    latest = _latest_runs(db, m.org_id, set(WORKFLOWS))
+    if system is not None:
+        _require_org_system(db, m.org_id, system)
+    installed_ids = _installed_ids(db, m.org_id)
+    org = _org_coverage(db, m.org_id, installed_ids)
+    installed = set(installed_ids)
+    latest = _latest_runs(db, m.org_id, set(WORKFLOWS), system)
     rows = [
         {
             "key": fk,
@@ -649,6 +678,8 @@ def get_journey(
     if not fw:
         raise HTTPException(status_code=404, detail="Journey not found")
     _ensure_tables(db)
+    if system is not None:
+        _require_org_system(db, m.org_id, system)
     ids = _installed_ids(db, m.org_id)
     res = evaluation_results.results(db, m.org_id)
     installed, org = set(ids), _org_coverage(db, m.org_id, ids, res)
@@ -662,7 +693,7 @@ def get_journey(
         return (evaluation_results.system_result(res, eid, system) or {"status": "not_run"})["status"]
 
     keys = FRAMEWORK_KEYS[framework_key]
-    latest = _latest_runs(db, m.org_id, {w for k in keys for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, [])})
+    latest = _latest_runs(db, m.org_id, {w for k in keys for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, [])}, system)
     groups: Dict[str, list] = {}
     for req in REQUIREMENTS.values():
         if req.key not in keys:
@@ -784,11 +815,18 @@ def _workflow_or_404(workflow_id: str) -> Workflow:
 
 
 @router.get("/workflows/{workflow_id}")
-def get_workflow(workflow_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_workflow(
+    workflow_id: str,
+    m: OrgMembership = Depends(_member),
+    db: Session = Depends(get_db),
+    system: Optional[str] = None,
+):
     wf = _workflow_or_404(workflow_id)
     _ensure_tables(db)
     org_id = m.org_id
-    latest = _latest_runs(db, org_id, [wf.id]).get(wf.id)
+    if system is not None:
+        _require_org_system(db, m.org_id, system)
+    latest = _latest_runs(db, org_id, [wf.id], system).get(wf.id)
     pattern = PATTERNS[wf.pattern]
     pack_id = cat.WORKFLOW_PACK[wf.id]
     steps, version = _current(db, org_id, wf)
@@ -847,11 +885,7 @@ def start_run(
     if not _is_installed(db, org_id, cat.WORKFLOW_PACK[wf.id]):
         raise HTTPException(status_code=409, detail="Install the pack before starting a run")
     if body.system_id:
-        system = db.execute(
-            text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": body.system_id}
-        ).fetchone()
-        if not system or str(system[0]) != org_id:
-            raise HTTPException(status_code=404, detail="AI system not found")
+        _require_org_system(db, org_id, body.system_id)
     steps, version = _current(db, org_id, wf)
     now = _utc_now_iso()
     run_id = str(uuid.uuid4())

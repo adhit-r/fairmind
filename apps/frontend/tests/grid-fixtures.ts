@@ -15,13 +15,13 @@ const check = (key: string, label: string, state: string, evidenceClass: string 
   key, label, state, confidence: state === 'open' ? 0 : 0.9, evidenceId: state === 'open' ? null : `ev-${key}`, evidenceClass, ...extra,
 })
 const checks = [
-  check('fairness', 'Fairness', 'proven', 'measured', { fails: true }),
+  check('fairness', 'Fairness', 'proven', 'measured', { fails: true, failureEvidenceIds: ['ev-standing-failure'] }),
   check('data_governance', 'Data governance', 'attested', 'manual'),
   check('human_oversight', 'Human oversight', 'proven', 'tool_estimated'),
   check('monitoring', 'Monitoring', 'open', null, { stale: true }),
   check('environmental', 'Environmental', 'open', null),
 ]
-const gates = systems.map((s, i) => ({ systemId: s.id, verdict: i ? 'no_go' : 'conditional_go', confidence: i ? 0.2 : 0.55, band: 'estimated', approvalStatus: 'not_requested', checks }))
+export const gridGates = systems.map((s, i) => ({ systemId: s.id, verdict: i ? 'no_go' : 'conditional_go', confidence: i ? 0.2 : 0.55, band: 'estimated', approvalStatus: 'not_requested', checks }))
 const req = (control: string, title: string, status: string) => ({ key: `${FW}|${control}`, control, title, status, workflows: [], evaluations: [] })
 const journey = {
   key: FW, name: 'ISO/IEC 42001:2023', pillar: 'governance', version: null, type: null, binding: null, status: null, active: 3, coveredAll: 0, coveredInstalled: 0,
@@ -65,17 +65,21 @@ export async function installGridFixtures(page: Page, fwSystems: unknown = frame
     window.localStorage.setItem('access_token', 'playwright-token')
     window.localStorage.setItem('selected_org_id', 'org-1')
   })
-  await page.route('**/api/proxy/**', async (route) => {
+  await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname.replace('/api/proxy', '')
+    if (path === '/api/v1/whats-new') return json(route, { releases: [], seen: null, emails: false })
+    if (path === '/api/v1/whats-new') return json(route, { releases: [], seen: null, emails: false })
     if (path === '/api/v1/auth/me') return json(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@grid.test' })
     if (path === '/api/v1/organizations') return json(route, { organizations: [{ id: 'org-1', name: 'Grid org', slug: 'grid-org', owner_id: 'user-1', created_at: '2026-01-01T00:00:00Z', role: 'admin' }] })
+    if (path === '/api/v1/plan') return json(route, { discovery: { suggested: [] } })
     if (path === '/api/v1/ai-governance/systems') return json(route, systems)
-    if (path === '/api/v1/ai-governance/estate/gates') return json(route, gates)
+    if (path === '/api/v1/ai-governance/estate/gates') return json(route, gridGates)
     if (path === '/api/v1/ai-governance/estate/frameworks') {
       const fw = fwSystems as typeof frameworkSystems
       return json(route, { unconfirmed: 0, frameworks: [{ key: FW, systems: fw.systems.length, tracked: fw.requirements.length, states: { proven: 1, open: fw.requirements.length - 1 } }] })
     }
     if (path === `/api/v1/ai-governance/frameworks/${FW}/systems`) return json(route, fwSystems)
+    if (path === `/api/v1/ai-governance/frameworks/${FW}/scope`) return json(route, { framework: { key: FW, name: journey.name }, items: [], summary: { total: 0, sure: 0, check: 0, waitingOwner: 0, confirmedIn: 0, confirmedOut: 0 } })
     if (path === `/api/v1/packs/journeys/${FW}`) return json(route, journey)
     if (path === '/api/v1/packs/journeys') return json(route, [{ key: FW, name: journey.name, pillar: 'governance', active: 3, coveredAll: 0, coveredInstalled: 0, contributingPacks: [], type: null, binding: null, workflows: [], waiting: 0 }])
     if (path === '/api/v1/packs/controls') return json(route, controls)

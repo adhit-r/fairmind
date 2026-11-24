@@ -829,6 +829,7 @@ def release_gate(
             assessment = environmental_assessed if isinstance(environmental_assessed, dict) else {"provenance_class": "tool_estimated", "confidence": 0.85}
             matching = [{"evidenceType": "environmental", "confidence": assessment["confidence"], "metadata": {"provenance_class": assessment["provenance_class"]}}]
         state, confidence, evidence_id, detail, evidence_class = "open", 0.0, None, None, None
+        failure_ids = set()
         record = None
         stale_for = None
         if key == "monitoring" and monitoring_cadence_hours:
@@ -851,12 +852,16 @@ def release_gate(
                 detail = {"all_checks_pass": _fairness_run_passes(record), "rows": content.get("rows"), "attributes": [a.get("attribute") for a in content.get("attributes", [])]}
                 if detail["all_checks_pass"] is False:
                     reasons.append("Measured fairness checks fail on at least one attribute" if key == "fairness" else "Latest monitoring snapshot shows drift or disparity outside thresholds")
+                    if evidence_id:
+                        failure_ids.add(evidence_id)
         # each evaluation's newest run: a failure stands until that evaluation passes again, whatever record is newest
         latest_runs: Dict[str, Dict[str, Any]] = {}
         for r in sorted((r for r in matching if evaluation_status(r)), key=lambda r: _record_time(r) or _NO_TIME):
             latest_runs[str((r.get("content") or {}).get("evaluationId"))] = r
         for evaluation_id, r in latest_runs.items():
             if evaluation_status(r) == "failed":
+                if r.get("id"):
+                    failure_ids.add(r["id"])
                 detail = {**(detail or {}), "evaluationId": evaluation_id, "all_checks_pass": False}
                 reasons.append(f"Evaluation {evaluation_id} failed, which counts against {label.lower()}")
         if key == "fairness":
@@ -866,13 +871,15 @@ def release_gate(
                         and isinstance(r.get("content"), dict) and _fairness_run_passes(r) is not None]
             newest_csv = max(runs_csv, key=lambda r: _record_time(r) or _NO_TIME, default=None)
             if newest_csv and newest_csv is not record and _fairness_run_passes(newest_csv) is False:
+                if newest_csv.get("id"):
+                    failure_ids.add(newest_csv["id"])
                 detail = {**(detail or {}), "all_checks_pass": False}
                 reasons.append("Measured fairness checks fail on at least one attribute")
         checks.append({
             "key": key, "label": label, "state": state, "confidence": round(confidence, 2), "evidenceId": evidence_id, "evidenceClass": evidence_class, "detail": detail,
             **({"stale": True} if stale_for is not None else {}),
             # detail exists only for measured or tool-estimated fairness and monitoring records, and evaluation runs
-            **({"fails": True} if detail and detail["all_checks_pass"] is False else {}),
+            **({"fails": True, "failureEvidenceIds": sorted(failure_ids)} if detail and detail["all_checks_pass"] is False else {}),
         })
 
     overall = round(sum(c["confidence"] for c in checks) / len(checks), 2) if checks else 0.0

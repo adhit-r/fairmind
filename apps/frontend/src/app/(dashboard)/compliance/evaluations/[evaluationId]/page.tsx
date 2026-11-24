@@ -2,7 +2,7 @@
 
 import '@/astryx/pages/evaluations.css'
 import Link from 'next/link'
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Activity, ArrowLeftRight, Bot, Boxes, Check, Cloud, Code, Cpu, Database, Info, MessageSquare, Network, Play, Plug, Scale, Server, Upload } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -29,7 +29,9 @@ import {
 import { setSystemKind } from '@/lib/api/hooks/useLifecycle'
 import { KIND_LABEL } from '@/astryx/data/discovery'
 import { defaultWay, keptAs, presetFor, proves } from '@/astryx/data/evaluations'
-import { useSystemContext } from '@/components/workflow/SystemContext'
+import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
+import { isOpenRisk, useRisks, type Risk } from '@/lib/api/hooks/useRisks'
+import { evaluationHref, findingHref, recordParam } from '@/lib/assurance/evaluationLinks'
 import { Drawer } from '@astryxdesign/core/Drawer'
 import { TraceView } from '@/components/traces/TraceView'
 import { ExplanationResult } from '@/components/explain/ExplainParts'
@@ -91,6 +93,18 @@ function DetailTable({ rows, onTrace }: { rows: Array<Record<string, unknown>>; 
   )
 }
 
+function recordObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function RunVerdict({ run }: { run: EngineRun }) {
+  return <>
+    <ResultPill status={run.status} />
+    {Boolean(run.thresholdLoosened?.length) && <Pill tone="warn">Loosened thresholds · not counted as proof</Pill>}
+    {run.partialRead && run.status === 'passed' && <Pill tone="warn">Partial live-run coverage · not counted as proof</Pill>}
+  </>
+}
+
 function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<string, unknown>) => void }) {
   // Engines that report more than one kind of row (features and samples, say) get a table per kind.
   const groups = useMemo(() => {
@@ -104,9 +118,7 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2.5">
-        <ResultPill status={run.status} />
-        {run.thresholdLoosened && <Pill tone="warn">Loosened thresholds: not counted as proof</Pill>}
-        {run.partialRead && run.status === 'passed' && <Pill tone="warn">Read part of the week&apos;s live runs: not counted as proof</Pill>}
+        <RunVerdict run={run} />
         <span className={`text-[13px] ${MUTED}`}>
           {run.systemName}, {when(run.createdAt)}
           {Object.values(run.files).length > 0 && `, from ${run.source === 'connection' ? 'the connection to ' : ''}${Object.values(run.files).join(' and ')}`}
@@ -352,22 +364,34 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
   const filesReady = from === 'traces' || from === 'fairmind' ? true : from === 'connection' ? !!connection : slots.every((s) => !s.required || files[s.name]) && (!choosing || probes !== 'upload' || !!files.probes)
   const ready = (!active.live || connected) && filesReady && settings.every((p) => !p.required || (params[p.name] ?? '').trim())
 
+  function finish(run: EngineRun, expectedId?: string) {
+    if (!mounted.current) return
+    if (!run.id || run.systemId !== system.id || run.evaluationId !== evaluationId || (expectedId && run.id !== expectedId)) {
+      setFailure('The response did not identify a run for this system and check.')
+      return
+    }
+    onDone(run)
+  }
+
   /** A behaviour test answers with a job; follow it until the run is stored. */
   async function follow(started: EvaluationJob) {
+    if (started.systemId !== system.id || started.evaluationId !== evaluationId) return setFailure('The job did not match this system and check.')
     let current = started
     while (mounted.current && current.status === 'running') {
       setJob(current)
       await sleep(2000)
       const res = await getJob(current.id)
+      if (!mounted.current) return
       if (res.error || !res.data) return setFailure(res.error)
+      if (res.data.id !== started.id || res.data.systemId !== system.id || res.data.evaluationId !== evaluationId) return setFailure('The returned job did not match this run.')
       current = res.data
     }
     setJob(null)
     if (current.status === 'failed') return setFailure(current.error ?? 'The run stopped')
     if (current.evidenceId) {
-      const run = await getRun(current.evidenceId)
+      const run = await getRun(current.evidenceId, system.id, evaluationId)
       if (run.error || !run.data) setFailure(run.error)
-      else onDone(run.data)
+      else finish(run.data, current.evidenceId)
     }
   }
 
@@ -404,9 +428,10 @@ function RunForm({ evaluationId, spec, live, way, liveRunsOwn = null, system, th
       for (const s of spec.slots) if (files[s.name] && (!choosing || s !== probeSlot || probes === 'upload')) form.append(s.name, files[s.name] as File)
     for (const s of liveUploads) if (files[s.name]) form.append(s.name, files[s.name] as File)
     const res = await runEvaluation(evaluationId, form)
+    if (!mounted.current) return
     if (res.error || !res.data) setFailure(res.error)
     else if ('job' in res.data) await follow(res.data.job)
-    else onDone(res.data)
+    else finish(res.data)
     setBusy(false)
   }
 
@@ -614,47 +639,91 @@ const SideCard = ({ label, children }: { label: string; children: ReactNode }) =
   </div>
 )
 
+type EvaluationDetailProps = {
+  evaluationId: string
+  systems: AISystemSummary[]
+  system?: AISystemSummary
+  runId?: string
+}
+
+function FindingEvaluation({ findingId, ...detail }: EvaluationDetailProps & { findingId: string; system: AISystemSummary }) {
+  const { data, loading, error, reload } = useRisks(detail.system.id)
+  if (loading) return <Loading label="Loading the originating finding" />
+  if (error) return <ErrorNote message={`Finding unavailable. ${error.message}`} onRetry={reload} />
+  const finding = data.find((r) => r.id === findingId && r.systemId === detail.system.id)
+  const meta = finding?.metadata
+  const linkedRun = !detail.runId || detail.runId === meta?.evidenceId || detail.runId === meta?.retestEvidenceId ||
+    (Array.isArray(meta?.retestEvidenceIds) && meta.retestEvidenceIds.includes(detail.runId))
+  if (!finding || finding.source !== 'fairmind.eval_engines' || meta?.evaluationId !== detail.evaluationId || !linkedRun) {
+    return <div className="grid gap-3">
+      <ErrorNote message="This finding does not identify that check or run on this system." />
+      {detail.runId && <Link className={BTN} href={evaluationHref(detail.evaluationId, detail.system.id, detail.runId)}>Look up this run independently</Link>}
+      {finding && <Link className={BTN} href={findingHref(detail.system.id, finding.id)}>Back to finding</Link>}
+    </div>
+  }
+  return <EvaluationDetail {...detail} finding={finding} />
+}
+
 export default function EvaluationPage() {
   const { evaluationId } = useParams<{ evaluationId: string }>()
   const search = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
-  const { systems: allSystems, selectedSystem, refreshSystems } = useSystemContext()
-  const systems = allSystems.filter((s) => s.metadata?.source !== 'fallback')
-  const evaluation = useEvaluation(evaluationId)
-  const runnable = !!evaluation.data?.runnable
-  const [picked, setPicked] = useState<string | null>(null)
-  const fallback = selectedSystem?.metadata?.source === 'fallback' ? '' : selectedSystem?.id ?? ''
-  const systemId = picked ?? search.get('system') ?? fallback
+  const { systems: register, loading, error, refreshSystems } = useSystemContext()
+  const systems = register.filter((s) => s.metadata?.source !== 'fallback')
+  const systemId = recordParam(search, 'system')
+  const runId = recordParam(search, 'run')
+  const findingId = recordParam(search, 'finding')
+  if (systemId === null || findingId === null || runId === null || (!systemId && (findingId || runId))) {
+    return <ErrorNote message="Evaluation link unavailable. A run or finding needs one system and an exact record reference." />
+  }
+  if (loading) return <Loading label="Loading AI systems" />
+  if (error) return <ErrorNote message={`AI systems unavailable. ${error}`} onRetry={refreshSystems} />
   const system = systems.find((s) => s.id === systemId)
-  const engine = useEngine(evaluationId, runnable, system ? systemId : undefined)
-  const runs = useEngineRuns(evaluationId, runnable)
-  const [openId, setOpenId] = useState<string | null>(null)
-  const [fresh, setFresh] = useState<EngineRun | null>(null)
+  if (systemId && !system) return <ErrorNote message="This AI system is unavailable in this organisation." />
+  const key = JSON.stringify([evaluationId, systemId, runId, findingId])
+  const detail = { evaluationId, systems, system, runId }
+  return findingId && system
+    ? <FindingEvaluation key={key} {...detail} system={system} findingId={findingId} />
+    : <EvaluationDetail key={key} {...detail} />
+}
+
+function EvaluationDetail({ evaluationId, systems, system, runId, finding }: EvaluationDetailProps & { finding?: Risk }) {
+  const router = useRouter()
+  const search = useSearchParams()
+  const { refreshSystems } = useSystemContext()
+  const systemId = system?.id
+  const evaluation = useEvaluation(evaluationId, systemId)
+  const runnable = evaluation.data?.id === evaluationId && evaluation.data.runnable
+  const engine = useEngine(evaluationId, Boolean(runnable && systemId && !runId), systemId)
+  const runs = useEngineRuns(evaluationId, runnable ? systemId : undefined)
+  const opened = useEngineRun(runId, evaluationId, systemId)
   const [chosenWay, setChosenWay] = useState<RunWay | null>(null)
   const [trace, setTrace] = useState<{ id: string; flag?: string } | null>(null)
-  const opened = useEngineRun(fresh ? null : openId)
-  const shown = fresh ?? opened.data
-
-  const choose = (id: string) => {
-    setPicked(id)
-    setChosenWay(null)
-    const q = new URLSearchParams(search.toString())
-    q.set('system', id)
-    router.replace(`${pathname}?${q.toString()}`, { scroll: false })
-  }
+  const choose = (id: string) => router.replace(evaluationHref(evaluationId, id), { scroll: false })
+  const earlierRetest = runId && runId !== finding?.metadata?.retestEvidenceId && Array.isArray(finding?.metadata?.retestEvidenceIds) && finding.metadata.retestEvidenceIds.includes(runId)
+  const sourceFinding = finding && systemId ? findingHref(systemId, finding.id) + (earlierRetest ? '&retests=all' : '') : null
 
   if (evaluation.loading && !evaluation.data) return <Loading label="Loading evaluation" />
-  if (evaluation.error || !evaluation.data) {
+  if (evaluation.error || evaluation.data?.id !== evaluationId || !Array.isArray(evaluation.data.tests) ||
+    typeof evaluation.data.name !== 'string' || !evaluation.data.pack ||
+    (evaluation.data.results != null && !Array.isArray(evaluation.data.results.systems))) {
     return (
       <div className="flex flex-col gap-4">
         <Crumbs items={[{ label: 'Evaluations', href: '/evaluations' }, { label: evaluationId }]} />
-        <ErrorNote message={`This evaluation could not be loaded. ${evaluation.error ?? ''}`} onRetry={evaluation.reload} />
+        <ErrorNote message={`This evaluation could not be loaded. ${evaluation.error ?? 'The requested check was not returned.'}`} onRetry={evaluation.reload} />
       </div>
     )
   }
   const e = evaluation.data
-  const spec = engine.data
+  if (runId && opened.loading) return <Loading label="Loading the recorded result" />
+  const shown = opened.data
+  if (runId && (opened.error || !shown || shown.id !== runId || shown.systemId !== systemId || shown.evaluationId !== evaluationId ||
+    !['passed', 'failed', 'insufficient'].includes(shown.status) || typeof shown.summary !== 'string' ||
+    !recordObject(shown.metrics) || !recordObject(shown.files) || (shown.detail != null && (!Array.isArray(shown.detail) || !shown.detail.every(recordObject))))) {
+    return <div className="grid gap-3"><ErrorNote message={`Recorded result unavailable for this system and check. ${opened.error ?? ''}`} onRetry={opened.reload} />
+      {sourceFinding && <Link className={BTN} href={sourceFinding}>Back to finding</Link>}</div>
+  }
+  const spec = engine.data?.id === evaluationId && Array.isArray(engine.data.slots) && Array.isArray(engine.data.params) ? engine.data : null
+  const engineError = engine.error || (engine.data && !spec ? 'The engine did not return a definition for this check.' : null)
   const ways = spec?.ways ?? []
   const asked = search.get('source') === 'traces' ? 'live_runs' : null
   // An engine with no way listed (FairMind's own agent) runs as it always has.
@@ -663,7 +732,11 @@ export default function EvaluationPage() {
   const runSpec = behaviour ?? spec
   const kind = spec?.kind ?? null
   const KindIcon = KIND_ICON[kind ?? ''] ?? Cpu
-  const mine = (runs.data ?? []).filter((r) => !system || r.systemId === system.id)
+  const historyError = runs.error || (runs.data && (!Array.isArray(runs.data) || runs.data.some((r) => !r || r.systemId !== systemId || r.evaluationId !== evaluationId))
+    ? 'The run history did not match this system and check.' : null)
+  const mine = historyError ? [] : runs.data ?? []
+  const current = e.results?.systems?.find((r) => r && r.systemId === systemId)
+  const mayRetest = !finding || (isOpenRisk(finding) && system?.stage !== 'retired')
   const live = !!runSpec?.live
   const kept = way ? keptAs(way, live, !!spec?.liveRunsEngine) : null
   // the stored run is model judged when a live engine runs, a judged platform check reads the platform, or live runs are replayed
@@ -678,10 +751,37 @@ export default function EvaluationPage() {
         <Pill>{e.id}</Pill>
         {!runnable ? <EnginePill engine={e.engine} /> : way && system ? <Pill tone="done" dot>{way === 'files' && live ? 'Runs live' : WAY_HEAD[way]}</Pill> : <Pill tone="done" dot>Runs in FairMind</Pill>}
         {e.judgeNotValidated && <Pill>Judge not validated</Pill>}
-        {e.results && e.results.status !== 'not_run' && <ResultPill status={e.results.status} />}
+        {system && <Link className="font-semibold underline" href={`/systems/${encodeURIComponent(system.id)}`}>{system.name}</Link>}
+        {!shown && current && <ResultPill status={current.status} />}
       </div>
-
-      {runnable && (
+      {finding && sourceFinding && (
+        <div className="fm-ev-card">
+          <span>{runId ? 'Originating finding' : 'Retest for finding'} · {finding.title}</span>{' '}
+          <Link href={sourceFinding} className="font-semibold underline">Back to finding</Link>
+        </div>
+      )}
+      {shown && (
+        <section className="fm-ev-card" aria-labelledby="recorded-result">
+          <h2 className="fm-ev-h2" id="recorded-result">Recorded result</h2>
+          <p className="fm-ev-small">Run <code className="break-all">{shown.id}</code> · {shown.evaluationId} · {system?.name}</p>
+          {shown.source === 'traces' && e.id === 'EV-OVS-04' ? (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <RunVerdict run={shown} />
+                <span className={`text-[13px] ${MUTED}`}>{shown.systemName}, {when(shown.createdAt)}, from live runs{shown.judge && `, judged by ${shown.judge.model}`}</span>
+              </div>
+              <p className="m-0 leading-normal text-[var(--fm-ink)]">{shown.summary}</p>
+              <ExplanationResult run={shown} onTrace={(id, flag) => setTrace({ id, flag })} />
+            </div>
+          ) : <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN}>Open the system file</Link>
+            {!finding && <Link href={`/findings?${new URLSearchParams({ system: shown.systemId })}`} className={BTN}>Open findings</Link>}
+            {runnable && mayRetest && <Link className={BTN_P} href={evaluationHref(e.id, systemId, undefined, finding?.id)}>Prepare another run</Link>}
+          </div>
+        </section>
+      )}
+      {!runId && !finding && (
         <div className="fm-ev-card fm-ev-sysbar">
           <span className="fm-ev-sysicon" aria-hidden><KindIcon size={20} /></span>
           <div className="fm-ev-grow">
@@ -703,7 +803,7 @@ export default function EvaluationPage() {
           </div>
         </div>
       )}
-      {runnable && systems.length === 0 && (
+      {systems.length === 0 && (
         <span className={`text-xs ${MUTED}`}>
           Register an AI system first: <Link href="/onboard" className="font-semibold underline">Register a system</Link>
         </span>
@@ -711,13 +811,15 @@ export default function EvaluationPage() {
 
       <div className="fm-ev-run-grid">
         <div className="fm-ev-stack fm-ev-run-main">
-          {!runnable ? (
+          {runId ? null : !mayRetest ? (
+            <p>{system?.stage === 'retired' ? 'This system is retired.' : 'This finding has been settled.'} Open its recorded results from the finding.</p>
+          ) : !runnable ? (
             <section className="fm-ev-card">
               <h2 className="fm-ev-h2">Not runnable in FairMind yet</h2>
               <p className="fm-ev-muted">FairMind cannot run this evaluation yet. It needs a connection to the system&apos;s platform or evidence FairMind does not collect.</p>
             </section>
-          ) : !system ? null : engine.error ? (
-            <ErrorNote message={engine.error} onRetry={engine.reload} />
+          ) : !system ? <p>Choose a system to see its results and run this check.</p> : engineError ? (
+            <ErrorNote message={engineError} onRetry={engine.reload} />
           ) : !spec || !runSpec || !way ? (
             <Loading label="Loading" />
           ) : spec.fit === 'unknown' && ways.length > 0 ? (
@@ -750,10 +852,7 @@ export default function EvaluationPage() {
                 system={{ id: system.id, name: system.name, kind }}
                 threshold={e.threshold}
                 onDone={(run) => {
-                  setFresh(run)
-                  setOpenId(run.id)
-                  runs.reload()
-                  evaluation.reload()
+                  router.push(evaluationHref(e.id, system.id, run.id, finding?.id))
                 }}
               />
             </>
@@ -796,24 +895,18 @@ export default function EvaluationPage() {
               <MetadataListItem label="Pack">{e.pack.name}</MetadataListItem>
             </MetadataList>
           </SideCard>
-          {runnable && (
-            <SideCard label={system ? 'Runs on this system' : 'Runs'}>
-              {runs.data && mine.length === 0 && <span className="fm-ev-muted fm-ev-small">None yet</span>}
+          {runnable && system && !finding && (
+            <SideCard label="Runs on this system">
+              {runs.loading ? <Loading label="Loading run history" /> : historyError
+                ? <ErrorNote message={`Run history unavailable. ${historyError}`} onRetry={runs.reload} />
+                : mine.length === 0 && <span className="fm-ev-muted fm-ev-small">None yet</span>}
               <ul className="fm-ev-runs">
                 {mine.map((r) => (
                   <li key={r.id}>
-                    <button
-                      type="button"
-                      aria-pressed={openId === r.id}
-                      onClick={() => {
-                        setFresh(null)
-                        setOpenId(r.id)
-                      }}
-                    >
+                    <Link href={evaluationHref(e.id, system.id, r.id)} aria-label={`${r.status} run ${r.id} on ${system.name}`} aria-current={runId === r.id ? 'page' : undefined}>
                       <ResultPill status={r.status} />
-                      {!system && <span>{r.systemName}</span>}
                       <span className="fm-ev-muted">{when(r.createdAt)}</span>
-                    </button>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -822,25 +915,6 @@ export default function EvaluationPage() {
         </aside>
       </div>
 
-      {runnable && shown && (
-        <section className="rounded-2xl bg-white p-5">
-          <h2 className="mb-3 mt-0 text-base font-semibold text-[var(--fm-ink)]">Result</h2>
-          {shown.source === 'traces' && e.id === 'EV-OVS-04' ? (
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <ResultPill status={shown.status} />
-                <span className={`text-[13px] ${MUTED}`}>{shown.systemName}, {when(shown.createdAt)}, from live runs{shown.judge && `, judged by ${shown.judge.model}`}</span>
-              </div>
-              <p className="m-0 leading-normal text-[var(--fm-ink)]">{shown.summary}</p>
-              <ExplanationResult run={shown} onTrace={(id, flag) => setTrace({ id, flag })} />
-            </div>
-          ) : <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN_P}>Open the system file</Link>
-            <Link href={`/risks?system=${encodeURIComponent(shown.systemId)}`} className={BTN}>Open findings</Link>
-          </div>
-        </section>
-      )}
       {shown && (
         <Drawer isOpen={trace !== null} onOpenChange={(o) => !o && setTrace(null)} label="Live run" width={560} padding={5}>
           {trace && (

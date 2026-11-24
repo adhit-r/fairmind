@@ -2,6 +2,8 @@
 
 import '@/astryx/pages/discovery.css'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft, ArrowRight, Plus } from 'lucide-react'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
@@ -11,6 +13,8 @@ import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { Selector } from '@astryxdesign/core/Selector'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { recordParam } from '@/lib/assurance/evaluationLinks'
+import { Button as Pill } from '@/components/ui/button'
 import { SourceMark, where } from '@/astryx/DiscoveryParts'
 import { CandidatePanel, WaitingList } from '@/astryx/DiscoveryReview'
 import { useCandidates, type Candidate } from '@/astryx/data/review'
@@ -279,23 +283,107 @@ function Sources({ d, busyId, run, onUpload }: { d: D; busyId: string | null; ru
 
 /* ------------------------------------------------------------------ Page */
 
+function groupQueueBySource(candidates: Candidate[]) {
+  const counts = new Map<IntegrationKind, number>()
+  for (const candidate of candidates) {
+    for (const source of new Set(candidate.sources)) {
+      counts.set(source, (counts.get(source) ?? 0) + 1)
+    }
+  }
+  return [...counts].sort(([firstKind, firstCount], [secondKind, secondCount]) =>
+    secondCount - firstCount || (SOURCE_LABEL[firstKind] ?? firstKind).localeCompare(SOURCE_LABEL[secondKind] ?? secondKind))
+}
+
+function QueueSourceSummary({ groups, total, source, onSource }: {
+  groups: ReturnType<typeof groupQueueBySource>
+  total: number
+  source: string | null
+  onSource: (kind: string | null) => void
+}) {
+  return (
+    <section className="dv-source-summary" aria-labelledby="dv-queue-sources">
+      <h2 id="dv-queue-sources">Sources in the queue</h2>
+      <p>Select a source to filter candidates.</p>
+      <ul>
+        {groups.map(([kind, count]) => (
+          <li key={kind}>
+            <button type="button" className="dv-source-filter" onClick={() => onSource(source === kind ? null : kind)}
+              aria-pressed={source === kind} aria-label={`Filter by ${SOURCE_LABEL[kind] ?? kind}, ${count} of ${total} candidates`}>
+              <SourceMark kind={kind} />
+              <span className="dv-source-label">{SOURCE_LABEL[kind] ?? kind}</span>
+              <strong>{count}</strong>
+              <span className="dv-source-track" aria-hidden><i style={{ width: `${count / total * 100}%` }} /></span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {groups.reduce((sum, [, count]) => sum + count, 0) > total &&
+        <p>Some candidates appear under more than one source.</p>}
+      <footer>
+        {source ? <button type="button" onClick={() => onSource(null)}>Clear source filter</button>
+          : <Link href="/discovery?view=sources">Manage sources <ArrowRight size={15} aria-hidden /></Link>}
+      </footer>
+    </section>
+  )
+}
+
+function waitingHref(source: string | null, candidate?: string) {
+  const query = new URLSearchParams({ view: 'found', show: 'waiting' })
+  if (candidate) query.set('c', candidate)
+  if (source) query.set('source', source)
+  return `/discovery?${query}`
+}
+
 function DiscoveryView() {
   const router = useRouter()
   const params = useSearchParams()
   const v = params.get('view')
-  // ?view=waiting is the old address of Found's waiting filter
-  const view = v === 'sources' || v === 'flow' ? v : v === 'found' || v === 'waiting' ? 'found' : 'overview'
   const d = useDiscovery()
   const c = useCandidates()
+  const picked = recordParam(params, 'c')
+  const hasCandidateLink = picked !== undefined
   const asked = (v === 'waiting' ? 'waiting' : params.get('show')) as Show | null
-  // anything waiting opens on what needs a decision; otherwise on everything found
-  const show: Show = asked && SHOWS.includes(asked) ? asked : c.candidates.length ? 'waiting' : 'all'
-  const showFound = (s: Show) => router.replace(`/discovery?view=found&show=${s}`)
-  const picked = params.get('c')
-  const selected = view === 'found' && show === 'waiting' ? (c.candidates.find((x) => x.id === picked)?.id ?? c.candidates[0]?.id ?? null) : null
-  const openCandidate = (id: string) => router.replace(`/discovery?view=found&show=waiting&c=${encodeURIComponent(id)}`)
+  const waiting = c.loading || c.error ? null : c.candidates.length
+  const show: Show = asked && SHOWS.includes(asked) ? asked : hasCandidateLink || waiting !== 0 ? 'waiting' : 'all'
+  const view = v === 'sources' || v === 'flow' || v === 'overview' ? v
+    : v === 'found' || v === 'waiting' || hasCandidateLink || asked || waiting !== 0 ? 'found' : 'overview'
+  const groups = groupQueueBySource(c.candidates)
+  const requestedSource = params.get('source')
+  const source = groups.some(([kind]) => kind === requestedSource) ? requestedSource : null
+  const visibleCandidates = source ? c.candidates.filter((candidate) => candidate.sources.some((kind) => kind === source)) : c.candidates
+  const showFound = (s: Show) => router.push(`/discovery?view=found&show=${s}`)
+  const openCandidate = (id: string) => router.push(waitingHref(source, id), { scroll: false })
+  const setSource = (kind: string | null) => router.push(waitingHref(kind), { scroll: false })
   const changed = () => void Promise.all([c.refresh(), d.refresh()])
-  const [lane, setLane] = useState<LaneKey | null>(null)
+  const closeReviewed = () => {
+    changed()
+    router.replace(waitingHref(source))
+  }
+  const lane = LANES.find((l) => l.key === params.get('lane')) ?? null
+  const setLane = (key: LaneKey | null) => router.push(key ? `/discovery?view=overview&lane=${key}` : '/discovery?view=overview', { scroll: false })
+  const [reviewRevision, setReviewRevision] = useState(0)
+  const [resolvedGroup, setResolvedGroup] = useState<{ member: string; group: string } | null>(null)
+  const selectedPanel = useRef<HTMLDivElement>(null)
+  const lastCandidate = useRef<string | null>(null)
+  const queueArea = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (view !== 'found' || show !== 'waiting') {
+      lastCandidate.current = null
+      return
+    }
+    if (picked && lastCandidate.current !== picked) {
+      lastCandidate.current = picked
+      selectedPanel.current?.focus({ preventScroll: true })
+      selectedPanel.current?.scrollIntoView({ block: 'start' })
+    } else if (!picked && waiting !== null && lastCandidate.current) {
+      const target = Array.from(queueArea.current?.querySelectorAll<HTMLElement>('[data-candidate-id]') ?? [])
+        .find((element) => element.dataset.candidateId === lastCandidate.current)
+      lastCandidate.current = null
+      const next = target ?? queueArea.current
+      next?.focus({ preventScroll: true })
+      next?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [picked, view, show, waiting])
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -326,72 +414,94 @@ function DiscoveryView() {
   }
 
   const failing = d.integrations.filter((i) => healthOf(i) === 'failing').length
-  const waiting = c.candidates.length
+  const sourceDataReady = !d.loading && !d.error
+  const sourceState = d.error
+    ? <EmptyState title="Discovery sources could not load" description={d.error} actions={<Button label="Try again" onClick={() => void d.refresh()} />} />
+    : <div role="status" aria-label="Loading discovery sources"><Skeleton height={160} /></div>
+  const queueState = c.error
+    ? <EmptyState title="Review queue could not load" description={c.error} actions={<Button label="Retry queue" onClick={() => void c.refresh()} />} />
+    : <div role="status" aria-label="Loading review queue"><Skeleton height={160} /></div>
+  const reviewed = sourceDataReady && picked ? d.discovered.find((a) => a.id === picked && (a.status === 'promoted' || a.status === 'ignored')) : undefined
+  const queue = waiting === null ? queueState : !waiting ? (
+    <EmptyState title="Nothing waiting for review" description="There are no candidates awaiting a decision." actions={<Button label="See all sightings" onClick={() => showFound('all')} />} />
+  ) : <WaitingList candidates={visibleCandidates}
+    title={source ? `${visibleCandidates.length} awaiting review from ${SOURCE_LABEL[source] ?? source}` : undefined}
+    selected={resolvedGroup && resolvedGroup.member === picked ? resolvedGroup.group : picked}
+    onPick={openCandidate} />
 
   return (
-    <div className="fm-page">
+    <div className="dv-page">
       <VStack gap={5}>
-        <HStack gap={4} hAlign="between" vAlign="end" wrap="wrap">
-          <VStack gap={1}>
-            <Heading level={1}>Discovery</Heading>
-            <Text color="secondary">
-              {d.loading
-                ? 'Reading connectors'
-                : `${d.integrations.length} source${d.integrations.length === 1 ? '' : 's'} watched · ${d.discovered.length} sightings · ${waiting} waiting for you`}
-            </Text>
-          </VStack>
-          <HStack gap={2}>
-            <Button label="See AI systems" variant="secondary" href="/systems" />
-            <Button label="Connect a source" variant="primary" href="/discovery/connect" />
-          </HStack>
-        </HStack>
+        <header className="dv-page-heading">
+          <div>
+            <h1>Discovery</h1>
+            {d.error && <p>Source counts unavailable</p>}
+          </div>
+          <Pill asChild variant="outline" size="lg" className="dv-connect-action">
+            <Link href="/discovery/connect"><Plus size={16} aria-hidden /> Connect a source</Link>
+          </Pill>
+        </header>
 
-        <TabList value={view} onChange={(t) => router.replace(t === 'overview' ? '/discovery' : `/discovery?view=${t}`)} hasDivider aria-label="Discovery view">
+        <TabList value={view} onChange={(t) => router.push(`/discovery?view=${t}`)} hasDivider className="dv-view-tabs" aria-label="Discovery view">
+          <Tab value="found" label="Sightings" />
           <Tab value="overview" label="Overview" />
-          <Tab value="found" label={`Found ${d.loading ? '' : d.discovered.length}${waiting ? ` · ${waiting} waiting` : ''}`} />
           <Tab value="flow" label="Flow" />
-          <Tab value="sources" label={`Sources${failing ? ` · ${failing} failing` : ''}`} />
+          <Tab value="sources" label="Sources"
+            aria-label={sourceDataReady && failing ? `Sources · ${failing} failing` : undefined}
+            endContent={sourceDataReady && failing ? <i className="dv-source-warning" aria-hidden title={`${failing} failing`} /> : undefined} />
         </TabList>
 
         {error && <Banner status="error" title="That did not work" description={error} isDismissable onDismiss={() => setError(null)} />}
 
-        {d.loading ? (
-          <VStack gap={2} aria-busy="true">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height={96} />
-            ))}
-          </VStack>
-        ) : d.error ? (
-          <EmptyState title="Discovery could not load" description={d.error} actions={<Button label="Try again" onClick={() => void d.refresh()} />} />
-        ) : view === 'flow' ? (
+        {view === 'found' ? (
+          <FoundList discovered={sourceDataReady ? d.discovered : null} show={show} showFilters={!picked} onShow={showFound} onReview={openCandidate} sourceState={sourceState}>
+            {picked === null ? (
+              <EmptyState title="Candidate link is incomplete" description="Choose one candidate from the review queue." actions={<Button label="View waiting queue" onClick={() => showFound('waiting')} />} />
+            ) : picked ? (
+              <div className="dv-split">
+                <div className="dv-selected" ref={selectedPanel} tabIndex={-1} role="region" aria-label="Candidate review">
+                  <Link className="dv-back" href={waitingHref(source)} scroll={false}><ArrowLeft size={16} aria-hidden /> Back to review queue</Link>
+                  <CandidatePanel
+                    key={JSON.stringify([picked, reviewRevision])}
+                    id={picked}
+                    integrations={d.integrations}
+                    reviewed={reviewed}
+                    onChanged={changed}
+                    onClosed={closeReviewed}
+                    onResolved={setResolvedGroup}
+                    onSplit={() => {
+                      setResolvedGroup(null)
+                      setReviewRevision((n) => n + 1)
+                      changed()
+                    }}
+                  />
+                </div>
+                {!!visibleCandidates.length && <aside className="dv-side-queue">
+                  <WaitingList candidates={visibleCandidates} selected={resolvedGroup && resolvedGroup.member === picked ? resolvedGroup.group : picked} onPick={openCandidate} compact />
+                </aside>}
+              </div>
+            ) : (
+              <div className="dv-queue-layout">
+                {waiting !== null && groups.length > 1 && (
+                  <label className="dv-mobile-source">
+                    <span>Filter by source</span>
+                    <select value={source ?? ''} onChange={(event) => setSource(event.target.value || null)}>
+                      <option value="">All sources</option>
+                      {groups.map(([kind, count]) => <option key={kind} value={kind}>{SOURCE_LABEL[kind] ?? kind} ({count})</option>)}
+                    </select>
+                  </label>
+                )}
+                <div className="dv-queue-main" ref={queueArea} tabIndex={-1}>{queue}</div>
+                {!!waiting && !!groups.length && <QueueSourceSummary groups={groups} total={waiting} source={source} onSource={setSource} />}
+              </div>
+            )}
+          </FoundList>
+        ) : !sourceDataReady ? sourceState : view === 'flow' ? (
           d.integrations.length === 0 ? (
             <EmptyState title="No sources connected" description="Connect a source and its reads appear here as a flow into your inventory." actions={<Button variant="primary" label="Connect a source" href="/discovery/connect" />} />
           ) : (
             <DiscoveryFlow d={d} onReview={() => showFound('waiting')} />
           )
-        ) : view === 'found' ? (
-          <FoundList discovered={d.discovered} waiting={waiting} show={show} onShow={showFound}>
-            {c.loading ? (
-              <Skeleton height={320} />
-            ) : c.error ? (
-              <EmptyState title="What is waiting could not load" description={c.error} actions={<Button label="Try again" onClick={() => void c.refresh()} />} />
-            ) : waiting === 0 ? (
-              <EmptyState
-                title="Nothing waiting for you"
-                description={
-                  d.discovered.length
-                    ? `All ${d.discovered.length} found item${d.discovered.length === 1 ? ' is' : 's are'} decided. Sources on a schedule keep looking; anything new lands here first.`
-                    : 'Sources on a schedule keep looking; anything they find lands here first.'
-                }
-                actions={d.discovered.length ? <Button label={`See all ${d.discovered.length} found`} onClick={() => showFound('all')} /> : undefined}
-              />
-            ) : (
-              <div className="dv-split">
-                <WaitingList candidates={c.candidates} selected={selected} onPick={openCandidate} />
-                {selected && <CandidatePanel key={selected} id={selected} onChanged={changed} />}
-              </div>
-            )}
-          </FoundList>
         ) : view === 'sources' ? (
           <Sources
             d={d}
@@ -404,13 +514,16 @@ function DiscoveryView() {
           />
         ) : (
           <>
-            <Areas d={d} lane={lane} onLane={setLane} />
+            <Areas d={d} lane={lane?.key ?? null} onLane={setLane} />
             <Flow d={d} onShow={showFound} />
-            <WaitingList
-              candidates={c.candidates.filter((x) => inLane(x, lane))}
-              onPick={openCandidate}
-              title={`Waiting for you (${c.candidates.filter((x) => inLane(x, lane)).length})${lane ? ` · ${LANES.find((l) => l.key === lane)?.label}` : ''}`}
-            />
+            {waiting === null ? queueState : (
+              <WaitingList
+                candidates={c.candidates.filter((x) => inLane(x, lane?.key ?? null))}
+                onPick={openCandidate}
+                title={lane ? `Waiting for review · ${lane.label}` : 'Waiting for review'}
+                emptyLabel={lane ? `No candidates are waiting in ${lane.label}.` : undefined}
+              />
+            )}
           </>
         )}
       </VStack>

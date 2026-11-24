@@ -3,7 +3,7 @@
 import '@/astryx/pages/environment.css'
 import Link from 'next/link'
 import { Suspense, useMemo, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Drawer } from '@astryxdesign/core/Drawer'
@@ -17,15 +17,21 @@ import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import { useEstateGates } from '@/lib/api/hooks/useEstate'
 import { checkCell, type CellState } from '@/components/ui/matrix'
 import { downloadCsrd, useEnvAssessments, useEnvBenchmarks } from '@/astryx/data/environment'
+import { FindingRetestDraft } from '@/components/workflow/FindingRetestDraft'
+import { recordParam } from '@/lib/assurance/evaluationLinks'
 import { EnvAssessForm } from '@/astryx/EnvAssessForm'
 
+type Coverage = CellState | 'unknown'
+
 const STATE: Record<string, { word: string; color: 'green' | 'blue' | 'orange' | 'red' | 'default' }> = {
+  unknown: { word: 'Gate status unknown', color: 'default' },
   proven: { word: 'Proven', color: 'green' },
   attested: { word: 'Attested', color: 'green' },
   estimated: { word: 'Estimated', color: 'blue' },
   stale: { word: 'Out of date', color: 'orange' },
   fails: { word: 'Fails', color: 'red' },
-  open: { word: 'Not assessed', color: 'default' },
+  excluded: { word: 'Outside release gate', color: 'default' },
+  open: { word: 'No current gate evidence', color: 'default' },
 }
 const TIER: Record<string, 'green' | 'orange' | 'red' | 'default'> = { low: 'green', medium: 'orange', high: 'red' }
 const words = (s: string | null | undefined) => (s ? s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : 'Not recorded')
@@ -33,14 +39,14 @@ const day = (iso: string | null | undefined) => {
   const d = iso ? new Date(iso) : null
   return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'unknown date'
 }
-const yesNo = (v: boolean | undefined) => (v === undefined ? 'Not recorded' : v ? 'Yes' : 'No')
+const yesNo = (v: boolean | undefined) => (v == null ? 'Not recorded' : v ? 'Yes' : 'No')
 
 type Sys = { id: string; name: string }
 
-function SystemRow({ system, orgId, state, focused, onAssess }: { system: Sys; orgId: string | undefined; state: CellState; focused: boolean; onAssess: (s: Sys) => void }) {
-  const { latest, history, loading, error } = useEnvAssessments(orgId, system.id)
+function SystemRow({ system, orgId, state, focused, onAssess }: { system: Sys; orgId: string | undefined; state: Coverage; focused: boolean; onAssess: (s: Sys) => void }) {
+  const { latest, history, loading, error, reload } = useEnvAssessments(orgId, system.id)
   const [exporting, setExporting] = useState<string | null>(null)
-  const s = STATE[state] ?? STATE.open
+  const s = STATE[state] ?? STATE.unknown
   const tier = latest?.impactTier ?? latest?.riskTier ?? null
 
   const exportIt = async () => {
@@ -66,7 +72,7 @@ function SystemRow({ system, orgId, state, focused, onAssess }: { system: Sys; o
         {loading ? (
           <Skeleton height={16} width={260} />
         ) : error ? (
-          <span>{error}</span>
+          <span>{error} <Button label="Retry assessment" size="sm" variant="ghost" onClick={reload} /></span>
         ) : latest ? (
           <>
             <span>
@@ -129,7 +135,7 @@ function SystemRow({ system, orgId, state, focused, onAssess }: { system: Sys; o
 function Benchmarks() {
   const { data, loading, error } = useEnvBenchmarks()
   if (loading) return <Skeleton height={60} />
-  if (error || !data) return <Text color="secondary">{error ?? 'No thresholds available.'}</Text>
+  if (error || !data?.thresholds) return <Text color="secondary">{error ?? 'Benchmark thresholds unavailable.'}</Text>
   return (
     <VStack gap={2}>
       {data.provisional && <Text color="secondary">These thresholds are provisional and will be recalibrated from real assessments.</Text>}
@@ -162,25 +168,58 @@ function Benchmarks() {
 }
 
 function EnvironmentView() {
-  const focus = useSearchParams().get('system') ?? undefined
+  const router = useRouter()
+  const params = useSearchParams()
+  const scope = recordParam(params, 'system')
+  const focus = scope ?? undefined
+  const finding = recordParam(params, 'finding')
   const orgId = useOrgId() ?? undefined
-  const { systems, loading: systemsLoading } = useSystemContext()
+  const { systems, loading: systemsLoading, error: registryError, refreshSystems } = useSystemContext()
   const gates = useEstateGates()
-  const [assessing, setAssessing] = useState<Sys | null>(null)
+  const [selected, setAssessing] = useState<Sys | null>(null)
   const [saved, setSaved] = useState(0)
 
   const rows = useMemo(() => {
-    const byId = new Map((gates.data ?? []).map((g) => [g.systemId, g]))
-    return systems.flatMap((s) => {
-      const gate = byId.get(s.id)
-      if (!gate || (focus && s.id !== focus)) return []
-      // Where the organisation leaves environmental impact out of its gate, an assessment can still be made and exported.
-      const check = gate.checks.find((c) => c.key === 'environmental')
-      return [{ system: s, state: check ? checkCell(check) : ('open' as CellState) }]
+    const observed = !gates.error && !gates.loading && Array.isArray(gates.data) ? gates.data : []
+    const byId = new Map(observed.map((gate) => [gate.systemId, gate]))
+    const live = systems.filter((system) => system.stage !== 'retired' && (!focus || system.id === focus))
+    return live.map((system) => {
+      const gate = byId.get(system.id)
+      const check = gate?.checks?.find((c) => c.key === 'environmental')
+      const state: Coverage = check ? checkCell(check) : Array.isArray(gate?.checks) ? 'excluded' : 'unknown'
+      return { system, state }
     })
-  }, [systems, gates.data, focus])
-  const counted = !gates.data?.length || gates.data.some((g) => g.checks.some((c) => c.key === 'environmental'))
-  const count = (...st: CellState[]) => rows.filter((r) => st.includes(r.state)).length
+  }, [systems, gates.data, gates.error, gates.loading, focus])
+  const requested = params.get('action') === 'assess'
+  const assessing = requested ? rows.find(({ system }) => system.id === focus)?.system ?? null : selected
+  function closeAssessment() {
+    setAssessing(null)
+    if (requested) {
+      const next = new URLSearchParams(params.toString())
+      next.delete('action')
+      next.delete('finding')
+      router.replace(`/environment?${next}`, { scroll: false })
+    }
+  }
+  const hasKnownGate = rows.some((row) => row.state !== 'unknown')
+  const count = (...states: Coverage[]) =>
+    hasKnownGate || states.includes('unknown') ? rows.filter((row) => states.includes(row.state)).length : '—'
+
+
+  const form = assessing && orgId ? (
+    <EnvAssessForm
+      orgId={orgId}
+      systemId={assessing.id}
+      onSaved={() => {
+        closeAssessment()
+        setSaved((n) => n + 1)
+        gates.reload()
+      }}
+    />
+  ) : null
+  if (requested && (!focus || (!systemsLoading && !registryError && !assessing))) {
+    return <div className="fm-page fm-env"><Banner status="warning" title="Assessment unavailable" description="An active system with the requested ID could not be verified." /></div>
+  }
 
   return (
     <div className="fm-page fm-env">
@@ -188,36 +227,37 @@ function EnvironmentView() {
         <VStack gap={1}>
           <Heading level={1}>Environment</Heading>
           <Text color="secondary">
-            Energy and carbon for each AI system, scored into an impact tier with a stated confidence. {focus && <Link href="/environment">Show every system</Link>}
+            Energy and carbon for active registered AI systems, scored into an impact tier with a stated confidence. {focus && <Link href="/environment">Show every system</Link>}
           </Text>
         </VStack>
 
-        {!counted && (
+        {rows.length > 0 && rows.every((row) => row.state === 'excluded') && (
           <Banner
             status="info"
             title="Not counted in release decisions"
-            description="Your organisation leaves environmental impact out of its release gate. Assessments here still feed CSRD reporting. An owner or admin can count them in Settings."
+            description="Environmental impact is outside the release gate for the systems shown. Assessments here still feed CSRD reporting. An owner or admin can count them in Settings."
             endContent={<Button label="Open Settings" size="sm" href="/settings" />}
           />
         )}
 
+        {registryError && <Banner status="error" title="The system register could not load" description={registryError} endContent={<Button label="Retry register" size="sm" onClick={() => void refreshSystems()} />} />}
+        {gates.loading && <Text color="secondary">Loading gate coverage…</Text>}
         {gates.error && <Banner status="error" title="The environmental checks could not load" description={gates.error} endContent={<Button label="Try again" size="sm" onClick={() => gates.reload()} />} />}
 
-        {(gates.loading && !gates.data) || systemsLoading ? (
+        {systemsLoading ? (
           <VStack gap={2}>
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} height={44} />
             ))}
           </VStack>
-        ) : !gates.error && rows.length === 0 ? (
-          <EmptyState title={focus ? 'That system was not found' : 'No registered AI systems yet'} description="Register a system, then assess its energy and carbon use here." actions={<Button label="Open AI systems" href="/systems" />} />
+        ) : registryError ? null : rows.length === 0 ? (
+          <EmptyState title={focus ? 'That system is outside the active register' : 'No active registered systems'} description="Register a system, then assess its energy and carbon use here." actions={<Button label="Open AI systems" href="/systems" />} />
         ) : (
-          !gates.error && (
-            <>
-              <ul className="fm-env-counts" aria-label="Environmental checks across the estate">
+          <>
+              <ul className="fm-env-counts" aria-label="Environmental checks for active systems in this view">
                 <li>
                   <b>{count('proven', 'attested')}</b>
-                  <span>Proven</span>
+                  <span>Proven or attested</span>
                 </li>
                 <li>
                   <b>{count('estimated')}</b>
@@ -232,8 +272,16 @@ function EnvironmentView() {
                   <span>Fails</span>
                 </li>
                 <li>
+                  <b>{count('unknown')}</b>
+                  <span>Gate status unknown</span>
+                </li>
+                <li>
                   <b>{count('open')}</b>
-                  <span>Not assessed</span>
+                  <span>No current gate evidence</span>
+                </li>
+                <li>
+                  <b>{count('excluded')}</b>
+                  <span>Outside release gate</span>
                 </li>
               </ul>
               <section className="fm-card" aria-labelledby="env-systems">
@@ -256,25 +304,18 @@ function EnvironmentView() {
                   <Benchmarks />
                 </VStack>
               </section>
-            </>
-          )
+          </>
         )}
       </VStack>
 
-      <Drawer isOpen={assessing !== null} onOpenChange={(o) => !o && setAssessing(null)} label={assessing ? `Start an assessment on ${assessing.name}` : 'Start an assessment'} width={460} padding={5}>
+      <Drawer isOpen={assessing !== null} onOpenChange={(o) => !o && closeAssessment()} label={assessing ? `Start an assessment on ${assessing.name}` : 'Start an assessment'} width={460} padding={5}>
         {assessing && orgId && (
           <VStack gap={4}>
             <Heading level={2}>Start an assessment</Heading>
             <Text color="secondary">{assessing.name}. The result is scored on save and added to the version trail.</Text>
-            <EnvAssessForm
-              orgId={orgId}
-              systemId={assessing.id}
-              onSaved={() => {
-                setAssessing(null)
-                setSaved((n) => n + 1)
-                gates.reload()
-              }}
-            />
+            {requested && finding !== undefined
+              ? <FindingRetestDraft systemId={assessing.id} findingId={finding} source="environmental_impact">{form}</FindingRetestDraft>
+              : form}
           </VStack>
         )}
       </Drawer>

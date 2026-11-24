@@ -1,0 +1,114 @@
+.fm-sf-review-trail {
+  min-width: 0;
+  padding: clamp(20px, 2.5vw, 34px);
+  overflow-wrap: anywhere;
+}
+
+.fm-sf-review-trail h2,
+.fm-sf-review-history h2 {
+  margin: 0 0 15px;
+  color: var(--fm-ink);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -.025em;
+}
+
+.fm-sf-review-trail ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-sf-review-trail li {
+  position: relative;
+  display: grid;
+  padding: 0 0 12px 18px;
+  margin-inline-start: 4px;
+}
+
+.fm-sf-review-trail li:not(:last-child) {
+  border-inline-start: 1px solid var(--fm-line);
+}
+
+.fm-sf-review-trail li:last-child {
+  padding-bottom: 0;
+  border-inline-start: 1px solid transparent;
+}
+
+.fm-sf-review-trail li::before {
+  position: absolute;
+  inset-block-start: 5px;
+  inset-inline-start: -5px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--fm-ink3);
+  border-radius: 50%;
+  background: var(--color-background-card);
+  content: '';
+}
+
+.fm-sf-review-trail li[data-state="recorded"]::before {
+  border-color: var(--fm-ink);
+  background: var(--fm-ink);
+}
+
+.fm-sf-review-trail li[data-state="failed"]::before {
+  border-color: var(--color-text-error);
+  background: var(--color-text-error);
+}
+
+.fm-sf-review-trail li :is(h3, p, a) {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.fm-sf-review-trail h3 {
+  color: var(--fm-ink);
+  font-weight: 600;
+}
+
+.fm-sf-review-trail p {
+  color: var(--fm-ink2);
+}
+
+.fm-sf-review-trail a,
+.fm-sf-review-history a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  justify-self: start;
+  color: var(--fm-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.fm-sf-review-history {
+  min-width: 0;
+  padding: 18px;
+  overflow-wrap: anywhere;
+}
+
+.fm-sf-review-history ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fm-sf-review-history li {
+  padding-block-start: 12px;
+  border-block-start: 1px solid var(--fm-line);
+}
+
+.fm-sf-review-history h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fm-sf-review-history-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 18px;
+  font-size: 13px;
+}

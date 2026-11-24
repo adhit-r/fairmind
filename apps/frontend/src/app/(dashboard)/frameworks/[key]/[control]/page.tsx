@@ -10,6 +10,10 @@ import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { classLabel } from '@/components/ui/matrix'
+import { evaluationHref } from '@/lib/assurance/evaluationLinks'
+import { withPackSystem } from '@/lib/assurance/packScope'
+import { evidenceSystemHref } from '@/lib/assurance/evidenceLinks'
+import { CheckEvidenceLinks } from '@/components/workflow/CheckEvidenceLinks'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import { useControls, useFrameworkSystems, type FrameworkCellCheck } from '@/lib/api/hooks/useEstate'
 import { useJourney, useJourneys } from '@/lib/api/hooks/usePacks'
@@ -51,12 +55,13 @@ function Trace() {
   const params = useParams<{ key: string; control: string }>()
   const key = decodeURIComponent(params.key)
   const control = decodeURIComponent(params.control)
-  const systemId = useSearchParams().get('system')
+  const requested = useSearchParams().getAll('system')
   const fw = useFrameworkSystems(key)
   const systems = fw.data?.systems ?? []
-  const si = Math.max(0, systems.findIndex((s) => s.id === systemId))
+  const si = requested.length === 1 ? systems.findIndex((s) => s.id === requested[0]) : -1
   const system = systems[si] ?? null
-  const journey = useJourney(key, system?.id)
+  const orgOnly = fw.data && !systems.length && !requested.length
+  const journey = useJourney(system || orgOnly ? key : undefined, system?.id)
   const journeys = useJourneys()
   const controls = useControls()
 
@@ -93,8 +98,27 @@ function Trace() {
       </VStack>
     )
   }
-  if (journey.error || fw.error || !j) {
+  if (journey.error || fw.error || !fw.data) {
     return <EmptyState title="This requirement could not load" description={journey.error || fw.error || 'No data came back.'} actions={<Button label="Try again" onClick={() => { journey.reload(); fw.reload() }} />} />
+  }
+  if (!system && !orgOnly) {
+    return (
+      <VStack gap={3}>
+        <Heading level={1}>{requested.length ? 'Requested system unavailable' : 'Choose a system'}</Heading>
+        <Text color="secondary">
+          {requested.length
+            ? `The link does not identify an available system in this organisation’s scope for ${shortFrameworkName(fw.data.framework.name)} ${control}.`
+            : `Choose the system to review for ${shortFrameworkName(fw.data.framework.name)} ${control}.`}
+        </Text>
+        <nav className="fx-chips" aria-label="AI system">
+          {systems.map((s) => <Link key={s.id} className="fx-chip" href={requirementHref(key, control, s.id)}>{s.name}</Link>)}
+        </nav>
+        <Link href={`/frameworks/${encodeURIComponent(key)}`}>Back to the framework</Link>
+      </VStack>
+    )
+  }
+  if (!j) {
+    return <EmptyState title="This requirement could not load" actions={<Button label="Try again" onClick={journey.reload} />} />
   }
   if (!req) {
     return <EmptyState title={`${control} is not in ${shortFrameworkName(j.name)}`} description="The link may point at an older version of the framework." actions={<Button variant="secondary" label="Back to the framework" href={`/frameworks/${encodeURIComponent(key)}`} />} />
@@ -106,12 +130,13 @@ function Trace() {
   const checks = cell?.checks ?? []
   const dashed = (s: ReqState) => (s === 'open' || s === 'none' ? ' dash' : '')
   const keep = system ? system.id : undefined
+  const frameworkHref = `/frameworks/${encodeURIComponent(key)}${system ? `?system=${encodeURIComponent(system.id)}` : ''}`
 
   return (
     <VStack gap={5}>
       <VStack gap={3}>
         <Text type="supporting">
-          <Link href="/frameworks">Frameworks</Link> / <Link href={`/frameworks/${encodeURIComponent(key)}`}>{short}</Link> / {req.group}
+          <Link href="/frameworks">Frameworks</Link> / <Link href={frameworkHref}>{short}</Link> / {req.group}
         </Text>
         <HStack gap={3} hAlign="between" vAlign="start" wrap="wrap">
           <VStack gap={1}>
@@ -148,7 +173,7 @@ function Trace() {
       <section className="fm-card" aria-labelledby="fx-trace-title" style={{ padding: 0 }}>
         <div className="fx-pad">
           <Heading level={2} id="fx-trace-title">
-            Trace{system ? ` for ${system.name}` : ''}
+            Trace for {system?.name ?? 'the organisation'}
           </Heading>
           <Text type="supporting">Read left to right: what the standard asks, the FairMind controls that check it, the proof, and where it stands.</Text>
         </div>
@@ -167,7 +192,7 @@ function Trace() {
                 {alsoCounts.map((x) => {
                   const [fwKey, code] = x.key.split('|')
                   return (
-                    <Link key={x.key} className="s" href={requirementHref(fwKey, code)}>
+                    <Link key={x.key} className="s" href={requirementHref(fwKey, code, keep)}>
                       {names.get(fwKey) ?? fwKey} {code}
                     </Link>
                   )
@@ -205,13 +230,13 @@ function Trace() {
                     {c.label}
                   </span>
                   <span className="s">
-                    Release check · {c.relation} · {c.evidenceClass ? classLabel(c.evidenceClass) : 'nothing current on file'}
+                    Release check · {c.relation}{!c.fails && c.evidenceClass ? ` · ${classLabel(c.evidenceClass)}` : ''}
                   </span>
                 </div>
               )
             })}
             {req.workflows.map((w) => (
-              <Link key={w.id} className={`fx-node${w.latestRun ? '' : ' dash'}`} href={w.latestRun ? `/compliance/runs/${encodeURIComponent(w.latestRun.id)}` : `/compliance/workflows/${encodeURIComponent(w.id)}`}>
+              <Link key={w.id} className={`fx-node${w.latestRun ? '' : ' dash'}`} href={w.latestRun ? `/compliance/runs/${encodeURIComponent(w.latestRun.id)}` : withPackSystem(`/compliance/workflows/${encodeURIComponent(w.id)}`, system?.id)}>
                 <span className="t">{w.name}</span>
                 <span className="s">
                   Workflow · {w.latestRun ? `${RUN_LABEL[w.latestRun.status] ?? w.latestRun.status} · ${new Date(w.latestRun.updatedAt).toLocaleDateString()}` : w.installed ? 'Never run' : 'Its pack is not installed'}
@@ -220,7 +245,7 @@ function Trace() {
               </Link>
             ))}
             {req.evaluations.map((e) => (
-              <Link key={e.id} className={`fx-node${e.result && e.result !== 'not_run' ? '' : ' dash'}`} href={`/compliance/evaluations/${encodeURIComponent(e.id)}`}>
+              <Link key={e.id} className={`fx-node${e.result && e.result !== 'not_run' ? '' : ' dash'}`} href={evaluationHref(e.id, system?.id)}>
                 <span className="t">
                   {e.result === 'passed' && <Glyph state="proven" label="Passed" />}
                   {e.result === 'failed' && <Glyph state="fails" label="Failed" />}
@@ -248,7 +273,7 @@ function Trace() {
               </p>
               <VStack gap={2}>
                 {system && <Button label="Open the system" href={`/systems/${encodeURIComponent(system.id)}`} />}
-                <Button variant="secondary" label="Attach evidence" href={system ? `/evidence?system=${encodeURIComponent(system.id)}` : '/evidence'} />
+                {system && <Button variant="secondary" label="Open system evidence library" href={evidenceSystemHref(system.id)} />}
               </VStack>
             </div>
           </div>
@@ -268,18 +293,20 @@ function Trace() {
                   <th scope="col">Check</th>
                   <th scope="col">Relation</th>
                   <th scope="col">Evidence</th>
-                  <th scope="col">Confidence</th>
+                  <th scope="col">Check confidence</th>
                   <th scope="col">State</th>
                 </tr>
               </thead>
               <tbody>
                 {checks.map((c) => {
-                  const { st, label } = checkView(c, 'open')
+                  const { st, label } = checkView(c, c.fails ? 'fails' : c.stale ? 'stale' : c.evidenceId ? 'proven' : 'open')
                   return (
                     <tr key={c.check}>
                       <td>{c.label}</td>
                       <td>{c.relation}</td>
-                      <td>{c.evidenceClass ? classLabel(c.evidenceClass) : 'Nothing current on file'}</td>
+                      <td>
+                        <CheckEvidenceLinks systemId={system?.id} check={c} failed={Boolean(c.fails || st === 'fails')} />
+                      </td>
                       <td className="num">{c.confidence.toFixed(2)}</td>
                       <td>
                         <span className="fx-state">

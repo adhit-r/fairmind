@@ -2,6 +2,7 @@
 
 import '@/astryx/pages/discovery.css'
 import '@/astryx/pages/tasks.css'
+import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useMemo, useState } from 'react'
 import { Banner } from '@astryxdesign/core/Banner'
@@ -119,6 +120,7 @@ const REVIEW = [
 
 /** A plan with no admin API: the admin describes the workspace once, and FairMind asks again on the review cadence. */
 function WorkspaceForm({ kind, onDone, onSwitch }: { kind: IntegrationKind; onDone: () => void; onSwitch: (k: IntegrationKind) => void }) {
+  const orgId = useOrgId()
   const spec = SOURCES[kind]
   const chatgpt = kind === 'chatgpt_workspace'
   const assistant = chatgpt ? 'custom GPT' : 'project'
@@ -149,8 +151,8 @@ function WorkspaceForm({ kind, onDone, onSwitch }: { kind: IntegrationKind; onDo
         history: f('history'),
         review_days: Number(review),
       }
-      const created = await createSource({ kind, name: f('name') || spec.label, config })
-      await syncSource(created.id).catch(() => undefined)
+      const created = await createSource({ kind, name: f('name') || spec.label, config }, orgId)
+      await syncSource(created.id, orgId).catch(() => undefined)
       onDone()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not save the workspace')
@@ -291,6 +293,7 @@ function VendorTiles({ kind, onSwitch, connected }: { kind: IntegrationKind; onS
 }
 
 function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; onDone: () => void; onSwitch: (k: IntegrationKind) => void; connected: Set<string> }) {
+  const orgId = useOrgId()
   const spec = SOURCES[kind]
   const [v, setV] = useState<Record<string, string>>({ name: spec.label })
   const [schedule, setSchedule] = useState('1440')
@@ -317,7 +320,7 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
     setBusy('preview')
     setErr(null)
     try {
-      setPreview(await previewSource(body()))
+      setPreview(await previewSource(body(), orgId))
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'FairMind could not read that source')
     } finally {
@@ -333,12 +336,12 @@ function Setup({ kind, onDone, onSwitch, connected }: { kind: IntegrationKind; o
     setBusy('connect')
     setErr(null)
     try {
-      const created = await createSource(body())
+      const created = await createSource(body(), orgId)
       // The first read happens now, so the Sources view opens with real data rather than a wait.
       if (logs) {
-        if (file) await uploadLogs(created.id, await file.text())
+        if (file) await uploadLogs(created.id, await file.text(), orgId)
       } else {
-        await syncSource(created.id).catch(() => undefined) // a failed first read shows on the Sources view
+        await syncSource(created.id, orgId).catch(() => undefined) // a failed first read shows on the Sources view
       }
       onDone()
     } catch (e) {

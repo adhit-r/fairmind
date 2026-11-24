@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { apiClient, type ApiResponse } from '@/lib/api/api-client'
+import { useOrgResource, withOrg } from '@/lib/api/hooks/usePacks'
 import type { DiscoveredAsset, IntegrationKind } from '@/lib/api/hooks/useIntegrations'
 
 function unwrap<T>(res: ApiResponse<T>): T {
@@ -70,54 +71,50 @@ export interface CandidateDetail extends Candidate {
 
 const D = '/api/v1/discovery'
 
+function isCandidate(c: Candidate | null): c is Candidate {
+  return !!c && typeof c.id === 'string' && !!c.id && typeof c.name === 'string' &&
+    Number.isInteger(c.sightings) && c.sightings > 0 && ['low', 'medium', 'high', 'critical'].includes(c.suggestedTier) &&
+    Array.isArray(c.sources) && Array.isArray(c.owners)
+}
+
+/** The navigation badge and the Discovery queue share one read of the merged candidates. */
+export function useCandidateQueue() {
+  const { data, loading, error, reload } = useOrgResource<Candidate[]>(`${D}/candidates`)
+  const candidates = Array.isArray(data) && data.every(isCandidate) ? data : null
+  return {
+    candidates: error ? [] : candidates ?? [], loading, refresh: reload,
+    error: error || (!loading && !candidates ? 'The candidate list was incomplete.' : null),
+  }
+}
+
+export const CandidateQueueContext = createContext<ReturnType<typeof useCandidateQueue> | null>(null)
+
 export function useCandidates() {
-  const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const refresh = useCallback(async () => {
-    try {
-      setCandidates(unwrap(await apiClient.get<Candidate[]>(`${D}/candidates`)))
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load what is waiting')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-  return { candidates, loading, error, refresh }
+  const queue = useContext(CandidateQueueContext)
+  if (!queue) throw new Error('Discovery requires the candidate queue from the dashboard.')
+  return queue
 }
 
 export function useCandidate(id: string | null) {
-  const [detail, setDetail] = useState<CandidateDetail | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const refresh = useCallback(async () => {
-    if (!id) {
-      setDetail(null)
-      return
-    }
-    setLoading(true)
-    try {
-      setDetail(unwrap(await apiClient.get<CandidateDetail>(`${D}/candidates/${encodeURIComponent(id)}`)))
-      setError(null)
-    } catch (e) {
-      setDetail(null)
-      setError(e instanceof Error ? e.message : 'Could not load it')
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-  return { detail, loading, error, refresh }
+  const { data, loading, error, errorStatus, reload } = useOrgResource<CandidateDetail>(id ? `${D}/candidates/${encodeURIComponent(id)}` : null)
+  // A merged candidate may also be opened by one of its member sighting IDs.
+  const matches = isCandidate(data) && Array.isArray(data.members) && data.members.length > 0 &&
+    data.members.every((member) => member && typeof member.id === 'string') && (data.id === id || data.members.some((member) => member.id === id)) &&
+    Array.isArray(data.checks) && Array.isArray(data.reach) && Array.isArray(data.tierReasons) && Array.isArray(data.frameworks) &&
+    Array.isArray(data.mismatches) && Array.isArray(data.tools)
+  return {
+    detail: !error && matches ? data : null, loading, notFound: errorStatus === 404,
+    error: error || (id && !loading && !matches ? 'The requested candidate and its sightings could not be verified.' : null), refresh: reload,
+  }
 }
 
-export async function askOwner(id: string, email: string) {
-  return unwrap(await apiClient.post<{ link: string; expiresAt: string; emailSent: boolean }>(`${D}/candidates/${encodeURIComponent(id)}/ask`, { email }))
+function discoveryAction(path: string, orgId: string | null) {
+  if (!orgId) throw new Error('Choose an organisation to review this candidate.')
+  return withOrg(`${D}/${path}`, orgId)
+}
+
+export async function askOwner(id: string, email: string, orgId: string | null) {
+  return unwrap(await apiClient.post<{ link: string; expiresAt: string; emailSent: boolean }>(discoveryAction(`candidates/${encodeURIComponent(id)}/ask`, orgId), { email }))
 }
 
 export interface Decision {
@@ -128,16 +125,16 @@ export interface Decision {
   owner?: string
 }
 
-export async function decide(id: string, body: Decision) {
-  return unwrap(await apiClient.post<{ decision: string; systemId: string | null }>(`${D}/candidates/${encodeURIComponent(id)}/decide`, body))
+export async function decide(id: string, body: Decision, orgId: string | null) {
+  return unwrap(await apiClient.post<{ decision: string; systemId: string | null }>(discoveryAction(`candidates/${encodeURIComponent(id)}/decide`, orgId), body))
 }
 
-export async function ignoreCandidate(id: string) {
-  return unwrap(await apiClient.post<{ status: string }>(`${D}/candidates/${encodeURIComponent(id)}/ignore`, {}))
+export async function ignoreCandidate(id: string, orgId: string | null) {
+  return unwrap(await apiClient.post<{ status: string }>(discoveryAction(`candidates/${encodeURIComponent(id)}/ignore`, orgId), {}))
 }
 
-export async function splitSighting(assetId: string) {
-  return unwrap(await apiClient.post<{ split: string }>(`${D}/assets/${encodeURIComponent(assetId)}/split`, {}))
+export async function splitSighting(assetId: string, orgId: string | null) {
+  return unwrap(await apiClient.post<{ split: string }>(discoveryAction(`assets/${encodeURIComponent(assetId)}/split`, orgId), {}))
 }
 
 /* ------------------------------------------------------------------ Shadow AI */

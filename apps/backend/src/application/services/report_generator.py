@@ -21,6 +21,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+from src.application.services.system_assurance_report import REPORT_TYPE as SYSTEM_ASSURANCE_REPORT
+
 
 # ─── Data Models ────────────────────────────────────────────────────────────
 
@@ -633,7 +635,82 @@ def _is_role(report: Dict[str, Any]) -> bool:
     return str(report.get("reportType") or "").startswith("role:")
 
 
+def _system_assurance_sections(report: Dict[str, Any], content_hash: str) -> List[tuple]:
+    data, config = report["data"], report["config"]
+    system, framework, period, coverage = (data[key] for key in ("system", "framework", "period", "coverage"))
+    sections = [
+        ("Record", None, [
+            ("Report ID", report["id"]), ("Template version", str(config["templateVersion"])),
+            ("Previewed at", data["generatedAt"]), ("Approved by", report["approvedBy"]),
+            ("Approved at", report["approvedAt"]), ("Revision SHA-256", content_hash),
+        ]),
+        ("Scope", None, [
+            ("System", system["name"]), ("System ID", system["id"]),
+            ("System version", system.get("version") or "Not recorded"),
+            ("Owner", system["owner"] or "Unassigned"), ("Risk tier", system["riskTier"]),
+            ("Lifecycle stage at preview", system["lifecycleStage"]),
+            ("Framework version", f"{framework['name']} {framework['versionLabel']}"),
+            ("Framework version ID", framework["versionId"]), ("Assignment ID", framework["assignmentId"]),
+            ("Evidence period", f"{period['dateFrom']} to {period['dateTo']} ({period['timeZone']}, inclusive)"),
+        ]),
+        ("Evidence population", None, [
+            ("Mapped runs in the period", str(coverage["evidenceRuns"])),
+            ("Controls on the assignment", str(coverage["controls"])),
+            ("Runs excluded without an assignment mapping", str(coverage["excludedUnmappedRuns"])),
+            ("System runs excluded without a valid capture time", str(coverage["excludedUndatedRuns"])),
+        ]),
+        ("Limitations", None, [(value,) for value in data["limitations"]]),
+        ("Unresolved system findings opened in the period", ("Finding", "Severity", "Status at preview", "Opened at", "Finding ID"), [
+            (finding["title"], finding["severity"], finding["status"], finding["createdAt"], finding["id"])
+            for finding in data["findings"]
+        ]),
+        ("Control state at preview", ("Control", "Applicability", "Assessment", "Passed, accepted mappings", "Evidence freshness"), [
+            (f"{control['externalId']} {control['title']}", control["applicability"], control["status"],
+             str(control["acceptedEvidenceCount"]), control["evidenceStatus"])
+            for control in data["controls"]
+        ]),
+        ("Evidence runs in the period", ("Source", "Captured at", "Result", "Run ID"), [
+            (f"{run['sourceType']} · {run['sourceIdentifier']}", run["capturedAt"], run["result"], run["runId"])
+            for run in data["evidence"]
+        ]),
+    ]
+    if config.get("definitionId"):
+        sections[0][2].insert(1, ("Report definition ID", config["definitionId"]))
+    control_by_id = {control["id"]: control for control in data["controls"]}
+    for run in data["evidence"]:
+        rows = [
+            ("Run ID", run["runId"]), ("Evidence run record ID", run["id"]),
+            ("Evidence artifact ID", run["evidenceId"] or "Not recorded"), ("Content SHA-256", run["contentHash"]),
+            ("Assurance source", run["assuranceSource"] or "Not recorded"),
+            ("Capability state", run["capabilityState"] or "Not recorded"),
+            ("Subject version", run["subjectVersion"] or "Not recorded"),
+            ("Expires at", run.get("expiresAt") or "Not recorded"),
+        ]
+        if run["sampleCount"] is not None:
+            rows.append(("Sample count", str(run["sampleCount"])))
+        rows += [("Run limitation", value) for value in run["limitations"]]
+        rows += [("Scope exclusion", value) for value in run["scopeExclusions"]]
+        for measurement in run["measurements"]:
+            unit = f" {measurement['unit']}" if measurement.get("unit") else ""
+            group = f" ({measurement['slice']})" if measurement.get("slice") else ""
+            rows.append((f"{measurement['name']}{group}", f"{measurement['value']}{unit}"))
+        for threshold in run["thresholds"]:
+            unit = f" {threshold['unit']}" if threshold.get("unit") else ""
+            rows.append((f"Threshold for {threshold['metric']}", f"{threshold['operator']} {threshold['value']}{unit}"))
+        for mapping in run["candidateMappings"]:
+            control = control_by_id[mapping["controlAssessmentId"]]
+            rows.append((f"Control {control['externalId']}", f"{mapping['state']} · {mapping['relation']} · {mapping['id']}"))
+            if mapping["rationale"]:
+                rows.append(("Mapping rationale", mapping["rationale"]))
+            for review in mapping["reviewHistory"]:
+                rows.append(("Review record", ", ".join(f"{key}={value}" for key, value in review.items() if value is not None)))
+        sections.append(("Evidence source detail", None, rows))
+    return sections
+
+
 def _sections(report: Dict[str, Any], content_hash: str) -> List[tuple]:
+    if report.get("reportType") == SYSTEM_ASSURANCE_REPORT:
+        return _system_assurance_sections(report, content_hash)
     return _role_sections(report, content_hash) if _is_role(report) else _snapshot_sections(report, content_hash)
 
 
@@ -664,10 +741,12 @@ def _bar_drawing(parts: List[tuple], width: float = 460, height: float = 12):
 
 def generate_snapshot_pdf(report: Dict[str, Any], content_hash: str) -> bytes:
     styles = getSampleStyleSheet()
-    story = [Paragraph(report.get("title") or "Audit Report", styles["Title"])]
+    title = report.get("title") or "Audit Report"
+    is_assurance = report.get("reportType") == SYSTEM_ASSURANCE_REPORT
+    story = [Paragraph(escape(title), styles["Title"])]
+    if report.get("narrative") and (_is_role(report) or is_assurance):
+        story.append(Paragraph(escape(report["narrative"]), styles["BodyText"]))
     if _is_role(report):
-        if report.get("narrative"):
-            story.append(Paragraph(escape(report["narrative"]), styles["BodyText"]))
         for label, parts in _bars(report):
             story += [Spacer(1, 8), Paragraph(escape(f"{label}: " + ", ".join(f"{v} {n}" for v, _, n in parts)), styles["BodyText"]), _bar_drawing(parts)]
     for heading, head, rows in _sections(report, content_hash):
@@ -676,18 +755,18 @@ def generate_snapshot_pdf(report: Dict[str, Any], content_hash: str) -> bytes:
             story.append(Paragraph("None recorded.", styles["Normal"]))
             continue
         cell = lambda v: Paragraph(escape(v), styles["BodyText"])  # noqa: E731
-        table = Table([[cell(c) for c in row] for row in ([head] if head else []) + rows], hAlign="LEFT")
+        table = Table([[cell(c) for c in row] for row in ([head] if head else []) + rows], hAlign="LEFT", splitInRow=int(is_assurance))
         table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.25, colors.grey), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(table)
     buffer = BytesIO()
-    SimpleDocTemplate(buffer, pagesize=letter, pageCompression=0).build(story)
+    SimpleDocTemplate(buffer, pagesize=letter, pageCompression=0, title=title).build(story)
     return buffer.getvalue()
 
 
 def generate_snapshot_docx(report: Dict[str, Any], content_hash: str) -> bytes:
     doc = Document()
     doc.add_heading(report.get("title") or "Audit Report", 0)
-    if _is_role(report) and report.get("narrative"):
+    if report.get("narrative") and (_is_role(report) or report.get("reportType") == SYSTEM_ASSURANCE_REPORT):
         doc.add_paragraph(report["narrative"])
     for heading, head, rows in _sections(report, content_hash):
         doc.add_heading(heading, 2)

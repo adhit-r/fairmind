@@ -142,14 +142,14 @@ RULE_CHECK = {"fairness_test": "fairness", "monitoring": "monitoring", "environm
 ANY_CHANGE = "*"
 
 
-def _changed_at(db: Session, org_id: str) -> Dict[str, Dict[str, datetime]]:
+def _changed_at(db: Session, org_id: str, system_id: Optional[str]) -> Dict[str, Dict[str, datetime]]:
     """Per system, its newest material change (ANY_CHANGE) and the newest change that reopened each check."""
     rows = db.execute(
         text(
             "SELECT c.system_id, c.reopens_json, c.created_at FROM governance_system_changes c JOIN governance_ai_systems s ON s.id = c.system_id "
-            "WHERE s.org_id = :org_id AND c.material"
+            "WHERE s.org_id = :org_id AND c.material AND (CAST(:system_id AS text) IS NULL OR s.id = :system_id)"
         ),
-        {"org_id": org_id},
+        {"org_id": org_id, "system_id": system_id},
     ).fetchall()
     out: Dict[str, Dict[str, datetime]] = {}
     for sid, reopens_json, raw in rows:
@@ -172,8 +172,8 @@ def _stale(row, changed: Dict[str, Dict[str, datetime]], check: str = ANY_CHANGE
     return filed is None or filed < at
 
 
-def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
-    """Latest result per AI system for every evaluation that has a rule, and the organisation-wide status.
+def results(db: Session, org_id: str, system_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    """Latest results and their status within the requested system or organisation.
 
     A result filed before the change that reopened its check (any material change, for an engine run) no longer
     counts: that system reads as not run.
@@ -184,14 +184,14 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
                 "SELECT e.id, e.system_id, e.evidence_type, e.content_json, e.created_at, s.name AS system_name "
                 "FROM governance_evidence e JOIN governance_ai_systems s ON s.id = e.system_id "
                 "WHERE s.org_id = :org_id AND e.evidence_type IN ('fairness_test', 'monitoring', 'environmental_impact') "
-                "ORDER BY e.created_at DESC"
+                "AND (CAST(:system_id AS text) IS NULL OR s.id = :system_id) ORDER BY e.created_at DESC"
             ),
-            {"org_id": org_id},
+            {"org_id": org_id, "system_id": system_id},
         )
         .mappings()
         .all()
     )
-    changed = _changed_at(db, org_id)
+    changed = _changed_at(db, org_id, system_id)
     now = datetime.now(timezone.utc)
     out: Dict[str, Dict[str, Any]] = {}
     for ev_id, (evidence_type, rule) in RULES.items():
@@ -215,7 +215,7 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
                     "at": row["created_at"],
                 }
         out[ev_id] = _rollup(sorted((s for s in latest.values() if s), key=lambda s: s["at"], reverse=True))
-    engine = _engine_runs(db, org_id, changed, now)
+    engine = _engine_runs(db, org_id, changed, now, system_id)
     # an id with both an engine and a rule: per system, the newer result stands, so a rule never hides a newer engine run
     for ev_id in out.keys() & engine.keys():
         by_system: Dict[str, dict] = {}
@@ -226,7 +226,7 @@ def results(db: Session, org_id: str) -> Dict[str, Dict[str, Any]]:
     return {**engine, **out}
 
 
-def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime]], now: datetime) -> Dict[str, Dict[str, Any]]:
+def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime]], now: datetime, system_id: Optional[str]) -> Dict[str, Dict[str, Any]]:
     """Deciding engine run per AI system for every evaluation FairMind runs itself (evaluation_runs router), as the gate
     reads it (fairness_run_service.deciding_runs): the newest run, with a failure standing behind a newer run that
     proves nothing. A pass on loosened thresholds reads as insufficient; a pass over a year old as not run."""
@@ -236,9 +236,10 @@ def _engine_runs(db: Session, org_id: str, changed: Dict[str, Dict[str, datetime
         text(
             "SELECT e.id, e.system_id, e.content_json, e.created_at, s.name AS system_name "
             "FROM governance_evidence e JOIN governance_ai_systems s ON s.id = e.system_id "
-            "WHERE s.org_id = :org_id AND e.evidence_type = 'evaluation_run' ORDER BY e.created_at DESC"
+            "WHERE s.org_id = :org_id AND e.evidence_type = 'evaluation_run' "
+            "AND (CAST(:system_id AS text) IS NULL OR s.id = :system_id) ORDER BY e.created_at DESC"
         ),
-        {"org_id": org_id},
+        {"org_id": org_id, "system_id": system_id},
     ).mappings().all()
     by_system: Dict[str, List[dict]] = {}
     for row in rows:

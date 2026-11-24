@@ -90,6 +90,8 @@ export interface GateCheck {
   state: 'proven' | 'attested' | 'open'
   confidence: number
   evidenceId: string | null
+  /** Records that still cause this check to fail. Its newest record (evidenceId) can be a pass. */
+  failureEvidenceIds?: string[]
   detail: { all_checks_pass?: boolean | null; rows?: number; attributes?: string[] } | null
   /** The provenance class of the record the check read; null when nothing current is on file. Absent in payloads older than the field. */
   evidenceClass?: string | null
@@ -362,7 +364,7 @@ export interface ClauseMapFramework {
     justification?: string | null
     /** The grid state derived on the server from the contributing checks' class, result and freshness; none when nothing reaches the clause. */
     cell: CellState | 'none'
-    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string; evidenceClass?: GateCheck['evidenceClass']; stale?: true; fails?: true }>
+    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; failureEvidenceIds?: string[]; relation: string; evidenceClass?: GateCheck['evidenceClass']; stale?: true; fails?: true }>
   }>
 }
 
@@ -444,11 +446,12 @@ type Get = <T>(path: string) => Promise<ApiResponse<T>>
 
 /** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope.
  *  The packs routes are scoped by `orgId`; without one the file has no evaluation runs. */
-export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void, orgId?: string | null) {
+export async function loadSystemFile(request: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void, orgId?: string | null) {
+  const get: Get = (path) => request(orgId ? withOrg(path, orgId) : path)
   const write = (next: (v: SystemFileView) => SystemFileView) => update((s) => writeEvaluationScopeState(s, scopeKey, next(s.value)))
   write((v) => ({ ...v, loading: true }))
   const sys = await get<SystemRecord>(`${GOV}/systems/${systemId}`)
-  if (!sys.success || !sys.data) {
+  if (!sys.success || sys.data?.id !== systemId) {
     write((v) => ({ file: { ...v.file, system: null }, loading: false, error: sys.error || 'System not found' }))
     return
   }
@@ -461,12 +464,12 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     get<AuditReport[]>(`${GOV}/reports?${q}`),
     get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
     get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
-    orgId ? get<EngineRun[]>(withOrg(`/api/v1/packs/systems/${encodeURIComponent(systemId)}/evaluation-runs`, orgId)) : Promise.resolve<ApiResponse<EngineRun[]>>({ success: true, data: [] }),
+    orgId ? get<EngineRun[]>(`/api/v1/packs/systems/${encodeURIComponent(systemId)}/evaluation-runs`) : Promise.resolve<ApiResponse<EngineRun[]>>({ success: true, data: [] }),
     get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
     get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
     get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
     get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
-    orgId ? get<LiveRunSummary | null>(withOrg(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/summary`, orgId)) : Promise.resolve<ApiResponse<LiveRunSummary | null>>({ success: true, data: null }),
+    orgId ? get<LiveRunSummary | null>(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/summary`) : Promise.resolve<ApiResponse<LiveRunSummary | null>>({ success: true, data: null }),
   ])
   const file: SystemFile = {
     system: sys.data,

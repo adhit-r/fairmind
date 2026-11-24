@@ -2,7 +2,8 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -158,6 +159,235 @@ def test_every_format_of_a_sealed_report_comes_from_the_same_snapshot():
     assert sealed["sha256"] in csv_body and "Readiness" in csv_body
     assert "'=SUM(A1)" in csv_body  # a formula in the summary stays text
     assert _client().get(f"/api/v1/reports/snapshots/{sealed['id']}/csv").status_code == 404
+
+
+def test_system_assurance_approves_the_scoped_revision_and_reexports_it():
+    from io import BytesIO
+
+    from docx import Document
+
+    from database.connection import db_manager
+    from database.governance_models import (
+        GovernanceControlDefinition, GovernanceControlEvidence, GovernanceEvidenceRun, GovernanceFrameworkVersion,
+    )
+    from src.application.services.governance_assurance_service import GovernanceAssuranceService
+
+    client, stranger = _client(), _client()
+    sid = _system(client, "Claims & appeals", "high")
+    same_name_sid = _system(client, "Claims & appeals", "high")
+    foreign_sid = _system(stranger, "Claims & appeals", "high")
+    org = _org_of(sid)
+    viewer = _client(org_id=org, role=UserRole.VIEWER)
+    prefix = f"{AIG}/reports/system-assurance"
+    with db_manager.SessionLocal() as s:
+        # The system has two assignments with the same display label and control names.
+        selected_version, other_version = str(uuid.uuid4()), str(uuid.uuid4())
+        for version in (selected_version, other_version):
+            s.execute(GovernanceFrameworkVersion.__table__.insert().values(
+                id=version, framework_key="report-test", name="Report test", version_label="1", source_hash=version,
+            ))
+            s.execute(GovernanceControlDefinition.__table__.insert().values(
+                framework_version_id=version, external_id="R1", title="Sample control", statement="Collect a sample.",
+            ))
+        s.commit()
+        service = GovernanceAssuranceService(s)
+        selected, _ = service.assign_framework(org, sid, selected_version)
+        other_assignment, _ = service.assign_framework(org, sid, other_version)
+        wrong_system, _ = service.assign_framework(org, same_name_sid, selected_version)
+        wrong_org, _ = service.assign_framework(_org_of(foreign_sid), foreign_sid, selected_version)
+        control_ids = {
+            assignment["id"]: service.assignment_controls(assignment["orgId"], assignment["id"])[0]["id"]
+            for assignment in (selected, other_assignment, wrong_system, wrong_org)
+        }
+
+    def add_run(label, captured_at, assignments=(), *, system_id=sid, state="accepted", expires_at=None, provenance=None):
+        with db_manager.SessionLocal() as s:
+            workspace_id, run_org = s.execute(sql("SELECT workspace_id, org_id FROM governance_ai_systems WHERE id = :id"),
+                                              {"id": system_id}).one()
+            run_id = str(uuid.uuid4())
+            s.execute(GovernanceEvidenceRun.__table__.insert().values(
+                id=run_id, org_id=run_org, system_id=system_id, source_type="evaluation", source_identifier="lab",
+                run_id=label, content_hash="a" * 64, result="passed", captured_at=captured_at, expires_at=expires_at,
+                workspace_id=workspace_id, passport_id=run_id, schema_version="test", capability_state="test",
+                assurance_source="test", limitations_json='["Sample applies to one test dataset."]',
+                provenance_json=json.dumps(provenance or {}),
+            ))
+            for assignment in assignments:
+                s.execute(GovernanceControlEvidence.__table__.insert().values(
+                    org_id=run_org, system_id=system_id, evidence_id=run_id, state=state,
+                    control_assessment_id=control_ids[assignment["id"]], mapping_rationale="Reviewed test input.",
+                ))
+            s.commit()
+
+    add_run("period-start", "2026-09-30T20:00:00-04:00", (selected, other_assignment), expires_at="2026-10-03T00:00:00Z",
+            provenance={"evaluation": {"scope": {"sampleCount": 42, "exclusions": ["Drafts"]},
+                                       "result": {"metrics": [{"name": "error rate", "value": 0.02, "unit": "ratio"}]},
+                                       "thresholds": [{"metric": "error rate", "operator": "lte", "value": 0.03}]}})
+    add_run("period-end", "2026-10-02T23:59:59.999999Z", (selected,), state="candidate")
+    add_run("after-period", "2026-10-03T00:00:00Z", (selected,))
+    add_run("other-assignment", "2026-10-01T12:00:00Z", (other_assignment,))
+    add_run("undated", None, (selected,))
+    add_run("same-name-system", "2026-10-01T12:00:00Z", (wrong_system,), system_id=same_name_sid)
+    add_run("foreign-system", "2026-10-01T12:00:00Z", (wrong_org,), system_id=foreign_sid)
+    for title, finding_sid, opened, status in (
+        ("In-period open finding", sid, "2026-10-01T10:00:00Z", "open"),
+        ("Already resolved finding", sid, "2026-10-01T10:00:00Z", "resolved"),
+        ("Out-of-period finding", sid, "2026-09-30T10:00:00Z", "open"),
+        ("Another system finding", same_name_sid, "2026-10-01T10:00:00Z", "open"),
+    ):
+        _exec("INSERT INTO governance_risks (id, system_id, title, severity, status, created_at, updated_at) "
+              "VALUES (:id, :sid, :title, 'high', :status, :opened, :opened)",
+              id=str(uuid.uuid4()), sid=finding_sid, title=title, status=status, opened=opened)
+
+    request = {"system_id": sid, "assignment_id": selected["id"], "date_from": "2026-10-01", "date_to": "2026-10-02",
+               "narrative": "Reviewed data for claims and appeals."}
+    assert client.post(f"{prefix}/preview", json={**request, "date_to": "2026-09-30"}).status_code == 422
+    assert client.post(f"{prefix}/preview", json={**request, "assignment_id": wrong_system["id"]}).status_code == 404
+    assert client.post(f"{prefix}/preview", json={**request, "assignment_id": wrong_org["id"]}).status_code == 404
+    assert viewer.post(f"{prefix}/preview", json=request).status_code == 403
+    preview_response = client.post(f"{prefix}/preview", json=request)
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert preview["status"] == "preview" and preview["sha256"] is None
+    assert preview["data"]["framework"]["versionId"] == selected_version
+    assert preview["data"]["coverage"] == {"evidenceRuns": 2, "controls": 1, "excludedUnmappedRuns": 1, "excludedUndatedRuns": 1}
+    assert [run["runId"] for run in preview["data"]["evidence"]] == ["period-end", "period-start"]
+    measured = preview["data"]["evidence"][1]
+    assert measured["sampleCount"] == 42 and measured["measurements"][0]["value"] == 0.02
+    assert measured["thresholds"][0]["value"] == 0.03 and measured["scopeExclusions"] == ["Drafts"]
+    assert [item["title"] for item in preview["data"]["findings"]] == ["In-period open finding"]
+    assert {m["controlAssessmentId"] for run in preview["data"]["evidence"] for m in run["candidateMappings"]} == {control_ids[selected["id"]]}
+    assert preview["data"]["controls"][0]["evidenceStatus"] == "stale"
+    history_params = {"system_id": sid, "report_type": "system-assurance"}
+    assert viewer.get(f"{AIG}/reports", params=history_params).json() == []
+    assert viewer.get(f"{AIG}/reports/{preview['id']}").status_code == 404
+    assert client.get(f"/api/v1/reports/snapshots/{preview['id']}/pdf").status_code == 409
+
+    add_run("late-arrival", "2026-10-01T18:00:00Z", (selected,))
+    stale = client.post(f"{prefix}/{preview['id']}/approve", json={"revision": preview["revision"]})
+    assert stale.status_code == 409 and "sources changed" in stale.json()["detail"]
+    assert viewer.get(f"{AIG}/reports", params=history_params).json() == []
+    fresh = client.post(f"{prefix}/preview", json=request).json()
+    assert fresh["id"] != preview["id"]
+    approve = f"{prefix}/{fresh['id']}/approve"
+    assert client.post(approve, json={"revision": preview["revision"]}).status_code == 409
+    assert client.post(approve, json={"revision": fresh["revision"], "narrative": "Edited during approval"}).status_code == 422
+    assert viewer.post(approve, json={"revision": fresh["revision"]}).status_code in {403, 404}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda approver: approver.post(approve, json={"revision": fresh["revision"]}),
+                                  (client, _client(org_id=org))))
+    assert all(response.status_code == 200 for response in responses), [response.text for response in responses]
+    sealed, duplicate = (response.json() for response in responses)
+    assert sealed == duplicate
+    assert sealed["status"] == "approved" and sealed["sha256"] == fresh["revision"]
+    assert sealed["approvedBy"] == "admin@test.invalid" and sealed["approvedAt"]
+    assert sealed["data"] == fresh["data"] and sealed["narrative"] == request["narrative"]
+    assert viewer.get(f"{AIG}/reports", params=history_params).json() == [sealed]
+
+    add_run("post-approval", "2026-10-02T11:00:00Z", (selected,))
+    exports = f"/api/v1/reports/snapshots/{sealed['id']}"
+    assert viewer.get(f"{AIG}/reports/{sealed['id']}").json() == sealed
+    assert stranger.get(f"{AIG}/reports/{sealed['id']}").status_code == 404
+    assert stranger.get(f"{exports}/json").status_code == 404
+    assert viewer.get(f"{exports}/json").json() == sealed
+    pdf = viewer.get(f"{exports}/pdf")
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+    doc = Document(BytesIO(viewer.get(f"{exports}/docx").content))
+    cells = [cell.text for table in doc.tables for row in table.rows for cell in row.cells]
+    assert {sealed["sha256"], selected_version, "late-arrival", "period-start", "period-end",
+            "In-period open finding", "42", "0.02 ratio"} <= set(cells)
+    assert {other_version, "post-approval", "after-period", "other-assignment", "foreign-system",
+            "Already resolved finding", "Out-of-period finding", "Another system finding"}.isdisjoint(cells)
+    assert request["narrative"] in [p.text for p in doc.paragraphs]
+
+
+def test_named_assurance_definition_pins_scope_and_versions():
+    from database.connection import db_manager
+    from database.governance_models import GovernanceFrameworkVersion
+    from src.application.services.governance_assurance_service import GovernanceAssuranceService
+
+    client, stranger = _client(), _client()
+    sid = _system(client, "Claims", "high")
+    other_sid = _system(client, "Claims", "high")
+    org = _org_of(sid)
+    viewer = _client(org_id=org, role=UserRole.VIEWER)
+    version_id = str(uuid.uuid4())
+    alternate_version = str(uuid.uuid4())
+    with db_manager.SessionLocal() as s:
+        for version in (version_id, alternate_version):
+            s.execute(GovernanceFrameworkVersion.__table__.insert().values(
+                id=version, framework_key="report-test", name="Report test", version_label="1", source_hash=version,
+            ))
+        s.commit()
+        service = GovernanceAssuranceService(s)
+        assignment, _ = service.assign_framework(org, sid, version_id)
+        alternate_assignment, _ = service.assign_framework(org, sid, alternate_version)
+        other_assignment, _ = service.assign_framework(org, other_sid, version_id)
+
+    assurance = f"{AIG}/reports/system-assurance"
+    definitions = f"{assurance}/definitions"
+    request = {"title": "  Claims assurance  ", "system_id": sid, "assignment_id": assignment["id"]}
+    assert viewer.post(definitions, json=request).status_code == 403
+    assert client.post(definitions, json={**request, "title": " "}).status_code == 422
+    assert client.post(definitions, json={**request, "assignment_id": other_assignment["id"]}).status_code == 404
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda title: client.post(definitions, json={**request, "title": title}),
+                                  (request["title"], "Claims assurance")))
+    assert sorted(response.status_code for response in responses) == [200, 201], [response.text for response in responses]
+    created, reopened = sorted(responses, key=lambda response: response.status_code, reverse=True)
+    definition = created.json()
+    assert reopened.json() == definition
+    assert client.post(definitions, json=request).json() == definition
+    definition_id = definition["id"]
+    assert definition == {"id": definition_id, "title": "Claims assurance", "systemId": sid,
+                          "assignmentId": assignment["id"], "createdBy": "admin@test.invalid",
+                          "createdAt": definition["createdAt"], "periodPreset": "previous_complete_utc_month"}
+    assert viewer.get(f"{definitions}/{definition_id}").json() == definition
+    assert viewer.get(definitions).json() == [definition]
+    assert viewer.get(definitions, params={"system_id": sid}).json() == [definition]
+    assert viewer.get(definitions, params={"system_id": other_sid}).json() == []
+    assert stranger.get(definitions).json() == []
+    assert stranger.get(f"{definitions}/{definition_id}").status_code == 404
+    differently_named = client.post(definitions, json={**request, "title": "Claims assurance for compliance"})
+    differently_assigned = client.post(definitions, json={**request, "assignment_id": alternate_assignment["id"]})
+    assert differently_named.status_code == differently_assigned.status_code == 201
+    assert len({definition_id, differently_named.json()["id"], differently_assigned.json()["id"]}) == 3
+
+    scope = {"system_id": sid, "assignment_id": assignment["id"], "date_from": "2026-09-01", "date_to": "2026-09-30"}
+    preview_url = f"{assurance}/preview"
+    wrong_scope = {**scope, "system_id": other_sid, "assignment_id": other_assignment["id"], "definition_id": definition_id}
+    assert client.post(preview_url, json=wrong_scope).status_code == 404
+    preview = client.post(preview_url, json={**scope, "definition_id": definition_id}).json()
+    assert preview["title"] == definition["title"] and preview["config"]["definitionId"] == definition_id
+    assert preview["config"]["frameworkVersionId"] == version_id
+    history = f"{AIG}/reports"
+    filtered = {"system_id": sid, "report_type": "system-assurance", "definition_id": definition_id}
+    assert viewer.get(history, params=filtered).json() == []
+    approved = client.post(f"{assurance}/{preview['id']}/approve", json={"revision": preview["revision"]})
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["sha256"] == preview["revision"]
+    export = viewer.get(f"/api/v1/reports/snapshots/{preview['id']}/json")
+    assert export.json() == approved.json()
+
+    unbound = client.post(preview_url, json=scope).json()
+    assert "definitionId" not in unbound["config"]
+    assert client.post(f"{assurance}/{unbound['id']}/approve", json={"revision": unbound["revision"]}).status_code == 200
+    second_preview = client.post(preview_url, json={
+        **scope, "date_from": "2026-10-01", "date_to": "2026-10-31", "definition_id": definition_id,
+    }).json()
+    second_version = client.post(f"{assurance}/{second_preview['id']}/approve", json={"revision": second_preview["revision"]})
+    assert second_version.status_code == 200, second_version.text
+    assert second_version.json()["id"] != approved.json()["id"]
+    assert viewer.get(history, params=filtered).json() == [second_version.json(), approved.json()]
+    all_versions = viewer.get(history, params={"system_id": sid, "report_type": "system-assurance"})
+    assert [report["id"] for report in all_versions.json()] == [second_preview["id"], unbound["id"], preview["id"]]
+    assert viewer.get(history, params={**filtered, "system_id": other_sid}).status_code == 404
+
+    _exec("UPDATE governance_ai_systems SET lifecycle_stage = 'retired' WHERE id = :id", id=sid)
+    assert client.post(definitions, json=request).status_code == 409
+    assert client.post(preview_url, json={**scope, "definition_id": definition_id}).status_code == 409
+    assert viewer.get(f"{definitions}/{definition_id}").json() == definition
+    assert viewer.get(history, params=filtered).json() == [second_version.json(), approved.json()]
 
 
 def test_a_reworded_briefing_must_cite_every_fact_and_add_no_number():

@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { useOrg } from '@/context/OrgContext'
+import { useOrgResource, withOrg } from '@/lib/api/hooks/usePacks'
 import { apiClient, type ApiResponse } from '@/lib/api/api-client'
 import type { DiscoveredAsset, Integration, IntegrationKind, IntegrationRun, IntegrationStep, RunStep } from '@/lib/api/hooks/useIntegrations'
 
@@ -464,22 +466,27 @@ export interface Preview {
 
 type NewIntegration = { kind: IntegrationKind; name: string; config: Record<string, unknown>; token?: string }
 
+function sourcePath(path: string, orgId: string | null): string {
+  if (!orgId) throw new Error('Select an organisation to manage its sources.')
+  return withOrg(path, orgId)
+}
+
 /** Read a source with the given access without saving anything. */
-export async function previewSource(body: NewIntegration): Promise<Preview> {
-  return unwrap(await apiClient.post<Preview>(`${BASE}/preview`, body))
+export async function previewSource(body: NewIntegration, orgId: string | null): Promise<Preview> {
+  return unwrap(await apiClient.post<Preview>(sourcePath(`${BASE}/preview`, orgId), body))
 }
 
 /** Create a connector and return it, without reloading any list (the connect page navigates away). */
-export async function createSource(body: NewIntegration): Promise<Integration> {
-  return unwrap(await apiClient.post<Integration>(BASE, body))
+export async function createSource(body: NewIntegration, orgId: string | null): Promise<Integration> {
+  return unwrap(await apiClient.post<Integration>(sourcePath(BASE, orgId), body))
 }
 
-export async function syncSource(id: string) {
-  return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/sync`, {}))
+export async function syncSource(id: string, orgId: string | null) {
+  return unwrap(await apiClient.post<Integration['lastSync']>(sourcePath(`${BASE}/${encodeURIComponent(id)}/sync`, orgId), {}))
 }
 
-export async function uploadLogs(id: string, text: string) {
-  return unwrap(await apiClient.post<Integration['lastSync']>(`${BASE}/${id}/upload`, { text }))
+export async function uploadLogs(id: string, text: string, orgId: string | null) {
+  return unwrap(await apiClient.post<Integration['lastSync']>(sourcePath(`${BASE}/${encodeURIComponent(id)}/upload`, orgId), { text }))
 }
 
 function unwrap<T>(res: ApiResponse<T>): T {
@@ -489,70 +496,65 @@ function unwrap<T>(res: ApiResponse<T>): T {
 
 /** Connectors and every discovered item (new, promoted and ignored), with the write actions. */
 export function useDiscovery() {
-  const [integrations, setIntegrations] = useState<Integration[]>([])
-  const [discovered, setDiscovered] = useState<DiscoveredAsset[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
+  const { selectedOrg, error: orgError, refreshOrgs } = useOrg()
+  const orgId = selectedOrg?.id ?? null
+  const sources = useOrgResource<Integration[]>(BASE)
+  const sightings = useOrgResource<DiscoveredAsset[]>(`${BASE}/discovered?status=all`)
+  const { reload: reloadSources } = sources
+  const { reload: reloadSightings } = sightings
   const refresh = useCallback(async () => {
-    try {
-      const [i, d] = await Promise.all([
-        apiClient.get<Integration[]>(BASE),
-        apiClient.get<DiscoveredAsset[]>(`${BASE}/discovered?status=all`),
-      ])
-      setIntegrations(unwrap(i))
-      setDiscovered(unwrap(d))
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load discovery')
-    } finally {
-      setLoading(false)
+    if (!orgId || orgError) {
+      await refreshOrgs()
+      return
     }
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
+    reloadSources()
+    reloadSightings()
+  }, [orgId, orgError, refreshOrgs, reloadSources, reloadSightings])
+  const invalid = (!sources.loading && !Array.isArray(sources.data)) || (!sightings.loading && !Array.isArray(sightings.data))
+  const error = orgError || sources.error || sightings.error || (invalid ? 'Discovery returned an unreadable source inventory.' : null)
+  const loading = (sources.loading && !sources.data) || (sightings.loading && !sightings.data)
+  const integrations = Array.isArray(sources.data) ? sources.data : []
+  const discovered = Array.isArray(sightings.data) ? sightings.data : []
 
   const setSchedule = async (id: string, minutes: number) => {
-    unwrap(await apiClient.patch<Integration>(`${BASE}/${id}`, { schedule_minutes: minutes }))
+    unwrap(await apiClient.patch<Integration>(sourcePath(`${BASE}/${encodeURIComponent(id)}`, orgId), { schedule_minutes: minutes }))
     await refresh()
   }
   /** Which steps of a source are not read. Saves one source; the caller refreshes once after a batch. */
   const setScope = async (id: string, disabledSteps: string[]) => {
-    unwrap(await apiClient.patch<Integration>(`${BASE}/${id}`, { disabled_steps: disabledSteps }))
+    unwrap(await apiClient.patch<Integration>(sourcePath(`${BASE}/${encodeURIComponent(id)}`, orgId), { disabled_steps: disabledSteps }))
   }
   const create = async (body: NewIntegration) => {
-    unwrap(await apiClient.post<Integration>(BASE, body))
+    unwrap(await apiClient.post<Integration>(sourcePath(BASE, orgId), body))
     await refresh()
   }
   const remove = async (id: string) => {
     // 204 has no body, so data is undefined on success: check success, not data.
-    const res = await apiClient.delete<null>(`${BASE}/${id}`)
+    const res = await apiClient.delete<null>(sourcePath(`${BASE}/${encodeURIComponent(id)}`, orgId))
     if (!res.success) throw new Error(res.error || 'The source could not be removed')
     await refresh()
   }
   const sync = async (id: string) => {
     try {
-      return await syncSource(id)
+      return await syncSource(id, orgId)
     } finally {
       await refresh()
     }
   }
   const promote = async (id: string) => {
-    const out = unwrap(await apiClient.post<{ systemId: string }>(`${BASE}/discovered/${id}/promote`, {}))
+    const out = unwrap(await apiClient.post<{ systemId: string }>(sourcePath(`${BASE}/discovered/${encodeURIComponent(id)}/promote`, orgId), {}))
     await refresh()
     return out
   }
   const upload = async (id: string, text: string) => {
     try {
-      return await uploadLogs(id, text)
+      return await uploadLogs(id, text, orgId)
     } finally {
       await refresh()
     }
   }
   const ignore = async (id: string) => {
-    unwrap(await apiClient.post<{ status: string }>(`${BASE}/discovered/${id}/ignore`, {}))
+    unwrap(await apiClient.post<{ status: string }>(sourcePath(`${BASE}/discovered/${encodeURIComponent(id)}/ignore`, orgId), {}))
     await refresh()
   }
 

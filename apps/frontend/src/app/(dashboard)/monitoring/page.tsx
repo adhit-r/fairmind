@@ -11,20 +11,25 @@ import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Token } from '@astryxdesign/core/Token'
 import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
+import { useEstateGates } from '@/lib/api/hooks/useEstate'
 import { usePolicyResource, type PolicyAlert } from '@/lib/api/hooks/usePolicies'
-import { useRisks } from '@/lib/api/hooks/useRisks'
+import { type Risk, isOpenRisk } from '@/lib/api/hooks/useRisks'
+import { useOrgResource } from '@/lib/api/hooks/usePacks'
+import { API_ENDPOINTS } from '@/lib/api/endpoints'
 import { useOrgId } from '@/lib/api/hooks/useOrgId'
 import { checkCell, type CellState } from '@/components/ui/matrix'
 import { useSystemMonitoring } from '@/astryx/data/monitoring'
 
+type Coverage = CellState | 'unknown'
+
 const STATE: Record<string, { word: string; color: 'green' | 'blue' | 'orange' | 'red' | 'default' }> = {
+  unknown: { word: 'Gate status unknown', color: 'default' },
   proven: { word: 'Proven', color: 'green' },
   attested: { word: 'Attested', color: 'green' },
   estimated: { word: 'Estimated', color: 'blue' },
   stale: { word: 'Out of date', color: 'orange' },
   fails: { word: 'Drifting', color: 'red' },
-  open: { word: 'Never watched', color: 'default' },
+  open: { word: 'No current gate evidence', color: 'default' },
 }
 
 const when = (iso: string | null | undefined) => {
@@ -33,12 +38,12 @@ const when = (iso: string | null | undefined) => {
 }
 const cadence = (hours: number) => (hours % 24 === 0 ? `every ${hours / 24 === 1 ? 'day' : `${hours / 24} days`}` : `every ${hours} hours`)
 
-function SystemRow({ id, name, tier, state }: { id: string; name: string; tier: string; state: CellState }) {
-  const { runs, policy, loading, error } = useSystemMonitoring(id)
+function SystemRow({ id, name, tier, state }: { id: string; name: string; tier: string; state: Coverage }) {
+  const { runs, policy, loading, error, policyError, reload } = useSystemMonitoring(id)
   const latest = runs[0]
-  const drift = latest ? latest.attributes.map((a) => a.maxRateDrift).filter((d): d is number => d != null) : []
+  const drift = latest ? (latest.attributes ?? []).map((a) => a.maxRateDrift).filter((d): d is number => d != null) : []
   const worst = drift.length ? Math.max(...drift) : null
-  const s = STATE[state] ?? STATE.open
+  const s = STATE[state] ?? STATE.unknown
   return (
     <li className="fm-mon-row">
       <div className="fm-mon-name">
@@ -70,6 +75,8 @@ function SystemRow({ id, name, tier, state }: { id: string; name: string; tier: 
         ) : (
           <span>No snapshot uploaded yet. {tier} risk.</span>
         )}
+        {policyError && <span>Watch cadence unavailable. {policyError}</span>}
+        {(policyError || error) && <Button label="Retry monitoring data" size="sm" variant="ghost" onClick={reload} />}
         {policy && (
           <span>
             Expected <b>{cadence(policy.cadenceHours)}</b>
@@ -84,50 +91,58 @@ function SystemRow({ id, name, tier, state }: { id: string; name: string; tier: 
 
 export default function MonitoringPage() {
   const orgId = useOrgId()
-  const { systems, loading: systemsLoading } = useSystemContext()
+  const { systems, loading: systemsLoading, error: registryError, refreshSystems } = useSystemContext()
   const gates = useEstateGates()
   const alerts = usePolicyResource<PolicyAlert[]>(orgId ?? null, '/alerts')
-  const risks = useRisks()
+  const risks = useOrgResource<{ risks: Risk[] }>(API_ENDPOINTS.aiGovernance.riskDashboard)
 
   const rows = useMemo(() => {
-    const byId = new Map((gates.data ?? []).map((g: EstateGate) => [g.systemId, g]))
-    return systems.flatMap((s) => {
-      const check = byId.get(s.id)?.checks.find((c) => c.key === 'monitoring')
-      return check ? [{ system: s, state: checkCell(check) }] : []
+    const observed = !gates.error && !gates.loading && Array.isArray(gates.data) ? gates.data : []
+    const byId = new Map(observed.map((gate) => [gate.systemId, gate]))
+    const live = systems.filter((system) => system.stage !== 'retired')
+    return live.map((system) => {
+      const check = byId.get(system.id)?.checks?.find((c) => c.key === 'monitoring')
+      return { system, state: check ? checkCell(check) : 'unknown' as const }
     })
-  }, [systems, gates.data])
+  }, [systems, gates.data, gates.error, gates.loading])
+  const hasKnownGate = rows.some((row) => row.state !== 'unknown')
+  const count = (...states: Coverage[]) =>
+    hasKnownGate || states.includes('unknown') ? rows.filter((row) => states.includes(row.state)).length : '—'
 
-  const count = (...states: CellState[]) => rows.filter((r) => states.includes(r.state)).length
   const nameOf = (id: string | undefined) => systems.find((s) => s.id === id)?.name ?? 'Unknown system'
-  const openAlerts = (alerts.data ?? []).filter((a) => a.status === 'open')
+  const openAlerts = !alerts.error && Array.isArray(alerts.data) ? alerts.data.filter((a) => a.status === 'open') : []
   // Findings the watch opened when a system kept drifting; the API sends the system as system_id.
-  const watchFindings = risks.data.filter((r) => r.source === 'fairmind.watch' && r.status !== 'closed' && r.status !== 'resolved')
+  const watchRows = risks.data?.risks
+  const watchError = risks.error || (!risks.loading && !Array.isArray(watchRows) ? 'The findings response was incomplete.' : null)
+  const watchFindings = !watchError && Array.isArray(watchRows) ? watchRows.filter((r) => r.source === 'fairmind.watch' && isOpenRisk(r)) : []
+  const alertError = alerts.error || (!alerts.loading && !Array.isArray(alerts.data) ? 'The alerts response was incomplete.' : null)
 
   return (
     <div className="fm-page">
       <VStack gap={5}>
         <VStack gap={1}>
           <Heading level={1}>Monitoring</Heading>
-          <Text color="secondary">Is each registered system still behaving the way it was released? Uploaded snapshots are compared against a baseline on a schedule.</Text>
+          <Text color="secondary">Is each active registered system still behaving the way it was released? Uploaded snapshots are compared against a baseline on a schedule.</Text>
         </VStack>
 
+        {registryError && <Banner status="error" title="The system register could not load" description={registryError} endContent={<Button label="Retry register" size="sm" onClick={() => void refreshSystems()} />} />}
+        {gates.loading && <Text color="secondary">Loading gate coverage…</Text>}
         {gates.error && <Banner status="error" title="The monitoring checks could not load" description={gates.error} endContent={<Button label="Try again" size="sm" onClick={() => gates.reload()} />} />}
 
-        {(gates.loading && !gates.data) || systemsLoading ? (
+        {systemsLoading ? (
           <VStack gap={2}>
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} height={44} />
             ))}
           </VStack>
-        ) : !gates.error && rows.length === 0 ? (
-          <EmptyState title="No registered AI systems yet" description="Register a system and upload a snapshot of its predictions to start watching it." actions={<Button variant="primary" label="Go to Discovery" href="/discovery" />} />
+        ) : registryError ? null : rows.length === 0 ? (
+          <EmptyState title="No active registered systems" description="Register a system and upload a snapshot of its predictions to start watching it." actions={<Button variant="primary" label="Go to Discovery" href="/discovery" />} />
         ) : (
-          !gates.error && (
-            <>
-              <ul className="fm-mon-counts" aria-label="Monitoring across the estate">
+          <>
+              <ul className="fm-mon-counts" aria-label="Monitoring across active registered systems">
                 <li>
                   <b>{count('proven', 'attested')}</b>
-                  <span>Proven</span>
+                  <span>Proven or attested</span>
                 </li>
                 <li>
                   <b>{count('estimated')}</b>
@@ -142,8 +157,12 @@ export default function MonitoringPage() {
                   <span>Drifting</span>
                 </li>
                 <li>
+                  <b>{count('unknown')}</b>
+                  <span>Gate status unknown</span>
+                </li>
+                <li>
                   <b>{count('open')}</b>
-                  <span>Never watched</span>
+                  <span>No current gate evidence</span>
                 </li>
               </ul>
 
@@ -168,14 +187,14 @@ export default function MonitoringPage() {
                         <Heading level={2} id="mon-alerts">
                           Alerts
                         </Heading>
-                        <Text color="secondary">{openAlerts.length + watchFindings.length} open</Text>
+                        {!alerts.loading && !risks.loading && !alertError && !watchError && <Text color="secondary">{openAlerts.length + watchFindings.length} shown</Text>}
                       </HStack>
-                      {alerts.error && <Banner status="error" title="Policy alerts could not load" description={alerts.error} endContent={<Button label="Try again" size="sm" onClick={() => alerts.reload()} />} />}
-                      {risks.error && <Banner status="error" title="Watch findings could not load" description={risks.error.message} />}
-                      {(alerts.loading || risks.loading) && !alerts.error ? (
+                      {alertError && <Banner status="error" title="Policy alerts could not load" description={alertError} endContent={<Button label="Try again" size="sm" onClick={() => alerts.reload()} />} />}
+                      {watchError && <Banner status="error" title="Watch findings could not load" description={watchError} endContent={<Button label="Retry findings" size="sm" onClick={risks.reload} />} />}
+                      {(alerts.loading || risks.loading) && !openAlerts.length && !watchFindings.length ? (
                         <Skeleton height={60} />
-                      ) : openAlerts.length + watchFindings.length === 0 && !alerts.error && !risks.error ? (
-                        <Text color="secondary">Nothing open. No policy rule is failing and no watch has opened a finding.</Text>
+                      ) : openAlerts.length + watchFindings.length === 0 && !alertError && !watchError ? (
+                        <Text color="secondary">No open policy alerts. No open watch findings among the {watchRows?.length} risk records returned for this organisation.</Text>
                       ) : (
                         <ul className="fm-mon-alerts">
                           {openAlerts.map((a) => (
@@ -204,8 +223,7 @@ export default function MonitoringPage() {
                   </section>
                 </aside>
               </div>
-            </>
-          )
+          </>
         )}
       </VStack>
     </div>

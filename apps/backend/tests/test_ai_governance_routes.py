@@ -536,6 +536,22 @@ def test_ai_governance_evidence_endpoints_require_authentication(authenticated_o
         client.headers["Authorization"] = authorization
 
 
+def test_scoped_evidence_item_requires_the_original_system(authenticated_org_database):
+    system_id = _create_scoped_system(authenticated_org_database, "Measured system")
+    other_id = _create_scoped_system(authenticated_org_database, "Other accessible system")
+    evidence = client.post(
+        "/api/v1/ai-governance/evidence/collect-v2",
+        json={"system_id": system_id, "type": "review_note", "title": "Original record",
+              "confidence": 0.8, "content": {"text": "System review"}},
+    )
+    assert evidence.status_code == 200, evidence.text
+    path = f"/api/v1/ai-governance/evidence-item/{evidence.json()['id']}"
+    scoped = client.get(path, params={"system_id": system_id, "org_id": authenticated_org_database["org_id"]})
+    assert scoped.status_code == 200, scoped.text
+    assert scoped.json()["title"] == "Original record"
+    assert client.get(path, params={"system_id": other_id}).status_code == 404
+
+
 def test_untrusted_external_evidence_writes_default_deny_without_persistence(
     authenticated_org_database,
 ):

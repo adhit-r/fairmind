@@ -1,24 +1,28 @@
 'use client'
 
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { evaluationHref } from '@/lib/assurance/evaluationLinks'
+import { packSystem, withPackSystem } from '@/lib/assurance/packScope'
+import { useSearchParams, useParams } from 'next/navigation'
 import { useCatalogue, useInstaller, usePackDetail } from '@/lib/api/hooks/usePacks'
 import { BTN, BTN_P, Crumbs, EnginePill, ErrorNote, Heading, Loading, MUTED, Pill, StatusPill, StagePill, cap } from '@/components/packs/parts'
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 export default function PackPage() {
+  const system = packSystem(useSearchParams())
   const { packId } = useParams<{ packId: string }>()
-  const pack = usePackDetail(packId)
+  const pack = usePackDetail(system === '' ? undefined : packId, system)
   const catalogue = useCatalogue()
   const installer = useInstaller(pack.reload)
 
+  if (system === '') return <ErrorNote message="This link needs one valid system identifier." />
   if (pack.loading && !pack.data) return <Loading label="Loading pack" />
-  if (pack.error || !pack.data) {
+  if (pack.error || pack.data?.id !== packId) {
     return (
       <div className="flex flex-col gap-4">
-        <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Pack' }]} />
-        <ErrorNote message={`This pack could not be loaded. ${pack.error ?? ''}`} onRetry={pack.reload} />
+        <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', system) }, { label: 'Pack' }]} />
+        <ErrorNote message={`This pack could not be loaded. ${pack.error ?? 'The requested pack was not returned.'}`} onRetry={pack.reload} />
       </div>
     )
   }
@@ -29,7 +33,7 @@ export default function PackPage() {
 
   return (
     <div className="flex flex-col gap-[22px]">
-      <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: pillar, href: '/compliance' }, { label: p.name }]} />
+      <Crumbs items={[{ label: 'Frameworks', href: withPackSystem('/compliance', system) }, { label: pillar, href: withPackSystem('/compliance', system) }, { label: p.name }]} />
       <Heading title={p.name} lead={p.description}>
         <button
           type="button"
@@ -78,7 +82,7 @@ export default function PackPage() {
                     <ul className="m-0 list-none p-0">
                       {pt.workflows.map((w) => (
                         <li key={w.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[#15171a14] py-2.5">
-                          <Link href={`/compliance/workflows/${w.id}`} className="min-w-[180px] flex-[1_1_220px] text-[13.5px] font-semibold hover:underline">
+                          <Link href={withPackSystem(`/compliance/workflows/${encodeURIComponent(w.id)}`, system)} className="min-w-[180px] flex-[1_1_220px] text-[13.5px] font-semibold hover:underline">
                             {w.name}
                           </Link>
                           <span title={w.autonomy}><Pill>Autonomy {w.autonomy.split(/\s/)[0]}</Pill></span>
@@ -97,7 +101,7 @@ export default function PackPage() {
                     <ul className="m-0 list-none p-0">
                       {pt.evaluations.map((e) => (
                         <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[#15171a14] py-2.5">
-                          <Link href={`/compliance/evaluations#${encodeURIComponent(e.id)}`} className="min-w-[180px] flex-[1_1_220px] text-[13.5px] font-semibold hover:underline">
+                          <Link href={evaluationHref(e.id, system)} className="min-w-[180px] flex-[1_1_220px] text-[13.5px] font-semibold hover:underline">
                             {e.name}
                           </Link>
                           <EnginePill engine={e.engine} />
@@ -120,7 +124,7 @@ export default function PackPage() {
             <ul className="m-0 list-none p-0">
               {p.frameworks.map((f) => (
                 <li key={f.key} className="flex items-center justify-between gap-2.5 border-t border-[#15171a14] py-[9px] text-[13px]">
-                  <Link href={`/compliance/journeys/${f.key}`} className="font-semibold hover:underline">
+                  <Link href={withPackSystem(`/compliance/journeys/${encodeURIComponent(f.key)}`, system)} className="font-semibold hover:underline">
                     {f.name}
                   </Link>
                   <span className="tabular-nums">

@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useState, type CSSProperties, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useGridFocus } from '@astryxdesign/core/hooks'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { GateCheck } from '@/lib/api/hooks/useSystemFile'
 import { cn } from '@/lib/utils'
@@ -36,7 +37,8 @@ export type MatrixProps = {
   tail?: { key: string; label: string }[]
   countHead?: string
   more?: { n: number; href: string }
-  onCell?: (rowKey: string, colKey: string) => void
+  onCell?: (rowKey: string, colKey: string, trigger: HTMLButtonElement) => void
+  keyboardNavigation?: boolean
   legendLabels?: Partial<Record<CellState, string>>
 }
 
@@ -121,9 +123,49 @@ export function groupLabelLines(colGroups: { label: string; cols: unknown[] }[])
 }
 
 /** The one grid of the app: rows of requirements or systems against columns of systems, checks or controls. */
-export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more, onCell, legendLabels }: MatrixProps) {
+const getCellButton = (cell: Element) => cell.querySelector<HTMLButtonElement>('button.fm-cel')
+
+export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more, onCell, keyboardNavigation = false, legendLabels }: MatrixProps) {
   const [hover, setHover] = useState<number | null>(null)
   const cols = colGroups.flatMap((g) => g.cols)
+  const navigateCells = keyboardNavigation && !!onCell
+  const { gridRef, focusCell, handleKeyDown } = useGridFocus<HTMLTableSectionElement>({
+    columns: cols.length,
+    cellSelector: 'td.mx-c',
+    isCellFocusable: (cell) => !!getCellButton(cell),
+    getFocusTarget: getCellButton,
+    hasRovingTabIndex: navigateCells,
+  })
+
+  function trackCellFocus(event: FocusEvent<HTMLTableSectionElement>) {
+    const target = event.target
+    if (!(target instanceof HTMLButtonElement) || !target.matches('button.fm-cel') || target.tabIndex === 0) return
+    // Astryx moves the tab stop on its own navigation. Sync direct DOM focus too.
+    const cell = target.closest('td')
+    if (!cell) return
+    const cells = Array.from(event.currentTarget.querySelectorAll('td.mx-c'))
+    const index = cells.indexOf(cell)
+    if (index >= 0) focusCell(index)
+  }
+
+  function navigateCell(event: KeyboardEvent<HTMLTableSectionElement>) {
+    const target = event.target
+    if (!(target instanceof HTMLButtonElement) || !target.matches('button.fm-cel')) return
+    if (event.defaultPrevented || event.altKey || event.shiftKey) return
+    if (event.key.startsWith('Arrow') && (event.ctrlKey || event.metaKey)) return
+    if (event.key === 'PageUp' || event.key === 'PageDown') return
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      const rtl = getComputedStyle(event.currentTarget).direction === 'rtl'
+      const direction = (event.key === 'ArrowRight') !== rtl ? 'nextElementSibling' : 'previousElementSibling'
+      let cell = target.closest('td')?.[direction]
+      while (cell?.matches('td.mx-c') && !getCellButton(cell)) cell = cell[direction]
+      if (!cell?.matches('td.mx-c')) {
+        event.preventDefault()
+        return
+      }
+    }
+    handleKeyDown(event)
+  }
   const starts = new Set<number>()
   colGroups.reduce((at, g) => (starts.add(at), at + g.cols.length), 0)
   const labels = groupLabelLines(colGroups)
@@ -137,8 +179,8 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
   const colCls = (c: MatrixCol, j: number) => cn(starts.has(j) && 'mx-gs', c.off && 'mx-off', hover === j && 'mx-hc')
 
   return (
-    <div className="mx" data-mx={id}>
-      {legend.length > 0 && (
+    <div className="mx" data-mx={id} data-keyboard-navigation={navigateCells || undefined}>
+      {(legend.length > 0 || navigateCells) && (
         <div className="mx-legend">
           {legend.map((k) => (
             <span key={k}>
@@ -146,10 +188,19 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
               {(k !== 'r1' && k !== 'r2' && k !== 'r3' && legendLabels?.[k]) || KIND_LABEL[k]}
             </span>
           ))}
+          {navigateCells && (
+            <p id={`${id}-keyboard-help`} className="md:ml-auto">Arrow keys move between cells. Enter opens details.</p>
+          )}
         </div>
       )}
       <div className="mx-wrap">
-        <table className="mx-grid" style={{ '--mx-vh': `${vh}px` } as CSSProperties} onMouseLeave={() => setHover(null)}>
+        <table
+          className="mx-grid"
+          style={{ '--mx-vh': `${vh}px` } as CSSProperties}
+          aria-label={navigateCells ? `${head} matrix` : undefined}
+          aria-describedby={navigateCells ? `${id}-keyboard-help` : undefined}
+          onMouseLeave={() => setHover(null)}
+        >
           <thead>
             {colGroups.some((g) => g.label) && (
               <tr className="mx-gh">
@@ -192,7 +243,7 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
               <th scope="col" className="mx-fill" />
             </tr>
           </thead>
-          <tbody>
+          <tbody ref={gridRef} onFocus={navigateCells ? trackCellFocus : undefined} onKeyDown={navigateCells ? navigateCell : undefined}>
             {groups
               .filter((g) => g.rows.length > 0)
               .map((g, gi) => (
@@ -223,7 +274,17 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
                             <td key={c.key} className={cn('mx-c', colCls(c, j))} title={k ? undefined : t} onMouseEnter={() => setHover(j)}>
                               {k &&
                                 (onCell ? (
-                                  <button type="button" className={`fm-cel ${k}`} title={t} aria-label={`${r.label}, ${t}`} onClick={() => onCell(r.key, c.key)} />
+                                  <button
+                                    type="button"
+                                    className={`fm-cel ${k}`}
+                                    title={t}
+                                    aria-label={`${r.label}, ${t}${navigateCells && grouped ? `, ${g.label}` : ''}`}
+                                    onClick={(event) => {
+                                      const trigger = event.currentTarget
+                                      if (navigateCells) trigger.focus({ preventScroll: true })
+                                      onCell(r.key, c.key, trigger)
+                                    }}
+                                  />
                                 ) : (
                                   <i role="img" className={`fm-cel ${k}`} title={t} aria-label={t} />
                                 ))}
@@ -255,10 +316,10 @@ export function Matrix({ id, head, colGroups, groups, tail = [], countHead, more
 }
 
 /** The drawer a cell opens: a small label, the title, one line under it, then the detail blocks. */
-export function CellDrawer({ open, onClose, label, title, sub, children }: { open: boolean; onClose: () => void; label: string; title: string; sub?: string; children: ReactNode }) {
+export function CellDrawer({ open, onClose, onCloseAutoFocus, label, title, sub, children }: { open: boolean; onClose: () => void; onCloseAutoFocus?: (event: Event) => void; label: string; title: string; sub?: string; children: ReactNode }) {
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="flex w-full flex-col gap-5 overflow-y-auto border-l border-[var(--fm-line)] bg-white p-6 text-[var(--fm-ink)] sm:max-w-[440px]">
+      <SheetContent onCloseAutoFocus={onCloseAutoFocus} className="flex w-full flex-col gap-5 overflow-y-auto border-l border-[var(--fm-line)] bg-white p-6 text-[var(--fm-ink)] sm:max-w-[440px]">
         <SheetHeader className="space-y-1 text-left">
           <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--fm-ink3)]">{label}</span>
           <SheetTitle className="text-[17px] font-semibold leading-snug tracking-[-0.01em] text-[var(--fm-ink)]">{title}</SheetTitle>

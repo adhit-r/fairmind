@@ -76,6 +76,9 @@ ALWAYS = (
     "017_org_ai_providers.sql",
     "028_framework_scope.sql",
     "029_internal_audits.sql",
+    "033_system_assurance_report_definitions.sql",
+    "034_system_assurance_schedules.sql",
+    "035_system_assurance_review_assignments.sql",
 )
 
 

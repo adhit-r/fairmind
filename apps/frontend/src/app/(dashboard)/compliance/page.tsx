@@ -1,7 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { packSystem, withPackSystem } from '@/lib/assurance/packScope'
+import { Suspense, useMemo, useState } from 'react'
 import {
   useBundles,
   useCatalogue,
@@ -33,7 +35,7 @@ const PLUGGED_SHOWN = 6
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 const pct = (n: number, total: number) => (total > 0 ? Math.min(100, (n / total) * 100) : 0)
 
-function PackCard({ pack, pillarName, busy, onToggle }: { pack: Pack; pillarName?: string; busy: string | null; onToggle: (remove: boolean) => void }) {
+function PackCard({ system, pack, pillarName, busy, onToggle }: { system?: string; pack: Pack; pillarName?: string; busy: string | null; onToggle: (remove: boolean) => void }) {
   return (
     <article className="pk-card flex flex-col gap-2.5 p-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -41,7 +43,7 @@ function PackCard({ pack, pillarName, busy, onToggle }: { pack: Pack; pillarName
         {pack.agentic && <Pill tone="you">Agentic</Pill>}
         {pillarName && <Pill>{pillarName}</Pill>}
       </div>
-      <Link href={`/compliance/packs/${pack.id}`} className="text-[15px] font-semibold hover:underline">
+      <Link href={withPackSystem(`/compliance/packs/${encodeURIComponent(pack.id)}`, system)} className="text-[15px] font-semibold hover:underline">
         {pack.name}
       </Link>
       <p className={`m-0 flex-grow text-[13px] leading-normal ${MUTED}`}>{pack.description}</p>
@@ -58,7 +60,7 @@ function PackCard({ pack, pillarName, busy, onToggle }: { pack: Pack; pillarName
         >
           {busy === pack.id ? (pack.installed ? 'Removing' : 'Installing') : pack.installed ? 'Remove' : 'Install'}
         </button>
-        <Link href={`/compliance/packs/${pack.id}`} className={BTN} aria-label={`Open ${pack.name}`}>
+        <Link href={withPackSystem(`/compliance/packs/${encodeURIComponent(pack.id)}`, system)} className={BTN} aria-label={`Open ${pack.name}`}>
           Open
         </Link>
       </div>
@@ -66,7 +68,7 @@ function PackCard({ pack, pillarName, busy, onToggle }: { pack: Pack; pillarName
   )
 }
 
-function BundleCard({ bundle, journeyKeys, busy, onInstall }: { bundle: Bundle; journeyKeys: Set<string>; busy: string | null; onInstall: () => void }) {
+function BundleCard({ system, bundle, journeyKeys, busy, onInstall }: { system?: string; bundle: Bundle; journeyKeys: Set<string>; busy: string | null; onInstall: () => void }) {
   const complete = bundle.installedCount >= bundle.packs.length
   return (
     <article className="pk-card flex flex-col gap-3 p-5">
@@ -84,7 +86,7 @@ function BundleCard({ bundle, journeyKeys, busy, onInstall }: { bundle: Bundle; 
         {bundle.targets.map((t) => (
           <li key={t.key} className="flex flex-col gap-1">
             {journeyKeys.has(t.key) ? (
-              <Link href={`/compliance/journeys/${t.key}`} className="text-[13px] font-semibold hover:underline">
+              <Link href={withPackSystem(`/compliance/journeys/${encodeURIComponent(t.key)}`, system)} className="text-[13px] font-semibold hover:underline">
                 {t.name}
               </Link>
             ) : (
@@ -120,7 +122,7 @@ function workflowLine(j: JourneySummary): string {
   return `${plural(j.workflows.length, 'workflow')}${parts.length ? `: ${parts.join(', ')}` : ''}${notRun ? `${parts.length ? ',' : ':'} ${notRun} not run yet` : ''}.`
 }
 
-function PluggedCard({ j, primary }: { j: JourneySummary; primary: boolean }) {
+function PluggedCard({ system, j, primary }: { system?: string; j: JourneySummary; primary: boolean }) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-[var(--fm-line)] p-3.5">
       <div className="flex items-center justify-between gap-2">
@@ -137,7 +139,7 @@ function PluggedCard({ j, primary }: { j: JourneySummary; primary: boolean }) {
       >
         <div className="h-full bg-[#009869]" style={{ width: `${pct(j.coveredInstalled, j.active)}%` }} />
       </div>
-      <Link href={`/compliance/journeys/${j.key}`} className={cn(primary ? BTN_P : BTN, 'self-start')}>
+      <Link href={withPackSystem(`/compliance/journeys/${encodeURIComponent(j.key)}`, system)} className={cn(primary ? BTN_P : BTN, 'self-start')}>
         Open journey
       </Link>
     </div>
@@ -145,12 +147,24 @@ function PluggedCard({ j, primary }: { j: JourneySummary; primary: boolean }) {
 }
 
 export default function CompliancePage() {
+  return <Suspense fallback={<Loading label="Loading frameworks" />}><ComplianceLibrary /></Suspense>
+}
+
+function ComplianceLibrary() {
+  const search = useSearchParams()
+  const system = packSystem(search)
   const catalogue = useCatalogue()
   const packs = usePacks()
   const bundles = useBundles()
-  const journeys = useJourneys()
-  const [view, setView] = useState<View>('installed')
-  const [pillar, setPillar] = useState<string>('')
+  const journeys = useJourneys(system)
+  const view = VIEWS.find((v) => v.id === search.get('view'))?.id ?? 'installed'
+  const pillar = search.get('pillar') ?? ''
+  function updateView(key: 'view' | 'pillar', value: string) {
+    const url = new URL(window.location.href)
+    if (value) url.searchParams.set(key, value)
+    else url.searchParams.delete(key)
+    window.history.replaceState(null, '', url)
+  }
   const [allPlugged, setAllPlugged] = useState(false)
   const installer = useInstaller(() => {
     packs.reload()
@@ -196,6 +210,7 @@ export default function CompliancePage() {
     return [...byId.values()].sort((a, b) => (order[a.status ?? ''] ?? 5) - (order[b.status ?? ''] ?? 5) || a.name.localeCompare(b.name))
   }, [allJourneys])
 
+  if (system === '') return <ErrorNote message="This link needs one valid system identifier." />
   if (packs.loading && !packs.data) return <Loading label="Loading frameworks" />
   if (packs.error && !packs.data) return <ErrorNote message={`Frameworks could not be loaded. ${packs.error}`} onRetry={packs.reload} />
 
@@ -212,7 +227,7 @@ export default function CompliancePage() {
         title="Frameworks"
         lead={`${plural(installedCount, 'pack is', 'packs are')} installed. Agents run their workflows and file the evidence; you approve anything that would change a system.`}
       >
-        <Link href="/compliance/evaluations" className={BTN}>Browse evaluations</Link>
+        <Link href={withPackSystem('/evaluations', system)} className={BTN}>Browse evaluations</Link>
       </Heading>
 
       {installer.failure && <ErrorNote message={installer.failure} />}
@@ -227,7 +242,7 @@ export default function CompliancePage() {
             id={`tab-${v.id}`}
             aria-selected={view === v.id}
             aria-controls={`panel-${v.id}`}
-            onClick={() => setView(v.id)}
+            onClick={() => updateView('view', v.id)}
             className={cn(
               'flex h-[34px] items-center whitespace-nowrap rounded-full px-4 text-[13px] font-semibold text-[var(--fm-ink2)]',
               view === v.id && 'bg-white text-[var(--fm-ink)] shadow-[0_1px_2px_rgba(20,20,30,.08)]',
@@ -252,14 +267,14 @@ export default function CompliancePage() {
                 <p className={cn('m-0 text-[13px] leading-normal', MUTED)}>
                   No framework is plugged in yet. Adding one installs the packs whose workflows cover it.
                 </p>
-                <button type="button" className={cn(BTN_P, 'self-start')} onClick={() => setView('add')}>
+                <button type="button" className={cn(BTN_P, 'self-start')} onClick={() => updateView('view', 'add')}>
                   Add a framework
                 </button>
               </>
             ) : (
               <>
                 {(allPlugged ? board.plugged : board.plugged.slice(0, PLUGGED_SHOWN)).map((j, i) => (
-                  <PluggedCard key={j.key} j={j} primary={i === 0} />
+                  <PluggedCard system={system} key={j.key} j={j} primary={i === 0} />
                 ))}
                 {board.plugged.length > PLUGGED_SHOWN && (
                   <button type="button" className={cn(BTN, 'self-start')} onClick={() => setAllPlugged(!allPlugged)} aria-expanded={allPlugged}>
@@ -268,7 +283,7 @@ export default function CompliancePage() {
                 )}
                 <p className={cn('m-0 text-[13px]', MUTED)}>
                   {plural(board.open.length, 'framework')} not started.{' '}
-                  <button type="button" onClick={() => setView('add')} className="font-semibold text-[var(--fm-ink)] underline">
+                  <button type="button" onClick={() => updateView('view', 'add')} className="font-semibold text-[var(--fm-ink)] underline">
                     Add a framework
                   </button>
                 </p>
@@ -315,7 +330,7 @@ export default function CompliancePage() {
                             {installer.busy === j.key ? 'Adding' : plugged ? 'Add the rest' : 'Add framework'}
                           </button>
                         )}
-                        <Link href={`/compliance/journeys/${j.key}`} className={BTN} aria-label={`Open the ${j.name} journey`}>
+                        <Link href={withPackSystem(`/compliance/journeys/${encodeURIComponent(j.key)}`, system)} className={BTN} aria-label={`Open the ${j.name} journey`}>
                           {plugged ? 'Open journey' : 'Preview'}
                         </Link>
                       </div>
@@ -338,7 +353,7 @@ export default function CompliancePage() {
             ) : (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
                 {(bundles.data ?? []).map((b) => (
-                  <BundleCard key={b.id} bundle={b} journeyKeys={journeyKeys} busy={installer.busy} onInstall={() => installer.bundle(b.id)} />
+                  <BundleCard system={system} key={b.id} bundle={b} journeyKeys={journeyKeys} busy={installer.busy} onInstall={() => installer.bundle(b.id)} />
                 ))}
               </div>
             )}
@@ -352,7 +367,7 @@ export default function CompliancePage() {
             <p className={cn('m-0 text-[13px]', MUTED)}>Packs are what you install: workflows and evaluations that each serve many frameworks.</p>
             <label className="flex items-center gap-2 text-[13px] font-semibold">
               Pillar
-              <select value={pillar} onChange={(e) => setPillar(e.target.value)} className="h-10 rounded-full border border-[#15171a24] bg-white px-4 text-[13px] font-semibold">
+              <select value={pillar} onChange={(e) => updateView('pillar', e.target.value)} className="h-10 rounded-full border border-[#15171a24] bg-white px-4 text-[13px] font-semibold">
                 <option value="">All pillars</option>
                 {pillars.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -365,7 +380,7 @@ export default function CompliancePage() {
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
               {shownPacks.map((p) => (
-                <PackCard key={p.id} pack={p} pillarName={pillarName(p.pillar)} busy={installer.busy} onToggle={(remove) => installer.pack(p.id, remove)} />
+                <PackCard system={system} key={p.id} pack={p} pillarName={pillarName(p.pillar)} busy={installer.busy} onToggle={(remove) => installer.pack(p.id, remove)} />
               ))}
             </div>
           )}
@@ -395,7 +410,7 @@ export default function CompliancePage() {
                   {workflows.map((w) => (
                     <tr key={w.id} className="border-t border-[var(--fm-line)] align-top">
                       <td className="py-2.5 pr-3">
-                        <Link href={`/compliance/workflows/${w.id}`} className="font-semibold hover:underline">{w.name}</Link>
+                        <Link href={withPackSystem(`/compliance/workflows/${encodeURIComponent(w.id)}`, system)} className="font-semibold hover:underline">{w.name}</Link>
                       </td>
                       <td className="py-2.5 pr-3"><StagePill stage={w.stage} /></td>
                       <td className="py-2.5 pr-3"><StatusPill status={w.status} /></td>

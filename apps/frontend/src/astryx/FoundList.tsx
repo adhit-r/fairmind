@@ -21,37 +21,45 @@ function origin(a: DiscoveredAsset): string {
 /** Every item discovery found, whatever was decided about it, with what happened and a link to the system it became. */
 export function FoundList({
   discovered,
-  waiting,
   show,
+  showFilters = true,
   onShow,
+  onReview,
+  sourceState,
   children,
 }: {
-  discovered: DiscoveredAsset[]
-  waiting: number
+  discovered: DiscoveredAsset[] | null
   show: Show
+  showFilters?: boolean
   onShow: (s: Show) => void
+  onReview: (id: string) => void
+  sourceState: React.ReactNode
   /** What the Waiting filter shows: the review list and panel, where decisions are made. */
   children: React.ReactNode
 }) {
   const { systems } = useSystemContext()
   const nameOf = new Map(systems.map((s) => [s.id, s.name]))
-  const registered = discovered.filter((a) => a.status === 'promoted')
-  const ignored = discovered.filter((a) => a.status === 'ignored')
-  const rows = show === 'registered' ? registered : show === 'ignored' ? ignored : discovered
+  const registered = (discovered ?? []).filter((a) => a.status === 'promoted')
+  const ignored = (discovered ?? []).filter((a) => a.status === 'ignored')
+  const rows = show === 'registered' ? registered : show === 'ignored' ? ignored : discovered ?? []
   const newest = [...rows].sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt))
 
   return (
     <div className="dv-found">
-      <SegmentedControl label="Show" value={show} onChange={(v) => onShow(v as Show)} size="sm">
-        <SegmentedControlItem label={`All ${discovered.length}`} value="all" />
-        <SegmentedControlItem label={`Waiting for you ${waiting}`} value="waiting" />
-        <SegmentedControlItem label={`Registered ${registered.length}`} value="registered" />
-        <SegmentedControlItem label={`Ignored ${ignored.length}`} value="ignored" />
-      </SegmentedControl>
+      {showFilters && (
+        <div className="dv-filters">
+          <SegmentedControl label="Sightings status" value={show} onChange={(v) => onShow(v as Show)} size="md">
+            <SegmentedControlItem label="Awaiting review" value="waiting" />
+            <SegmentedControlItem label="All sightings" value="all" />
+            <SegmentedControlItem label="Registered" value="registered" />
+            <SegmentedControlItem label="Ignored" value="ignored" />
+          </SegmentedControl>
+        </div>
+      )}
 
       {show === 'waiting' ? (
         children
-      ) : newest.length === 0 ? (
+      ) : !discovered ? sourceState : newest.length === 0 ? (
         <section className="fm-card">
           <Text color="secondary">{show === 'ignored' ? 'Nothing ignored.' : show === 'registered' ? 'Nothing registered from discovery yet.' : 'Nothing found yet. Connect a source and what it finds lands here.'}</Text>
         </section>
@@ -97,13 +105,13 @@ export function FoundList({
                         </>
                       ) : a.status === 'ignored' ? (
                         <span className="dv-chip">Ignored</span>
-                      ) : (
+                      ) : a.status === 'new' ? (
                         <>
                           <span className="dv-chip wait">Waiting for you</span>
                           <br />
-                          <button type="button" className="dv-linkbtn" onClick={() => onShow('waiting')}>Review it</button>
+                          <button type="button" className="dv-linkbtn" onClick={() => onReview(a.id)}>Review it</button>
                         </>
-                      )}
+                      ) : <span className="dv-chip">Status unknown</span>}
                     </td>
                   </tr>
                 )

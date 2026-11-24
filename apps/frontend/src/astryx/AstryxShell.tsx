@@ -4,7 +4,7 @@ import '@astryxdesign/core/reset.css'
 import './shell.css'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { Theme } from '@astryxdesign/core/theme'
 import { LinkProvider } from '@astryxdesign/core/Link'
@@ -23,37 +23,31 @@ import { DEMO_FLAG } from '@/lib/api/api-client'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { useAIProvider, useRuns } from '@/lib/api/hooks/usePacks'
 import { useNeedsYou } from './data/needsYou'
-import { useDiscovery } from './data/discovery'
 import { useRisks } from '@/lib/api/hooks/useRisks'
-import { useShadowAI } from './data/review'
+import { CandidateQueueContext, useCandidateQueue, useShadowAI } from './data/review'
 import { fairmindTheme } from './theme'
 import { ALL, NAV, SETTINGS, groupOf, isOn, type Place } from './nav'
 import { WhatsNewButton } from '@/components/whatsnew/WhatsNew'
 
 /** Live counts for the menu, read from the API. A count the API cannot give is left out, never guessed. */
-function useNavCounts(): Partial<Record<NonNullable<Place['count']> | 'waiting', number>> {
+function useNavCounts(waitingCandidates: number | undefined): Partial<Record<NonNullable<Place['count']>, number>> {
   const { systems } = useSystemContext()
   const needsYou = useNeedsYou()
   const runs = useRuns().data ?? []
-  const { discovered, loading: discoveryLoading } = useDiscovery()
-  const waiting = discovered.filter((a) => a.status === 'new').length
   const { summary: risks } = useRisks()
   const shadow = useShadowAI()
   return {
     // The same list the Needs you page shows, so the badge and the page agree.
-    ...(needsYou.loading ? {} : { needs: needsYou.items.length }),
+    ...(needsYou.total === undefined ? {} : { needs: needsYou.total }),
     systems: systems.length,
     runs: runs.filter((r) => r.status === 'running' || r.status === 'queued').length,
-    // Discovery shows what waits for a decision when anything does, else everything found; only waiting is hot.
-    ...(discoveryLoading ? {} : { found: waiting || discovered.length, waiting }),
+    waitingCandidates,
     ...(risks ? { findings: risks.open } : {}),
     ...(shadow.data ? { shadow: shadow.data.findings.filter((f) => f.status === 'open').length } : {}),
   }
 }
 
-const HOT: Array<NonNullable<Place['count']>> = ['needs', 'found', 'findings', 'shadow']
-// The count that decides whether a menu item is hot: Discovery is hot only while something waits.
-const hotKey = (k: NonNullable<Place['count']>) => (k === 'found' ? 'waiting' : k)
+const HOT: Array<NonNullable<Place['count']>> = ['needs', 'waitingCandidates', 'findings', 'shadow']
 
 function OrgName() {
   const { organizations, selectedOrg, selectOrg } = useOrg()
@@ -175,7 +169,14 @@ function DemoNotice() {
 export function AstryxShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? '/dashboard'
   const router = useRouter()
-  const counts = useNavCounts()
+  const queue = useCandidateQueue()
+  const counts = useNavCounts(queue.loading || queue.error ? undefined : queue.candidates.length)
+  const previousPath = useRef(pathname)
+  const refreshQueue = queue.refresh
+  useEffect(() => {
+    if (pathname === '/discovery' && previousPath.current !== pathname) refreshQueue()
+    previousPath.current = pathname
+  }, [pathname, refreshQueue])
   const { systems } = useSystemContext()
   const { selectedOrg, isLoading: orgLoading } = useOrg()
   const [isPaletteOpen, setPaletteOpen] = useState(false)
@@ -220,7 +221,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
       </Link>
       {NAV.map((g) => {
         const Icon = g.icon
-        const hot = g.places.some((p) => p.count && HOT.includes(p.count) && (counts[hotKey(p.count)] ?? 0) > 0)
+        const hot = g.places.some((p) => p.count && HOT.includes(p.count) && (counts[p.count] ?? 0) > 0)
         return (
           <Link key={g.key} href={g.places[0].href} className="fm-sb" aria-current={group === g ? 'true' : undefined}>
             <span className="ic">
@@ -256,7 +257,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
         {group.places.map((p) => {
           const Icon = p.icon
           const n = p.count ? counts[p.count] : undefined
-          const hot = !!p.count && HOT.includes(p.count) && (counts[hotKey(p.count)] ?? 0) > 0
+          const hot = !!p.count && HOT.includes(p.count) && (n ?? 0) > 0
           return (
             <Item
               key={p.href}
@@ -265,7 +266,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
               endContent={
                 n != null ? (
                   <Text size="sm" weight="semibold" hasTabularNumbers color="secondary" className={hot ? 'fm-hot-count' : undefined}>
-                    {n}
+                    {n}{p.count === 'waitingCandidates' && <span className="sr-only"> candidates awaiting review</span>}
                   </Text>
                 ) : undefined
               }
@@ -316,7 +317,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
                     {places.map((p) => (
                       <Link key={p.href} className="fm-chip" href={p.href} aria-current={isOn(pathname, p) ? 'page' : undefined}>
                         {p.label}
-                        {p.n != null && <b>{p.n}</b>}
+                        {p.n != null && <b>{p.n}{p.count === 'waitingCandidates' && <span className="sr-only"> candidates awaiting review</span>}</b>}
                       </Link>
                     ))}
                   </nav>
@@ -340,7 +341,7 @@ export function AstryxShell({ children }: { children: React.ReactNode }) {
             <LayoutContent padding={0}>
               <main id="fm-main" tabIndex={-1} className="fm-main">
                 <DemoNotice />
-                {!orgLoading && !selectedOrg && !WITHOUT_ORG.test(pathname) ? <NoOrganisation /> : children}
+                {!orgLoading && !selectedOrg && !WITHOUT_ORG.test(pathname) ? <NoOrganisation /> : <CandidateQueueContext.Provider value={queue}>{children}</CandidateQueueContext.Provider>}
               </main>
             </LayoutContent>
           }

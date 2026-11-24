@@ -23,6 +23,7 @@ import { AcceptanceCard, HeatCard, LedgerCard, PacksCard, RegisterCard, SampleCa
 import { LibraryCard, RecentCard, ReportDrawer } from '@/astryx/reports/Library'
 import { Card, ProofBars } from '@/astryx/reports/parts'
 import { ROLES, type Briefing as BriefingModel, type ReportModel, type Role, type SealedReport } from '@/astryx/reports/types'
+import { SavedReports } from './SavedReports'
 
 const isRole = (v: string | null): v is Role => ROLES.some((r) => r.key === v)
 
@@ -94,6 +95,7 @@ function ReportsHub() {
   const search = useSearchParams()
   const role: Role = isRole(search.get('role')) ? (search.get('role') as Role) : 'executive'
   const system = search.get('system') || ''
+  const assuranceReportHref = system ? `/reports/system?system=${encodeURIComponent(system)}` : '/reports/system'
   const { systems } = useSystemContext()
   const options = useMemo(
     () => [{ value: 'org', label: 'Whole organisation' }, ...systems.filter((s) => s.metadata?.source !== 'fallback').map((s) => ({ value: s.id, label: s.name }))],
@@ -152,9 +154,15 @@ function ReportsHub() {
             <div className="rp-scope">
               <Selector label="Scope" options={options} value={system || 'org'} onChange={(v) => go({ system: String(v) === 'org' ? '' : String(v) })} />
             </div>
-            <Button label="Download report" variant="primary" isDisabled={!shown} onClick={() => setDrawer({ item: LIBRARY[role][0], format: LIBRARY[role][0].formats[0] })} />
+            <Button label="Schedules" variant="secondary" href="/reports/schedules" />
+            <Button label="Download report" variant="secondary" isDisabled={!shown} onClick={() => setDrawer({ item: LIBRARY[role][0], format: LIBRARY[role][0].formats[0] })} />
+            <Button label="Prepare system assurance report" variant="primary" href={assuranceReportHref}>
+              System assurance report
+            </Button>
           </div>
         </div>
+
+        <SavedReports systemId={system} />
 
         <div className="rp-lens">
           <SegmentedControl label="Who is reading" value={role} onChange={(v) => go({ role: String(v) as Role })} size="sm">
