@@ -29,15 +29,16 @@ const enabled = import.meta.env.PUBLIC_POSTHOG_KEY?.trim() &&
     const key = 'fairmind_analytics_choice_v1';
     const panel = root.querySelector<HTMLElement>('[data-panel]')!;
     const edit = root.querySelector<HTMLButtonElement>('[data-edit]')!;
-    const apply = (choice: string) => window.fairmindConsent.setConsent({
-      analytics: choice === 'allow', source: 'fairmind-website', policyVersion: '2026-11-25',
+    const apply = (choice: string | undefined) => window.fairmindConsent.setConsent({
+      analytics: choice === 'allow', source: choice ? 'fairmind-website' : 'fairmind-choice-cleared', policyVersion: '2026-11-25',
     });
     const read = () => document.cookie.split('; ').find(part => part.startsWith(key + '='))?.slice(key.length + 1);
     let lastChoice: string | undefined;
     const sync = () => {
-      const saved = read();
+      const value = read();
+      const saved = value === 'allow' || value === 'deny' ? value : undefined;
       panel.hidden = saved === 'allow' || saved === 'deny';
-      if (saved !== lastChoice) apply(saved || 'deny');
+      if (saved !== lastChoice) apply(saved);
       lastChoice = saved;
     };
     root.hidden = false;

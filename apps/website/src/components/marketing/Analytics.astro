@@ -570,7 +570,7 @@
     });
   };
 
-  const disableAnalytics = () => {
+  const disableAnalytics = (choiceCleared: boolean) => {
     active = false;
     cleanupInstrumentation?.();
 
@@ -582,13 +582,13 @@
       schedulePostHogStorageCleanup();
     }
 
-    setState(privacySignalEnabled ? 'blocked-by-browser-privacy-signal' : 'denied');
+    setState(privacySignalEnabled ? 'blocked-by-browser-privacy-signal' : choiceCleared ? 'awaiting-consent' : 'denied');
     return true;
   };
 
   const applyConsent = (detail: { analytics?: boolean; source?: string; policyVersion?: string } = {}) => {
     consentAllowed = detail.analytics === true;
-    return consentAllowed ? enableAnalytics(detail) : Promise.resolve(disableAnalytics());
+    return consentAllowed ? enableAnalytics(detail) : Promise.resolve(disableAnalytics(detail.source === 'fairmind-choice-cleared'));
   };
 
   window.fairmindAnalytics = {
