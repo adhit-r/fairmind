@@ -109,6 +109,8 @@ def engine_status(evaluations):
     where = {}
     for m in (eval_engines.data, eval_engines.model, eval_engines.ops, eval_engines.platform, eval_engines.behaviour, eval_engines.agentic, eval_engines.suites, eval_engines.assess):
         for e in m.ENGINES:
+            if eval_engines.ALTERNATES.get(e.id) is e:
+                continue  # a live-run variant of an evaluation whose file engine is the one registered
             where.setdefault(e.id, f"src/application/services/eval_engines/{m.__name__.rsplit('.', 1)[1]}.py")
     for i in RULES:
         where.setdefault(i, "src/application/services/evaluation_results.py")

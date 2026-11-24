@@ -195,6 +195,17 @@ def test_catalogue_engine_status_matches_the_code():
     assert exists == set(REGISTRY) | set(RULES)
 
 
+def test_catalogue_code_location_is_the_registered_engine():
+    """An evaluation with a file engine and a live variant points at the file engine, the one in REGISTRY."""
+    from src.application.services.eval_engines import ALTERNATES, REGISTRY
+
+    catalogue = json.loads((Path(__file__).resolve().parents[1] / "src/api/routers/pack_catalogue_data/catalogue.json").read_text())
+    where = {e["id"]: e["codeLocation"] for e in catalogue["evaluations"] if e["engine"] == "Engine exists"}
+    for evaluation_id in ALTERNATES:
+        if REGISTRY[evaluation_id].run:
+            assert where[evaluation_id].endswith(REGISTRY[evaluation_id].run.__module__.rsplit(".", 1)[1] + ".py")
+
+
 def test_install_and_uninstall_toggle(tmp_database):
     _, client = _org(tmp_database)
     assert client.post(f"{PACKS}/{FOUNDATION}/install").json()["installed"] is True
