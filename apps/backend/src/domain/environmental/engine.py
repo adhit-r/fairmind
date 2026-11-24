@@ -16,7 +16,13 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
 from .confidence import band_from_score, confidence_from_source, normalize_provenance
-from .controls import _has_dated_mitigation, _has_exception, coverage, coverage_rate
+from .controls import (
+    _has_dated_mitigation,
+    _has_exception,
+    _has_remeasured_mitigation,
+    coverage,
+    coverage_rate,
+)
 from .decision_matrix import NO_GO, get_recommendation, requires_mitigation
 from .impact import impact_tier
 
@@ -31,7 +37,8 @@ class EnvironmentalEngineResult:
     risk_tier: str                      # canonical alias of impact_tier
     recommendation: str                 # go / conditional_go / no_go
     requires_mitigation: bool
-    has_dated_mitigation: bool
+    has_dated_mitigation: bool          # a plan; shown, never unblocks
+    has_remeasured_mitigation: bool     # completed and re-measured with a reduction
     has_exception: bool
     mitigation_readiness: str           # documented / planned / missing
     mitigation_blocking: bool           # conditional_go that cannot be approved yet
@@ -69,11 +76,16 @@ def _resolve_confidence(assessment: Mapping[str, Any], provenance: str) -> float
     return confidence_from_source(provenance)
 
 
-def _mitigation_readiness(assessment: Mapping[str, Any], documented_mitigation: bool) -> str:
-    if documented_mitigation:
+def _mitigation_readiness(
+    assessment: Mapping[str, Any], remeasured: bool, dated_plan: bool
+) -> str:
+    # "documented" is earned by a re-measurement; a declared value or a dated
+    # plan is at most "planned".
+    if remeasured:
         return "documented"
-    declared = assessment.get("mitigation_readiness")
-    return declared if declared in {"documented", "planned", "missing"} else "missing"
+    if dated_plan or assessment.get("mitigation_readiness") in {"documented", "planned"}:
+        return "planned"
+    return "missing"
 
 
 def run_assessment(assessment: Mapping[str, Any] | Any) -> EnvironmentalEngineResult:
@@ -102,18 +114,16 @@ def run_assessment(assessment: Mapping[str, Any] | Any) -> EnvironmentalEngineRe
     needs_mitigation = requires_mitigation(recommendation)
 
     dated_mitigation = _has_dated_mitigation(assessment)
+    remeasured_mitigation = _has_remeasured_mitigation(assessment)
     has_exception = _has_exception(assessment)
-    documented_mitigation = (
-        dated_mitigation
-        or assessment.get("mitigation_readiness") == "documented"
-    )
-    mitigation_blocking = needs_mitigation and not (documented_mitigation or has_exception)
+    mitigation_blocking = needs_mitigation and not (remeasured_mitigation or has_exception)
     approval_blocking = recommendation == NO_GO or mitigation_blocking
 
     if mitigation_blocking:
         warnings.append(
-            "conditional_go requires a documented mitigation with a target date "
-            "(or a valid exception) before approval"
+            "conditional_go requires a completed mitigation re-measured against a "
+            "baseline assessment (or a valid exception) before approval; a plan "
+            "or target date is not enough"
         )
     if confidence == 0.0:
         warnings.append(
@@ -128,7 +138,7 @@ def run_assessment(assessment: Mapping[str, Any] | Any) -> EnvironmentalEngineRe
     enriched["provenance_class"] = provenance
     enriched["recommendation"] = recommendation
     enriched["risk_tier"] = tier
-    readiness = _mitigation_readiness(assessment, documented_mitigation)
+    readiness = _mitigation_readiness(assessment, remeasured_mitigation, dated_mitigation)
     enriched["mitigation_readiness"] = readiness
 
     cov = coverage(enriched)
@@ -144,6 +154,7 @@ def run_assessment(assessment: Mapping[str, Any] | Any) -> EnvironmentalEngineRe
         recommendation=recommendation,
         requires_mitigation=needs_mitigation,
         has_dated_mitigation=dated_mitigation,
+        has_remeasured_mitigation=remeasured_mitigation,
         has_exception=has_exception,
         mitigation_readiness=readiness,
         mitigation_blocking=mitigation_blocking,

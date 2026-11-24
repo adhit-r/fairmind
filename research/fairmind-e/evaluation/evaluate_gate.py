@@ -160,8 +160,8 @@ def no_mitigation_review_prediction(result: Any) -> tuple[str, bool, str]:
 
 
 def no_exception_path_prediction(result: Any) -> tuple[str, bool, str]:
-    """Ablation: dated mitigation is required; owned exceptions are ignored."""
-    documented = result.has_dated_mitigation or result.mitigation_readiness == "documented"
+    """Ablation: a re-measured mitigation is required; owned exceptions are ignored."""
+    documented = result.has_remeasured_mitigation
     return (
         result.recommendation,
         result.recommendation == "no_go" or (result.recommendation == "conditional_go" and not documented),

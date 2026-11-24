@@ -56,6 +56,12 @@ class Mitigation(BaseModel):
     target_date: date | None = None
     owner: str | None = None
     status: Literal["proposed", "in_progress", "completed", "cancelled"] = "proposed"
+    # A completed mitigation is credited only against a re-measurement: this
+    # assessment must re-measure the system and name the earlier assessment it
+    # replaces. The service derives measured_reduction_pct from the two and
+    # discards any value the caller sends.
+    baseline_assessment_id: str | None = None
+    measured_reduction_pct: float | None = None
 
 
 class EnvironmentalException(BaseModel):

@@ -58,5 +58,5 @@ def get_recommendation(impact_tier: str, evidence_confidence: float) -> str:
 
 
 def requires_mitigation(recommendation: str) -> bool:
-    """A ``conditional_go`` requires a documented, dated mitigation to be approvable."""
+    """A ``conditional_go`` needs a re-measured mitigation or an owned exception to be approvable."""
     return recommendation == CONDITIONAL_GO

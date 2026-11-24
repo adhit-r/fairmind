@@ -84,10 +84,9 @@ CONTROLS: tuple[Control, ...] = (
     Control(
         "ENV-6",
         "Mitigation & approval",
-        "Conditional releases carry documented mitigation or an owned exception.",
+        "Conditional releases carry a re-measured mitigation or an owned exception.",
         lambda a: (a.get("recommendation") != "conditional_go")
-        or a.get("mitigation_readiness") == "documented"
-        or _has_dated_mitigation(a)
+        or _has_remeasured_mitigation(a)
         or _has_exception(a),
     ),
 )
@@ -102,6 +101,22 @@ def _has_dated_mitigation(assessment: Mapping[str, Any]) -> bool:
         if not isinstance(m, Mapping):
             continue
         if m.get("description") and m.get("target_date"):
+            return True
+    return False
+
+
+def _has_remeasured_mitigation(assessment: Mapping[str, Any]) -> bool:
+    """True if a completed mitigation was re-measured and the measurement shows a reduction.
+
+    ``measured_reduction_pct`` is derived by the service from the named baseline
+    assessment; a plan, a target date or a declared readiness never counts.
+    """
+    mitigations = assessment.get("mitigations_json") or assessment.get("mitigations") or []
+    for m in mitigations:
+        if not isinstance(m, Mapping) or m.get("status") != "completed":
+            continue
+        reduction = m.get("measured_reduction_pct")
+        if m.get("baseline_assessment_id") and reduction is not None and float(reduction) > 0:
             return True
     return False
 

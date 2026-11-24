@@ -340,18 +340,41 @@ def test_conditional_go_mitigation_flow(environmental_governance_client):
     )
     assert r.status_code == 409
 
-    # Add a dated mitigation, then approval succeeds.
+    # A dated plan is a promise, not evidence: still blocked.
     r = client.put(
         f"{base}/{assessment_id}/mitigation",
         json={"mitigation": {"description": "4-bit quantise + re-measure", "target_date": "2026-12-01"}},
     )
     assert r.status_code == 200
+    planned_id = r.json()["data"]["assessmentId"]
+    r = client.post(f"{base}/{planned_id}/approve", json={"reviewer": "grc-lead"})
+    assert r.status_code == 409
+
+    def remeasure(per_1m: float, **mitigation):
+        return client.post(f"{base}/assess", json=_assessment_body(
+            source="hardware_telemetry", phase="training",
+            metrics={"total_kg_co2e_location": 20000.0, "total_kwh": 40000.0,
+                     "kg_co2e_per_1m_tokens": per_1m},
+            mitigations_json=[{"description": "4-bit quantised", "status": "completed", **mitigation}],
+        )).json()
+
+    # A declared reduction without a baseline is ignored.
+    declared = remeasure(4.0, measured_reduction_pct=90.0)
+    assert declared["mitigation_blocking"] is True
+    # Re-measured worse than the baseline (the bfloat16 case): still blocked.
+    worse = remeasure(6.0, baseline_assessment_id=assessment_id)
+    assert worse["mitigation_blocking"] is True
+    # Re-measured lower than the baseline: the server derives 20 percent and approval succeeds.
+    better = remeasure(4.0, baseline_assessment_id=assessment_id, measured_reduction_pct=99.0)
+    assert better["mitigation_blocking"] is False
     r = client.post(
-        f"{base}/{assessment_id}/approve",
-        json={"reviewer": "grc-lead", "attestation": "Reviewed with mitigation plan"},
+        f"{base}/{better['assessment_id']}/approve",
+        json={"reviewer": "grc-lead", "attestation": "Re-measured after quantisation"},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["reviewerState"] == "accepted"
+    saved = r.json()["data"]["assessment"]["mitigations_json"][0]
+    assert saved["measured_reduction_pct"] == 20.0
 
 
 def test_environmental_gate_blocks_deployment_approval(environmental_governance_client):
