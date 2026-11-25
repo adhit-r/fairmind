@@ -15,6 +15,8 @@ interface EvidenceUploaderProps {
   onClose: () => void
   /** External URLs are untrusted evidence, offered only when that linking is switched on. */
   externalUrlsEnabled?: boolean
+  /** The release-gate check this evidence is for (from ?check=); preselects the type the gate counts for it. */
+  initialCheck?: string | null
 }
 
 const KINDS: Array<{ kind: ArtifactKind; label: string }> = [
@@ -24,6 +26,40 @@ const KINDS: Array<{ kind: ArtifactKind; label: string }> = [
   { kind: 'attestation', label: 'Attestation' },
 ]
 
+// The gate matches the exact evidence type, so uploads offer the types it counts. Only the checks the gate sends to an
+// upload are listed: a manual record for monitoring, fairness or environmental would shadow a measured one.
+const GATE_TYPES = [
+  { check: 'data_governance', label: 'Data governance' },
+  { check: 'human_oversight', label: 'Human oversight' },
+]
+
+// A copy of GATE_CHECKS in fairness_run_service.py (no endpoint serves it): the gate lower-cases a record's type and counts it for the check that lists it.
+const GATE_CHECK_TYPES: Record<string, string[]> = {
+  fairness: ['fairness_test'],
+  data_governance: ['data', 'dataset', 'data_governance', 'data_lineage', 'provenance', 'training_data'],
+  human_oversight: ['human_oversight', 'policy', 'oversight', 'approval_policy'],
+  monitoring: ['monitoring', 'monitoring_snapshot', 'drift'],
+  environmental: ['environmental', 'environmental_assessment'],
+}
+// The newest record wins a check, so a manual one would shadow these measured records.
+const MEASURED_ROUTE: Record<string, string> = {
+  fairness: 'Fairness evidence comes from a fairness test. Run one on the system file.',
+  monitoring: 'Monitoring evidence comes from a monitoring snapshot. Record one on the system file.',
+  environmental: 'Environmental evidence comes from the environmental assessment. Open it from the system file.',
+}
+
+/** What the release gate does with a typed evidence type; `blocked` when it belongs to a measured route. */
+export function otherTypeHint(type: string): { text: string; blocked: boolean } {
+  const t = type.trim().toLowerCase()
+  // the server refuses an uploaded run (ai_governance._reject_record_only_type): only running the evaluation records one
+  if (t === 'evaluation_run') return { text: 'Evaluation runs are recorded by running the evaluation from the catalogue.', blocked: true }
+  const check = Object.keys(GATE_CHECK_TYPES).find((key) => GATE_CHECK_TYPES[key].includes(t))
+  if (check && MEASURED_ROUTE[check]) return { text: MEASURED_ROUTE[check], blocked: true }
+  const label = GATE_TYPES.find((g) => g.check === check)?.label
+  if (label) return { text: `Counts toward the release gate's ${label} check as manual evidence.`, blocked: false }
+  return { text: 'The release gate does not count this type.', blocked: false }
+}
+
 const SUGGESTED_TAGS = ['eu-ai-act', 'bias-scan', 'monitoring', 'compliance', 'q1-2026', 'iso-42001', 'nist-rmf']
 const SUGGESTED_FOLDERS = ['EU AI Act', 'ISO 42001', 'NIST AI RMF', 'Bias Testing', 'Monitoring', 'Audits']
 
@@ -32,16 +68,21 @@ const FIELD =
 const LABEL_CLS = 'block text-[12px] font-medium text-[var(--fm-ink2)]'
 const SUGGEST = 'rounded-full bg-[var(--fm-bg)] px-2.5 py-1 text-[12px] font-medium text-[var(--fm-ink2)] hover:text-[var(--fm-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--fm-ink)]'
 
-export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEnabled = false }: EvidenceUploaderProps) {
+export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEnabled = false, initialCheck }: EvidenceUploaderProps) {
   const kinds = externalUrlsEnabled ? KINDS : KINDS.filter((option) => option.kind !== 'url')
   const uid = useId()
   const [kind, setKind] = useState<ArtifactKind>('narrative')
   const [title, setTitle] = useState('')
-  const [evidenceType, setEvidenceType] = useState('test_results')
+  const [typeChoice, setTypeChoice] = useState(GATE_TYPES.some((t) => t.check === initialCheck) ? initialCheck! : '')
+  const [otherType, setOtherType] = useState('')
+  const evidenceType = typeChoice === 'other' ? otherType.trim() : typeChoice
+  const gateLabel = GATE_TYPES.find((t) => t.check === typeChoice)?.label
+  const otherHint = typeChoice === 'other' ? otherTypeHint(otherType) : null
   const [content, setContent] = useState('')
   const [fileUrl, setFileUrl] = useState('')
   const [fileName, setFileName] = useState('')
-  const [confidence, setConfidence] = useState(0.8)
+  // No default: the person collecting the evidence states how much it can be trusted.
+  const [confidence, setConfidence] = useState<number | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [folder, setFolder] = useState('')
@@ -79,6 +120,14 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (confidence === null) {
+      setFormError('Set the confidence for this evidence before collecting it.')
+      return
+    }
+    if (otherHint?.blocked) {
+      setFormError(otherHint.text)
+      return
+    }
     setSubmitting(true)
     setFormError(null)
     try {
@@ -140,15 +189,25 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
 
       <div>
         <label className={LABEL_CLS} htmlFor={`${uid}-type`}>Evidence type</label>
-        <input
-          id={`${uid}-type`}
-          value={evidenceType}
-          onChange={(e) => setEvidenceType(e.target.value)}
-          className={FIELD}
-          placeholder="e.g. bias_test_result, monitoring_snapshot, audit_log"
-          autoComplete="off"
-          required
-        />
+        <select id={`${uid}-type`} value={typeChoice} onChange={(e) => setTypeChoice(e.target.value)} className={FIELD} required>
+          <option value="" disabled>Choose a type</option>
+          {GATE_TYPES.map((t) => <option key={t.check} value={t.check}>{t.label}</option>)}
+          <option value="other">Other</option>
+        </select>
+        {typeChoice === 'other' && (
+          <input
+            aria-label="Other evidence type"
+            value={otherType}
+            onChange={(e) => setOtherType(e.target.value)}
+            className={cn(FIELD, 'mt-2')}
+            placeholder="Name the evidence type"
+            autoComplete="off"
+            required
+          />
+        )}
+        <p className={cn('m-0 mt-1.5 text-[12px]', otherHint?.blocked ? 'text-[#b42318]' : MUTED)}>
+          {gateLabel ? `Counts toward the release gate's ${gateLabel} check as manual evidence.` : otherHint ? otherHint.text : 'Data governance and human oversight count toward the release gate.'}
+        </p>
       </div>
 
       {/* Kind-specific content */}
@@ -294,7 +353,7 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
       <div>
         <div className="flex items-center justify-between">
           <label className={LABEL_CLS} htmlFor={`${uid}-confidence`}>Confidence</label>
-          <span className="text-[13px] font-semibold tabular-nums">{Math.round(confidence * 100)}%</span>
+          <span className="text-[13px] font-semibold tabular-nums">{confidence === null ? 'Not set' : `${Math.round(confidence * 100)}%`}</span>
         </div>
         <input
           id={`${uid}-confidence`}
@@ -302,7 +361,8 @@ export function EvidenceUploader({ systemId, onCollect, onClose, externalUrlsEna
           min={0}
           max={1}
           step={0.05}
-          value={confidence}
+          value={confidence ?? 0.5}
+          aria-valuetext={confidence === null ? 'Not set' : `${Math.round(confidence * 100)}%`}
           onChange={(e) => setConfidence(parseFloat(e.target.value))}
           className="mt-1 w-full cursor-pointer accent-[var(--fm-ink)]"
         />

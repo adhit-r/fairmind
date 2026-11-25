@@ -139,7 +139,7 @@ class AdvancedBiasAnalysisResult:
     bias_type: BiasType
     analysis_method: AnalysisMethod
     overall_bias_score: float
-    confidence_level: float
+    confidence_level: Optional[float]  # None when the method has no measured confidence
     detailed_results: Union[
         CausalAnalysisResult,
         CounterfactualResult,
@@ -253,6 +253,12 @@ class AdvancedBiasDetectionService:
         confounders: Optional[List[str]]
     ) -> CausalAnalysisResult:
         """Perform causal inference analysis using difference-in-means with t-tests"""
+
+        # Text protected attributes (e.g. gender) are coded as categories so they can be correlated.
+        df = df.copy()
+        for attr in protected_attrs:
+            if attr in df.columns and not pd.api.types.is_numeric_dtype(df[attr]):
+                df[attr] = df[attr].astype("category").cat.codes
 
         if treatment not in df.columns or outcome not in df.columns:
             return CausalAnalysisResult(
@@ -575,7 +581,7 @@ class AdvancedBiasDetectionService:
                 bias_type=BiasType.INTERSECTIONAL,
                 analysis_method=AnalysisMethod.INTERSECTIONAL_ANALYSIS,
                 overall_bias_score=bias_score,
-                confidence_level=0.85,  # High confidence for intersectional analysis
+                confidence_level=None,  # not measured by this method
                 detailed_results=intersectional_results,
                 recommendations=recommendations,
                 risk_assessment=self._assess_intersectional_risk(intersectional_results),
@@ -890,7 +896,7 @@ class AdvancedBiasDetectionService:
                 bias_type=BiasType.TEMPORAL,
                 analysis_method=AnalysisMethod.TEMPORAL_ANALYSIS,
                 overall_bias_score=bias_score,
-                confidence_level=0.8,
+                confidence_level=None,  # not measured by this method
                 detailed_results=temporal_results,
                 recommendations=recommendations,
                 risk_assessment=self._assess_temporal_risk(temporal_results),
@@ -1096,7 +1102,7 @@ class AdvancedBiasDetectionService:
                 bias_type=BiasType.CONTEXTUAL,
                 analysis_method=AnalysisMethod.CONTEXT_SENSITIVE,
                 overall_bias_score=bias_score,
-                confidence_level=0.85,
+                confidence_level=None,  # not measured by this method
                 detailed_results=contextual_results,
                 recommendations=recommendations,
                 risk_assessment=self._assess_contextual_risk(contextual_results),

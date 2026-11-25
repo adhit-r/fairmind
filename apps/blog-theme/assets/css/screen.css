@@ -306,3 +306,7 @@ img{max-width:100%;height:auto;display:block}
   .toc-m li:last-child a{border-bottom:0}
   .lead{grid-column:auto}
 }
+.share{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:2.5rem;padding-top:1.1rem;border-top:1px solid var(--line);font-size:.82rem}
+.share span{color:var(--gray);margin-right:.25rem}
+.share a,.share button{display:inline-flex;align-items:center;min-height:2.25rem;padding:0 .9rem;border:1px solid var(--line);border-radius:999px;background:var(--white);color:var(--ink);font:500 .82rem var(--sans);cursor:pointer;transition:border-color .15s,color .15s}
+.share a:hover,.share button:hover{border-color:var(--accent);color:var(--accent)}

@@ -134,15 +134,38 @@ def test_system_records_addressed_by_id_stay_in_the_organisation(client):
         json={"workspace_id": "ws-b", "name": "x", "risk_tier": "low", "lifecycle_stage": "onboard"},
     ).status_code == 404
 
-    evidence = client.post(f"{GOV}/evidence/upload", headers=B, json={"system_id": "system-b", "type": "audit_log"})
+    evidence = client.post(f"{GOV}/evidence/upload", headers=B, json={"system_id": "system-b", "type": "audit_log", "confidence": 0.8})
     assert evidence.status_code == 200, evidence.text
     evidence_id = evidence.json()["id"]
-    assert client.post(f"{GOV}/evidence/upload", headers=A, json={"system_id": "system-b", "type": "x"}).status_code == 404
+    assert client.post(f"{GOV}/evidence/upload", headers=A, json={"system_id": "system-b", "type": "x", "confidence": 0.8}).status_code == 404
     assert client.get(f"{GOV}/evidence-item/{evidence_id}", headers=A).status_code == 404
     assert client.patch(f"{GOV}/evidence-item/{evidence_id}", headers=A, json={"title": "x"}).status_code == 404
     assert client.post(
         f"{GOV}/evidence-item/{evidence_id}/links", headers=A, json={"entity_type": "risk", "entity_id": "r"}
     ).status_code == 404
+
+
+def test_the_owner_is_changed_by_a_mutator_of_the_organisation_and_recorded(client):
+    owner = f"{GOV}/systems/system-a"
+    done = client.patch(owner, headers=A, json={"owner": "  priya@acme.com  "})
+    assert done.status_code == 200, done.text
+    change = done.json()["change"]
+    assert done.json()["owner"] == "priya@acme.com"
+    assert (change["parts"], change["material"], change["reopens"]) == (["docs"], False, [])
+    assert change["note"] == "Owner changed from no owner to priya@acme.com" and change["recordedBy"]
+    assert client.get(owner, headers=A).json()["owner"] == "priya@acme.com"
+    assert client.patch(owner, headers=A, json={"owner": "priya@acme.com"}).json()["change"] is None
+
+    client.patch(owner, headers=A, json={"owner": "Sam Lee"})
+    notes = [c["note"] for c in client.get(f"{owner}/changes", headers=A).json()["changes"]]
+    assert notes[-1] == "Owner changed from priya@acme.com to Sam Lee"
+
+    for bad in ({"owner": "   "}, {"owner": "x" * 321}, {}):
+        assert client.patch(owner, headers=A, json=bad).status_code == 422
+    assert client.patch(owner, headers=A_MEMBER, json={"owner": "x"}).status_code == 403
+    assert client.patch(f"{GOV}/systems/system-b", headers=A, json={"owner": "x"}).status_code == 404
+    assert client.patch(f"{GOV}/systems/unregistered", headers=A, json={"owner": "x"}).status_code == 404
+    assert client.get(owner, headers=A).json()["owner"] == "Sam Lee"
 
 
 # --------------------------------------------------------------------------- audit logs

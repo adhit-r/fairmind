@@ -1,0 +1,53 @@
+{
+  "title": "See the connection and the audit checks",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Agent audits reads your agent platform with a read-only key. Claude Managed Agents is the only platform today."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "This is where you would save the key. It is encrypted and never shown again.",
+      "box": {
+        "x": 353,
+        "y": 407,
+        "w": 80,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Below the connection are the checks. Each one says whether it reads the platform or an uploaded file.",
+      "box": {
+        "x": 334,
+        "y": 504,
+        "w": 918,
+        "h": 28
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Open a check to see the latest result for each system.",
+      "box": {
+        "x": 347,
+        "y": 626,
+        "w": 216,
+        "h": 20
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "Run leads to the evaluation page, where the check is started on a registered system.",
+      "box": {
+        "x": 1168,
+        "y": 626,
+        "w": 49,
+        "h": 28
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 42
+}

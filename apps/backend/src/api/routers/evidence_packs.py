@@ -4,7 +4,7 @@ POST   /packs                 build a pack for chosen systems and frameworks
 GET    /packs                 the caller's organisation's packs
 GET    /packs/frameworks      frameworks the clause map covers
 GET    /packs/{id}            manifest, hash and share state
-GET    /packs/{id}/download   manifest and hash as an attachment
+GET    /packs/{id}/download   manifest and hash as an attachment; ?format=csv for the records as one CSV
 POST   /packs/{id}/share      mint an auditor token (returned once; only its SHA-256 is stored)
 DELETE /packs/{id}/share      revoke the token
 GET    /api/v1/public/packs/{id}?t=<token>   no auth; the token is the credential
@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -42,6 +42,7 @@ from src.application.services.evidence_pack_service import (
     canonical_bytes,
     clause_frameworks,
     is_expired,
+    manifest_csv,
     manifest_digest,
     new_share_token,
     token_matches,
@@ -92,12 +93,12 @@ def _require_org_mutator(db: Session, org_id: str, current_user: TokenData) -> N
 
 
 @router.get("/packs/frameworks")
-async def list_pack_frameworks(current_user: TokenData = Depends(get_current_active_user)):
+def list_pack_frameworks(current_user: TokenData = Depends(get_current_active_user)):
     return clause_frameworks()
 
 
 @router.post("/packs")
-async def create_pack(
+def create_pack(
     body: PackCreateRequest,
     http: Request,
     current_user: TokenData = Depends(get_current_active_user),
@@ -119,7 +120,7 @@ async def create_pack(
             raise HTTPException(status_code=404, detail="AI system not found")
         systems.append({"id": system.id, "name": system.name, "riskTier": system.risk_tier, "gate": _gate_payload(db, system_id, system.risk_tier)})
     frameworks = list(dict.fromkeys(body.frameworks))
-    manifest = build_manifest(db, title=body.title.strip(), frameworks=frameworks, systems=systems, created_by=_authenticated_actor(current_user))
+    manifest = build_manifest(db, org_id=str(org_id), title=body.title.strip(), frameworks=frameworks, systems=systems, created_by=_authenticated_actor(current_user))
     pack_id = str(uuid.uuid4())
     db.execute(
         text(
@@ -138,7 +139,7 @@ async def create_pack(
 
 
 @router.get("/packs")
-async def list_packs(http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def list_packs(http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     rows = db.execute(
         text(f"SELECT {_COLUMNS} FROM governance_evidence_packs WHERE org_id = :org ORDER BY created_at DESC"), {"org": _caller_org(http)}
@@ -147,22 +148,34 @@ async def list_packs(http: Request, current_user: TokenData = Depends(get_curren
 
 
 @router.get("/packs/{pack_id}")
-async def get_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def get_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     row = _pack_row(db, pack_id, _caller_org(http))
     return {**_summary(row), "manifest": json.loads(row[5])}
 
 
 @router.get("/packs/{pack_id}/download")
-async def download_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def download_pack(
+    pack_id: str,
+    http: Request,
+    format: Literal["json", "csv"] = Query("json"),
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
     _ensure_tables(db)
     row = _pack_row(db, pack_id, _caller_org(http))
+    if format == "csv":
+        # utf-8-sig: the byte-order mark makes spreadsheet apps read names outside ASCII correctly
+        return Response(
+            manifest_csv(json.loads(row[5])).encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="inspection-pack-{row[0]}.csv"'},
+        )
     body = json.dumps({"manifest": json.loads(row[5]), "manifestHash": row[6]}, indent=2, ensure_ascii=False)
     return Response(body, media_type="application/json", headers={"Content-Disposition": f'attachment; filename="inspection-pack-{row[0]}.json"'})
 
 
 @router.post("/packs/{pack_id}/share")
-async def share_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def share_pack(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
     _pack_row(db, pack_id, org_id)
@@ -177,7 +190,7 @@ async def share_pack(pack_id: str, http: Request, current_user: TokenData = Depe
 
 
 @router.delete("/packs/{pack_id}/share")
-async def revoke_pack_share(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def revoke_pack_share(pack_id: str, http: Request, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     _ensure_tables(db)
     org_id = _caller_org(http)
     _pack_row(db, pack_id, org_id)
@@ -188,7 +201,7 @@ async def revoke_pack_share(pack_id: str, http: Request, current_user: TokenData
 
 
 @public_router.get("/packs/{pack_id}")
-async def public_pack(pack_id: str, t: Optional[str] = Query(None, max_length=256), db: Session = Depends(get_db)):
+def public_pack(pack_id: str, t: Optional[str] = Query(None, max_length=256), db: Session = Depends(get_db)):
     """Read-only pack for an auditor holding the share token. Unknown pack and wrong token look the same."""
     _ensure_tables(db)
     row = db.execute(text(f"SELECT {_COLUMNS} FROM governance_evidence_packs WHERE id = :id"), {"id": pack_id}).fetchone()

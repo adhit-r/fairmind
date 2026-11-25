@@ -1,7 +1,7 @@
 ---
 import { evaluations, evalGroups, evalFilters, engineCounts, frameworkLabel } from '../../lib/catalogue';
 
-const engineLabel = { exists: 'Engine in FairMind', partial: 'Partial engine', none: 'Specified, not built yet' };
+const engineLabel = { exists: 'Engine in FairMind', partial: 'Related code, no engine yet', none: 'Specified, not built yet' };
 const featured = evaluations.findIndex((e) => e.id === 'EV-FAI-01');
 const data = evaluations.map((e) => ({
   ...e,
@@ -33,9 +33,9 @@ let index = 0;
         ))}
       </div>
       <ul class="et-legend" aria-label="Engine status">
-        <li><i class="et-swatch" data-engine="exists"></i>{engineLabel.exists} <b>{engineCounts.exists}</b></li>
-        <li><i class="et-swatch" data-engine="partial"></i>{engineLabel.partial} <b>{engineCounts.partial}</b></li>
-        <li><i class="et-swatch" data-engine="none"></i>{engineLabel.none} <b>{engineCounts.none}</b></li>
+        {(['exists', 'partial', 'none'] as const).filter((k) => engineCounts[k]).map((k) => (
+          <li><i class="et-swatch" data-engine={k}></i>{engineLabel[k]} <b>{engineCounts[k]}</b></li>
+        ))}
       </ul>
     </div>
 

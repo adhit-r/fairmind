@@ -1,0 +1,30 @@
+Post copy for the short videos (renders/). Every line traces to ../collateral/FACTS.md.
+
+TEASER (17s, 9:16 for Reels/Shorts/Stories, 1:1 for feeds)
+May this AI system ship? And what is the evidence?
+FairMind keeps every AI system against every release check, and a person decides.
+Try the read-only demo: https://app.fairmind.xyz/login
+#AIGovernance #OpenSource
+
+INTRO (34s, 16:9 for YouTube/website, 4:5 for feeds)
+FairMind in 34 seconds: an open-source AI assurance workbench for models and agents.
+See every AI system against every release check. Test with 109 catalogue evaluations. Gate the release on five checks. Then a person decides, someone other than the person who asked.
+Demo: https://app.fairmind.xyz/login  Code (AGPL-3.0): https://github.com/adhit-r/fairmind
+
+FIND (23s, 4:5)
+Do you know every AI system you run?
+FairMind's discovery reads MLflow, GitHub and Hugging Face and lists the AI systems you have not registered, then tracks each one from found to registered to approved and watched.
+https://app.fairmind.xyz/login
+
+EVIDENCE (23s, 4:5)
+What would you hand an auditor?
+In FairMind every result becomes evidence, with where it came from and how much it counts. Auditor packs freeze evidence and decisions into a snapshot with a hash, checked offline with `fairmind verify`.
+https://app.fairmind.xyz/login
+
+DECIDE (23s, 4:5)
+Who decides if a model ships? A person, with the evidence in front of them.
+FairMind's release gate scores every check and explains how the verdict was reached. The request is decided by someone other than the requester, and the decision stays on the system's record.
+https://app.fairmind.xyz/login
+
+Captions: every word is on screen, so the videos read with the sound off.
+Music: original bed composed for each video (compose.py), owned outright.

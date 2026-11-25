@@ -121,11 +121,16 @@ def build_row(
     notes: str,
     started_at: float | None = None,
     ended_at: float | None = None,
+    degraded: bool = False,
 ) -> dict[str, str]:
-    """Assemble one contract row. Empty strings mark absent real figures."""
+    """Assemble one contract row. Empty strings mark absent real figures.
+
+    ``degraded`` marks a tracker that fell back to a load x TDP model; its row
+    is classed ``manual`` because that is what the figure is in kind.
+    """
 
     if method_available:
-        provenance = methods.PROVENANCE_BY_METHOD[method]
+        provenance = "manual" if degraded else methods.PROVENANCE_BY_METHOD[method]
         uncertainty = methods.UNCERTAINTY_PCT_BY_METHOD[method]
         confidence = _SMOKE.confidence_score(provenance, float(uncertainty))
         gate_kg = market_kg if market_kg is not None else location_kg
@@ -230,7 +235,13 @@ def _codecarbon_row(
         f"{run_result.codecarbon_reason}; OfflineEmissionsTracker "
         f"country={region}; market-based figures not provided by the tool"
     )
+    if run_result.codecarbon_degraded:
+        notes += (
+            "; DEGRADED: codecarbon fell back to cpu_load mode (CPU load x TDP "
+            "constant, no hardware counters); provenance downgraded to manual"
+        )
     return build_row(
+        degraded=run_result.codecarbon_degraded,
         workload_id=module.WORKLOAD_ID,
         functional_unit=module.FUNCTIONAL_UNIT,
         run_id=run_id,
@@ -564,6 +575,13 @@ def main(argv: list[str] | None = None) -> int:
         "batching, time_shift) and write a companion CSV",
     )
     parser.add_argument(
+        "--mitigation-iterations",
+        type=int,
+        default=1,
+        help="repeat the mitigation suite this many times (with --mitigations) "
+        "so each physical rerun has variance, not a single execution",
+    )
+    parser.add_argument(
         "--gap-seconds",
         type=float,
         default=0.0,
@@ -585,6 +603,8 @@ def main(argv: list[str] | None = None) -> int:
         args.iterations = 1 if args.dry_run else 5
     if args.iterations < 1:
         parser.error("--iterations must be >= 1")
+    if args.mitigation_iterations < 1:
+        parser.error("--mitigation-iterations must be >= 1")
     run_label = "dryrun" if args.dry_run else "real"
     if args.output is None:
         args.output = DEFAULT_OUTPUT_DIR / f"{run_label}_runs.csv"
@@ -598,15 +618,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.mitigations:
         from measurement import mitigations as mitigations_module
 
-        mitigation_rows = mitigations_module.run_mitigation_suite(
-            workload=args.workload,
-            dry_run=args.dry_run,
-            seed=args.seed,
-            region=args.region,
-            gflops_per_watt=args.gflops_per_watt,
-            pue=args.pue,
-            config_overrides_path=args.config_overrides,
-        )
+        mitigation_rows = []
+        for iteration in range(1, args.mitigation_iterations + 1):
+            mitigation_rows.extend(mitigations_module.run_mitigation_suite(
+                workload=args.workload,
+                dry_run=args.dry_run,
+                seed=args.seed,
+                region=args.region,
+                gflops_per_watt=args.gflops_per_watt,
+                pue=args.pue,
+                config_overrides_path=args.config_overrides,
+                iteration=iteration,
+            ))
         mitigation_path = args.output.parent / (
             args.output.stem + "_mitigations.csv"
         )

@@ -105,6 +105,8 @@ class ComplianceAuditResponse(BaseModel):
     risk_level: Optional[str]
     framework_results: List[FrameworkResultResponse]
     generated_at: datetime
+    # Every check reads only the model_context the caller sent; nothing is verified.
+    basis: str = "self_declared"
 
 
 class FrameworkInfoResponse(BaseModel):

@@ -109,7 +109,7 @@ def _fairness_review_state(document: Any) -> Mapping[str, Any]:
     return review_state if isinstance(review_state, Mapping) else {}
 
 @router.post("/create", response_model=AIBOMResponse)
-async def create_ai_bom(request: AIBOMRequest):
+def create_ai_bom(request: AIBOMRequest):
     """Create a new AI Bill of Materials document"""
     try:
         bom_document = ai_bom_service.create_bom_document(request)
@@ -125,7 +125,7 @@ async def create_ai_bom(request: AIBOMRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents", response_model=AIBOMResponse)
-async def list_ai_bom_documents(
+def list_ai_bom_documents(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
     project_name: Optional[str] = Query(None, description="Filter by project name"),
@@ -168,7 +168,7 @@ async def list_ai_bom_documents(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents/{bom_id}", response_model=AIBOMResponse)
-async def get_ai_bom_document(bom_id: str):
+def get_ai_bom_document(bom_id: str):
     """Get a specific AI BOM document by ID"""
     try:
         document = ai_bom_service.get_bom_document(bom_id)
@@ -189,7 +189,7 @@ async def get_ai_bom_document(bom_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents/{bom_id}/fairness-evidence-profile", response_model=AIBOMResponse)
-async def get_fairness_evidence_profile(bom_id: str):
+def get_fairness_evidence_profile(bom_id: str):
     """Generate a reviewer-facing fairness evidence profile for an AI BOM document"""
     try:
         document = ai_bom_service.get_bom_document(bom_id)
@@ -219,7 +219,7 @@ async def get_fairness_evidence_profile(bom_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/documents/{bom_id}", response_model=AIBOMResponse)
-async def update_ai_bom_document(bom_id: str, request: AIBOMRequest):
+def update_ai_bom_document(bom_id: str, request: AIBOMRequest):
     """Update an AI BOM document"""
     try:
         # Convert request to update data
@@ -256,7 +256,7 @@ async def update_ai_bom_document(bom_id: str, request: AIBOMRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/documents/{bom_id}", response_model=AIBOMResponse)
-async def delete_ai_bom_document(bom_id: str):
+def delete_ai_bom_document(bom_id: str):
     """Delete an AI BOM document"""
     try:
         success = ai_bom_service.delete_bom_document(bom_id)
@@ -277,7 +277,7 @@ async def delete_ai_bom_document(bom_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health", response_model=dict)
-async def health_check():
+def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",

@@ -2,6 +2,7 @@
 
 import io
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -35,10 +36,27 @@ class Param:
     kind: str = "text"  # text | number | json
     default: Any = None
     required: bool = False
+    options: Tuple[str, ...] = ()  # a text param limited to these values, shown as a choice
 
 
 # (system, user, JSON schema) -> the organisation's model's JSON answer; raises EngineError
 Judge = Callable[[str, str, Dict[str, Any]], Dict[str, Any]]
+
+
+def matches_schema(value: Any, schema: Dict[str, Any]) -> bool:
+    """A judge's answer has every required key and the declared booleans, integers, arrays and objects; strings are only read with str()."""
+    kind = schema.get("type")
+    if kind == "object":
+        props = schema.get("properties", {})
+        return (isinstance(value, dict) and all(k in value for k in schema.get("required", ()))
+                and all(matches_schema(value[k], sub) for k, sub in props.items() if k in value))
+    if kind == "array":
+        return isinstance(value, list) and all(matches_schema(v, schema.get("items", {})) for v in value)
+    if kind == "boolean":
+        return isinstance(value, bool)  # "false" is not false
+    if kind == "integer":  # JSON Schema counts 2.0 as an integer
+        return (isinstance(value, int) and not isinstance(value, bool)) or (isinstance(value, float) and value.is_integer())
+    return True
 
 
 @dataclass(frozen=True)
@@ -55,7 +73,12 @@ class Engine:
     platform: Optional[Callable[[Dict[str, Any], Dict[str, Any], Optional[Judge]], Dict[str, Any]]] = None
     platform_method: str = ""
     judge: bool = False  # the platform check asks the organisation's model
+    file_judge: bool = False  # the file run takes the organisation's model as a third argument, None when none is set
     live: str = ""  # "" reads uploaded files; "target" calls the AI system under test; "agent" calls FairMind's own agent
+    # Reads inputs from FairMind's own stored results: (db session, org id, system id) -> files, added to any uploads.
+    collect: Optional[Callable[[Any, str, str], Dict[str, bytes]]] = None
+    # A rate-bounded behaviour test: the probe counts the run form offers and the 95% bound each shows with none failing.
+    sampling: Optional[Dict[str, Any]] = field(default=None, hash=False, compare=False)
 
     def spec(self) -> Dict[str, Any]:
         return {
@@ -67,6 +90,8 @@ class Engine:
             "platform": self.platform is not None,
             "platformMethod": self.platform_method or self.method,
             "judge": self.judge,
+            "fileJudge": self.file_judge,
+            "sampling": self.sampling,
         }
 
 
@@ -77,11 +102,48 @@ def result(status: str, summary: str, metrics: Dict[str, Any], detail: Optional[
     return {"status": status, "summary": summary, "metrics": metrics, "detail": rows[:MAX_DETAIL_ROWS], "detailTotal": len(rows)}
 
 
-def read_csv(raw: bytes, what: str) -> pd.DataFrame:
+def upper_bound(bad: int, n: int) -> float:
+    """The one-sided 95% Clopper-Pearson upper bound on a rate seen as bad of n, as a fraction."""
+    if bad >= n:
+        return 1.0
+    if bad == 0:
+        return 1 - 0.05 ** (1 / n)
+
+    def at_most(p: float) -> float:  # P(X <= bad) for X ~ Binomial(n, p), in logs so large n cannot overflow
+        lp, lq, top = math.log(p), math.log1p(-p), math.lgamma(n + 1)
+        return sum(math.exp(top - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * lp + (n - i) * lq) for i in range(bad + 1))
+
+    lo, hi = bad / n, 1.0
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if at_most(mid) > 0.05 else (lo, mid)
+    return hi
+
+
+def sampled(status: str, bad: int, n: int, limit: float) -> Tuple[str, str]:
+    """A pass stands only when the 95% upper bound on bad of n is within limit (a fraction); otherwise insufficient, with the sentence why."""
+    if status != "passed" or not 0 < limit < 1 or n <= 0:  # a zero limit is zero tolerance: no sample bounds a rate at 0
+        return status, ""
+    high = upper_bound(bad, n)
+    if high <= limit:
+        return status, ""
+    pct = f"{round(limit * 100, 4):g}%"
+    return "insufficient", (f" {bad} of {n} is within {pct}, but at 95% confidence the rate could be as high as {high:.1%}, so this sample "
+                            f"cannot show it is at or under {pct}; that takes at least {samples_needed(limit)} with none failing.")
+
+
+def samples_needed(limit: float) -> int:
+    """The smallest sample whose 95% upper bound is within limit (a fraction between 0 and 1) when nothing in it fails."""
+    return math.ceil(math.log(0.05) / math.log(1 - limit))
+
+
+def read_csv(raw: bytes, what: str, text: bool = False, literal: bool = False) -> pd.DataFrame:
+    """text keeps every cell as a string, so ids and yes/no flags never turn into floats like 1.0 when a cell is blank.
+    literal also keeps NA, None, null and the like as written, so only a blank cell is missing (a tool may be named NA)."""
     if not raw:
         raise EngineError(f"{what} is empty")
     try:
-        frame = pd.read_csv(io.BytesIO(raw))
+        frame = pd.read_csv(io.BytesIO(raw), dtype=str if text or literal else None, keep_default_na=not literal, na_values=[""] if literal else None)
     except Exception as exc:  # pandas raises several parser errors
         raise EngineError(f"{what} is not a readable CSV: {exc}")
     if frame.empty:

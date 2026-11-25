@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _ORG_AUDIT_FILTER = f"org_id = :org_id AND {NOT_A_READ}"
 
 @router.get("/")
-async def root():
+def root():
     """Root endpoint"""
     return {
         "message": "Fairmind AI Governance API",
@@ -36,7 +36,7 @@ async def root():
     }
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",

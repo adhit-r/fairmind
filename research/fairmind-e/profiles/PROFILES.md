@@ -66,7 +66,7 @@ The submission covers the complete hyperparameter search and final fit for the 2
 
 LexRetrieve is the retrieval service behind a Dublin-based legal research product used by law firms in Ireland and the Netherlands. Each query embeds the user question with a compact bi-encoder, retrieves candidate passages from a statute and case-law index, and returns re-ranked citations. Roughly twelve million queries were served in the June 2026 window.
 
-Engineering instrumented the retrieval pods with CodeCarbon, which sampled node power and applied Irish grid intensity for the location figure and the provider's green-tariff residual mix for the market figure. Tool estimates were cross-checked against pod CPU-seconds; the residual uncertainty is dominated by shared-node attribution.
+Energy and carbon figures come from the cloud provider's carbon footprint export for the tagged retrieval pods, which reports kilowatt-hours with Irish grid intensity for the location figure and the provider's green-tariff residual mix for the market figure. Engineering cross-checked the export against pod CPU-seconds; the residual uncertainty is dominated by the provider's shared-node allocation, which customers cannot audit.
 
 The declared boundary covers embedding, index search, and re-ranking for production queries. The nightly index rebuild is assessed separately and is excluded here.
 
@@ -79,8 +79,8 @@ The declared boundary covers embedding, index search, and re-ranking for product
 - Boundary: Production query path of the LexRetrieve service: query embedding, index search, and re-ranking for the June 2026 window (about 12 million queries).
   - Includes: query embedding; index search; re-ranking
   - Excludes: nightly index rebuild; document ingestion pipeline
-- Declared evidence provenance: tool_estimated (CodeCarbon 2.5 on the retrieval pods)
-- Self-reported confidence score: 0.66
+- Declared evidence provenance: vendor_reported (cloud provider carbon footprint export for the retrieval pods)
+- Self-reported confidence score: 0.55
 - Reported uncertainty: 22 percent
 - Intensity vs approved baseline: 0.88
 
@@ -98,7 +98,7 @@ The declared boundary covers embedding, index search, and re-ranking for product
 - Documented mitigations: none declared
 - Exception on file: none
 - Disclosed offsets or credits: none
-- Evidence references: `codecarbon-emissions-2026-06.csv`, `green-tariff-residual-mix-2026.pdf`
+- Evidence references: `provider-carbon-export-2026-06.csv`, `green-tariff-residual-mix-2026.pdf`
 
 ---
 
@@ -296,7 +296,7 @@ Node-level IPMI power telemetry and facility PUE were logged for the full run. H
 
 A Bengaluru startup ran continued pretraining of a 7-billion-parameter multilingual model across ten Indic languages, positioning it for government-service chat and voice interfaces. The five-week run used a rented GPU cluster located in a coal-heavy grid region.
 
-Energy was not metered. The team reconstructed consumption with a green-algorithms style calculator from scheduler GPU-hours, card TDP, and an assumed 65 percent utilisation profile, then applied national grid factors. The startup discloses retired verified carbon units covering roughly the estimated footprint and treats that purchase as its primary environmental answer. Mitigation for the next run is described as planned, but no owner or target date has been documented.
+The startup did not meter energy. Its figures come from the GPU rental provider's monthly sustainability statement, which reports energy and emissions per tenant from the provider's own facility metering; the method and meter data are not open to audit. The startup discloses retired verified carbon units covering roughly the estimated footprint and treats that purchase as its primary environmental answer. Mitigation for the next run is described as planned, but no owner or target date has been documented.
 
 ### Assessment submission
 
@@ -307,9 +307,9 @@ Energy was not metered. The team reconstructed consumption with a green-algorith
 - Boundary: Continued pretraining of the 7B multilingual model across ten Indic languages on a rented GPU cluster.
   - Includes: continued pretraining
   - Excludes: base checkpoint training; instruction tuning; serving
-  - Assumptions: GPU-hours and TDP reconstructed from scheduler logs; utilisation assumed at 65 percent.
-- Declared evidence provenance: tool_estimated (green-algorithms style calculator over scheduler logs)
-- Self-reported confidence score: 0.64
+  - Assumptions: Energy and emissions as stated in the provider's tenant sustainability statement; provider method not open to audit.
+- Declared evidence provenance: vendor_reported (GPU rental provider monthly sustainability statement)
+- Self-reported confidence score: 0.52
 - Reported uncertainty: 24 percent
 - Intensity vs approved baseline: 1.2
 - Declared mitigation readiness: planned
@@ -326,7 +326,7 @@ Energy was not metered. The team reconstructed consumption with a green-algorith
 - Documented mitigations: none declared
 - Exception on file: none
 - Disclosed offsets or credits: retired_kg_co2e: 30000
-- Evidence references: `scheduler-gpu-hours-2026-05.csv`, `calculator-worksheet-cpt.pdf`, `vcu-retirement-certificate.pdf`
+- Evidence references: `scheduler-gpu-hours-2026-05.csv`, `provider-sustainability-statement-2026-05.pdf`, `vcu-retirement-certificate.pdf`
 
 ---
 
@@ -445,7 +445,7 @@ Rather than a dated efficiency mitigation, the VP of Platform Engineering signed
 
 A Toronto analytics vendor maintains semantic search over customer document stores. A nightly pipeline embeds new and changed content with a 350-million-parameter encoder, processing about 38 million embedding requests in June 2026 across two regions, many of them long multi-page documents.
 
-Instrumentation attached to the inference gateway estimates per-request energy and carbon with documented assumptions, in the style of EcoLogits. Off-peak batching and a distilled encoder are both under discussion as reduction options, but neither has an owner or a target date, and no exception has been requested from the review board.
+Energy and carbon figures come from the cloud provider's per-service carbon report for the embedding gateway, which allocates the provider's figures to the tagged service with assumptions customers cannot audit. Off-peak batching and a distilled encoder are both under discussion as reduction options, but neither has an owner or a target date, and no exception has been requested from the review board.
 
 ### Assessment submission
 
@@ -456,8 +456,8 @@ Instrumentation attached to the inference gateway estimates per-request energy a
 - Boundary: Nightly and incremental embedding of customer document stores with the 350M encoder across two regions for the June 2026 window (about 38 million embedding requests).
   - Includes: embedding requests; gateway preprocessing
   - Excludes: vector-store serving; retrieval API; encoder training
-- Declared evidence provenance: tool_estimated (EcoLogits-style gateway instrumentation)
-- Self-reported confidence score: 0.62
+- Declared evidence provenance: vendor_reported (cloud provider per-service carbon report)
+- Self-reported confidence score: 0.48
 - Reported uncertainty: 20 percent
 - Intensity vs approved baseline: 1.08
 - Declared mitigation readiness: planned
@@ -476,4 +476,4 @@ Instrumentation attached to the inference gateway estimates per-request energy a
 - Documented mitigations: none declared
 - Exception on file: none
 - Disclosed offsets or credits: none
-- Evidence references: `gateway-instrumentation-export-2026-06.csv`, `estimation-assumptions-note.pdf`
+- Evidence references: `provider-carbon-report-2026-06.csv`, `provider-allocation-assumptions-2026.pdf`

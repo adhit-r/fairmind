@@ -236,7 +236,7 @@ async def explainability_analysis(request: ExplainabilityAnalysisRequest):
         raise HTTPException(status_code=500, detail=f"Explainability analysis failed: {str(e)}")
 
 @router.get("/bias-tests")
-async def get_available_bias_tests():
+def get_available_bias_tests():
     """
     Get list of available bias tests and their configurations
     """
@@ -253,7 +253,7 @@ async def get_available_bias_tests():
 # The test configuration is one process-wide dict shared by every tenant, so only
 # a platform admin may change it.
 @router.put("/bias-tests/configure", dependencies=[Depends(require_admin)])
-async def configure_bias_test(request: BiasTestConfigurationRequest):
+def configure_bias_test(request: BiasTestConfigurationRequest):
     """
     Configure individual bias tests
     """
@@ -280,7 +280,7 @@ async def configure_bias_test(request: BiasTestConfigurationRequest):
         raise HTTPException(status_code=500, detail=f"Failed to configure bias test: {str(e)}")
 
 @router.get("/bias-categories")
-async def get_bias_categories():
+def get_bias_categories():
     """
     Get available bias categories
     """
@@ -294,7 +294,7 @@ async def get_bias_categories():
         raise HTTPException(status_code=500, detail=f"Failed to get bias categories: {str(e)}")
 
 @router.get("/evaluation-datasets")
-async def get_evaluation_datasets():
+def get_evaluation_datasets():
     """
     Get available evaluation datasets
     """
@@ -308,7 +308,7 @@ async def get_evaluation_datasets():
         raise HTTPException(status_code=500, detail=f"Failed to get evaluation datasets: {str(e)}")
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """
     Health check for the modern bias detection service
     """
@@ -393,7 +393,7 @@ async def _log_batch_evaluation(count: int, risk_levels: List[str]):
         logger.error(f"Error logging batch evaluation: {e}")
 
 @router.get("/detection-results")
-async def get_detection_results(m: OrgMembership = Depends(org_member)):
+def get_detection_results(m: OrgMembership = Depends(org_member)):
     """
     Get this organisation's modern bias detection results for dashboard display from database
     """
@@ -490,7 +490,7 @@ async def get_detection_results(m: OrgMembership = Depends(org_member)):
         raise HTTPException(status_code=500, detail="Failed to get detection results")
 
 @router.get("/evaluation-history")
-async def get_evaluation_history(limit: int = Query(10, ge=1, le=100), m: OrgMembership = Depends(org_member)):
+def get_evaluation_history(limit: int = Query(10, ge=1, le=100), m: OrgMembership = Depends(org_member)):
     """
     This organisation's stored bias test results, newest first
     """

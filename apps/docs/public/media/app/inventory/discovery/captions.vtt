@@ -1,0 +1,17 @@
+WEBVTT
+
+1
+00:00:00.400 --> 00:00:07.355
+Discovery reads your MLflow, GitHub and Hugging Face sources and lists AI systems you have not registered.
+
+2
+00:00:08.275 --> 00:00:09.704
+Connect a source to start.
+
+3
+00:00:10.640 --> 00:00:13.605
+Choose the kind of source. The fields change to match it.
+
+4
+00:00:14.864 --> 00:00:19.152
+Adding the connector saves it. This demo is read-only, so we stop here.

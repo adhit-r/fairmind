@@ -1,225 +1,213 @@
 'use client'
 
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
-import { SimpleChart } from '@/components/charts/SimpleChart'
-import { StatCard } from '@/components/charts/StatCard'
-import { Progress } from '@/components/ui/progress'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  IconActivity,
-  IconTrendingUp,
-  IconTrendingDown,
-  IconRefresh,
-  IconBell,
-  IconBellOff,
-  IconAlertTriangle,
-} from '@tabler/icons-react'
-import { useState, useMemo } from 'react'
-import { useMonitoring } from '@/lib/api/hooks/useMonitoring'
-import { useAuditLogs } from '@/lib/api/hooks/useAuditLogs'
+import '@/astryx/pages/monitoring.css'
+import Link from 'next/link'
+import { useMemo } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { EmptyState } from '@astryxdesign/core/EmptyState'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Heading, Text } from '@astryxdesign/core/Text'
+import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Token } from '@astryxdesign/core/Token'
+import { HStack, VStack } from '@astryxdesign/core/Layout'
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
+import { usePolicyResource, type PolicyAlert } from '@/lib/api/hooks/usePolicies'
+import { useRisks } from '@/lib/api/hooks/useRisks'
+import { useOrgId } from '@/lib/api/hooks/useOrgId'
+import { checkCell, type CellState } from '@/components/ui/matrix'
+import { useSystemMonitoring } from '@/astryx/data/monitoring'
 
-export default function MonitoringPage() {
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const [notifications, setNotifications] = useState(true)
-  const { metrics, loading, error, refetch } = useMonitoring()
-  const { data: auditLogs } = useAuditLogs(24) // Last 24 hours
+const STATE: Record<string, { word: string; color: 'green' | 'blue' | 'orange' | 'red' | 'default' }> = {
+  proven: { word: 'Proven', color: 'green' },
+  attested: { word: 'Attested', color: 'green' },
+  estimated: { word: 'Estimated', color: 'blue' },
+  stale: { word: 'Out of date', color: 'orange' },
+  fails: { word: 'Drifting', color: 'red' },
+  open: { word: 'Never watched', color: 'default' },
+}
 
-  // Process audit logs for metrics chart (group by hour)
-  const metricsData = useMemo(() => {
-    if (!auditLogs || auditLogs.length === 0) {
-      const hours = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00']
-      return hours.map(name => ({ name, value: 0 }))
-    }
-    
-    const hourCounts: Record<string, number> = {}
-    auditLogs.forEach(log => {
-      const date = new Date(log.timestamp || log.created_at || Date.now())
-      const hour = `${String(date.getHours()).padStart(2, '0')}:00`
-      hourCounts[hour] = (hourCounts[hour] || 0) + 1
-    })
-    
-    const hours = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00']
-    return hours.map(name => ({ name, value: hourCounts[name] || 0 }))
-  }, [auditLogs])
+const when = (iso: string | null | undefined) => {
+  const d = iso ? new Date(iso) : null
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'unknown'
+}
+const cadence = (hours: number) => (hours % 24 === 0 ? `every ${hours / 24 === 1 ? 'day' : `${hours / 24} days`}` : `every ${hours} hours`)
 
-  // System performance data from metrics
-  const performanceData = useMemo(() => {
-    if (!metrics) {
-      return [
-        { name: 'CPU', value: 0 },
-        { name: 'Memory', value: 0 },
-        { name: 'Network', value: 0 },
-        { name: 'Storage', value: 0 },
-      ]
-    }
-    
-    return [
-      { name: 'Active Models', value: metrics.active_models || 0 },
-      { name: 'Error Rate', value: (metrics.error_rate || 0) * 100 },
-      { name: 'Compliance', value: (metrics.compliance_score || 0) * 100 },
-      { name: 'Bias Alerts', value: (metrics.bias_alerts || 0) * 10 },
-    ]
-  }, [metrics])
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-10 w-32" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !metrics) {
-    return (
-      <div className="space-y-6">
-        <Alert className="border-2 border-red-500">
-          <IconAlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error Loading Monitoring Data</AlertTitle>
-          <AlertDescription>
-            {error.message}
-            <br />
-            <Button variant="default" className="mt-4" onClick={() => refetch()}>
-              <IconRefresh className="mr-2 h-4 w-4" />
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
-    )
-  }
-
+function SystemRow({ id, name, tier, state }: { id: string; name: string; tier: string; state: CellState }) {
+  const { runs, policy, loading, error } = useSystemMonitoring(id)
+  const latest = runs[0]
+  const drift = latest ? latest.attributes.map((a) => a.maxRateDrift).filter((d): d is number => d != null) : []
+  const worst = drift.length ? Math.max(...drift) : null
+  const s = STATE[state] ?? STATE.open
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <li className="fm-mon-row">
+      <div className="fm-mon-name">
+        <Link href={`/systems/${encodeURIComponent(id)}`}>{name}</Link>
         <div>
-          <h1 className="text-[30px] font-semibold tracking-[-.03em]">Monitoring</h1>
-          <p className="text-muted-foreground mt-1">
-            Real-time system and model monitoring
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="auto-refresh"
-              checked={autoRefresh}
-              onCheckedChange={setAutoRefresh}
-            />
-            <Label htmlFor="auto-refresh">Auto Refresh</Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="notifications"
-              checked={notifications}
-              onCheckedChange={setNotifications}
-            />
-            <Label htmlFor="notifications">Notifications</Label>
-          </div>
-          <Button variant="default" onClick={() => refetch()}>
-            <IconRefresh className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
+          <Token size="sm" color={s.color} label={s.word} />
         </div>
       </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Active Models"
-          value={metrics?.active_models || 0}
-          icon={<IconActivity className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Total Predictions"
-          value={metrics?.total_predictions?.toLocaleString() || '0'}
-          icon={<IconTrendingUp className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Error Rate"
-          value={`${((metrics?.error_rate || 0) * 100).toFixed(2)}%`}
-          icon={<IconTrendingDown className="h-5 w-5" />}
-        />
-        <StatCard
-          title="Avg Response"
-          value={`${metrics?.avg_response_time || 0}ms`}
-          icon={<IconActivity className="h-5 w-5" />}
-        />
+      <div className="fm-mon-facts">
+        {loading ? (
+          <Skeleton height={16} width={240} />
+        ) : error ? (
+          <span>{error}</span>
+        ) : latest ? (
+          <>
+            <span>
+              Latest snapshot <b>{when(latest.createdAt)}</b>
+            </span>
+            <span>
+              Overall PSI <b>{latest.overallPsi == null ? 'not scored' : latest.overallPsi.toFixed(3)}</b>
+            </span>
+            <span>
+              Worst attribute drift <b>{worst == null ? 'not scored' : worst.toFixed(3)}</b>
+            </span>
+            <span>
+              Checks <b>{latest.allChecksPass == null ? 'not scored' : latest.allChecksPass ? 'all pass' : 'some fail'}</b>
+            </span>
+          </>
+        ) : (
+          <span>No snapshot uploaded yet. {tier} risk.</span>
+        )}
+        {policy && (
+          <span>
+            Expected <b>{cadence(policy.cadenceHours)}</b>
+            {policy.isDefault ? ' (default)' : ''}
+          </span>
+        )}
       </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SimpleChart
-          title="Request Metrics (24h)"
-          data={metricsData}
-          type="line"
-          dataKey="value"
-        />
-        <Card className="p-6 fm-card">
-          <h3 className="text-lg font-bold mb-4">System Performance</h3>
-          <div className="space-y-4">
-            {performanceData.map((item) => (
-              <div key={item.name} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="font-medium">{item.name}</Label>
-                  <span className="text-sm font-bold">{item.value}%</span>
-                </div>
-                <Progress value={item.value} className="h-3 border border-[var(--fm-line)]" />
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      {/* Alerts */}
-      <Card className="p-6 fm-card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold">Recent Alerts</h3>
-          <Button variant="noShadow" size="sm">
-            View All
-          </Button>
-        </div>
-        <div className="space-y-3">
-          {[
-            { type: 'warning', message: 'High CPU usage detected on model-001', time: '2 minutes ago' },
-            { type: 'info', message: 'New model registered: model-042', time: '15 minutes ago' },
-            { type: 'success', message: 'Security scan completed successfully', time: '1 hour ago' },
-          ].map((alert, index) => (
-            <div
-              key={index}
-              className="p-3 border border-[var(--fm-line)] bg-white flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-2 border border-[var(--fm-line)] ${
-                  alert.type === 'warning' ? 'bg-yellow-400' :
-                  alert.type === 'info' ? 'bg-blue-400' :
-                  'bg-green-400'
-                }`}>
-                  {alert.type === 'warning' ? <IconBell className="h-4 w-4" /> :
-                   alert.type === 'info' ? <IconBell className="h-4 w-4" /> :
-                   <IconBellOff className="h-4 w-4" />}
-                </div>
-                <div>
-                  <p className="font-medium">{alert.message}</p>
-                  <p className="text-sm text-muted-foreground">{alert.time}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
+      <Button label="Upload a snapshot" variant="secondary" size="sm" href={`/systems/${encodeURIComponent(id)}`} />
+    </li>
   )
 }
 
+export default function MonitoringPage() {
+  const orgId = useOrgId()
+  const { systems, loading: systemsLoading } = useSystemContext()
+  const gates = useEstateGates()
+  const alerts = usePolicyResource<PolicyAlert[]>(orgId ?? null, '/alerts')
+  const risks = useRisks()
+
+  const rows = useMemo(() => {
+    const byId = new Map((gates.data ?? []).map((g: EstateGate) => [g.systemId, g]))
+    return systems.flatMap((s) => {
+      const check = byId.get(s.id)?.checks.find((c) => c.key === 'monitoring')
+      return check ? [{ system: s, state: checkCell(check) }] : []
+    })
+  }, [systems, gates.data])
+
+  const count = (...states: CellState[]) => rows.filter((r) => states.includes(r.state)).length
+  const nameOf = (id: string | undefined) => systems.find((s) => s.id === id)?.name ?? 'Unknown system'
+  const openAlerts = (alerts.data ?? []).filter((a) => a.status === 'open')
+  // Findings the watch opened when a system kept drifting; the API sends the system as system_id.
+  const watchFindings = risks.data.filter((r) => r.source === 'fairmind.watch' && r.status !== 'closed' && r.status !== 'resolved')
+
+  return (
+    <div className="fm-page">
+      <VStack gap={5}>
+        <VStack gap={1}>
+          <Heading level={1}>Monitoring</Heading>
+          <Text color="secondary">Is each registered system still behaving the way it was released? Uploaded snapshots are compared against a baseline on a schedule.</Text>
+        </VStack>
+
+        {gates.error && <Banner status="error" title="The monitoring checks could not load" description={gates.error} endContent={<Button label="Try again" size="sm" onClick={() => gates.reload()} />} />}
+
+        {(gates.loading && !gates.data) || systemsLoading ? (
+          <VStack gap={2}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} height={44} />
+            ))}
+          </VStack>
+        ) : !gates.error && rows.length === 0 ? (
+          <EmptyState title="No registered AI systems yet" description="Register a system and upload a snapshot of its predictions to start watching it." actions={<Button variant="primary" label="Go to Discovery" href="/discovery" />} />
+        ) : (
+          !gates.error && (
+            <>
+              <ul className="fm-mon-counts" aria-label="Monitoring across the estate">
+                <li>
+                  <b>{count('proven', 'attested')}</b>
+                  <span>Proven</span>
+                </li>
+                <li>
+                  <b>{count('estimated')}</b>
+                  <span>Estimated</span>
+                </li>
+                <li className="warn">
+                  <b>{count('stale')}</b>
+                  <span>Out of date</span>
+                </li>
+                <li className="bad">
+                  <b>{count('fails')}</b>
+                  <span>Drifting</span>
+                </li>
+                <li>
+                  <b>{count('open')}</b>
+                  <span>Never watched</span>
+                </li>
+              </ul>
+
+              <div className="fm-mon">
+                <section className="fm-card" aria-labelledby="mon-systems">
+                  <VStack gap={2}>
+                    <Heading level={2} id="mon-systems">
+                      Systems
+                    </Heading>
+                    <ul className="fm-mon-list">
+                      {rows.map((r) => (
+                        <SystemRow key={r.system.id} id={r.system.id} name={r.system.name} tier={r.system.riskTier} state={r.state} />
+                      ))}
+                    </ul>
+                  </VStack>
+                </section>
+
+                <aside className="fm-mon-rail" aria-labelledby="mon-alerts">
+                  <section className="fm-card">
+                    <VStack gap={3}>
+                      <HStack gap={2} vAlign="center" hAlign="between">
+                        <Heading level={2} id="mon-alerts">
+                          Alerts
+                        </Heading>
+                        <Text color="secondary">{openAlerts.length + watchFindings.length} open</Text>
+                      </HStack>
+                      {alerts.error && <Banner status="error" title="Policy alerts could not load" description={alerts.error} endContent={<Button label="Try again" size="sm" onClick={() => alerts.reload()} />} />}
+                      {risks.error && <Banner status="error" title="Watch findings could not load" description={risks.error.message} />}
+                      {(alerts.loading || risks.loading) && !alerts.error ? (
+                        <Skeleton height={60} />
+                      ) : openAlerts.length + watchFindings.length === 0 && !alerts.error && !risks.error ? (
+                        <Text color="secondary">Nothing open. No policy rule is failing and no watch has opened a finding.</Text>
+                      ) : (
+                        <ul className="fm-mon-alerts">
+                          {openAlerts.map((a) => (
+                            <li key={a.id}>
+                              <Link href={`/systems/${encodeURIComponent(a.systemId)}`}>{a.systemName}</Link>
+                              <span>{a.ruleTitle}</span>
+                              <small>
+                                Policy {a.policyName} · {a.severity} · opened {when(a.openedAt)}
+                              </small>
+                            </li>
+                          ))}
+                          {watchFindings.map((r) => {
+                            const sid = (r as { system_id?: string }).system_id ?? r.systemId
+                            return (
+                              <li key={r.id}>
+                                <Link href={sid ? `/findings?system=${encodeURIComponent(sid)}` : '/findings'}>{nameOf(sid)}</Link>
+                                <span>{r.title}</span>
+                                <small>Monitoring finding · {r.severity}</small>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                      <Button label="See all alerts" variant="ghost" size="sm" href="/alerts" />
+                    </VStack>
+                  </section>
+                </aside>
+              </div>
+            </>
+          )
+        )}
+      </VStack>
+    </div>
+  )
+}

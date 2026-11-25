@@ -1,0 +1,5 @@
+{
+  "title": "Inventory",
+  "defaultOpen": false,
+  "pages": ["systems", "system-file", "discovery"]
+}

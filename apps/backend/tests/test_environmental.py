@@ -61,14 +61,36 @@ def test_confidence_from_source_midpoint():
 
 
 def test_confidence_capped_by_provenance():
-    from src.domain.environmental.confidence import cap_confidence_for_provenance
-    # A claimed score cannot exceed what the provenance class permits.
+    from src.domain.environmental.confidence import cap_confidence_for_provenance, normalize_source
+    # System-derived evidence confidence is capped at its class (release gate).
     assert cap_confidence_for_provenance(0.95, "vendor_reported") == 0.60
     assert cap_confidence_for_provenance(0.95, "measured") == 0.95
-    # Unknown provenance forces 0.0 regardless of any claimed score.
     assert cap_confidence_for_provenance(0.95, "unknown") == 0.0
-    # No explicit score falls back to the provenance midpoint.
     assert cap_confidence_for_provenance(None, "tool_estimated") == 0.72
+    # A tracker that fell back to load x TDP is classed with analytic estimates.
+    assert normalize_source("codecarbon_cpu_load") == "manual"
+    assert normalize_source("codecarbon") == "tool_estimated"
+
+
+def test_engine_ignores_caller_supplied_confidence():
+    # manual (0.20-0.40) straddles the 0.35 band boundary: a self-chosen 0.36
+    # must not lift a manual estimate into the moderate band. The engine uses
+    # the class midpoint and nothing else.
+    result = run_assessment({
+        "lifecycle_phase": "training",
+        "source": "manual",
+        "evidence_confidence": 0.36,
+        "metrics": {"total_kg_co2e": 10.0},
+    })
+    assert (result.evidence_confidence, result.confidence_band) == (0.30, "unknown")
+    assert result.recommendation == "conditional_go"
+    degraded = run_assessment({
+        "lifecycle_phase": "training",
+        "source": "codecarbon_cpu_load",
+        "evidence_confidence": 0.85,
+        "metrics": {"total_kg_co2e": 10.0},
+    })
+    assert (degraded.provenance_class, degraded.evidence_confidence) == ("manual", 0.30)
 
 
 @pytest.mark.parametrize(

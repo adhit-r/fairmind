@@ -3,7 +3,7 @@
 A small typed client for the FairMind API: read the release gate, run fairness tests, record monitoring snapshots and attestations. One dependency, `httpx`.
 
 ```bash
-pip install ./apps/sdk        # from a checkout; or: uv add ./apps/sdk
+pip install fairmind          # or: uv add fairmind; from a checkout: pip install ./apps/sdk
 export FAIRMIND_API_URL=https://fairmind.example.com
 export FAIRMIND_API_KEY=...   # minted at POST /api/v1/auth/api-keys
 ```

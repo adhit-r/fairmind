@@ -18,8 +18,18 @@ Provenance -> confidence ranges:
     manual          0.20 - 0.40
     unknown         0.00
 
-Vendor-reported evidence is capped at 0.60. Offsets and RECs never improve
+In the environmental gate, confidence is a function of the provenance class
+alone: the class midpoint. A caller-supplied score is kept for audit but never
+enters that gate, because ``manual`` (0.20-0.40) and ``tool_estimated``
+(0.60-0.85) straddle band boundaries, so a self-chosen score inside a class
+could move a band with no change in measurement quality. The platform's own
+release gate still caps system-derived evidence confidence at the class range
+(``cap_confidence_for_provenance``). Offsets and RECs never improve
 confidence.
+
+A software tracker that has fallen back to a load-times-TDP model (codecarbon's
+``cpu_load`` mode) is not a tool estimate in kind; its sources map to
+``manual``.
 """
 
 from __future__ import annotations
@@ -62,6 +72,11 @@ _SOURCE_ALIASES: dict[str, str] = {
     "manual_estimate": "manual",
     "flop_estimate": "manual",
     "manual_flop": "manual",
+    # Degraded trackers: no hardware counters, power = load x TDP constant.
+    "codecarbon_cpu_load": "manual",
+    "tool_cpu_load": "manual",
+    "cpu_load": "manual",
+    "tool_degraded": "manual",
     "undisclosed": "unknown",
     "none": "unknown",
     "": "unknown",
@@ -106,7 +121,12 @@ def confidence_from_source(source: str | None) -> float:
 
 
 def cap_confidence_for_provenance(score: float | None, provenance_class: str | None) -> float:
-    """Apply provenance caps to a caller-supplied confidence score."""
+    """Cap a system-derived confidence (e.g. a decayed evidence record) at its class.
+
+    This is for collected evidence whose confidence the platform computed. The
+    environmental gate does not use it: a caller's self-reported score never
+    enters that gate (see ``confidence_from_source``).
+    """
     provenance = normalize_provenance(provenance_class)
     if provenance == "unknown":
         return 0.0

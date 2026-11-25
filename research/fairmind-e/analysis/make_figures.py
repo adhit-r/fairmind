@@ -172,7 +172,7 @@ def figure_energy_and_matrix(runs: list[dict[str, str]], out: Path) -> None:
                   fontsize=6.0, color=MUTED)
     for row, tier in enumerate(TIERS):
         ax_b.text(-0.14, 2.5 - row, tier, ha="right", va="center", fontsize=6.4, color=MUTED)
-    ax_b.text(1.5, 3.44, "evidence confidence", ha="center", fontsize=6.5, color=INK)
+    ax_b.text(1.5, 3.60, "evidence confidence", ha="center", fontsize=6.5, color=INK)
     ax_b.text(-1.22, 1.5, "impact", ha="center", va="center", rotation=90,
               fontsize=6.5, color=INK)
     ax_b.text(1.0, -0.72, "20/20 runs: same row, different decision",
@@ -185,13 +185,12 @@ def figure_energy_and_matrix(runs: list[dict[str, str]], out: Path) -> None:
 
 
 def figure_mitigations(path: Path, out: Path) -> None:
-    """Mitigation outcomes, split by what was actually done.
+    """The three physical mitigation reruns, one execution each.
 
-    Only three pairs are physical reruns. The region and time shifts recompute
-    one measured run against a bundled emission-factor table with no rerun, so
-    they are identical across workloads by construction; drawing them as eight
-    independent bars would imply evidence that does not exist. They are
-    collapsed to one bar each and labelled as accounting scenarios.
+    The region and time shifts in the same CSV recompute one measured run
+    against a bundled placeholder emission-factor table with no rerun. They are
+    arithmetic, not evidence, so they stay out of the figure and are confined
+    to the paper's appendix.
     """
     with path.open(encoding="utf-8") as handle:
         rows = [r for r in csv.DictReader(handle) if r.get("method_available") == "true"]
@@ -203,42 +202,30 @@ def figure_mitigations(path: Path, out: Path) -> None:
         pre, post = float(r["pre_location_kg_co2e"]), float(r["post_location_kg_co2e"])
         return (pre - post) / pre * 100.0
 
-    physical, accounting = [], {}
+    physical = []
     for r in rows:
         if "no rerun performed" in (r.get("notes") or ""):
-            accounting.setdefault(r["mitigation_id"], []).append(pct(r))
-        else:
-            mid = display.get(r["mitigation_id"], r["mitigation_id"].replace("_", " "))
-            name = f"{mid} - {WORKLOAD_LABEL[r['workload_id']]}"
-            physical.append((name, pct(r)))
-
+            continue
+        mid = display.get(r["mitigation_id"], r["mitigation_id"].replace("_", " "))
+        physical.append((f"{mid} - {WORKLOAD_LABEL[r['workload_id']]}", pct(r)))
     physical.sort(key=lambda t: t[1])
-    entries = [(n, v, True) for n, v in physical]
-    entries.append((None, None, None))  # separator row
-    for mid, vals in sorted(accounting.items()):
-        entries.append((
-            f"{display.get(mid, mid.replace('_', ' '))} (x{len(vals)} workloads)",
-            statistics.mean(vals), False,
-        ))
 
-    fig, ax = plt.subplots(figsize=(5.5, 2.05))
+    fig, ax = plt.subplots(figsize=(5.5, 1.45))
     floor = -120.0
     ypos, labels = [], []
-    for i, (name, value, is_physical) in enumerate(entries):
+    for i, (name, value) in enumerate(physical):
         ypos.append(i)
-        if name is None:
-            labels.append("")
-            continue
         labels.append(name)
         drawn = max(value, floor)
         colour = BLUE if value >= 0 else VERMILLION
-        ax.barh(i, drawn, color=colour, edgecolor="white", linewidth=0.7, height=0.62,
-                hatch="" if is_physical else "///", zorder=2)
+        ax.barh(i, drawn, color=colour, edgecolor="white", linewidth=0.7, height=0.62, zorder=2)
         if value < floor:
-            ax.text(floor + 5, i, f"{value:,.0f}%", va="center", ha="left",
-                    fontsize=6.5, color="white", zorder=3)
-            ax.plot([floor], [i], marker="<", markersize=4.5, color=VERMILLION,
-                    markeredgecolor="white", markeredgewidth=0.5, clip_on=False, zorder=3)
+            # Broken-axis mark: two white diagonals across the clipped bar.
+            for x0 in (floor + 8, floor + 12):
+                ax.plot([x0, x0 + 3], [i - 0.36, i + 0.36], color="white",
+                        linewidth=1.6, solid_capstyle="butt", zorder=3)
+            ax.text(floor + 20, i, f"{value:,.0f}% (axis broken)", va="center",
+                    ha="left", fontsize=6.5, color="white", zorder=3)
         else:
             ax.text(drawn + 2.5, i, f"{value:.1f}%", va="center", ha="left",
                     fontsize=6.5, color=INK)
@@ -251,18 +238,12 @@ def figure_mitigations(path: Path, out: Path) -> None:
     ax.set_xlabel("Reduction in carbon intensity (%), positive is better", fontsize=7)
     ax.tick_params(axis="x", labelsize=6.5)
     ax.set_xlim(floor - 6, 116)
-    ax.set_ylim(-1.3, len(entries) - 0.4)
+    ax.set_ylim(-1.3, len(physical) - 0.4)
     ax.set_axisbelow(True)
     ax.xaxis.grid(True, color=GRID, linewidth=0.5)
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
-    # barh puts index 0 at the bottom, so the physical group sits low and the
-    # accounting group high; label each where it actually is.
-    ax.text(floor - 4, len(physical) - 0.32, "physical reruns", fontsize=6.4,
-            color=MUTED, style="italic")
-    ax.text(floor - 4, len(entries) - 0.72, "placeholder factors, illustrative only",
-            fontsize=6.4, color=MUTED, style="italic")
-    ax.set_title("Mitigation outcomes, separated by what was actually executed",
+    ax.set_title("Physical mitigation reruns, one execution each",
                  loc="left", fontsize=7.5, color=INK, pad=6)
     fig.savefig(out)
     plt.close(fig)

@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { describeChart } from '@/components/charts/describe'
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface ActionDistributionChartProps {
@@ -31,35 +32,37 @@ export function ActionDistributionChart({
             No data available
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ action, count }) => `${action}: ${count}`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="count"
-                onClick={(entry: any) => onActionClick?.(entry.action)}
-                style={{ cursor: 'pointer' }}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '2px solid #000',
-                  boxShadow: 'var(--fm-shadow)',
-                }}
-                formatter={(value: any) => `${value} events`}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          <div role="img" aria-label={describeChart('Events by action', data.map((d) => [d.action, d.count]))}>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ action, count }) => `${action}: ${count}`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="count"
+                  onClick={(entry: any) => onActionClick?.(entry.action)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '2px solid #000',
+                    boxShadow: 'var(--fm-shadow)',
+                  }}
+                  formatter={(value: any) => `${value} events`}
+                />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         )}
         {data.length > 0 && (
           <p className="text-xs text-gray-500 mt-4 text-center">

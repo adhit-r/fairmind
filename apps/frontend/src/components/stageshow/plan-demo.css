@@ -1,0 +1,30 @@
+/* Pinned, bottom bleed: a card-sized window inset left, right and top. */
+.fo {
+  & .ss-stage { --gutter: 32px; }
+
+  .fo-window {
+    position: absolute;
+    top: var(--gutter);
+    left: var(--gutter);
+    right: var(--gutter);
+    height: 340px;
+    box-shadow: var(--ss-shadow-hero);
+  }
+  .fo-body { display: flex; flex-direction: column; gap: 12px; height: 100%; padding: 6px 16px 0; background: #fff; }
+
+  .fo-packs { display: flex; flex-direction: column; margin-top: -4px; }
+  .fo-pack { display: flex; align-items: center; gap: 10px; height: 34px; border-bottom: 1px solid var(--fm-line); }
+  .fo-pack__name { font-size: 13px; font-weight: 500; line-height: 1.3; color: var(--fm-ink2); transition: color 0.35s; }
+  .fo-pack[data-on] .fo-pack__name { color: var(--fm-ink); }
+  .fo-pack__n { margin-left: auto; font-size: 11.5px; line-height: 1.3; color: var(--fm-ink3); }
+
+  .fo-fw { padding: 12px; border-radius: 12px; background: var(--fm-bg); }
+  .fo-fw__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .fo-fw__name { font-size: 12.5px; font-weight: 600; line-height: 1.3; color: var(--fm-ink); }
+  .fo-fw__count { font-size: 11.5px; line-height: 1.3; color: var(--fm-ink2); font-variant-numeric: tabular-nums; }
+  .fo-num { display: inline-block; width: 16px; margin-right: 4px; text-align: right; }
+  .fo-cells { display: flex; gap: 6px; }
+  .fo-cells .fm-cel { width: 14px; height: 14px; }
+
+  .fo-actions { display: flex; }
+}

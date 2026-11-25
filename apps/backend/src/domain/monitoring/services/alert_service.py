@@ -47,6 +47,21 @@ class Alert:
     acknowledged_at: Optional[datetime]
 
 
+_DATETIME_FIELDS = ("created_at", "updated_at", "acknowledged_at")
+
+
+def _dump(obj) -> Dict[str, Any]:
+    return {k: (v.isoformat() if isinstance(v, datetime) else v) for k, v in asdict(obj).items()}
+
+
+def _load(cls, data: Dict[str, Any]):
+    data = dict(data)
+    for k in _DATETIME_FIELDS:
+        if isinstance(data.get(k), str):
+            data[k] = datetime.fromisoformat(data[k])
+    return cls(**data)
+
+
 @service(lifetime=ServiceLifetime.SINGLETON)
 class AlertService(AsyncBaseService):
     """
@@ -57,8 +72,11 @@ class AlertService(AsyncBaseService):
     
     def __init__(self, logger: Optional[ILogger] = None):
         super().__init__(logger)
-        self.rules: Dict[str, AlertRule] = {}
-        self.alerts: Dict[str, Alert] = {}
+        from database.record_store import PersistentMap
+
+        # Kept in the database so rules and alerts survive restarts and are shared by workers.
+        self.rules = PersistentMap("monitoring_alert_rules", load=lambda d: _load(AlertRule, d), dump=_dump)
+        self.alerts = PersistentMap("monitoring_alerts", load=lambda d: _load(Alert, d), dump=_dump)
         
     async def create_rule(self, rule_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create an alert rule."""
@@ -99,7 +117,8 @@ class AlertService(AsyncBaseService):
             if hasattr(rule, k) and k not in ["id", "created_at"]:
                 setattr(rule, k, v)
         rule.updated_at = datetime.now(timezone.utc)
-        
+        self.rules[rule_id] = rule
+
         return asdict(rule)
 
     async def delete_rule(self, rule_id: str) -> bool:
@@ -190,7 +209,8 @@ class AlertService(AsyncBaseService):
         alert.acknowledged = True
         alert.acknowledged_by = user_id
         alert.acknowledged_at = datetime.now(timezone.utc)
-        
+        self.alerts[alert_id] = alert
+
         return asdict(alert)
 
     async def get_unacknowledged_alerts(self, model_id: Optional[str] = None) -> List[Dict[str, Any]]:

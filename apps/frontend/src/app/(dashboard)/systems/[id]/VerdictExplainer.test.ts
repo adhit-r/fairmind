@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import type { GatePathStep, ReleaseGate } from '@/lib/api/hooks/useSystemFile'
-import { arithmetic, attestationNote, bandRange, bestOption, confidenceShort, goPath, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
+import { HASH_PANEL, STEP_LINK, arithmetic, attestationNote, bandRange, bestOption, confidenceShort, goPath, pathSummary, stepClass, stepLine, stepTitle, tierLine, tierOverride } from './VerdictExplainer'
 
 const step = (check: GatePathStep['check'], action: GatePathStep['action'], evidenceClass: GatePathStep['evidenceClass'], counts: number, gain: number): GatePathStep => ({ check, action, evidenceClass, counts, gain, note: null })
 
@@ -152,4 +152,22 @@ test('a tier raised above the suggestion says above, never below', () => {
   const raised = { ...medium.explain!, tier: 'high', tierSource: { ...medium.explain!.tierSource!, suggestedTier: 'medium' as const, tierBelowSuggestion: false } }
   assert.equal(tierLine(raised), 'Tier High, above the Medium suggested by rule T3, confirmed by reviewer-1 on 7 Nov 2026.')
   assert.equal(tierOverride(raised), null)
+})
+
+test('every in-page explainer link opens a system-file panel', () => {
+  const hashes = [...Object.values(STEP_LINK).map((l) => l.href), '#onboard', '#decision'].filter((h) => h.startsWith('#'))
+  assert.deepEqual(hashes.filter((h) => !HASH_PANEL[h]), [])
+})
+
+test('a monitoring evaluation on live runs is named by what it checks', () => {
+  const gate = { checks: [{ key: 'monitoring', label: 'Monitoring in place' }] } as unknown as ReleaseGate
+  const onRuns: GatePathStep = { ...step('monitoring', 'evaluation_run', 'measured', 1, 0.2), evaluationId: 'EV-MON-02', source: 'traces' }
+  assert.equal(stepTitle(onRuns, gate), 'Check tool calls on live runs')
+  assert.equal(stepTitle(step('monitoring', 'evaluation_run', 'measured', 1, 0.2), gate), 'Run a catalogue evaluation for monitoring in place')
+})
+
+test('explanation quality on live runs is named by what it checks', () => {
+  const gate = { checks: [{ key: 'human_oversight', label: 'Human oversight' }] } as unknown as ReleaseGate
+  const onRuns: GatePathStep = { ...step('human_oversight', 'evaluation_run', 'measured', 1, 0.2), evaluationId: 'EV-OVS-04', source: 'traces' }
+  assert.equal(stepTitle(onRuns, gate), 'Check stated reasons on live runs')
 })

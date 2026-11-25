@@ -72,7 +72,7 @@ class GateEvaluationTest(unittest.TestCase):
             by_id = {row["case_id"]: row for row in rows}
             self.assertEqual(
                 by_id["vendor_claimed_high_confidence_capped"]["actual_confidence_score"],
-                "0.60",
+                "0.50",
             )
             self.assertEqual(
                 by_id["offsets_do_not_rescue_unknown"]["actual_recommendation"],

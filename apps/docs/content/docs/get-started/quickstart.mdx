@@ -1,0 +1,60 @@
+---
+title: Quickstart
+description: Sign in, register one AI system, test it and read its release verdict, all in the app.
+---
+
+<Status state="shipped" />
+
+This guide takes one AI system from registration to a release verdict. It takes about ten minutes and happens entirely in the app.
+
+<Steps>
+<Step>
+### Sign in
+
+Go to [app.fairmind.xyz](https://app.fairmind.xyz) and sign in. New accounts wait for an administrator to approve them.
+
+To look around first, press **Try the demo** on the sign-in page. The demo is a full organisation with real evidence, and it is read-only, so you can open every page but not change anything.
+</Step>
+
+<Step>
+### Register a system
+
+Open **Inventory › AI systems** and press **Register systems**. Enter the system's name, owner, risk tier and the frameworks that apply, or upload a CSV to register several at once. FairMind opens the new system file. [Register a system](/docs/journeys/register-system) explains each field.
+
+Already have models in MLflow, GitHub or Hugging Face? [Discovery](/docs/app/inventory/discovery) finds them for you, and **Register it** turns a found item into a system.
+</Step>
+
+<Step>
+### Confirm the tier
+
+In the system file, read **What it is** and press **Confirm tier and rules**. The risk tier sets how much evidence a release needs.
+</Step>
+
+<Step>
+### Read the release gate
+
+**Release gate** shows the verdict (go, conditional go or no go), the confidence and one bar per check. A new system reads no go with every check open. That is expected: nothing has been measured yet. **Why this verdict** lists the reasons.
+</Step>
+
+<Step>
+### Measure something
+
+**What it needs** lists the next steps, each marked **Agent** or **Person** with how much confidence it adds. Press **Run the test** on one, or open [Testing › Evaluations](/docs/app/testing/evaluations) to pick a check from the catalogue and press **Open to run**.
+
+Behaviour tests call your system and have your organisation's model judge the answers, so they need two things first: a model key under **Settings › AI provider**, and **how FairMind calls this AI system** set in the system file. Each result is stored as measured evidence and the gate updates.
+</Step>
+
+<Step>
+### Ask for a decision
+
+Press **Request release decision**. A reviewer opens the system file, presses **Decide** and approves or rejects. **Approve release** stays disabled while the verdict is no go. The decision is sealed with the evidence it rests on, and shows in [Release › Decisions](/docs/app/release/decisions).
+</Step>
+</Steps>
+
+## Next
+
+<Cards>
+  <Card title="Core concepts" href="/docs/get-started/core-concepts" description="What a check, evidence and a verdict mean." />
+  <Card title="The app" href="/docs/app" description="Every page in the menu, with a recording and a click-through." />
+  <Card title="Govern your first agent" href="/docs/journeys/govern-your-first-agent" description="Test an agent's behaviour and its platform setup." />
+</Cards>

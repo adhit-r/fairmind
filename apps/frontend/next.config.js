@@ -1,10 +1,35 @@
 /** @type {import('next').NextConfig} */
+// Sent on every page and proxied API response. Cloudflare can add the same at
+// the edge (deploy/lightsail/cloudflare.md); setting them here keeps them when
+// the app runs anywhere else. A full CSP with nonces is a separate change.
+const SECURITY_HEADERS = [
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  // The directives that need no nonce: no plugins, no <base> hijack, forms post
+  // only here, never framed. script-src with nonces needs every page rendered
+  // per request and a production-build check, so it is a separate change.
+  { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'" },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+]
+
 const nextConfig = {
+  poweredByHeader: false,
+
+  async headers() {
+    return [
+      { source: '/:path*', headers: SECURITY_HEADERS },
+      // Authenticated API answers must never sit in a shared cache.
+      { source: '/api/:path*', headers: [{ key: 'Cache-Control', value: 'no-store' }] },
+    ]
+  },
+
   async redirects() {
     return [
       {
         source: '/audit-reports',
-        destination: '/reports?view=builder',
+        destination: '/reports/system',
         permanent: false,
       },
       {
@@ -12,11 +37,28 @@ const nextConfig = {
         destination: '/compliance-dashboard',
         permanent: false,
       },
-      {
-        source: '/remediation-wizard',
-        destination: '/remediation?mode=guided',
-        permanent: false,
-      },
+      // Older addresses for pages that now live in the new menu.
+      { source: '/integrations', destination: '/discovery', permanent: false },
+      { source: '/model-inventory', destination: '/systems', permanent: false },
+      { source: '/risks', destination: '/findings', permanent: false },
+      { source: '/remediation', destination: '/findings', permanent: false },
+      { source: '/compliance/runs', destination: '/runs', permanent: false },
+      { source: '/compliance/evaluations', destination: '/evaluations', permanent: false },
+      { source: '/evidence/packs', destination: '/auditor-packs', permanent: false },
+      // The old org admin pages: people, roles and the audit log live in Settings now.
+      { source: '/org-admin', destination: '/settings?section=team', permanent: false },
+      { source: '/org-admin/members', destination: '/settings?section=team', permanent: false },
+      { source: '/org-admin/roles', destination: '/settings?section=team', permanent: false },
+      { source: '/org-admin/audit-log', destination: '/settings?section=audit-log', permanent: false },
+      { source: '/org-admin/settings', destination: '/settings', permanent: false },
+      { source: '/admin/roles', destination: '/settings?section=team', permanent: false },
+      { source: '/remediation-wizard', destination: '/findings', permanent: false },
+      // Retired tool pages: the evaluations they stood for live in the catalogue now.
+      ...['/bias', '/advanced-bias', '/llm-judge', '/llm-testing', '/benchmarks', '/fairness-documentation', '/explainability-studio', '/multimodal-bias'].map(
+        (source) => ({ source, destination: '/evaluations', permanent: false }),
+      ),
+      { source: '/ai-bom', destination: '/systems', permanent: false },
+      { source: '/provenance', destination: '/systems', permanent: false },
     ]
   },
 
@@ -67,4 +109,6 @@ const nextConfig = {
   output: 'standalone',
 }
 
-module.exports = nextConfig
+const { withAstryx } = require('@astryxdesign/build/next')
+
+module.exports = withAstryx(nextConfig)

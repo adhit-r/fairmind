@@ -24,9 +24,9 @@ from fastapi import HTTPException, status
 
 @pytest.mark.asyncio
 async def test_accept_invitation_invalid_token():
-    """Test that invalid token returns 400 Bad Request."""
+    """Test that an unknown token returns 404 Not Found."""
     # This test demonstrates the error handling for missing/invalid tokens
-    # Expected behavior: HTTP 400 with detail "Invalid or expired invitation token"
+    # Expected behavior: HTTP 404 with detail "Invitation not found"
     pass
 
 

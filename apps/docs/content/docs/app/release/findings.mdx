@@ -1,0 +1,48 @@
+---
+title: Findings
+description: Review everything raised against your systems, most serious first, and track the remediation tasks for each.
+---
+
+<Access where="Release and operate › Findings" address="/findings" change="Owner or admin of the organisation (adding a task or changing its status)" />
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/release/findings" /></Tab>
+  <Tab value="Try it"><TryIt page="app/release/findings" /></Tab>
+</Tabs>
+
+## What it is for
+
+Findings collects what failed checks, the monitoring watch and your reviewers have raised. It groups them by severity: Critical, High, Medium, Low. Use it to decide what to fix first and to track the fix.
+
+Findings matter at the release gate. Approval is refused while a system has open critical remediation tasks.
+
+## How to use it
+
+1. Open **Findings**. The counts at the top show All findings, Open, and one count per severity.
+2. Read the table, which has Finding, System, Source and Status columns. Severity groups run from Critical down.
+3. Click a finding title to open its drawer.
+4. Read **What was found** and **Suggested fix**. Either may say "No description recorded" or "No mitigation recorded" when the source gave none.
+5. Under **Remediation tasks**, change a task's **Status**, or press **Add a remediation task**, fill in **Task**, **What needs to change** and **Priority**, then press **Add task**.
+6. To retest, press **Open the system file** and run the check again.
+
+To see one system only, arrive from a link that carries `?system=`. The heading then reads "Findings on" that system, with a **Show every system** link.
+
+## Step by step
+
+The recording above, one screen at a time.
+
+<TourSteps page="app/release/findings" />
+
+## What's on the page
+
+Source tells you where a finding came from: Entered by a person, Monitoring watch, or the name of a check. A finding not tied to a system has no remediation tasks.
+
+Task statuses are Open, In progress, Blocked, Fixed, ready for retest, Resolved and Closed. The drawer shows only tasks linked to that finding, and counts how many other tasks the system has.
+
+Findings are not closed by editing them. A finding closes when the next result of the check passes. The task status records the work, not the proof.
+
+If there are none, the empty state names how they appear: a check fails, the watch sees sustained drift, or someone records one on a system. It offers **Open AI systems**.
+
+For the full cycle read [Remediation and retest](../../journeys/remediation-retest.mdx). To see where monitoring findings come from, see [Monitoring](./monitoring.mdx).
+
+<PageAnatomy route="findings" />

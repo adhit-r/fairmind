@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { installGridFixtures } from './grid-fixtures'
 
 test.describe('Navigation', () => {
   test('should navigate to all main pages', async ({ page }) => {
@@ -32,6 +33,7 @@ test.describe('Navigation', () => {
   })
 
   test('should have sidebar navigation', async ({ page }) => {
+    await installGridFixtures(page)
     await page.goto('/dashboard')
     await page.waitForLoadState('networkidle')
     
@@ -62,3 +64,16 @@ test.describe('Navigation', () => {
   })
 })
 
+
+test.describe('Library links', () => {
+  test('Rules group lists Frameworks at /frameworks, not the packs hub', async ({ page }) => {
+    await installGridFixtures(page)
+    // The menu shows the places of the group the page is in; Frameworks sits in Rules and opens /frameworks.
+    await page.goto('/policies')
+    const rules = page.getByRole('navigation', { name: 'Rules' })
+    await expect(rules.getByText('Frameworks', { exact: true })).toBeVisible({ timeout: 30_000 })
+    await rules.getByText('Frameworks', { exact: true }).click()
+    await expect(page).toHaveURL(/\/frameworks$/, { timeout: 30_000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Frameworks' })).toBeVisible()
+  })
+})

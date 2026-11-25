@@ -97,7 +97,7 @@ class HealthCheckService:
             logger.error(f"Readiness check failed: {e}", exc_info=True)
             return {
                 "status": "not_ready",
-                "reason": str(e),
+                "reason": "Readiness check failed; see the server log",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
     

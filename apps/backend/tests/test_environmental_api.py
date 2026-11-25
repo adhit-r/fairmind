@@ -18,7 +18,7 @@ from api.main import app
 from src.api.routers import environmental as environmental_router
 from src.application.services import environmental_service
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("environmental_gate_on")]
 
 
 class _NoRouterSqlSession:

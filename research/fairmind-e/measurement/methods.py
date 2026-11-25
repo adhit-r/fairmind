@@ -101,6 +101,10 @@ class RunResult:
     codecarbon_reason: str
     codecarbon_energy_kwh: float | None = None
     codecarbon_emissions_kg: float | None = None
+    # True when codecarbon found no hardware counters and fell back to its
+    # cpu_load mode (power = CPU load x a TDP constant). Such a figure is an
+    # analytic estimate in kind, so the row is classed ``manual``.
+    codecarbon_degraded: bool = False
     # Unix epoch seconds bracketing the workload itself, so an independently
     # sampled power log can be integrated over exactly this window.
     started_at: float | None = None
@@ -170,6 +174,7 @@ def execute_workload(
             result, started, ended = _timed_run(module, config, seed)
         finally:
             stop_emissions = tracker.stop()
+        degraded = _codecarbon_cpu_load_fallback(tracker)
         data = getattr(tracker, "final_emissions_data", None)
         energy_kwh = getattr(data, "energy_consumed", None)
         emissions_kg = getattr(data, "emissions", None)
@@ -194,6 +199,7 @@ def execute_workload(
             codecarbon_reason=cc_reason,
             codecarbon_energy_kwh=float(energy_kwh),
             codecarbon_emissions_kg=float(emissions_kg),
+            codecarbon_degraded=degraded,
             started_at=started,
             ended_at=ended,
         )
@@ -208,6 +214,23 @@ def execute_workload(
             started_at=started,
             ended_at=ended,
         )
+
+
+def _codecarbon_cpu_load_fallback(tracker: Any) -> bool:
+    """True when the tracker's CPU sensor is in codecarbon's cpu_load mode.
+
+    Reads the private ``_hardware`` list; if the layout changes the answer is
+    False and the row keeps ``tool_estimated``, which is the pre-existing
+    behaviour, not a crash.
+    """
+    try:
+        from codecarbon.external.hardware import CPU, MODE_CPU_LOAD
+    except Exception:
+        return False
+    return any(
+        isinstance(h, CPU) and getattr(h, "_mode", None) == MODE_CPU_LOAD
+        for h in getattr(tracker, "_hardware", []) or []
+    )
 
 
 def manual_energy_kwh(flops: float, gflops_per_watt: float, pue: float) -> float:

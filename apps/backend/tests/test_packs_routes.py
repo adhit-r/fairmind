@@ -185,6 +185,16 @@ def test_catalogue_counts(tmp_database):
     assert len(packs) == 21 and FOUNDATION in {p["id"] for p in packs}
 
 
+def test_catalogue_engine_status_matches_the_code():
+    """'Engine exists' means runnable; rerun scripts/export_pack_catalogue.py when an engine is added."""
+    from src.application.services.evaluation_results import RULES
+    from src.application.services.eval_engines import REGISTRY
+
+    catalogue = json.loads((Path(__file__).resolve().parents[1] / "src/api/routers/pack_catalogue_data/catalogue.json").read_text())
+    exists = {e["id"] for e in catalogue["evaluations"] if e["engine"] == "Engine exists"}
+    assert exists == set(REGISTRY) | set(RULES)
+
+
 def test_install_and_uninstall_toggle(tmp_database):
     _, client = _org(tmp_database)
     assert client.post(f"{PACKS}/{FOUNDATION}/install").json()["installed"] is True
@@ -213,17 +223,14 @@ def test_bundle_install_installs_its_packs(tmp_database):
     done = client.post(f"{PACKS}/bundles/{bundle['id']}/install").json()
     assert done["installedCount"] == len(done["packs"]) == len(bundle["packs"]) and all(p["installed"] for p in done["packs"])
     assert {p["id"] for p in client.get(PACKS).json() if p["installed"]} == {p["id"] for p in bundle["packs"]}
-    # Installed packs cover through their workflows; their evaluations test nothing until a result passes.
-    covered_only = pack_catalogue.Coverage([p["id"] for p in bundle["packs"]], tested_by=[])
-    assert all(t["coveredInstalled"] == covered_only.count(t["key"]) <= t["coveredAll"] for t in done["targets"])
+    # Installing covers nothing yet: a workflow covers once a run of it is done, an evaluation tests once a result passes.
+    assert all(t["coveredInstalled"] == 0 < t["coveredAll"] for t in done["targets"])
     assert client.post(f"{PACKS}/bundles/nope/install").status_code == 404
 
 
-def test_journey_requirement_moves_from_available_to_covered(tmp_database):
+def test_journey_requirement_moves_from_available_to_covered_once_its_workflow_is_done(tmp_database):
     _, client = _org(tmp_database)
-    # A requirement that only PK-FOUNDATION's workflows cover.
-    only = pack_catalogue.PACK_DONE[FOUNDATION] - set().union(*(d for p, d in pack_catalogue.PACK_DONE.items() if p != FOUNDATION))
-    key = next(k for k in sorted(only) if k in pack_catalogue._C.pack_covers[FOUNDATION])
+    key = sorted(pack_catalogue._C.covers[WORKFLOW])[0]  # a requirement PK-FOUNDATION's policy review covers
     framework = pack_catalogue.REQUIREMENTS[key].framework
 
     def status():
@@ -233,11 +240,34 @@ def test_journey_requirement_moves_from_available_to_covered(tmp_database):
     before, state = status()
     assert state == "available" and before["coveredInstalled"] == 0
     client.post(f"{PACKS}/{FOUNDATION}/install")
+    installed, state = status()
+    assert state == "available" and installed["coveredInstalled"] == 0  # installing is not doing the work
+    assert _submit(client, _decide(client, _to_gate(client), "approve"))["status"] == "done"
     after, state = status()
     assert state == "covered" and after["coveredInstalled"] > 0
     assert after["coveredAll"] == before["coveredAll"]
     assert [s["installed"] for s in after["steps"] if s["pack"] == FOUNDATION] == [True]
     assert FOUNDATION in {j["contributingPacks"][0] for j in client.get(f"{PACKS}/journeys").json() if j["key"] == framework}
+
+
+def test_a_rejected_run_does_not_cover_and_a_rerun_keeps_coverage(tmp_database):
+    _, client = _org(tmp_database)
+    key = sorted(pack_catalogue._C.covers[WORKFLOW])[0]
+    framework = pack_catalogue.REQUIREMENTS[key].framework
+
+    def status():
+        journey = client.get(f"{PACKS}/journeys/{framework}").json()
+        return {r["key"]: r["status"] for g in journey["groups"] for r in g["requirements"]}[key]
+
+    client.post(f"{PACKS}/{FOUNDATION}/install")
+    run = _decide(client, _to_gate(client), "reject")
+    while run["status"] != "done":
+        run = _submit(client, run)
+    assert status() == "available"  # risk accepted is not the work done
+    assert _submit(client, _decide(client, _to_gate(client), "approve"))["status"] == "done"
+    assert status() == "covered"
+    _start(client)  # a re-run in progress does not take the coverage away
+    assert status() == "covered"
 
 
 def test_journeys_list_has_five_active_requirements_each(tmp_database):
@@ -255,8 +285,9 @@ def test_evaluations_filter_by_pillar_and_engine(tmp_database):
     _, client = _org(tmp_database)
     everything = client.get(f"{PACKS}/evaluations").json()
     assert len(everything) == 109
-    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Partial"}).json()
-    assert len(secure) == 6 and all(e["pillar"] == "SECURE" and e["engine"] == "Partial" for e in secure)
+    secure = client.get(f"{PACKS}/evaluations", params={"pillar": "SECURE", "engine": "Engine exists"}).json()
+    assert secure and all(e["pillar"] == "SECURE" and e["engine"] == "Engine exists" for e in secure)
+    assert client.get(f"{PACKS}/evaluations", params={"engine": "Partial"}).json() == []
     drift = client.get(f"{PACKS}/evaluations", params={"q": "data drift"}).json()
     assert [e["id"] for e in drift] == ["EV-DAT-01"] and drift[0]["tests"] and drift[0]["installed"] is False
     assert client.get(f"{PACKS}/evaluations/EV-DAT-01").json()["pack"]["id"] == drift[0]["pack"]["id"]
@@ -345,6 +376,10 @@ def test_changes_loop_through_revise_then_escalate_after_three_rounds(tmp_databa
     run = _decide(client, run, "request_changes", "still not right")
     assert run["events"][-4]["payload"]["escalated"]
     assert ("step.completed", "escalate") in _kinds(run)
+    # The ledger says who was told; it never claims a message nobody sent.
+    told = next(e["payload"] for e in run["events"] if (e["kind"], e["stepId"]) == ("step.completed", "escalate"))
+    assert told["notificationSent"] == (told["recipients"] > 0)
+    assert told["notificationSent"] or told["reason"]
     assert (run["currentStep"], run["waitingFor"]) == (ASK_STEP, "approval")
     assert _approval_count(tmp_database, run["id"]) == 5
 
@@ -557,8 +592,8 @@ def test_adding_a_framework_installs_its_packs_and_journeys_show_waiting_runs(tm
     after = next(j for j in client.get(f"{PACKS}/journeys").json() if j["key"] == "ISO42001")
     policy = next(w for w in after["workflows"] if w["id"] == WORKFLOW)
     assert policy["status"] == "waiting" and policy["stage"] and after["waiting"] == 1
-    # Installed packs cover through their workflows; their evaluations count only once a result passes.
-    assert after["coveredInstalled"] == pack_catalogue.Coverage(before["contributingPacks"], tested_by=[]).count("ISO42001")
+    # A waiting run covers nothing: workflows cover once a run is done, evaluations once a result passes.
+    assert after["coveredInstalled"] == 0
 
     journey = client.get(f"{PACKS}/journeys/ISO42001").json()
     assert all(w["stage"] for g in journey["groups"] for r in g["requirements"] for w in r["workflows"])
@@ -660,7 +695,7 @@ def test_india_bias_needs_an_india_attribute_and_drift_needs_a_baseline(tmp_data
     _store(tmp_database, org_id, system, "monitoring", monitoring, "2026-11-01T12:00:00")
     drift = client.get(f"{PACKS}/evaluations/EV-FAI-07").json()["results"]
     assert drift["status"] == "insufficient" and drift["systems"][0]["detail"] == "No baseline run to compare against"
-    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"] is None  # no engine and no stored results to read
+    assert client.get(f"{PACKS}/evaluations/EV-SEC-22").json()["results"]["status"] == "not_run"  # engine since Nov 2026, not run yet
     assert client.get(f"{PACKS}/evaluations/EV-TST-01").json()["results"]["status"] == "not_run"  # has an engine, not run yet
 
 
@@ -877,3 +912,145 @@ def test_the_agent_only_does_a_step_that_is_waiting_for_output(tmp_database):
     _, client = _installed_org(tmp_database)
     gate = _to_gate(client)
     assert client.post(f"{PACKS}/runs/{gate['id']}/steps/{gate['currentStep']}/agent").status_code == 409
+
+
+def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_database, monkeypatch):
+    from api.routes import llm
+
+    org_id, client = _org(tmp_database)
+    assert client.post(f"{PACKS}/ask", json={"question": "Which systems are blocked?"}).status_code == 409  # no provider yet
+    system = _system(tmp_database, org_id)
+    _store(tmp_database, org_id, system, "fairness_test", _fairness(False), "2026-11-01T10:00:00")
+    _save_provider(client)
+    seen = {}
+
+    async def answer(conn, system_prompt, user, schema):
+        seen["prompt"] = json.loads(user)
+        return {"answer": "Credit model fails fairness.", "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
+            "model": conn.model, "latencyMs": 5, "usage": {}}
+
+    monkeypatch.setattr(llm, "complete", answer)
+    body = client.post(f"{PACKS}/ask", json={"question": "Which systems are blocked?"}).json()
+    assert body["answer"] == "Credit model fails fairness."
+    assert body["systems"] == [{"id": system, "name": "Credit model", "reason": "Fairness fails"}]
+    assert body["systemsRead"] == 1 and seen["prompt"]["question"] == "Which systems are blocked?"
+    gate = seen["prompt"]["facts"]["systems"][0]
+    assert gate["verdict"] and any(c["label"] for c in gate["checks"])
+
+    async def failing(conn, system_prompt, user, schema):
+        raise llm.LLMError("Anthropic is rate limiting this key")
+
+    monkeypatch.setattr(llm, "complete", failing)
+    failed = client.post(f"{PACKS}/ask", json={"question": "Anything?"})
+    assert failed.status_code == 502 and failed.json()["detail"] == "Anthropic is rate limiting this key"
+    assert client.post(f"{PACKS}/ask", json={"question": ""}).status_code == 422
+
+
+def _finish(client, workflow, **body):
+    """Run a workflow with no branching step to done, approving at its gate."""
+    run = _start(client, workflow, **body)
+    while run["status"] != "done":
+        run = _decide(client, run, "approve") if run["waitingFor"] == "approval" else _submit(client, run)
+    return run
+
+
+def _gate_check(engine, system_id, check):
+    from sqlalchemy.orm import Session
+    from api.routes.fairness_runs import _gate_payload
+
+    with Session(bind=engine) as db:
+        return next(c for c in _gate_payload(db, system_id, "high")["checks"] if c["key"] == check)
+
+
+def test_a_completed_oversight_run_attests_the_gate_check_and_a_rejected_one_does_not(tmp_database):
+    org_id, client = _org(tmp_database)
+    client.post(f"{PACKS}/PK-OVERSIGHT/install")
+    system = _system(tmp_database, org_id)
+    rejected = _start(client, "human_oversight_effectiveness", system_id=system)
+    while rejected["waitingFor"] == "input":
+        rejected = _submit(client, rejected)
+    assert _decide(client, rejected, "reject")["status"] == "done"
+    assert _gate_check(tmp_database, system, "human_oversight")["state"] == "open"
+
+    run = _finish(client, "human_oversight_effectiveness", system_id=system)
+    check = _gate_check(tmp_database, system, "human_oversight")
+    assert (check["state"], check["evidenceClass"]) == ("attested", "manual")
+    with tmp_database.connect() as conn:
+        content = conn.execute(text("SELECT content_json FROM governance_evidence WHERE id = :id"), {"id": check["evidenceId"]}).scalar()
+    assert json.loads(content) == {"runId": run["id"], "workflowId": "human_oversight_effectiveness", "sealedHeadHash": run["events"][-1]["hash"]}
+
+
+def test_a_completed_run_does_not_shadow_a_measured_evaluation_run_of_its_check(tmp_database):
+    from database.governance_models import GovernanceEvidence
+
+    org_id, client = _org(tmp_database)
+    client.post(f"{PACKS}/PK-OVERSIGHT/install")
+    system = _system(tmp_database, org_id)
+    with tmp_database.begin() as conn:
+        conn.execute(GovernanceEvidence.__table__.insert().values(
+            id=str(uuid.uuid4()), system_id=system, org_id=str(org_id), evidence_type="evaluation_run", confidence=1.0, status="collected",
+            content_json=json.dumps({"evaluationId": "EV-OVS-01", "status": "passed"}), metadata_json=json.dumps({"provenance_class": "measured"}),
+            created_at=datetime.now(timezone.utc).isoformat(),
+        ))
+    assert _gate_check(tmp_database, system, "human_oversight")["state"] == "proven"
+    _finish(client, "human_oversight_effectiveness", system_id=system)
+    check = _gate_check(tmp_database, system, "human_oversight")
+    assert (check["state"], check["evidenceClass"]) == ("proven", "measured")
+
+
+def _change(engine, org_id, system_id, reopens, number=1):
+    from database.governance_models import GovernanceSystemChange
+
+    with engine.begin() as conn:
+        conn.execute(GovernanceSystemChange.__table__.insert().values(
+            system_id=system_id, org_id=str(org_id), number=number, parts_json='["threshold"]', reopens_json=json.dumps(reopens),
+            material=True, recorded_by="owner", seal="x",
+        ))
+
+
+def test_a_run_a_change_superseded_is_labelled_reopened_and_does_not_block_the_attestation(tmp_database):
+    from sqlalchemy.orm import Session
+    from api.routes.ai_governance import _fetch_evidence_records, _summarize_evidence
+    from api.routes.fairness_runs import _gate_payload
+    from database.governance_models import GovernanceEvidence
+
+    org_id, client = _org(tmp_database)
+    client.post(f"{PACKS}/PK-OVERSIGHT/install")
+    system = _system(tmp_database, org_id)
+    with tmp_database.begin() as conn:
+        conn.execute(GovernanceEvidence.__table__.insert().values(
+            id=str(uuid.uuid4()), system_id=system, org_id=str(org_id), evidence_type="evaluation_run", confidence=1.0, status="collected",
+            content_json=json.dumps({"evaluationId": "EV-OVS-01", "status": "passed"}), metadata_json=json.dumps({"provenance_class": "measured"}),
+            created_at="2026-11-01T10:00:00+00:00",
+        ))
+    _change(tmp_database, org_id, system, ["fairness"])  # reopens fairness only, but makes every earlier evaluation run stale
+    with Session(bind=tmp_database) as db:
+        gate = _gate_payload(db, system, "high")
+        summary = _summarize_evidence(_fetch_evidence_records(db, system), system, db)
+    check = next(c for c in gate["checks"] if c["key"] == "human_oversight")
+    assert (check["state"], check.get("reopenedBy")) == ("open", 1) and "Change 1 reopened human oversight" in gate["reasons"]
+    assert "human oversight evidence" in summary["missingSignals"]  # the file says what the gate says
+    _finish(client, "human_oversight_effectiveness", system_id=system)
+    check = _gate_check(tmp_database, system, "human_oversight")
+    assert (check["state"], check["evidenceClass"]) == ("attested", "manual")
+
+
+def test_a_system_view_and_its_agent_see_only_that_systems_results(tmp_database):
+    from sqlalchemy.orm import Session
+    from api.routes import packs
+
+    org_id, client = _org(tmp_database)
+    tested, untested = _system(tmp_database, org_id, "Tested model"), _system(tmp_database, org_id, "Untested model")
+    _store(tmp_database, org_id, tested, "fairness_test", _fairness(True), "2026-11-01T10:00:00")
+    key = "NISTRMF|MEASURE 2.11"
+    org_wide = {e["id"]: e["result"] for e in _requirement(client, "NISTRMF", key)["evaluations"]}
+    journey = client.get(f"{PACKS}/journeys/NISTRMF", params={**client.params, "system": untested}).json()
+    mine = {e["id"]: e["result"] for g in journey["groups"] for r in g["requirements"] if r["key"] == key for e in r["evaluations"]}
+    assert org_wide["EV-FAI-01"] == "passed" and mine["EV-FAI-01"] == "not_run"
+
+    client.post(f"{PACKS}/{FOUNDATION}/install")
+    started = _start(client, WORKFLOW, system_id=untested)
+    with Session(bind=tmp_database) as db:
+        run = db.execute(text("SELECT * FROM workflow_runs WHERE id = :id"), {"id": started["id"]}).mappings().fetchone()
+        facts = packs._agent_facts(db, run, packs._run_steps(db, run)[1], [])
+    assert facts["evaluations"] == []  # the other system's pass is not this system's

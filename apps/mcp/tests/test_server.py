@@ -45,6 +45,8 @@ def test_tools_are_registered(client):
     assert asyncio.run(go()) == {
         "list_systems", "release_gate", "clause_map", "run_fairness_test", "record_monitoring_snapshot", "attest_check",
         "list_evaluations", "describe_evaluation", "run_evaluation",
+        "get_system", "register_system", "create_evidence_pack", "verify_evidence_pack", "record_finding", "list_findings", "create_remediation_task",
+        "update_remediation_task", "request_release_approval", "generate_report",
     }
 
 
@@ -73,7 +75,7 @@ def test_clause_map_passes_frameworks(client):
     }
     result = call(client, "clause_map", {"system_id": "s1", "frameworks": ["EUAIA"]})
     client.clause_map.assert_called_once_with("s1", ["EUAIA"])
-    assert "EU AI Act (EUAIA): 1 proven, 0 attested, 1 open of 2 clauses" in result.content[0].text and "open: Art 14" in result.content[0].text
+    assert "EU AI Act (EUAIA): 1 proven, 0 partial, 0 attested, 1 open of 2 clauses" in result.content[0].text and "open: Art 14" in result.content[0].text
 
 
 def test_run_fairness_test(client):
@@ -147,3 +149,15 @@ def test_run_evaluation_error_is_a_tool_error(client):
     client.run_evaluation.side_effect = FairMindError("Evaluation EV-SEC-01 failed: no judge")
     result = call(client, "run_evaluation", {"system_id": "s1", "evaluation_id": "EV-SEC-01", "use_connection": True})
     assert result.isError and "no judge" in result.content[0].text
+
+
+def test_clause_map_strict_audit_fails_on_partial_and_excluded_counts_closed(client):
+    client.clause_map.return_value = {
+        "verdict": "go", "confidence": 0.9,
+        "frameworks": [{"key": "ISO42001", "name": "ISO/IEC 42001", "counts": {"proven": 0, "partial": 1, "attested": 0, "excluded": 1, "open": 0, "total": 2},
+                        "clauses": [{"control": "A.7.2", "state": "partial"}, {"control": "A.10.4", "state": "excluded"}]}],
+    }
+    assert call(client, "clause_map", {"system_id": "s1"}).structuredContent["auditReady"] is True
+    result = call(client, "clause_map", {"system_id": "s1", "strict": True})
+    assert result.structuredContent["auditReady"] is False and "1 excluded" in result.content[0].text
+    assert "strict audit: not ready, A.7.2 open or partial" in result.content[0].text

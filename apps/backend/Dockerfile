@@ -1,5 +1,5 @@
 # Multi-stage production-ready Dockerfile
-FROM python:3.11-slim@sha256:b596083aa14d47c78a652138aa9b98607585499d7c7ec343ae378f6c5770822d as builder
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 as builder
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -23,7 +23,7 @@ COPY requirements.txt pyproject.toml ./
 RUN pip install --require-hashes -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim@sha256:b596083aa14d47c78a652138aa9b98607585499d7c7ec343ae378f6c5770822d as production
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 as production
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -64,5 +64,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Expose port
 EXPOSE 8000
 
-# Start command
+# Start command. One worker on purpose: the policy-alert and autopilot loops in
+# api/main.py run once per worker and would send duplicate alerts and runs. Sync
+# handlers already run in the threadpool, so one slow request no longer stalls
+# the rest. ponytail: add workers after those loops take a Postgres advisory lock.
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

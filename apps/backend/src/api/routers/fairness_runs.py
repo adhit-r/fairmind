@@ -8,6 +8,9 @@ PUT  /systems/{id}/monitoring-policy       set them; stale monitoring stops coun
 POST /systems/{id}/attestations            a person states a check is satisfied; manual evidence
 GET  /systems/{id}/gate                    verdict, confidence, check states, the release decision status, why, and the path to the next verdict
 GET  /systems/{id}/clause-map              the gate per framework clause, scoped to the confirmed frameworks
+GET  /systems/{id}/soa/{framework}         that framework's clauses as a Statement of Applicability CSV
+GET  /estate/gates                         the gate of every system in the caller's org, without explain and path
+GET  /frameworks/{key}/systems             per requirement, the cell of every system that confirmed the framework
 
 Mounted under /api/v1/ai-governance next to the governance router and sharing
 its org scoping and system access rules.
@@ -20,12 +23,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from api.routes.ai_governance import (
     CLOSED_RISK_STATUSES,
+    OrgMembership,
+    org_member,
     _authenticated_actor,
     _caller_org,
     _enforce_org_scope,
@@ -41,14 +46,20 @@ from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
 from pydantic import BaseModel, Field
 
-from src.application.services.clause_map_service import clause_map
+from src.application.services.plan_assignment_service import plan_frameworks
+from src.application.services.clause_map_service import POLICY_CONTROL, _catalogue, clause_map, statement_of_applicability, tracked_requirements
 from src.application.services.decision_seal_service import list_seals
+from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
 from src.application.services.fairness_run_service import (
+    point_estimate_status,
     ATTESTABLE_CHECKS,
     ATTESTATION_CONFIDENCE,
+    TIERS,
     FairnessRunError,
     confirm_attributes,
     effective_tier,
+    evaluation_status,
+    gate_check,
     gate_explain,
     inspect_csv,
     path_forward,
@@ -63,8 +74,10 @@ router = APIRouter(tags=["fairness"], dependencies=[Depends(_enforce_org_scope)]
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-async def _read_upload(file: UploadFile) -> bytes:
-    data = await file.read()
+def _read_upload(file: UploadFile) -> bytes:
+    # Sync on purpose: the handlers run in the threadpool, and the form parser has
+    # already spooled the upload. Read one byte past the limit, never the whole file.
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if not data:
         raise HTTPException(status_code=422, detail="The uploaded file is empty")
     if len(data) > MAX_UPLOAD_BYTES:
@@ -85,13 +98,13 @@ def _environmental_assessed(db: Session, system_id: str) -> Optional[Dict[str, A
     """The newest assessment's provenance and confidence, which the gate counts like any other record; None when there is none."""
     try:
         row = db.execute(
-            text("SELECT provenance_class, confidence_score FROM governance_environmental_assessments WHERE system_id = :id ORDER BY created_at DESC LIMIT 1"),
+            text("SELECT provenance_class, confidence_score, created_at FROM governance_environmental_assessments WHERE system_id = :id ORDER BY created_at DESC LIMIT 1"),
             {"id": system_id},
         ).fetchone()
     except Exception:
         db.rollback()
         return None
-    return {"provenance_class": row[0] or "unknown", "confidence": float(row[1] or 0.0)} if row else None
+    return {"provenance_class": row[0] or "unknown", "confidence": float(row[1] or 0.0), "created_at": row[2]} if row else None
 
 
 DEFAULT_CADENCE_HOURS = 168
@@ -134,7 +147,9 @@ def _approval_blockers(db: Session, system_id: str, gate: Dict[str, Any]) -> Lis
         env = {"blocked": True, "code": "missing_environmental_evidence"}
     counts = (_release_blockers(db, system_id) or {}).get("blockers", {})
     findings, tasks = counts.get("openHighOrCriticalFindings", 0), counts.get("activeCriticalTasks", 0)
-    out = [{"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": env.get("code") != "missing_environmental_evidence"}]
+    out = []
+    if env.get("code") != "not_required":
+        out.append({"key": "environmental_assessment", "text": "An environmental impact assessment is on file", "met": env.get("code") != "missing_environmental_evidence"})
     if env.get("blocked") and env.get("code") != "missing_environmental_evidence":
         out.append({"key": env.get("code"), "text": ENV_BLOCKER_TEXT.get(env.get("code"), env.get("reason")), "met": False})
     out.append({"key": "open_findings", "text": "No open high or critical findings" + (f" ({findings} open)" if findings else ""), "met": not findings})
@@ -144,17 +159,140 @@ def _approval_blockers(db: Session, system_id: str, gate: Dict[str, Any]) -> Lis
     return out
 
 
+def _attested_controls(db: Session, system_id: str) -> Dict[str, Dict[str, Any]]:
+    """Controls no gate check reaches that the organisation has stated or worked through, for the clause map.
+
+    From done workflow runs a reviewer did not reject (organisation-scope ones, plus runs on this system; a systemless
+    run of a system-scope workflow counts for no system, as the plan reads it), from plan attestations and from
+    acknowledgements of a published policy's current version (the policy control), keyed by common control; the newest
+    wins. Gate controls are left out: their checks count already.
+    """
+    from api.routes.pack_catalogue import WORKFLOWS
+    from src.application.services.clause_map_service import GATE_CONTROLS
+
+    org = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+    if not org:
+        return {}
+    found = []
+    for wf_id, sys_id, at, by in db.execute(
+        text(
+            "SELECT r.workflow_id, r.ai_system_id, COALESCE(r.finished_at, r.updated_at), r.started_by FROM workflow_runs r "
+            "LEFT JOIN governance_approval_requests a ON a.id = r.approval_request_id "
+            "WHERE r.org_id = :org AND r.status = 'done' AND (a.status IS NULL OR a.status <> 'rejected')"
+        ),
+        {"org": org},
+    ).fetchall():
+        wf = WORKFLOWS.get(wf_id)
+        if wf and wf.commonControl and (sys_id == system_id or (wf.scope or "").lower().startswith("organisation")):
+            found.append((wf.commonControl, {"statement": f"{wf.name}: completed", "by": by, "at": str(at), "source": "workflow"}))
+    for task_key, statement, by, at in db.execute(
+        text("SELECT task_key, statement, attested_by, created_at FROM plan_attestations WHERE org_id = :org"), {"org": org}
+    ).fetchall():
+        if task_key.startswith("control:"):
+            found.append((task_key.split(":", 1)[1], {"statement": statement, "by": by, "at": str(at), "source": "plan_attestation"}))
+    for name, people, at in db.execute(
+        text(
+            "SELECT p.name, COUNT(*), MAX(k.acknowledged_at) FROM org_policy_acknowledgements k "
+            "JOIN org_policies p ON p.id = k.policy_id AND p.org_id = k.org_id "
+            "WHERE k.org_id = :org AND p.status <> 'retired' AND k.version = p.published_version GROUP BY p.id, p.name"
+        ),
+        {"org": org},
+    ).fetchall():
+        found.append((POLICY_CONTROL, {"statement": f"{name}: acknowledged by {people}", "by": None, "at": str(at), "source": "policy_acknowledgement"}))
+    out: Dict[str, Dict[str, Any]] = {}
+    for control, att in sorted(found, key=lambda f: f[1]["at"]):
+        if control not in GATE_CONTROLS:
+            out[control] = {**att, "confidence": ATTESTATION_CONFIDENCE}
+    return out
+
+
+def _control_evidence(db: Session, system_id: str, records: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    """(accepted evidence mappings, control assessments by clause) of this system, for the clause map.
+
+    The assurance store's controls are framework clauses: a control's catalogue clause is its framework's key joined to
+    its external id, or to its parent requirement for a workbook sub-control. Rows are read in the system's own org. A
+    mapping counts while its run passed and still stands (the readiness rule) and its record survives the latest
+    material change; its evidence is weighed as the gate weighs any record.
+    """
+    from src.application.services.fairness_run_service import _weigh
+    from src.application.services.framework_catalog_service import CATALOGUE_STORE_KEYS
+    from src.application.services.governance_assurance_service import GovernanceAssuranceService
+
+    org = db.execute(text("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+    if not org:
+        return [], {}
+    catalogue_key = {store: key for key, store in CATALOGUE_STORE_KEYS.items()}
+    active = _catalogue()["active"]
+    clause_of: Dict[str, str] = {}
+    by_clause: Dict[str, List[Dict[str, Any]]] = {}
+    for assessment_id, applicability, status, justification, external_id, parent, store_key in db.execute(
+        text(
+            "SELECT a.id, a.applicability, a.status, a.justification, d.external_id, d.parent_requirement_id, v.framework_key "
+            "FROM governance_control_assessments a "
+            "JOIN governance_control_definitions d ON d.id = a.control_definition_id "
+            "JOIN governance_framework_versions v ON v.id = d.framework_version_id "
+            "JOIN governance_framework_assignments g ON g.id = a.framework_assignment_id "
+            "WHERE a.org_id = :org AND a.system_id = :id AND d.active = 1 "
+            # only the newest assignment of each framework: an older version still assigned does not speak for the clause
+            "AND NOT EXISTS (SELECT 1 FROM governance_framework_assignments g2 "
+            "JOIN governance_framework_versions v2 ON v2.id = g2.framework_version_id "
+            "WHERE g2.org_id = g.org_id AND g2.system_id = g.system_id AND v2.framework_key = v.framework_key "
+            "AND (g2.created_at, g2.id) > (g.created_at, g.id))"
+        ),
+        {"org": org, "id": system_id},
+    ).fetchall():
+        fw = catalogue_key.get(store_key)
+        key = next((k for k in (f"{fw}|{external_id}", f"{fw}|{parent}") if k in active), None) if fw else None
+        if key:
+            clause_of[assessment_id] = key
+            by_clause.setdefault(key, []).append(
+                {"applicability": applicability, "status": status, "justification": justification, "confidence": ATTESTATION_CONFIDENCE}
+            )
+    outdated = GovernanceAssuranceService(db)._outdated_catalogue_runs(org, system_id)
+    current = {r["id"]: r for r in records}
+    mapped = []
+    for assessment_id, evidence_id, run_id in db.execute(
+        text(
+            "SELECT m.control_assessment_id, m.artifact_evidence_id, r.id FROM governance_control_evidence m "
+            "JOIN governance_evidence_runs r ON r.id = m.evidence_id AND r.org_id = m.org_id "
+            "WHERE m.org_id = :org AND m.system_id = :id AND m.state = 'accepted' AND r.result = 'passed'"
+        ),
+        {"org": org, "id": system_id},
+    ).fetchall():
+        record = current.get(evidence_id)
+        if assessment_id not in clause_of or run_id in outdated or not record:
+            continue
+        evidence_class, confidence, state = _weigh(record)
+        evaluation_id = (record.get("content") or {}).get("evaluationId") if isinstance(record.get("content"), dict) else None
+        mapped.append({"clause": clause_of[assessment_id], "evaluationId": evaluation_id, "evidenceId": evidence_id, "state": state,
+                       "evidenceClass": evidence_class, "confidence": round(confidence, 2), "label": evaluation_id or "evidence run"})
+    return mapped, by_clause
+
+
 def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision: bool = True) -> Dict[str, Any]:
     """The release gate; ``with_decision=False`` reads the evidence alone, as the reviewer deciding a request needs it.
 
     The verdict is computed on the effective tier: the suggested tier while a lower confirmed tier awaits a
     second person. ``explain`` and ``path`` say why the verdict is what it is and what would move it.
     """
-    records = _fetch_evidence_records(db, system_id)
+    reopened = reopened_since(db, system_id)
+    on_file = _fetch_evidence_records(db, system_id)
+    records = drop_superseded(on_file, {k: at for k, (at, _) in reopened.items()})
+    kept = {id(r) for r in records}
+    # an evaluation run goes stale at any material change, so its check is reopened by the newest one
+    stale_runs = {gate_check(r) for r in on_file if evaluation_status(r) and id(r) not in kept}
+    newest_change = max(reopened.values()) if reopened else None
     cadence = _monitoring_policy(db, system_id)["cadenceHours"]
     applicability, stage = _system_applicability(db, system_id)
     tier = effective_tier(risk_tier, applicability)
-    assessed = _environmental_assessed(db, system_id)
+    from src.application.services.environmental_service import system_environmental_gate_enabled
+
+    from api.routes.system_targets import _row as _target_row
+
+    with_env = system_environmental_gate_enabled(db, system_id)
+    assessed = _environmental_assessed(db, system_id) if with_env else None
+    if assessed and "environmental" in reopened and not drop_superseded([{"evidenceType": "environmental", "createdAt": assessed["created_at"]}], {"environmental": reopened["environmental"][0]}):
+        assessed = None  # assessed before the change that reopened it
     approval = decided = None
     if with_decision:
         approval = _fetch_latest_system_approval(db, system_id)
@@ -165,16 +303,33 @@ def _gate_payload(db: Session, system_id: str, risk_tier: str, *, with_decision:
     gate = release_gate(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence,
         approval_status=approval["status"] if approval else "not_requested", last_decision=decided[0] if decided else None,
+        include_environmental=with_env,
     )
     gate["reasons"] += tier_reasons(risk_tier, applicability)
+    for check in gate["checks"]:
+        change = reopened.get(check["key"]) or (newest_change if check["key"] in stale_runs else None)
+        if change and check["state"] == "open":
+            check["reopenedBy"] = change[1]
+            gate["reasons"].append(f"Change {change[1]} reopened {check['label'].lower()}")
     _apply_policy_rules(db, system_id, gate)
     gate["systemId"] = system_id
     gate["riskTier"] = risk_tier
-    gate["explain"] = gate_explain(risk_tier, applicability)
+    gate["explain"] = gate_explain(risk_tier, applicability, include_environmental=with_env)
+    has_target = _target_row(db, system_id) is not None
+    from api.routes.agent_traces import has_decision_runs, has_live_runs  # function-level: that router imports packs, which imports this one
     gate["path"] = path_forward(
         tier, records, environmental_assessed=assessed, monitoring_cadence_hours=cadence, lifecycle_stage=stage,
-        approval_blockers=_approval_blockers(db, system_id, gate),
+        approval_blockers=_approval_blockers(db, system_id, gate), include_environmental=with_env,
+        model_target=has_target, live_runs=has_live_runs(db, system_id),
+        decision_runs=has_target and has_decision_runs(db, system_id),
     )
+    if not has_target and any(c["key"] == "fairness" and c["state"] != "proven" for c in gate["checks"]):
+        gate["path"]["notes"].append(
+            "Fairness is priced as a CSV fairness run because no model connection is saved. For a chat or LLM system, save how "
+            "FairMind calls it under Model connection, and fairness is measured by a behaviour test instead."
+        )
+    gate["attestedControls"] = _attested_controls(db, system_id)
+    gate["mappedEvidence"], gate["controlAssessments"] = _control_evidence(db, system_id, records)
     if gate["policy"]["blocking"]:
         gate["path"]["notes"].append("A failing blocking policy rule holds the verdict at no go until the rule passes; evidence steps do not change that.")
     if gate["policy"]["warnings"]:
@@ -208,7 +363,7 @@ def _apply_policy_rules(db: Session, system_id: str, gate: Dict[str, Any]) -> No
 
 
 @router.post("/systems/{system_id}/fairness-runs/inspect")
-async def inspect_fairness_csv(
+def inspect_fairness_csv(
     system_id: str,
     file: UploadFile = File(...),
     current_user: TokenData = Depends(get_current_active_user),
@@ -217,7 +372,7 @@ async def inspect_fairness_csv(
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user)
     try:
-        return inspect_csv(await _read_upload(file), _last_run_metadata(db, system_id))
+        return inspect_csv(_read_upload(file), _last_run_metadata(db, system_id))
     except FairnessRunError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
@@ -238,7 +393,7 @@ def _confirmation_summary(record: Optional[Dict[str, Any]]) -> Optional[Dict[str
 
 
 @router.post("/systems/{system_id}/fairness-runs")
-async def create_fairness_run(
+def create_fairness_run(
     system_id: str,
     http: Request,
     file: UploadFile = File(...),
@@ -251,6 +406,7 @@ async def create_fairness_run(
     confirm_sha256: Optional[str] = Form(None),
     removal_reason: Optional[str] = Form(None),
     uncovered_reason: Optional[str] = Form(None),
+    keep_for_agent: Optional[str] = Form(None, description='"1" keeps this file so the release autopilot can re-run it'),
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -258,7 +414,7 @@ async def create_fairness_run(
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_row(db, system_id)
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
-    data = await _read_upload(file)
+    data = _read_upload(file)
     now = datetime.now(timezone.utc).isoformat()
     try:
         # The suggestion is recomputed from these bytes, so a client cannot choose what it was shown.
@@ -314,9 +470,19 @@ async def create_fairness_run(
             "created_at": now,
         },
     )
+    kept = False
+    if keep_for_agent == "1" and confirmation["confirmed"]:
+        from api.routes.autopilot import keep_source  # autopilot imports this module
+
+        keep_source(
+            db, _caller_org(http), system_id, "fairness", kind="upload", file_name=file.filename, content=data,
+            actor=_authenticated_actor(current_user), basis={"evidenceId": evidence_id, "mapping": result["mapping"]},
+        )
+        kept = True
     db.commit()
     return {
         "runId": run_id,
+        "keptForAgent": kept,
         "evidenceId": evidence_id,
         "systemId": system_id,
         "title": title,
@@ -327,7 +493,7 @@ async def create_fairness_run(
 
 
 @router.get("/systems/{system_id}/fairness-runs")
-async def list_fairness_runs(
+def list_fairness_runs(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -344,12 +510,14 @@ async def list_fairness_runs(
     runs: List[Dict[str, Any]] = []
     for row in rows:
         content = json.loads(row[2] or "{}")
+        status = point_estimate_status(content)  # the same rule as EV-FAI-01/02 and the gate, not the significance-gated checks
         runs.append(
             {
                 "evidenceId": row[0],
                 "title": row[1],
                 "rows": content.get("rows"),
-                "allChecksPass": content.get("all_checks_pass"),
+                "allChecksPass": content.get("all_checks_pass") if status is None else status == "passed",
+                "status": status,
                 "attributes": [
                     {
                         "attribute": a.get("attribute"),
@@ -370,7 +538,7 @@ async def list_fairness_runs(
 
 
 @router.get("/systems/{system_id}/clause-map")
-async def get_clause_map(
+def get_clause_map(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -393,8 +561,30 @@ async def get_clause_map(
     return payload
 
 
+@router.get("/systems/{system_id}/soa/{framework_key}")
+def get_statement_of_applicability(
+    system_id: str,
+    framework_key: str,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """One framework's clauses for this system as Statement of Applicability CSV, from the same clause map."""
+    if framework_key not in _catalogue()["frameworks"]:
+        raise HTTPException(status_code=404, detail="Framework not found")
+    _ensure_tables(db)
+    _require_system_access(db, system_id, current_user)
+    system = _system_row(db, system_id)
+    frameworks = clause_map(_gate_payload(db, system_id, system.risk_tier), frameworks=[framework_key])["frameworks"]
+    if not frameworks:
+        raise HTTPException(status_code=404, detail="The framework has no active clauses")
+    return Response(
+        statement_of_applicability(frameworks[0]), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="soa-{framework_key}-{system_id}.csv"'},
+    )
+
+
 @router.get("/systems/{system_id}/seals")
-async def get_decision_seals(
+def get_decision_seals(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -406,7 +596,7 @@ async def get_decision_seals(
 
 
 @router.get("/systems/{system_id}/gate")
-async def get_release_gate(
+def get_release_gate(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -415,6 +605,191 @@ async def get_release_gate(
     _require_system_access(db, system_id, current_user)
     system = _system_row(db, system_id)
     return _gate_payload(db, system_id, system.risk_tier)
+
+
+class ReleaseGateSettings(BaseModel):
+    environmentalGate: bool
+
+
+@router.get("/release-gate/settings", response_model=ReleaseGateSettings)
+def get_release_gate_settings(http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)):
+    """Which checks this organisation's release gate weighs. Any member may read it."""
+    from src.application.services.environmental_service import environmental_gate_enabled
+
+    return {"environmentalGate": environmental_gate_enabled(db, m.org_id)}
+
+
+@router.put("/release-gate/settings", response_model=ReleaseGateSettings)
+def set_release_gate_settings(
+    body: ReleaseGateSettings, http: Request, m: OrgMembership = Depends(org_member), db: Session = Depends(get_db)
+):
+    """Owners and admins choose whether environmental impact counts in release decisions; each change is audited."""
+    if str(m.role).lower() not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only an owner or admin of the organisation can change the release gate")
+    db.execute(
+        text(
+            "UPDATE organizations SET metadata = COALESCE(metadata::jsonb, '{}'::jsonb) || jsonb_build_object('environmentalGate', CAST(:on AS boolean)), "
+            "updated_at = NOW() WHERE id::text = :id"
+        ),
+        {"on": body.environmentalGate, "id": m.org_id},
+    )
+    db.execute(
+        text(
+            "INSERT INTO org_audit_logs (id, org_id, user_id, action, resource_type, resource_id, changes, status, ip_address, user_agent, created_at) "
+            "VALUES (:id, :org, :user, :action, 'organization', :org, CAST(:changes AS json), 'success', :ip, :ua, NOW())"
+        ),
+        {
+            "id": str(uuid.uuid4()), "org": m.org_id, "user": m.user_id,
+            "action": "release_gate_environmental_" + ("on" if body.environmentalGate else "off"),
+            "changes": json.dumps({"environmentalGate": body.environmentalGate}),
+            "ip": http.client.host if http.client else None, "ua": http.headers.get("user-agent"),
+        },
+    )
+    db.commit()
+    return {"environmentalGate": body.environmentalGate}
+
+
+def _org_systems(db: Session, http: Request) -> List[Any]:
+    # Retired systems leave the live estate; their files stay readable one by one.
+    return db.execute(
+        text("SELECT id, name, risk_tier FROM governance_ai_systems WHERE org_id = :org AND COALESCE(lifecycle_stage, '') <> 'retired'"),
+        {"org": _caller_org(http)},
+    ).fetchall()
+
+
+@router.get("/estate/gates")
+def get_estate_gates(
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The release gate of every system in the caller's org: verdict, confidence and checks, without explain and path."""
+    _ensure_tables(db)
+    out = []
+    # ponytail: N gate computations (~10 queries each); precompute on evidence write if estates pass ~100 systems.
+    for row in _org_systems(db, http):
+        gate = _gate_payload(db, row.id, row.risk_tier)
+        out.append({
+            "systemId": row.id, "verdict": gate["verdict"], "confidence": gate["confidence"], "band": gate["band"], "approvalStatus": gate["approvalStatus"],
+            "checks": [{k: v for k, v in c.items() if k != "detail"} for c in gate["checks"]],
+        })
+    return out
+
+
+WEAKEST_FIRST = ("fails", "stale", "open", "none", "planned", "estimated", "partial", "attested", "excluded", "proven")  # none: nothing reaches the clause
+
+
+def _weakness(state: str) -> int:
+    return WEAKEST_FIRST.index(state) if state in WEAKEST_FIRST else WEAKEST_FIRST.index("open")
+
+
+def _plan_frameworks(db: Session, org_id: str) -> List[str]:
+    """The frameworks the organisation chose in its governance plan; [] before it has a plan."""
+    return plan_frameworks(db, org_id)
+
+
+@router.get("/estate/frameworks")
+def get_estate_frameworks(
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """The frameworks the organisation follows and, per framework, the weakest state of each tracked requirement.
+
+    A framework is followed when the plan chose it or a system confirmed it. A system that has not confirmed its
+    frameworks inherits the plan's; a system that confirmed a list without a plan framework has opted out of it.
+    One gate computation per system, shared by every framework it answers to.
+    """
+    _ensure_tables(db)
+    catalogue = _catalogue()["frameworks"]
+    plan = [k for k in _plan_frameworks(db, _caller_org(http)) if k in catalogue]
+    worst: Dict[str, Dict[str, str]] = {k: {} for k in plan}
+    systems: Dict[str, int] = {k: 0 for k in plan}
+    inherited: Dict[str, int] = {k: 0 for k in plan}
+    confirmed_by: Dict[str, int] = {}
+    unconfirmed = 0
+    for row in _org_systems(db, http):
+        applicability, _ = _system_applicability(db, row.id)
+        if applicability is None:
+            unconfirmed += 1
+            keys = list(plan)
+            for key in keys:
+                inherited[key] += 1
+        else:
+            keys = [f["key"] for f in applicability.get("frameworks") or [] if isinstance(f, dict) and f.get("key") in catalogue]
+            for key in keys:
+                confirmed_by[key] = confirmed_by.get(key, 0) + 1
+        if not keys:
+            continue
+        payload = clause_map(_gate_payload(db, row.id, row.risk_tier), frameworks=keys)
+        cells = {fw["key"]: {c["key"]: c["cell"] for c in fw["clauses"]} for fw in payload["frameworks"]}
+        for key in keys:
+            systems[key] = systems.get(key, 0) + 1
+            fw_worst = worst.setdefault(key, {})
+            for req, state in cells.get(key, {}).items():
+                if req not in fw_worst or _weakness(state) < _weakness(fw_worst[req]):
+                    fw_worst[req] = state
+    out = []
+    for key, count in systems.items():
+        states: Dict[str, int] = {}
+        for state in worst[key].values():
+            states[state] = states.get(state, 0) + 1
+        out.append({
+            "key": key, "systems": count, "tracked": len(tracked_requirements(key)), "states": states,
+            "source": "plan" if key in plan else "system", "inherited": inherited.get(key, 0), "confirmed": confirmed_by.get(key, 0),
+        })
+    return {"unconfirmed": unconfirmed, "plan": plan, "frameworks": out}
+
+
+@router.get("/frameworks/{framework_key}/systems")
+def get_framework_systems(
+    framework_key: str,
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Every requirement of one framework the gate speaks to, with one cell per system that confirmed the framework.
+
+    Systems run from the highest tier down; ``cells`` follows that order. Systems with no confirmed applicability
+    count as ``unconfirmed``, confirmed ones without this framework as ``notInScope``. When the plan chose this
+    framework, unconfirmed systems inherit it and are in scope (``inherited`` counts them).
+    """
+    framework = _catalogue()["frameworks"].get(framework_key)
+    if not framework:
+        raise HTTPException(status_code=404, detail="Framework not found")
+    _ensure_tables(db)
+    followed_by_plan = framework_key in _plan_frameworks(db, _caller_org(http))
+    systems, unconfirmed, not_in_scope, inherited = [], 0, 0, 0
+    for row in _org_systems(db, http):
+        applicability, _ = _system_applicability(db, row.id)
+        if applicability is None:
+            unconfirmed += 1
+            if followed_by_plan:
+                systems.append(row)
+                inherited += 1
+        elif any(isinstance(f, dict) and f.get("key") == framework_key for f in applicability.get("frameworks") or []):
+            systems.append(row)
+        else:
+            not_in_scope += 1
+    systems.sort(key=lambda r: (-TIERS.index(effective_tier(r.risk_tier, None)), r.name))
+    # ponytail: one gate computation per system, as /estate/gates.
+    clauses = []
+    for row in systems:
+        payload = clause_map(_gate_payload(db, row.id, row.risk_tier), frameworks=[framework_key])
+        clauses.append({c["key"]: c for fw in payload["frameworks"] for c in fw["clauses"]})
+    return {
+        "framework": {"key": framework_key, "name": framework.get("name") or framework_key},
+        "systems": [{"id": r.id, "name": r.name, "riskTier": r.risk_tier} for r in systems],
+        "unconfirmed": unconfirmed,
+        "notInScope": not_in_scope,
+        "inherited": inherited,
+        "followedByPlan": followed_by_plan,
+        "requirements": [
+            # a clause nothing reaches for a system has no cell, so the screen falls back to organisation coverage
+            {"key": key, "cells": [{"state": by_key[key]["cell"], "checks": by_key[key]["checks"]} if by_key.get(key, {}).get("cell", "none") != "none" else None for by_key in clauses]}
+            for key in tracked_requirements(framework_key)
+        ],
+    }
 
 
 def _insert_evidence(db: Session, http: Request, current_user: TokenData, system_id: str, *, evidence_type: str, title: str, source: str, content: Dict[str, Any], confidence: float, metadata: Dict[str, Any]) -> str:
@@ -450,7 +825,7 @@ def _latest_fairness_run(db: Session, system_id: str) -> Optional[Dict[str, Any]
 
 
 @router.post("/systems/{system_id}/monitoring-runs")
-async def create_monitoring_run(
+def create_monitoring_run(
     system_id: str,
     http: Request,
     file: UploadFile = File(...),
@@ -469,7 +844,7 @@ async def create_monitoring_run(
     attribute_list = [a.strip() for a in attributes.split(",") if a.strip()]
     try:
         result = run_monitoring(
-            await _read_upload(file),
+            _read_upload(file),
             attributes=attribute_list,
             prediction=prediction or None,
             score=score or None,
@@ -549,7 +924,7 @@ class MonitoringPolicyRequest(BaseModel):
 
 
 @router.get("/systems/{system_id}/monitoring-policy")
-async def get_monitoring_policy(
+def get_monitoring_policy(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -560,7 +935,7 @@ async def get_monitoring_policy(
 
 
 @router.put("/systems/{system_id}/monitoring-policy")
-async def put_monitoring_policy(
+def put_monitoring_policy(
     system_id: str,
     body: MonitoringPolicyRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -593,7 +968,7 @@ async def put_monitoring_policy(
 
 
 @router.get("/systems/{system_id}/monitoring-runs")
-async def list_monitoring_runs(
+def list_monitoring_runs(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -623,7 +998,7 @@ class AttestationRequest(BaseModel):
 
 
 @router.post("/systems/{system_id}/attestations")
-async def create_attestation(
+def create_attestation(
     system_id: str,
     body: AttestationRequest,
     http: Request,

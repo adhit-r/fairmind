@@ -52,7 +52,8 @@ class TestAPIEndpoints:
         response = client.get("/api")
         assert response.status_code == 200
         data = response.json()
-        assert data["name"] == "Fairmind ML Service API"
+        from config.settings import settings
+        assert data["name"] == settings.api_title
         assert "version" in data
         assert "endpoints" in data
     

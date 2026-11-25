@@ -185,6 +185,7 @@ SQL_STATEMENTS = [
     "ALTER TABLE governance_evidence ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft'",
     "ALTER TABLE governance_evidence ADD COLUMN IF NOT EXISTS uploaded_by TEXT",
     "ALTER TABLE governance_evidence ADD COLUMN IF NOT EXISTS captured_at TEXT",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
     """
     CREATE TABLE IF NOT EXISTS governance_evidence_links (
         id TEXT PRIMARY KEY,

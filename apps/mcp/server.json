@@ -1,0 +1,35 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.adhit-r/fairmind",
+  "title": "FairMind",
+  "description": "Release gate for AI systems from FairMind: evaluations, framework evidence and ledger snapshots.",
+  "repository": {
+    "url": "https://github.com/adhit-r/fairmind",
+    "source": "github",
+    "subfolder": "apps/mcp"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "fairmind-mcp",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "FAIRMIND_API_URL",
+          "description": "Base URL of your FairMind host.",
+          "isRequired": true
+        },
+        {
+          "name": "FAIRMIND_API_KEY",
+          "description": "FairMind API key, minted at POST /api/v1/auth/api-keys.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

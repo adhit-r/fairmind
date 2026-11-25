@@ -4,6 +4,7 @@ Handles admin approval notifications and user status emails.
 """
 
 import logging
+from html import escape
 import httpx
 from typing import Optional
 from config.settings import settings
@@ -18,7 +19,7 @@ class ResendEmailService:
         self.api_key = settings.resend_api_key
         self.from_email = settings.resend_from_email
 
-    async def _send(self, to: str, subject: str, html: str) -> bool:
+    async def _send(self, to: str, subject: str, html: str, headers: Optional[dict] = None) -> bool:
         if not self.api_key:
             logger.info(f"[EMAIL console] To: {to} | Subject: {subject}")
             return True
@@ -27,7 +28,7 @@ class ResendEmailService:
                 resp = await client.post(
                     self.API_URL,
                     headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                    json={"from": self.from_email, "to": [to], "subject": subject, "html": html},
+                    json={"from": self.from_email, "to": [to], "subject": subject, "html": html, **({"headers": headers} if headers else {})},
                 )
                 if resp.status_code in (200, 201):
                     logger.info(f"Email sent to {to}: {subject}")
@@ -48,7 +49,11 @@ class ResendEmailService:
     ) -> bool:
         approve_url = f"{settings.frontend_url}/admin/registrations?action=approve&id={request_id}"
         deny_url = f"{settings.frontend_url}/admin/registrations?action=deny&id={request_id}"
-        msg_block = f"<p><strong>Message:</strong> {message}</p>" if message else ""
+        # Everything below except the URLs is requester input from a public form.
+        requester_name, requester_email, org_name, requested_role = (
+            escape(v) for v in (requester_name, requester_email, org_name, requested_role)
+        )
+        msg_block = f"<p><strong>Message:</strong> {escape(message)}</p>" if message else ""
         html = f"""
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
           <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">
@@ -79,25 +84,111 @@ class ResendEmailService:
         """
         return await self._send(admin_email, f"New access request from {requester_name} ({org_name})", html)
 
-    async def send_approval_email(self, user_email: str, user_name: str, org_name: str) -> bool:
+    async def send_approval_email(
+        self, user_email: str, user_name: str, org_name: str, set_password_url: str, expires_minutes: int
+    ) -> bool:
         html = f"""
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
-          <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">
-            Access Approved — FairMind
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:22px;font-weight:600;padding-bottom:12px">
+            Access approved — FairMind
           </h1>
-          <p>Hi <strong>{user_name}</strong>,</p>
-          <p>Your access request for <strong>{org_name}</strong> has been approved.</p>
-          <p>You can now log in to FairMind:</p>
-          <a href="{settings.frontend_url}/auth/login"
-             style="display:inline-block;background:#000;color:#fff;padding:12px 24px;text-decoration:none;font-weight:900;margin-top:16px">
-            Log in to FairMind
+          <p>Hi <strong>{escape(user_name)}</strong>,</p>
+          <p>Your access request for <strong>{escape(org_name)}</strong> has been approved. Choose a password to sign in.</p>
+          <a href="{set_password_url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:16px">
+            Choose your password
           </a>
+          <p style="margin-top:24px;font-size:12px;color:#666">
+            The link works once and expires in {expires_minutes} minutes. After that, use
+            "Forgot password" on <a href="{settings.frontend_url}/login">{settings.frontend_url}/login</a> to get a new one.
+          </p>
         </div>
         """
         return await self._send(user_email, "Your FairMind access has been approved", html)
 
+    async def send_org_invitation(self, email: str, token: str, role: str, expires_at: str) -> bool:
+        url = f"{settings.frontend_url}/invitations/{token}"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:22px;font-weight:600;padding-bottom:12px">You are invited to FairMind</h1>
+          <p>You have been invited to join an organisation on FairMind as <strong>{escape(role)}</strong>.</p>
+          <a href="{url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:16px">
+            Accept invitation
+          </a>
+          <p style="margin-top:24px;font-size:12px;color:#666">The link expires on {escape(expires_at[:10])}.</p>
+        </div>
+        """
+        return await self._send(email, "You are invited to FairMind", html)
+
+    async def send_task_assigned(self, email: str, title: str, about: Optional[str], due: Optional[str], url: str) -> bool:
+        about_line = f"<p style=\"color:#5a5f68\">About: {escape(about)}</p>" if about else ""
+        due_line = f"<p>Due {escape(due)}</p>" if due else ""
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:20px;font-weight:600;padding-bottom:8px">A task was assigned to you</h1>
+          <p><strong>{escape(title)}</strong></p>
+          {about_line}
+          {due_line}
+          <a href="{url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:12px">
+            Open the task
+          </a>
+        </div>
+        """
+        return await self._send(email, f"Task assigned: {title}", html)
+
+    async def send_task_reminder(self, to: str, soon: list, overdue: list, unsubscribe_url: str) -> bool:
+        """One email per person: tasks due tomorrow and tasks that went past their due date.
+
+        Each item is a dict with title, due and url. The unsubscribe link stops reminders only.
+        """
+        def items(rows: list) -> str:
+            return "".join(
+                f'<li style="margin:6px 0"><a href="{escape(r["url"])}" style="color:#15171a">{escape(r["title"])}</a>'
+                f' <span style="color:#5a5f68">due {escape(r["due"])}</span></li>'
+                for r in rows
+            )
+
+        parts = []
+        if overdue:
+            parts.append(f'<h2 style="font-size:15px;font-weight:600;margin:20px 0 4px">Past the due date</h2><ul style="padding-left:18px;margin:0">{items(overdue)}</ul>')
+        if soon:
+            parts.append(f'<h2 style="font-size:15px;font-weight:600;margin:20px 0 4px">Due tomorrow</h2><ul style="padding-left:18px;margin:0">{items(soon)}</ul>')
+        count = len(soon) + len(overdue)
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:20px;font-weight:600;padding-bottom:4px">Your FairMind tasks</h1>
+          {"".join(parts)}
+          <p style="margin-top:28px;font-size:12px;color:#5a5f68">
+            You get this because these tasks are assigned to you.
+            <a href="{escape(unsubscribe_url)}" style="color:#5a5f68">Stop task reminders</a>
+          </p>
+        </div>
+        """
+        if overdue:
+            subject = f"{len(overdue)} task{'s' if len(overdue) != 1 else ''} past the due date" if not soon else f"{count} tasks need you: {len(overdue)} overdue, {len(soon)} due tomorrow"
+        else:
+            subject = f"Due tomorrow: {soon[0]['title']}" if len(soon) == 1 else f"{len(soon)} tasks due tomorrow"
+        headers = {"List-Unsubscribe": f"<{unsubscribe_url}>", "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+        return await self._send(to, subject, html, headers)
+
+    async def send_join_request(self, to: str, requester_name: str, requester_email: str, org_name: str, url: str) -> bool:
+        html = f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e5e5e5;border-radius:14px;padding:32px">
+          <h1 style="font-size:20px;font-weight:600;padding-bottom:8px">Someone asked to join {escape(org_name)}</h1>
+          <p><strong>{escape(requester_name)}</strong> ({escape(requester_email)}) signed up with an address on your organisation's domain.</p>
+          <a href="{url}"
+             style="display:inline-block;background:#15171a;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:600;margin-top:12px">
+            Review the request
+          </a>
+        </div>
+        """
+        return await self._send(to, f"{requester_name} asked to join {org_name}", html)
+
     async def send_denial_email(self, user_email: str, user_name: str, org_name: str, notes: Optional[str] = None) -> bool:
-        notes_block = f"<p><strong>Reason:</strong> {notes}</p>" if notes else ""
+        notes_block = f"<p><strong>Reason:</strong> {escape(notes)}</p>" if notes else ""
+        user_name, org_name = escape(user_name), escape(org_name)
         html = f"""
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:2px solid #000;padding:32px">
           <h1 style="font-size:24px;font-weight:900;border-bottom:4px solid #000;padding-bottom:16px">

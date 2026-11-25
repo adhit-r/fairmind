@@ -205,6 +205,13 @@ class User(Base):
     # Account status
     is_active = Column(Boolean, default=True)
     is_verified_email = Column(Boolean, default=False)
+    # Bumped to end every session of this user; refresh tokens carry the value they were issued at.
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
+    # Set from the unsubscribe link in a task reminder email; assignment notices still go out.
+    task_reminders_off = Column(Boolean, nullable=True)
+    # What's new: the latest release tag this person opened, and whether they asked for release emails (off unless set).
+    seen_release = Column(String(64), nullable=True)
+    release_emails = Column(Boolean, nullable=True)
 
     # Organization relationships
     # organizations.owner_id points back at users, so these two keys are added after both tables exist (use_alter).
@@ -378,6 +385,19 @@ class OrganizationMember(Base):
     inviter = relationship("User", foreign_keys=[invited_by])
 
 
+class OrganizationDomain(Base):
+    """An email domain an organisation owns: sign-ups from it are routed to the org's admins, not a new org."""
+
+    __tablename__ = "org_domains"
+
+    id = Column(UUID, primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain = Column(String(253), nullable=False, unique=True)  # lower case, no leading @
+    verified_via = Column(String(30), nullable=False)  # owner_email | platform_admin
+    added_by = Column(TextUUID, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
 class OrganizationInvitation(Base):
     """Organization invitation model for pending member invitations.
 
@@ -447,3 +467,19 @@ class OrganizationAuditLog(Base):
     organization = relationship("Organization", back_populates="audit_logs")
     user = relationship("User")
 
+
+
+class RefreshToken(Base):
+    """One row per issued browser refresh token, for rotation and reuse detection.
+
+    Each refresh marks its token used and issues a new one; a token presented
+    again after use means someone else holds it, so every session of that user
+    ends (config.auth.AuthManager.refresh_session).
+    """
+    __tablename__ = "refresh_tokens"
+
+    jti = Column(String(64), primary_key=True)
+    user_id = Column(String, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

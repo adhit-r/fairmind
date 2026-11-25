@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from config.auth import TokenData, get_current_active_user
 from config.settings import settings
 from database.connection import get_db
+from src.application.services.plan_assignment_service import ensure_plan_assignments
 from src.application.ports.evidence_ingestion import (
     EvidenceAuditWriteError,
     EvidenceMappingReferenceError,
@@ -80,6 +81,7 @@ class AssessmentUpdateRequest(BaseModel):
     status: str | None = None
     applicability: str | None = None
     owner: str | None = None
+    justification: str | None = Field(default=None, max_length=2000)
 
 
 class EvidenceMappingRequest(BaseModel):
@@ -713,6 +715,7 @@ def create_system(
     )
     if system is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    ensure_plan_assignments(db, membership.org_id, [system["id"]])
     return system
 
 
@@ -903,9 +906,12 @@ def create_evidence_mapping(
 ):
     service = _service(db)
     _require_mutation(membership, service)
-    mapping, created = service.create_evidence_mapping(
-        membership.org_id, evidence_id, request.control_assessment_id, request.rationale
-    )
+    try:
+        mapping, created = service.create_evidence_mapping(
+            membership.org_id, evidence_id, request.control_assessment_id, request.rationale
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
     if mapping is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Evidence or control assessment not found"

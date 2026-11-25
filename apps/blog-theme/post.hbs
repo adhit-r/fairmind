@@ -19,6 +19,14 @@
     <div class="prose gh-content" data-post>
       {{content}}
     </div>
+    <nav class="share" aria-label="Share this guide">
+      <span>Share</span>
+      <a href="https://www.linkedin.com/sharing/share-offsite/?url={{url absolute="true"}}" target="_blank" rel="noopener">LinkedIn</a>
+      <a href="https://x.com/intent/post?text={{encode title}}&amp;url={{url absolute="true"}}" target="_blank" rel="noopener">X</a>
+      <a href="https://bsky.app/intent/compose?text={{encode title}}%20{{url absolute="true"}}" target="_blank" rel="noopener">Bluesky</a>
+      <a href="mailto:?subject={{encode title}}&amp;body={{url absolute="true"}}">Email</a>
+      <button type="button" data-copy="{{url absolute="true"}}">Copy link</button>
+    </nav>
   </article>
   <aside class="side">
     <section class="mod facts-mod">

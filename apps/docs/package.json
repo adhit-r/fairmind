@@ -4,8 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3333",
+    "prebuild": "tsx scripts/coverage.ts",
     "build": "next build",
-    "start": "next start -p 3333"
+    "start": "next start -p 3333",
+    "coverage": "tsx scripts/coverage.ts",
+    "outline": "tsx capture/outline.ts",
+    "capture": "tsx capture/run.ts"
   },
   "dependencies": {
     "fumadocs-mdx": "^12.0.3",
@@ -18,6 +22,8 @@
     "@types/node": "^20.19.43",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "playwright-core": "^1.56.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.5.3"
   },
   "overrides": {
@@ -25,5 +31,7 @@
     "picomatch": "^4.0.4",
     "postcss": "^8.5.18",
     "sharp": "^0.35.0"
-  }
+  },
+  "description": "The FairMind documentation: every app page with a narrated recording and a click-through demo, captured from the read-only demo",
+  "type": "module"
 }

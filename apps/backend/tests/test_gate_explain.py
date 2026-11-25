@@ -10,6 +10,9 @@ from sqlalchemy import text as sql
 from api.main import app
 from src.application.services.fairness_run_service import effective_tier, gate_explain, path_forward, release_gate, tier_reasons
 from tests.auth_helpers import auth_headers
+import pytest
+
+pytestmark = pytest.mark.usefixtures("environmental_gate_on")  # written for the five-check gate
 
 NOW = datetime(2026, 11, 7, tzinfo=timezone.utc)
 PASSING_RUN = {"id": "run", "evidenceType": "fairness_test", "confidence": 0.95, "metadata": {"provenance_class": "measured"}, "timestamp": "2026-11-06T00:00:00+00:00", "content": {"all_checks_pass": True, "attributes": []}}
@@ -34,16 +37,18 @@ def test_medium_first_verdict_path():
     assert any(n.startswith("Medium, high and critical systems never get a plain go") for n in path["notes"])
 
 
-def test_high_tier_ceiling_stays_below_measured_with_the_real_caps():
+def test_high_tier_reaches_conditional_go_through_catalogue_evaluations():
+    # Catalogue evaluation runs are the measured route for data governance, human oversight and monitoring (1.0 each).
     live = path_forward("high", [PASSING_RUN], lifecycle_stage="operate", now=NOW)
-    assert live["target"] == "conditional_go" and live["options"] == [] and live["toGo"] is None  # high never gets a plain go
-    assert live["ceiling"] == {"confidence": 0.65, "verdict": "no_go"}  # 0.95 + 0.85 + 0.85 + 0.30 + 0.30
-    assert "Conditional go needs confidence 0.70; the most FairMind can record today reaches 0.65. Data governance (0.30 at most) and human oversight (0.30 at most) have no measured route today." in live["notes"]
-    # Before release there are no shadow or live decisions, so no monitoring snapshot is offered.
+    assert live["target"] == "conditional_go" and live["toGo"] is None  # high never gets a plain go
+    assert _steps(live["options"][0]) == [("data_governance", "evaluation_run"), ("human_oversight", "evaluation_run"), ("monitoring", "evaluation_run")]
+    assert (live["options"][0]["confidenceAfter"], live["options"][0]["verdictAfter"]) == (0.79, "conditional_go")
+    assert live["ceiling"] == {"confidence": 0.96, "verdict": "conditional_go"}  # 0.95 + 1.0 * 3 + 0.85
+    assert not any("no measured route today" in n for n in live["notes"])
+    # Before release there are no shadow or live decisions, so no monitoring snapshot is offered; an evaluation still is.
     early = path_forward("high", [PASSING_RUN], now=NOW)
-    assert early["ceiling"] == {"confidence": 0.54, "verdict": "no_go"}  # 0.95 + 0.85 + 0.30 * 3
-    # Monitoring can only be attested before release; an upload counts no more than an attestation.
-    assert any(n.endswith("Data governance (0.30 at most), human oversight (0.30 at most) and monitoring in place (0.30 at most) have no measured route today.") for n in early["notes"])
+    assert early["ceiling"] == {"confidence": 0.96, "verdict": "conditional_go"}
+    assert ("monitoring", "monitoring_snapshot") not in [st for o in early["options"] for st in _steps(o)]
 
 
 def test_proven_and_attested_checks_get_no_weaker_steps():
@@ -54,7 +59,8 @@ def test_proven_and_attested_checks_get_no_weaker_steps():
     assert steps and not any(check == "fairness" for check, _ in steps)
     assert ("human_oversight", "attest") not in steps and ("environmental", "attest") not in steps
     assert ("monitoring", "monitoring_snapshot") not in steps
-    assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["verdictAfter"] == "go"
+    # one step each: a measured evaluation run beats a tool-estimated assessment
+    assert _steps(path["options"][0]) == [("data_governance", "evaluation_run")] and path["options"][0]["verdictAfter"] == "go"
     assert sorted(_steps(path["options"][1])) == [("data_governance", "attest"), ("monitoring", "attest")]
     assert path["toGo"] == path["options"][0]  # the next verdict up is go, so the go path is the same route
     # Nothing left to raise: a proven environmental check gets no step and the target is already met.
@@ -66,7 +72,7 @@ def test_an_existing_monitoring_run_allows_a_snapshot_and_ties_go_to_the_approva
     path = path_forward("medium", [PASSING_RUN, stale], monitoring_cadence_hours=168, approval_blockers=NO_ASSESSMENT, now=NOW)
     # A snapshot and an assessment each reach 0.36; only the assessment also clears the approval blocker.
     assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["approvalReady"] is True
-    assert path["ceiling"]["confidence"] == 0.65 and path["ceiling"]["verdict"] == "conditional_go"  # 0.95 + 0.85 + 0.85 + 0.30 + 0.30
+    assert path["ceiling"]["confidence"] == 0.96 and path["ceiling"]["verdict"] == "conditional_go"  # 0.95 + 1.0 * 3 + 0.85
 
 
 def test_a_manual_assessment_on_file_still_leaves_a_tool_assessment_step():
@@ -80,19 +86,20 @@ def test_a_low_tier_at_no_go_also_gets_the_shortest_path_to_go():
     path = path_forward("low", [], approval_blockers=NO_ASSESSMENT, now=NOW)
     assert path["target"] == "conditional_go"
     assert _steps(path["options"][0]) == [("environmental", "environmental_assessment")] and path["options"][0]["verdictAfter"] == "conditional_go"
-    # A run and an assessment reach 0.34, one short of 0.35. The third step is one manual step: an upload and an
-    # attestation both count 0.30, the upload is listed first, and data governance beats human oversight only by name.
+    # An evaluation run (1.0) and an assessment (0.85) reach 0.37, past 0.35, with no manual step; data governance
+    # beats the other evaluation-run checks only by name.
     go = path["toGo"]
-    assert _steps(go) == [("fairness", "fairness_run"), ("environmental", "environmental_assessment"), ("data_governance", "evidence_upload")]
-    assert (go["kind"], go["confidenceAfter"], go["verdictAfter"], go["approvalReady"]) == ("measured_first", 0.4, "go", True)
+    assert _steps(go) == [("data_governance", "evaluation_run"), ("environmental", "environmental_assessment")]
+    assert (go["kind"], go["confidenceAfter"], go["verdictAfter"], go["approvalReady"]) == ("measured_first", 0.37, "go", True)
 
 
 def test_equal_paths_prefer_measured_evidence_over_a_tool_estimate():
     attested = {"id": "mon", "evidenceType": "monitoring", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T00:00:00+00:00"}
     path = path_forward("medium", [PASSING_RUN, attested], lifecycle_stage="operate", now=NOW)
-    # One step each and nothing else blocks approval: the measured snapshot (0.36) beats the assessment (0.42).
-    assert _steps(path["options"][0]) == [("monitoring", "monitoring_snapshot")]
-    assert path["options"][0]["confidenceAfter"] == 0.36 and path["toGo"] is None
+    # One step each and nothing else blocks approval: a measured evaluation run (0.45) beats the assessment (0.42),
+    # and outranks the measured snapshot (0.36) on confidence.
+    assert _steps(path["options"][0]) == [("data_governance", "evaluation_run")]
+    assert path["options"][0]["confidenceAfter"] == 0.45 and path["toGo"] is None
 
 
 def test_go_is_not_promised_past_a_failing_measured_check():
@@ -100,6 +107,13 @@ def test_go_is_not_promised_past_a_failing_measured_check():
     path = path_forward("low", [failing], environmental_assessed=True, now=NOW)
     assert path["target"] == "go" and path["options"] == []
     assert "Go is not reachable while a measured check fails; it needs a passing re-run." in path["notes"]
+
+
+def test_each_check_names_the_class_of_the_record_it_read():
+    manual = {"id": "ho", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T00:00:00+00:00"}
+    checks = {c["key"]: c for c in release_gate("medium", [PASSING_RUN, manual], environmental_assessed=True, now=NOW)["checks"]}
+    assert (checks["fairness"]["evidenceClass"], checks["human_oversight"]["evidenceClass"], checks["monitoring"]["evidenceClass"]) == ("measured", "manual", None)
+    assert checks["environmental"]["evidenceClass"] == "tool_estimated" and checks["environmental"]["evidenceId"] is None  # classed from its assessment
 
 
 def test_effective_tier_explain_and_reasons():
@@ -172,7 +186,9 @@ def test_a_lowered_tier_gates_on_the_suggestion_until_another_person_accepts_it(
     # A confirmed framework with no crosswalk to the gate checks is still named, with no clauses.
     _set_applicability(sid, {**lowered, "frameworks": [{"key": "ATLAS", "name": "MITRE ATLAS"}]})
     unmapped = client.get(f"/api/v1/ai-governance/systems/{sid}/clause-map").json()
-    assert unmapped["scoped"] is True and unmapped["frameworks"] == [] and unmapped["confirmed"] == [{"key": "ATLAS", "name": "MITRE ATLAS"}]
+    # a confirmed framework no check reaches is still read clause by clause, every clause open
+    assert unmapped["scoped"] is True and unmapped["confirmed"] == [{"key": "ATLAS", "name": "MITRE ATLAS"}]
+    assert [f["key"] for f in unmapped["frameworks"]] == ["ATLAS"] and unmapped["frameworks"][0]["counts"]["open"] == unmapped["frameworks"][0]["counts"]["total"]
 
 
 def test_a_failing_warning_rule_keeps_the_path_from_promising_go(monkeypatch):

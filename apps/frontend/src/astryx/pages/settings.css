@@ -1,0 +1,9 @@
+.fm-st { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; }
+.fm-st-nav { display: grid; gap: 2px; align-content: start; }
+.fm-st-body { min-width: 0; max-width: 900px; }
+.fm-st-embed { padding: 16px; border-radius: var(--radius-container); border: 1px solid var(--color-border); background: var(--color-background-card); }
+.fm-st-key { display: block; padding: 10px 12px; border-radius: var(--radius-element); background: var(--color-background-muted); font-family: var(--font-family-code, ui-monospace, monospace); font-size: 13px; word-break: break-all; }
+.fm-st-pad { padding: 16px; }
+.fm-st-roles { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.fm-st-roles li { display: grid; gap: 2px; }
+@media (max-width: 760px) { .fm-st { grid-template-columns: minmax(0, 1fr); gap: 16px; } .fm-st-nav { grid-auto-flow: column; overflow-x: auto; } }

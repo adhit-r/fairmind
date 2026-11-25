@@ -68,7 +68,7 @@ def test_task_accuracy_without_a_baseline_is_insufficient_and_bad_task_is_reject
 
 def _answers(consistent):
     rows = []
-    for i in range(20):
+    for i in range(30):  # 30 consistent prompts bound the inconsistent share under 10%
         base = f"The filing deadline for form {i} is the thirty first of July"
         for j in range(3):
             # inconsistent prompts get a completely different answer on the last repeat
@@ -329,3 +329,14 @@ def test_verbatim_reproduction_rejects_missing_column_and_non_utf8_text():
         _run("EV-LEG-01", outputs=d, protected=b"\xff\xfe\x00bad")
     with pytest.raises(EngineError):
         _run("EV-LEG-01", outputs=d, protected=b"   \n")
+
+
+def test_the_rate_upper_bound_is_one_sided_clopper_pearson():
+    from src.application.services.eval_engines.common import sampled, samples_needed, upper_bound
+
+    # Published one-sided 95% Clopper-Pearson upper bounds.
+    assert upper_bound(0, 20) == pytest.approx(0.1391, abs=1e-4) and upper_bound(3, 10) == pytest.approx(0.6066, abs=1e-4)
+    assert upper_bound(5, 100) == pytest.approx(0.1023, abs=1e-4) and upper_bound(4, 4) == 1.0
+    assert samples_needed(0.02) == 149 and samples_needed(0.1) == 29
+    assert sampled("passed", 0, 149, 0.02) == ("passed", "") and sampled("passed", 0, 148, 0.02)[0] == "insufficient"
+    assert sampled("failed", 0, 1, 0.02) == ("failed", "") and sampled("passed", 0, 1, 0.0) == ("passed", "")  # zero tolerance

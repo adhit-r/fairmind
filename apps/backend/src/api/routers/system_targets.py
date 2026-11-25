@@ -9,6 +9,10 @@ Two kinds of target: an OpenAI-compatible Chat Completions endpoint, or a plain 
 a JSON body (a template with {{prompt}} in it) and answers JSON (the answer read at a dot path). The
 endpoint goes through the same public-https guard as the organisation's own model, and the auth value is
 encrypted the same way its key is. Mounted under /api/v1/packs beside the packs router.
+
+A target saved with via=runner is called by the FairMind CLI inside the customer's network
+(`fairmind eval run --live --local`), never by this server: its URL may be private, no auth value is
+stored (the runner holds it), and ask() refuses it.
 """
 
 import json
@@ -16,6 +20,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,7 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.routes import llm
-from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes.ai_governance import _ensure_tables, _load_json_value, _utc_now_iso
 from api.routes.packs import _manager, _member
 from database.connection import get_db
 from src.application.services.governance_assurance_service import OrgMembership
@@ -91,6 +96,14 @@ class Target:
     def intended_use(self) -> str:
         return self.fields.get("intendedUse", "")
 
+    @property
+    def via_runner(self) -> bool:
+        return self.fields.get("via") == "runner"
+
+
+def runner_command(evaluation_id: str, system_id: str) -> str:
+    return f"fairmind eval run {evaluation_id} --system {system_id} --live --local"
+
 
 def _fill(template: Any, prompt: str) -> Any:
     if isinstance(template, str):
@@ -113,8 +126,10 @@ def _at(data: Any, path: str) -> Any:
     return data
 
 
-async def ask(target: Target, prompt: str) -> str:
-    """One prompt to the system under test and its answer as text."""
+async def ask(target: Target, prompt: str, attempts: int = 1) -> str:
+    """One prompt to the system under test and its answer as text; attempts > 1 retries rate limits and gateway errors."""
+    if target.via_runner:
+        raise Unreachable("This system is called by your runner inside your network, not by FairMind")
     url = llm._public_https(target.url, "Endpoint")  # again at call time: DNS can change after save
     headers = {}
     if target.kind == "openai":
@@ -129,7 +144,8 @@ async def ask(target: Target, prompt: str) -> str:
         body = _fill(json.loads(target.fields["requestTemplate"]), prompt)
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT_S, headers=headers, follow_redirects=False) as client:
-            resp = await client.post(url, json=body)
+            # a chat model is asked at temperature 0 where it accepts it, so a run can be repeated
+            resp = await (llm.post_at_zero(client, url, attempts, body) if target.kind == "openai" else llm.post_with_retry(client, url, attempts, json=body))
     except httpx.TimeoutException:
         raise TimedOut("The system did not answer in time")
     except httpx.HTTPError:
@@ -161,6 +177,7 @@ async def ask(target: Target, prompt: str) -> str:
 
 class TargetBody(BaseModel):
     kind: Literal["openai", "http"]
+    via: Literal["fairmind", "runner"] = "fairmind"
     url: str = Field(min_length=1, max_length=500)
     model: str = Field(default="", max_length=200)
     systemPrompt: str = Field(default="", max_length=20000)
@@ -206,11 +223,18 @@ def stored_target(db: Session, org_id: str, system_id: str) -> Target:
     auth = llm.decrypt(row["auth_enc"])
     if row["auth_enc"] and auth is None:
         raise HTTPException(status_code=409, detail="The stored auth value for this system can no longer be read; enter it again")
-    return Target(row["kind"], row["url"], json.loads(row["fields_json"] or "{}"), auth)
+    fields = json.loads(row["fields_json"] or "{}")
+    if not fields.get("intendedUse"):  # the purpose a person gave when classifying the system, when the connection has none
+        meta = db.execute(text("SELECT metadata_json FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).scalar()
+        purpose = ((_load_json_value(meta, {}).get("applicability") or {}).get("answers") or {}).get("intendedPurpose")
+        fields["intendedUse"] = (purpose or "").strip()
+    return Target(row["kind"], row["url"], fields, auth)
 
 
 def _fields(body: TargetBody) -> Dict[str, str]:
     fields = {"systemPrompt": body.systemPrompt.strip(), "intendedUse": body.intendedUse.strip()}
+    if body.via == "runner":
+        fields["via"] = "runner"
     if body.kind == "openai":
         if not body.model.strip():
             raise HTTPException(status_code=422, detail="Enter the model name the endpoint expects")
@@ -227,24 +251,32 @@ def _fields(body: TargetBody) -> Dict[str, str]:
 
 
 @router.get("/ai-systems/{system_id}/target")
-async def get_target(system_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_target(system_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
     return {"target": _json(_row(db, system_id))}
 
 
 @router.put("/ai-systems/{system_id}/target")
-async def save_target(system_id: str, body: TargetBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_target(system_id: str, body: TargetBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
-    try:
-        url = llm._public_https(body.url, "Endpoint")
-    except llm.LLMError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    if body.via == "runner":
+        # Never fetched by this server, so a private address is fine; only the runner calls it.
+        url = body.url.strip().rstrip("/")
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise HTTPException(status_code=422, detail="Endpoint must be an http:// or https:// URL")
+    else:
+        try:
+            url = llm._public_https(body.url, "Endpoint")
+        except llm.LLMError as e:
+            raise HTTPException(status_code=422, detail=str(e))
     fields = _fields(body)
     stored = _row(db, system_id)
-    auth = (body.authValue or "").strip() or None
-    keep = auth is None and stored is not None and stored["kind"] == body.kind
+    runner = body.via == "runner"
+    auth = None if runner else (body.authValue or "").strip() or None  # a runner keeps its own auth value
+    keep = not runner and auth is None and stored is not None and stored["kind"] == body.kind
     db.execute(
         text(
             "INSERT INTO governance_ai_system_targets (system_id, org_id, kind, url, fields_json, auth_enc, auth_hint, "
@@ -270,7 +302,7 @@ async def save_target(system_id: str, body: TargetBody, m: OrgMembership = Depen
 
 
 @router.delete("/ai-systems/{system_id}/target")
-async def delete_target(system_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def delete_target(system_id: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
     db.execute(text("DELETE FROM governance_ai_system_targets WHERE system_id = :id"), {"id": system_id})
@@ -283,6 +315,9 @@ async def test_target(system_id: str, m: OrgMembership = Depends(_manager), db: 
     _ensure_tables(db)
     _system_or_404(db, m.org_id, system_id)
     target = stored_target(db, m.org_id, system_id)
+    if target.via_runner:
+        raise HTTPException(status_code=409, detail="FairMind cannot reach this system; your runner calls it during a run: "
+                            + runner_command("<evaluation>", system_id))
     db.rollback()  # hold no transaction open while the system answers
     started = time.monotonic()
     try:

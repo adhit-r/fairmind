@@ -1,6 +1,7 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
+import { describeChart } from '@/components/charts/describe'
 import {
   PieChart as RechartsPieChart,
   Pie,
@@ -29,39 +30,41 @@ export function PieChart({ title, data, className }: PieChartProps) {
   return (
     <Card className={cn('p-6 fm-card', className)}>
       <h3 className="text-lg font-bold mb-4">{title}</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <RechartsPieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            outerRadius={100}
-            fill="#8884d8"
-            dataKey="value"
-            stroke="#000"
-            strokeWidth={2}
-          >
-            {data.map((entry, index) => (
-              <Cell
-                key={`cell-${index}`}
-                fill={entry.color || COLORS[index % COLORS.length]}
-                stroke="#000"
-                strokeWidth={2}
-              />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{
-              border: '2px solid #000',
-              borderRadius: '0',
-              backgroundColor: '#fff',
-            }}
-          />
-          <Legend />
-        </RechartsPieChart>
-      </ResponsiveContainer>
+      <div role="img" aria-label={describeChart(title, data.map((d) => [d.name, d.value]))}>
+        <ResponsiveContainer width="100%" height={300}>
+          <RechartsPieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              labelLine={false}
+              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              outerRadius={100}
+              fill="#8884d8"
+              dataKey="value"
+              stroke="#000"
+              strokeWidth={2}
+            >
+              {data.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.color || COLORS[index % COLORS.length]}
+                  stroke="#000"
+                  strokeWidth={2}
+                />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                border: '2px solid #000',
+                borderRadius: '0',
+                backgroundColor: '#fff',
+              }}
+            />
+            <Legend />
+          </RechartsPieChart>
+        </ResponsiveContainer>
+      </div>
     </Card>
   )
 }

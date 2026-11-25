@@ -68,7 +68,15 @@ class EvidenceCollectionService:
     """Service for collecting and managing compliance evidence"""
     
     def __init__(self):
-        self.evidence_store: Dict[str, Evidence] = {}
+        from database.record_store import PersistentMap
+
+        # Kept in the database so evidence ids stay resolvable after a restart.
+        self.evidence_store = PersistentMap(
+            "compliance_evidence",
+            load=Evidence.model_validate,
+            dump=lambda e: e.model_dump(mode="json"),
+            scope_of=lambda e: e.metadata.get("org_id"),
+        )
         self.technical_controls = self._initialize_technical_controls()
     
     def _initialize_technical_controls(self) -> Dict[str, TechnicalControl]:
@@ -279,7 +287,7 @@ class EvidenceCollectionService:
         
         checks = {
             "completeness": dataset_quality.get("completeness", 0) >= 0.95,
-            "accuracy": dataset_quality.get("accuracy", 0) >= 0.90,
+            "accuracy": (dataset_quality.get("accuracy") or 0) >= 0.90,
             "consistency": dataset_quality.get("consistency", 0) >= 0.95,
             "missing_values": dataset_quality.get("missing_rate", 1.0) <= 0.05,
         }
@@ -298,7 +306,8 @@ class EvidenceCollectionService:
         privacy_controls = system_data.get("privacy_controls", {})
         
         checks = {
-            "pii_detection": privacy_controls.get("pii_detected", False) == False or privacy_controls.get("pii_anonymized", False),
+            # pass only on a recorded scan: no PII found, or PII found and anonymised
+            "pii_detection": privacy_controls.get("pii_detected") is False or privacy_controls.get("pii_anonymized") is True,
             "consent_tracking": privacy_controls.get("consent_tracked", False),
             "data_minimization": privacy_controls.get("data_minimization_applied", False),
             "retention_policy": privacy_controls.get("retention_policy_defined", False),
@@ -405,7 +414,7 @@ class EvidenceCollectionService:
         
         checks = {
             "monitoring_enabled": drift_metrics.get("monitoring_enabled", False),
-            "accuracy_stable": abs(drift_metrics.get("accuracy_change", 0)) <= 0.05,
+            "accuracy_stable": isinstance(drift_metrics.get("accuracy_change"), (int, float)) and abs(drift_metrics["accuracy_change"]) <= 0.05,
             "alerts_configured": drift_metrics.get("alerts_configured", False),
         }
         

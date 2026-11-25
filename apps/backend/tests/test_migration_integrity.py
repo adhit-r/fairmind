@@ -1051,10 +1051,8 @@ async def test_database_initialization_failure_closes_every_resource(
         "database.connect",
         "engine.dispose",
         "database.disconnect",
-        "pool.close",
     ]
     assert manager.database is None
-    assert manager._pool is None
     assert manager.engine is None
     assert manager.SessionLocal is None
 
@@ -1148,7 +1146,6 @@ async def test_postgresql_runtime_families_receive_one_fixed_search_path(
 
     expected_path = 'pg_catalog,"trusted",pg_temp'
     assert database_options["server_settings"] == {"search_path": expected_path}
-    assert pool_options["server_settings"] == {"search_path": expected_path}
     assert bound_engines == [
         (primary_engine, "trusted"),
         (repository_engine, "trusted"),

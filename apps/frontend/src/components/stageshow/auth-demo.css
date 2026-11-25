@@ -1,0 +1,81 @@
+/* Corner bleed: the app window inset a gutter from the top and left, running
+   off the right and bottom of the panel. */
+.fa {
+  & .ss-stage { --gutter: 56px; }
+
+  .fa-window {
+    position: absolute;
+    top: var(--gutter);
+    left: var(--gutter);
+    width: 860px;
+    height: 640px;
+    box-shadow: var(--ss-shadow-hero);
+  }
+
+  .ss-window__side .fm-rail { border: 0; background: none; padding: 2px 10px 10px; }
+
+  .fa-body { display: flex; flex-direction: column; height: 100%; padding: 4px 16px 0; background: #fff; }
+
+  .fa-toolbar { display: flex; align-items: center; gap: 12px; max-width: 452px; height: 36px; margin-bottom: 10px; }
+  .fa-sources { display: flex; gap: 6px; }
+  .fa-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 10px 0 8px;
+    border-radius: 999px;
+    border: 1px solid var(--fm-line);
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: var(--fm-ink2);
+    white-space: nowrap;
+  }
+  .fa-source i { width: 6px; height: 6px; border-radius: 50%; background: #2f9e5b; }
+  .fa-source--on { background: #fff; }
+  .fa-busy { display: inline-flex; align-items: center; gap: 6px; height: 16px; }
+  .fa-spin { display: grid; place-items: center; width: 12px; height: 12px; }
+  .fa-cand[data-gone] { opacity: 0; }
+
+  .fa-found { max-width: 452px; margin-bottom: 12px; padding: 12px 12px 12px; border-radius: 12px; background: var(--fm-bg); }
+  .fa-found .fm-label { margin-bottom: 8px; }
+  .fa-cand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 6px 0 10px;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(20, 20, 30, 0.05), 0 0 0 1px var(--fm-line);
+  }
+  .fa-cand__name { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--fm-ink); }
+  .fa-cand__tier { margin-left: auto; font-size: 11.5px; color: var(--fm-ink3); }
+
+  /* The estate grid, at the Matrix's pitch: 28px cells, hairline rows. */
+  .fa-grid { --name: 176px; --cell: 28px; }
+  .fa-head,
+  .fa-row { display: grid; grid-template-columns: var(--name) repeat(5, var(--cell)) 1fr; align-items: end; }
+  .fa-head { height: 96px; padding-bottom: 8px; border-bottom: 1px solid var(--fm-line); }
+  .fa-head__sys,
+  .fa-head__gate { padding-left: 2px; }
+  .fa-head__gate { padding-left: 14px; }
+  .fa-vh {
+    justify-self: center;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--fm-ink2);
+    white-space: nowrap;
+  }
+  .fa-row { align-items: center; height: 40px; border-bottom: 1px solid var(--fm-line); }
+  .fa-row__name { display: flex; align-items: center; min-width: 0; padding-left: 2px; }
+  .fa-row__real { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--fm-ink); }
+  .fa-row__cell { display: grid; place-items: center; }
+  .fa-row__gate { padding-left: 14px; }
+  .fa-row .fm-cel[data-state='none'] { box-shadow: none; }
+
+
+  .fa-rest { position: absolute; width: 1px; height: 1px; }
+}

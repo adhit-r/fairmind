@@ -1,0 +1,55 @@
+---
+title: Getting around
+description: Seven menu groups down the left, a panel of their pages beside them, one file for every AI system, and a search that reaches every page.
+---
+
+<Tabs items={['Watch', 'Try it']}>
+  <Tab value="Watch"><Watch page="app/getting-around" /></Tab>
+  <Tab value="Try it"><TryIt page="app/getting-around" /></Tab>
+</Tabs>
+
+The app lives at [app.fairmind.xyz](https://app.fairmind.xyz). Down its left edge runs a strip of seven icons, one for
+each group of pages. Choosing an icon opens the group's first page, with all its pages listed in a panel beside the strip. Settings sits at the foot of
+the strip.
+
+| Group | Pages | What you do there |
+|---|---|---|
+| Home | [Home](/docs/app/home/home), [Needs you](/docs/app/home/needs-you) | See the state of every system at a glance, and the things waiting for a person |
+| Inventory | [AI systems](/docs/app/inventory/systems), [Discovery](/docs/app/inventory/discovery) | Register the AI systems you govern, and review the ones FairMind found in your connected platforms |
+| Rules | [Plan](/docs/app/rules/plan), [Frameworks](/docs/app/rules/frameworks), [Policies](/docs/app/rules/policies) | Decide what each system must meet, and against which frameworks and internal policies |
+| Testing | [Evaluations](/docs/app/testing/evaluations), [Runs](/docs/app/testing/runs), [Agent audits](/docs/app/testing/agent-audits) | Choose evaluations, run them, and audit agents |
+| Release and operate | [Decisions](/docs/app/release/decisions), [Monitoring](/docs/app/release/monitoring), [Findings](/docs/app/release/findings), [Environment](/docs/app/release/environment) | Record release decisions, watch systems in production, work findings to closure, assess environmental cost |
+| Records | [Evidence](/docs/app/records/evidence), [Auditor packs](/docs/app/records/auditor-packs) | Keep the evidence behind every decision, and share a bounded pack with an auditor |
+| Agents | [Autopilot](/docs/app/agents/autopilot), [Ask FairMind](/docs/app/agents/ask) | Let FairMind prepare the next steps, or ask it about your estate |
+
+Each AI system also has its own page, its [system file](/docs/app/inventory/system-file), which gathers that system's
+plan, runs, findings, evidence and decisions in one place. Inventory stays lit while you are in one.
+
+## Signals in the menu
+
+A number beside a page is a live count read from the server: how many things need you, how many systems are
+registered, how many were discovered and not yet registered, how many runs and how many open findings. A count the
+server cannot give is left out, never estimated.
+
+## Search
+
+**Search or ask** at the top of the panel (or Cmd+K, Ctrl+K on Windows and Linux) opens one search over every page and
+every system in the organisation. Pick a result to go straight to it.
+
+## On a phone
+
+Below 768 pixels wide, the strip and panel fold into a menu button in the top bar.
+
+## The demo
+
+**Try the demo** on the [sign-in page](https://app.fairmind.xyz/login) opens a demo organisation with real systems,
+evaluations and evidence, read-only. Every recording in these docs was captured there. The server refuses any change
+made in the demo, so you can open every form and drawer without affecting anything.
+
+## Step by step
+
+<TourSteps page="app/getting-around" />
+
+## What's on the page
+
+<PageAnatomy route="dashboard" />

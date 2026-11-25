@@ -1,7 +1,7 @@
 {
   "name": "chain-of-custody",
   "description": "Ghost theme for Chain of Custody, the FairMind guides to AI regulation, security and safety.",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "private": true,
   "engines": {
     "ghost": ">=6.0.0"

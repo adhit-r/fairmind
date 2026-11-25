@@ -122,10 +122,15 @@ export function FairnessRunPanel({
   inspect,
   run,
   onDone,
+  onDecide,
+  decideLabel,
 }: {
   inspect: (file: File) => Promise<CsvInspection>
   run: (file: File, mapping: FairnessMapping, confirmation: AttributeConfirmation) => Promise<FairnessRunResult>
   onDone?: (result: FairnessRunResult) => void
+  /** Opens the release decision beside the gate, or requests one; the compact verdict's link calls it. Without it there is no link. */
+  onDecide?: () => void
+  decideLabel?: string
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -137,6 +142,7 @@ export function FairnessRunPanel({
   const [result, setResult] = useState<FairnessRunResult | null>(null)
   const [busy, setBusy] = useState<'inspect' | 'run' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [keepForAgent, setKeepForAgent] = useState(false)
 
   const columns = inspection?.columns.map((c) => c.name) ?? []
   const suggested = inspection?.suggested.attributes ?? []
@@ -179,6 +185,7 @@ export function FairnessRunPanel({
       sha256: inspection.fileSha256,
       removalReason: removed.length ? removalReason.trim() : undefined,
       uncoveredReason: uncovered.length ? uncoveredReason.trim() : undefined,
+      keepForAgent,
     }
     try {
       const out = await run(file, { ...mapping, attributes, favorableLabel: favourable ? mapping.favorableLabel : undefined }, confirmation)
@@ -267,10 +274,10 @@ export function FairnessRunPanel({
               <table className="w-full min-w-[640px] text-[12.5px]">
                 <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--fm-ink3)]">
                   <tr>
-                    <th className="w-[84px] pb-1.5 font-medium">Protected</th>
-                    <th className="pb-1.5 font-medium">Column</th>
-                    <th className="pb-1.5 font-medium">Values</th>
-                    <th className="pb-1.5 font-medium">Why it&apos;s listed</th>
+                    <th scope="col" className="w-[84px] pb-1.5 font-medium">Protected</th>
+                    <th scope="col" className="pb-1.5 font-medium">Column</th>
+                    <th scope="col" className="pb-1.5 font-medium">Values</th>
+                    <th scope="col" className="pb-1.5 font-medium">Why it&apos;s listed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -342,6 +349,10 @@ export function FairnessRunPanel({
             </div>
           )}
 
+          <label className="flex items-center gap-2 text-[12.5px] text-[var(--fm-ink2)]">
+            <input type="checkbox" checked={keepForAgent} onChange={(e) => setKeepForAgent(e.target.checked)} className="h-4 w-4 accent-[var(--fm-ink)]" />
+            Keep this file so the release autopilot can re-run it with these attributes
+          </label>
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" disabled={!canRun || busy !== null} onClick={() => void go()} className="h-9 rounded-full bg-[var(--fm-ink)] px-4 text-[12.5px] font-semibold text-white disabled:opacity-60">
               {busy === 'run' ? 'Running' : 'Confirm attributes and run'}
@@ -379,12 +390,12 @@ export function FairnessRunPanel({
             <table className="w-full min-w-[640px] text-[12.5px]">
               <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--fm-ink3)]">
                 <tr>
-                  <th className="pb-1.5 font-medium">Attribute</th>
-                  <th className="pb-1.5 font-medium">Groups</th>
-                  <th className="pb-1.5 text-right font-medium">Impact ratio</th>
-                  <th className="pb-1.5 text-right font-medium">Equal opp. gap</th>
-                  <th className="pb-1.5 text-right font-medium">Eq. odds gap</th>
-                  <th className="pb-1.5 text-right font-medium">Calibration gap</th>
+                  <th scope="col" className="pb-1.5 font-medium">Attribute</th>
+                  <th scope="col" className="pb-1.5 font-medium">Groups</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Impact ratio</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Equal opp. gap</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Eq. odds gap</th>
+                  <th scope="col" className="pb-1.5 text-right font-medium">Calibration gap</th>
                 </tr>
               </thead>
               <tbody>
@@ -419,7 +430,7 @@ export function FairnessRunPanel({
           <div className="text-[11.5px] text-[var(--fm-ink3)]">
             Thresholds: impact ratio at or above {result.result.thresholds.disparate_impact_ratio} (four-fifths rule), gaps at or below {result.result.thresholds.gap}. A check fails only when its value crosses the threshold and the difference is statistically significant: permutation p-value below {result.result.thresholds.alpha.toPrecision(2)}, Bonferroni-adjusted for {result.result.thresholds.tests} tests. Intervals are 95% bootstrap.
           </div>
-          <VerdictExplainer gate={result.gate} compact />
+          <VerdictExplainer gate={result.gate} compact onOpen={onDecide} decideLabel={decideLabel} />
           <div>
             <button type="button" onClick={() => void pick(null)} className="text-[12.5px] font-medium text-[var(--fm-ink2)] underline-offset-2 hover:underline">Run another file</button>
           </div>

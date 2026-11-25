@@ -15,7 +15,7 @@ The product status (what works today, what is partly done, what is not built) is
 | Environmental governance evidence | Canonical organization/system API and tenant-bound persistence verified on PostgreSQL 14 | Scoped evidence workflow only; not validated emissions accounting or compliance proof |
 | Admission, reviewer, and governance-decision workflow | Internal routes and PostgreSQL gates are implemented but remain default-off and are not a public execution capability | Internal alpha only; do not claim general availability |
 | Sandboxed worker execution | Not yet shipped | Do not claim |
-| LLM, agent, code, vision, image, audio, video, and multimodal evaluations | 56 catalogue evaluations have engines, including behaviour tests against the live system and agent-platform configuration audits; none is independently benchmarked | Runs in FairMind; do not claim independent validation |
+| LLM, agent, code, vision, image, audio, video, and multimodal evaluations | All 109 catalogue evaluations have an engine (104 in the engine registry, 5 that evaluate stored runs), including behaviour tests against the live system and agent-platform configuration audits; none is independently benchmarked | Runs in FairMind; do not claim independent validation |
 | Pre-deployment, realtime, and post-deployment assurance | Release gate (pre-deployment) and pushed monitoring snapshots (post-deployment) are shipped; realtime assurance is not | Gate and monitoring only; do not claim realtime assurance |
 | Compliance, certification, automatic approval, or automatic enforcement | Not provided by this branch | Do not claim |
 

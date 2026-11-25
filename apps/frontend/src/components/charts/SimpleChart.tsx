@@ -1,6 +1,7 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
+import { describeChart } from '@/components/charts/describe'
 import {
   LineChart,
   Line,
@@ -39,50 +40,52 @@ export function SimpleChart({
   return (
     <Card className={cn('p-6 fm-card', className)}>
       <h3 className="text-lg font-bold mb-4">{title}</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        {type === 'line' ? (
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#000" />
-            <XAxis dataKey="name" stroke="#000" />
-            <YAxis stroke="#000" />
-            <Tooltip 
-              contentStyle={{
-                border: '2px solid #000',
-                borderRadius: '0',
-                backgroundColor: '#fff',
-              }}
-            />
-            <Legend />
-            <Line 
-              type="monotone" 
-              dataKey={dataKey} 
-              stroke="#FF6B35" 
-              strokeWidth={3}
-              dot={{ fill: '#000', strokeWidth: 2, r: 4 }}
-            />
-          </LineChart>
-        ) : (
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#000" />
-            <XAxis dataKey="name" stroke="#000" />
-            <YAxis stroke="#000" />
-            <Tooltip 
-              contentStyle={{
-                border: '2px solid #000',
-                borderRadius: '0',
-                backgroundColor: '#fff',
-              }}
-            />
-            <Legend />
-            <Bar 
-              dataKey={dataKey} 
-              fill="#FF6B35"
-              stroke="#000"
-              strokeWidth={2}
-            />
-          </BarChart>
-        )}
-      </ResponsiveContainer>
+      <div role="img" aria-label={describeChart(title, data.map((d) => [d.name, d.value]))}>
+        <ResponsiveContainer width="100%" height={300}>
+          {type === 'line' ? (
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#000" />
+              <XAxis dataKey="name" stroke="#000" />
+              <YAxis stroke="#000" />
+              <Tooltip 
+                contentStyle={{
+                  border: '2px solid #000',
+                  borderRadius: '0',
+                  backgroundColor: '#fff',
+                }}
+              />
+              <Legend />
+              <Line 
+                type="monotone" 
+                dataKey={dataKey} 
+                stroke="#FF6B35" 
+                strokeWidth={3}
+                dot={{ fill: '#000', strokeWidth: 2, r: 4 }}
+              />
+            </LineChart>
+          ) : (
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#000" />
+              <XAxis dataKey="name" stroke="#000" />
+              <YAxis stroke="#000" />
+              <Tooltip 
+                contentStyle={{
+                  border: '2px solid #000',
+                  borderRadius: '0',
+                  backgroundColor: '#fff',
+                }}
+              />
+              <Legend />
+              <Bar 
+                dataKey={dataKey} 
+                fill="#FF6B35"
+                stroke="#000"
+                strokeWidth={2}
+              />
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
     </Card>
   )
 }

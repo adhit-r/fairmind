@@ -33,6 +33,10 @@ function detailOf(e: RunEvent): string {
       .join('. ')
   }
   if (typeof p.sealedHeadHash === 'string') return `Sealed events 1 to ${String(p.sealedThroughSeq)}`
+  if (typeof p.notificationSent === 'boolean')
+    return p.notificationSent
+      ? `Emailed ${String(p.recipients)} ${p.recipients === 1 ? 'reviewer' : 'reviewers'}`
+      : `Nobody was messaged${typeof p.reason === 'string' ? `: ${p.reason}` : ''}`
   return ''
 }
 
@@ -217,7 +221,7 @@ function RunView({ runId }: { runId: string }) {
                   ) : (
                     <>
                       No AI provider is switched on, so the agent works by rules: it lists what is on file and what is missing, and leaves the judgement to the reviewer.{' '}
-                      <Link href="/org-admin/settings#ai-provider" className="font-semibold text-[var(--fm-ink)] underline">Set up a provider</Link>
+                      <Link href="/settings?section=ai-provider" className="font-semibold text-[var(--fm-ink)] underline">Set up a provider</Link>
                     </>
                   )}
                 </p>

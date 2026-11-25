@@ -145,7 +145,7 @@ def _save_assessment(
 
 
 @router.post(f"{_CANONICAL_ROOT}/assess", response_model=AssessResponse)
-async def assess_scoped(
+def assess_scoped(
     org_id: str,
     system_id: str,
     body: AssessRequest,
@@ -170,7 +170,7 @@ def _latest_payload(db: Session, org_id: str, system_id: str) -> GenericResponse
 
 
 @router.get(_CANONICAL_ROOT, response_model=GenericResponse)
-async def get_latest_scoped(
+def get_latest_scoped(
     org_id: str,
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
@@ -184,7 +184,7 @@ async def get_latest_scoped(
     "/api/v1/systems/{system_id}/environmental-impact",
     response_model=GenericResponse,
 )
-async def get_latest_legacy(
+def get_latest_legacy(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -220,7 +220,7 @@ def _ingest_evidence(
 
 
 @router.post(f"{_CANONICAL_ROOT}/evidence", response_model=GenericResponse)
-async def ingest_evidence_scoped(
+def ingest_evidence_scoped(
     org_id: str,
     system_id: str,
     body: EnvironmentalEvidenceIngestRequest,
@@ -234,7 +234,7 @@ async def ingest_evidence_scoped(
     "/api/v1/systems/{system_id}/environmental-impact/evidence",
     response_model=GenericResponse,
 )
-async def ingest_evidence_legacy(
+def ingest_evidence_legacy(
     system_id: str,
     body: EnvironmentalEvidenceIngestRequest,
     current_user: TokenData = Depends(get_current_active_user),
@@ -245,7 +245,7 @@ async def ingest_evidence_legacy(
 
 
 @router.get(f"{_CANONICAL_ROOT}/history", response_model=GenericResponse)
-async def get_history_scoped(
+def get_history_scoped(
     org_id: str,
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
@@ -261,7 +261,7 @@ async def get_history_scoped(
     "/api/v1/systems/{system_id}/environmental-impact/history",
     response_model=GenericResponse,
 )
-async def get_history_legacy(
+def get_history_legacy(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -298,7 +298,7 @@ def _add_mitigation(
     f"{_CANONICAL_ROOT}/{{assessment_id}}/mitigation",
     response_model=GenericResponse,
 )
-async def add_mitigation_scoped(
+def add_mitigation_scoped(
     org_id: str,
     system_id: str,
     assessment_id: str,
@@ -315,7 +315,7 @@ async def add_mitigation_scoped(
     "/api/v1/systems/{system_id}/environmental-impact/{assessment_id}/mitigation",
     response_model=GenericResponse,
 )
-async def add_mitigation_legacy(
+def add_mitigation_legacy(
     system_id: str,
     assessment_id: str,
     body: MitigationRequest,
@@ -357,7 +357,7 @@ def _approve_assessment(
     f"{_CANONICAL_ROOT}/{{assessment_id}}/approve",
     response_model=GenericResponse,
 )
-async def approve_assessment_scoped(
+def approve_assessment_scoped(
     org_id: str,
     system_id: str,
     assessment_id: str,
@@ -374,7 +374,7 @@ async def approve_assessment_scoped(
     "/api/v1/systems/{system_id}/environmental-impact/{assessment_id}/approve",
     response_model=GenericResponse,
 )
-async def approve_assessment_legacy(
+def approve_assessment_legacy(
     system_id: str,
     assessment_id: str,
     body: ApproveRequest,
@@ -398,7 +398,7 @@ def _export_csrd(db: Session, org_id: str, system_id: str) -> GenericResponse:
 
 
 @router.get(f"{_CANONICAL_ROOT}/export", response_model=GenericResponse)
-async def export_csrd_scoped(
+def export_csrd_scoped(
     org_id: str,
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
@@ -412,7 +412,7 @@ async def export_csrd_scoped(
     "/api/v1/systems/{system_id}/environmental-impact/export",
     response_model=GenericResponse,
 )
-async def export_csrd_legacy(
+def export_csrd_legacy(
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -422,7 +422,7 @@ async def export_csrd_legacy(
 
 
 @router.get(f"{_CANONICAL_ROOT}/controls", response_model=GenericResponse)
-async def controls_scoped(
+def controls_scoped(
     org_id: str,
     system_id: str,
     current_user: TokenData = Depends(get_current_active_user),
@@ -435,7 +435,7 @@ async def controls_scoped(
 
 
 @router.get("/api/v1/environment/benchmarks", response_model=GenericResponse)
-async def benchmarks(
+def benchmarks(
     current_user: TokenData = Depends(get_current_active_user),
 ):
     del current_user
@@ -443,7 +443,7 @@ async def benchmarks(
 
 
 @router.get("/api/v1/environment/controls", response_model=GenericResponse)
-async def controls_legacy(
+def controls_legacy(
     system_id: str | None = None,
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -457,7 +457,7 @@ async def controls_legacy(
 
 
 @router.post("/api/v1/environment/controls/seed", response_model=GenericResponse)
-async def seed_controls(
+def seed_controls(
     current_user: TokenData = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):

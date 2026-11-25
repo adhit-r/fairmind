@@ -178,7 +178,7 @@ class ComplianceResultCreate(BaseModel):
     overall_score: float = Field(..., ge=0, le=100, description="Overall compliance score")
     status: ComplianceStatus = Field(..., description="Compliance status")
     requirements_met: int = Field(..., ge=0, description="Number of requirements met")
-    total_requirements: int = Field(..., gt=0, description="Total requirements")
+    total_requirements: int = Field(..., ge=0, description="Total requirements (0 while a framework has none defined)")
     evidence_count: int = Field(default=0, ge=0, description="Number of evidence items")
     results: Dict[str, Any] = Field(default_factory=dict, description="Detailed results")
     gaps: Optional[List[ComplianceGap]] = Field(None, description="Compliance gaps")

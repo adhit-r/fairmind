@@ -235,60 +235,6 @@ class AuthentikConfig:
             logger.error(f"Unexpected error validating token: {str(e)}")
             return None
 
-    def map_authentik_roles_to_fairmind(self, groups: List[str]) -> List[str]:
-        """Map Authentik groups to FairMind roles.
-
-        Args:
-            groups: List of Authentik group names
-
-        Returns:
-            List of FairMind role names
-        """
-        role_mapping = {
-            "fairmind-admin": "admin",
-            "fairmind-analyst": "analyst",
-            "fairmind-viewer": "viewer",
-        }
-
-        roles = []
-        for group in groups:
-            if group in role_mapping:
-                roles.append(role_mapping[group])
-            else:
-                logger.debug(f"No role mapping found for group: {group}")
-
-        return roles
-
-    def extract_role_info(self, token_payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract role and group information from Authentik token.
-
-        Args:
-            token_payload: Decoded JWT payload
-
-        Returns:
-            Dict with 'groups' and 'roles' keys
-        """
-        try:
-            # Authentik includes groups in the token or user_id can be used to fetch groups
-            groups = token_payload.get("groups", [])
-            roles = self.map_authentik_roles_to_fairmind(groups)
-
-            return {
-                "groups": groups,
-                "roles": roles,
-                "user_id": token_payload.get("sub"),
-                "username": token_payload.get("preferred_username"),
-                "email": token_payload.get("email"),
-                "name": token_payload.get("name"),
-            }
-
-        except Exception as e:
-            logger.error(f"Error extracting role info: {str(e)}")
-            return {
-                "groups": [],
-                "roles": ["viewer"],  # Default to viewer role on error
-                "user_id": token_payload.get("sub"),
-            }
 
 
 # Global Authentik config instance

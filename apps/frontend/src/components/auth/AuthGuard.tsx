@@ -16,7 +16,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const guardState = resolveAuthGuardState({ user, status })
 
   useEffect(() => {
-    if (guardState === 'redirect') router.replace('/login')
+    if (guardState !== 'redirect') return
+    // Come back to the page they asked for; login accepts same-origin paths only.
+    const here = `${window.location.pathname}${window.location.search}`
+    router.replace(here && here !== '/' ? `/login?next=${encodeURIComponent(here)}` : '/login')
   }, [guardState, router])
 
   if (guardState === 'loading') {

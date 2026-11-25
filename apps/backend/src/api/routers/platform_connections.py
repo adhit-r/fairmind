@@ -113,8 +113,10 @@ async def snapshot(api_key: str) -> Dict[str, Any]:
         for vault in snap["vaults"]:
             vault["credentials"] = await _take(b.vaults.credentials.list(vault["id"], limit=MAX_ITEMS), MAX_ITEMS)
         for store in snap["memory_stores"]:
-            store["memories"] = await _take(b.memory_stores.memories.list(store["id"], view="full", limit=MAX_ITEMS), MAX_MEMORIES)
-        sessions = await _take(b.sessions.list(limit=MAX_SESSIONS, order="desc"), MAX_SESSIONS)
+            memories = await _take(b.memory_stores.memories.list(store["id"], view="full", limit=MAX_ITEMS), MAX_MEMORIES + 1)
+            store["memories"], store["memories_capped"] = memories[:MAX_MEMORIES], len(memories) > MAX_MEMORIES
+        sessions = await _take(b.sessions.list(limit=MAX_SESSIONS, order="desc"), MAX_SESSIONS + 1)
+        snap["sessions_capped"], sessions = len(sessions) > MAX_SESSIONS, sessions[:MAX_SESSIONS]
     except anthropic.APIError as e:
         raise _error(e)
     finally:
@@ -189,13 +191,13 @@ def stored_key(db: Session, org_id: str, platform: str) -> str:
 
 
 @router.get("/platform-connections")
-async def list_connections(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def list_connections(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     _ensure_tables(db)
     return [_json(p, _row(db, m.org_id, p)) for p in PLATFORMS]
 
 
 @router.put("/platform-connections/{platform}")
-async def save_connection(platform: str, body: ConnectionBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def save_connection(platform: str, body: ConnectionBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _platform(platform)
     _ensure_tables(db)
     key = body.apiKey.strip()
@@ -213,7 +215,7 @@ async def save_connection(platform: str, body: ConnectionBody, m: OrgMembership 
 
 
 @router.delete("/platform-connections/{platform}")
-async def delete_connection(platform: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+def delete_connection(platform: str, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
     _platform(platform)
     _ensure_tables(db)
     db.execute(text("DELETE FROM org_platform_connections WHERE org_id = :org AND platform = :p"), {"org": m.org_id, "p": platform})

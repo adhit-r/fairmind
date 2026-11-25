@@ -1,9 +1,12 @@
 'use client'
 
+import { useState } from 'react'
+import { HumanCheck, awaitingHumanCheck, humanCheckHeaders } from '@/components/auth/HumanCheck'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/api/hooks/useAuth'
 import { useAuthentik } from '@/lib/api/hooks/useAuthentik'
 import { Card } from '@/components/ui/card'
+import { AuthSplit } from '../AuthSplit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,12 +17,14 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loginSchema, type LoginFormData } from '@/lib/validations/schemas'
 import { IconAlertTriangle, IconBrandGoogle } from '@tabler/icons-react'
+import { safeNextPath } from '@/lib/safe-next-path'
 
 const AUTHENTIK_ENABLED = !!process.env.NEXT_PUBLIC_AUTHENTIK_URL
+const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO === 'true'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login, loading, error } = useAuth()
+  const { login, loginDemo, loading, error } = useAuth()
   const { login: authentikLogin, isLoading: ssoLoading } = useAuthentik()
   const { toast } = useToast()
 
@@ -31,25 +36,43 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   })
 
+  const [check, setCheck] = useState<string | null>(null)
+  const [checkRound, setCheckRound] = useState(0)
+
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login(data)
+      await login(data, humanCheckHeaders(check))
       toast({
         title: "Login successful",
         description: "Welcome back!",
       })
-      router.push('/dashboard')
+      router.push(safeNextPath(new URLSearchParams(window.location.search).get('next'), window.location.origin))
     } catch (err) {
       toast({
         title: "Login failed",
         description: err instanceof Error ? err.message : "Invalid credentials",
         variant: "destructive",
       })
+    } finally {
+      setCheckRound((n) => n + 1) // a check token works once
+    }
+  }
+
+  const tryDemo = async () => {
+    try {
+      await loginDemo()
+      router.push('/dashboard')
+    } catch (err) {
+      toast({
+        title: 'The demo did not open',
+        description: err instanceof Error ? err.message : 'Try again in a moment.',
+        variant: 'destructive',
+      })
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <AuthSplit>
       <Card className="w-full max-w-md p-8 fm-card">
         <div className="flex flex-col items-center mb-8">
           <OrangeLogo size="lg" />
@@ -102,10 +125,11 @@ export default function LoginPage() {
             )}
           </div>
 
+          <HumanCheck onToken={setCheck} resetKey={checkRound} />
           <Button
             type="submit"
             className="w-full"
-            disabled={loading}
+            disabled={loading || awaitingHumanCheck(check)}
             aria-busy={loading}
             aria-label={loading ? 'Signing in, please wait' : 'Sign in to FairMind'}
           >
@@ -137,13 +161,29 @@ export default function LoginPage() {
           </>
         )}
 
+        {DEMO_ENABLED && (
+          <div className="mt-6 rounded-[14px] border border-[var(--fm-line)] p-4 text-center">
+            <p className="text-sm font-medium">See FairMind before you sign up</p>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">A demo organisation with real systems, evaluations and evidence. Read-only.</p>
+            <Button
+              type="button"
+              variant="neutral"
+              className="w-full border border-[var(--fm-line)]"
+              onClick={tryDemo}
+              disabled={loading}
+            >
+              Try the demo
+            </Button>
+          </div>
+        )}
+
         <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground mb-3">Don't have an account?</p>
+          <p className="text-sm text-muted-foreground mb-3">Don&apos;t have an account?</p>
           <a href="/register" className="inline-block px-4 py-2 border border-[var(--fm-line)] font-medium text-sm">
-            Create an account
+            Request access
           </a>
         </div>
       </Card>
-    </div>
+    </AuthSplit>
   )
 }

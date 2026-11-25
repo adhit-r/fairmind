@@ -1,0 +1,58 @@
+---
+title: Status and limits
+description: What works today, what is partly done and what is not built, so you never rely on more than FairMind can show.
+---
+
+FairMind is alpha (November 2026). The main path works end to end: discover systems, run workflows and evaluations, gate a release, and hand an auditor a verifiable pack. Every page in these docs carries one of these labels:
+
+<Status state="shipped" />
+<Status state="partial" />
+<Status state="alpha" />
+<Status state="not-built" />
+
+## Works today
+
+| Area | What you can do |
+| --- | --- |
+| AI systems | Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. |
+| Packs and workflows | Install packs, start workflow runs, record step outputs, decide at gates, and publish your own version of a workflow. |
+| Evaluations | Run all 109 catalogue evaluations: on uploaded files, against your live system, on your agent platform's configuration, or on results from your own sandbox, drills and detectors. Results are stored as measured evidence. |
+| Release gate | Five checks give **go**, **conditional go** or **no go**. Failing blocking policy rules force **no go**. Approval is refused while critical findings are open. |
+| Policies | Rules mapped to framework controls, evaluated live, counted as evidence for those controls. |
+| Evidence for auditors | The gate per framework clause, auditor packs, a read-only auditor link, and offline verification of a pack. |
+
+## Partly done
+
+| Area | Where it stands |
+| --- | --- |
+| Agent steps | The agent drafts a workflow step when a person asks. It uses your own model (19 providers, key encrypted at rest) or built-in rules. It writes to the ledger only; it changes nothing outside FairMind. |
+| Agent, attack and detector evaluations | 21 evaluations (agent scenarios, kill-switch drills, multi-agent faults, attacks on models, deepfake, voice-clone and phishing results) judge a results file you produce in your own sandbox or tool. FairMind computes the metric from the raw rows but does not run the scenario or attack itself. The CBRN and abuse-material refusal tests run only on a restricted probe set you upload. |
+| Monitoring | You upload snapshots from the system file on your own schedule. FairMind flags stale snapshots and opens a finding on sustained drift. It does not pull data. |
+| Catalogue workflows | 86 of the 90 are marked *proposed* until organisations run them in practice. |
+| Older pages | Bias detection, LLM judge, multimodal bias and similar pages from earlier versions sit outside the main navigation and are not validated. LLM judge sends input to an external provider. |
+
+## Not built yet
+
+- **Automatic workflow starts.** The catalogue lists schedules and triggers, but a person starts every run.
+- **Sandboxed evaluation workers.** Evaluations run inside FairMind itself. Uploaded model files are inspected, never loaded or executed.
+- **Runtime guardrails.** FairMind assesses systems; it does not sit in the request path.
+- **Certification.** No compliance certificate, automatic approval or "FairMind Verified" claim.
+
+## How to write a bounded finding
+
+Prefer:
+
+> The submitted environmental assessment produced a conditional-go recommendation using the recorded inputs and provisional benchmark set. Reviewer sign-off remains blocked until the mitigation requirement is resolved.
+
+Avoid:
+
+> The system is environmentally compliant and approved for release.
+
+## Safe use
+
+1. Confirm the capability state before running an evaluator.
+2. Inspect the underlying artifact, scope, threshold, provenance, and limitations.
+3. Keep a human reviewer in the decision path.
+4. Treat framework mappings as evidence relevance, not automatic conformity.
+5. Preserve rerun and remediation history.
+

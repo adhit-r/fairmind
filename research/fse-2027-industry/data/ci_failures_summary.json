@@ -1,0 +1,74 @@
+[
+ {
+  "cause": "flaky: evidence revalidation",
+  "runs": 21,
+  "caused_by_change": false,
+  "median_runs_to_green": 1
+ },
+ {
+  "cause": "break on main: SQLite-only SQL",
+  "runs": 17,
+  "caused_by_change": false,
+  "median_runs_to_green": 4
+ },
+ {
+  "cause": "break on main: changed golden values",
+  "runs": 8,
+  "caused_by_change": false,
+  "median_runs_to_green": 1.5
+ },
+ {
+  "cause": "flaky: concurrency timeout",
+  "runs": 3,
+  "caused_by_change": false,
+  "median_runs_to_green": 1.0
+ },
+ {
+  "cause": "flaky: sandbox OOM classification",
+  "runs": 3,
+  "caused_by_change": false,
+  "median_runs_to_green": 2.5
+ },
+ {
+  "cause": "regression in the change",
+  "runs": 3,
+  "caused_by_change": true,
+  "median_runs_to_green": 1.5
+ },
+ {
+  "cause": "dependency or environment",
+  "runs": 3,
+  "caused_by_change": true,
+  "median_runs_to_green": 0
+ },
+ {
+  "cause": "run-level failure, no failed job log",
+  "runs": 2,
+  "caused_by_change": false,
+  "median_runs_to_green": 0
+ },
+ {
+  "cause": "design-rule ratchet",
+  "runs": 2,
+  "caused_by_change": true,
+  "median_runs_to_green": 1
+ },
+ {
+  "cause": "dependency upgrade broke an API",
+  "runs": 2,
+  "caused_by_change": true,
+  "median_runs_to_green": 1.5
+ },
+ {
+  "cause": "frontend unit test",
+  "runs": 1,
+  "caused_by_change": true,
+  "median_runs_to_green": 1
+ },
+ {
+  "cause": "type error",
+  "runs": 1,
+  "caused_by_change": true,
+  "median_runs_to_green": 1
+ }
+]

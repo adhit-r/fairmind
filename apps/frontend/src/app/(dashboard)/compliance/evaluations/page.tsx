@@ -7,7 +7,7 @@ import { Crumbs, EnginePill, Empty, ErrorNote, Heading, Loading, MUTED, Pill, Re
 
 const ENGINES: Array<{ value: EngineStatus; label: string }> = [
   { value: 'Engine exists', label: 'Engine exists' },
-  { value: 'Partial', label: 'Partial' },
+  { value: 'Partial', label: 'Related code' },
   { value: 'Not found', label: 'Not built yet' },
 ]
 const FIELD = 'h-10 rounded-full border border-[#15171a24] bg-white px-4 text-[13px] font-semibold'
@@ -75,7 +75,7 @@ export default function EvaluationsPage() {
       <Crumbs items={[{ label: 'Frameworks', href: '/compliance' }, { label: 'Evaluations' }]} />
       <Heading
         title="Evaluations"
-        lead={`${all.length} evaluations measure how your AI systems behave. FairMind runs ${runs} of them itself on files you upload, and records results for ${readable} in all, including your fairness, monitoring and environmental checks; ${recorded} have results so far, and a passing one marks the requirements it tests as tested.`}
+        lead={`${all.length} evaluations measure how your AI systems behave. FairMind runs ${runs} of them itself on files you upload, and records results for ${readable} in all, including your fairness, monitoring and environmental checks; ${recorded} have results so far, and a passing one marks the requirements it counts toward as tested.`}
       />
 
       <section aria-label="Filters" className="pk-card flex flex-wrap items-center gap-3 px-5 py-4">
@@ -142,7 +142,7 @@ export default function EvaluationsPage() {
                   <th scope="col" className="py-2 pr-3 font-semibold">Latest result</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Engine</th>
                   <th scope="col" className="py-2 pr-3 font-semibold">Pattern and pack</th>
-                  <th scope="col" className="py-2 font-semibold">Requirements tested</th>
+                  <th scope="col" className="py-2 font-semibold">Counts toward</th>
                 </tr>
               </thead>
               <tbody>
@@ -206,7 +206,7 @@ export default function EvaluationsPage() {
                           <ul className="m-0 mt-1.5 flex list-none flex-col gap-1.5 p-0">
                             {e.tests.map((t) => (
                               <li key={t.key} className="text-[12.5px] leading-snug">
-                                <span className="font-mono text-[11.5px]">{t.framework} {t.control}</span> {t.title}
+                                <span className="font-mono text-[11.5px]">{t.framework} {t.control}</span> {t.title} <Pill>{t.relation}</Pill>
                               </li>
                             ))}
                           </ul>

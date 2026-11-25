@@ -39,6 +39,8 @@ export default function StatusPage() {
       return <Badge variant="default" className="border border-[var(--fm-line)] bg-green-500">Healthy</Badge>
     } else if (status === 'degraded') {
       return <Badge variant="secondary" className="border border-[var(--fm-line)] bg-yellow-400">Degraded</Badge>
+    } else if (status === 'unknown') {
+      return <Badge variant="secondary" className="border border-[var(--fm-line)]">Unknown</Badge>
     } else {
       return <Badge variant="destructive" className="border border-[var(--fm-line)]">Down</Badge>
     }

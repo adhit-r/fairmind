@@ -448,9 +448,9 @@ class TestIntegration:
         assert "status" in health_data
         assert "service" in health_data
         
-        # Test readiness endpoint
+        # Readiness: without startup the database is not connected, which is a 503.
         response = client.get("/health/ready")
-        assert response.status_code == 200
+        assert response.status_code == 503
         
         # Test liveness endpoint
         response = client.get("/health/live")

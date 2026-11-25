@@ -407,7 +407,7 @@ async def get_system_health():
         raise HTTPException(status_code=500, detail=str(e))
 
 @_rest.get("/metrics")
-async def get_monitoring_metrics():
+def get_monitoring_metrics():
     """Get monitoring metrics for dashboard"""
     raise HTTPException(status_code=501, detail="Fleet monitoring metrics are not collected yet. Use /metrics/{model_id} for recorded metrics.")
 

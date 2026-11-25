@@ -58,3 +58,27 @@ def test_login_checks_the_users_table(monkeypatch):
     ok = client.post("/api/v1/auth/login", json={"email": "owner@example.com", "password": password})
     assert ok.status_code == 200
     assert ok.json()["user"]["org_id"]
+
+
+def test_a_sign_in_is_recorded_and_never_blocks(monkeypatch):
+    password = new_password()
+    store = make_user_store(("stamp@example.com", password, "admin"))
+    monkeypatch.setattr("config.auth._fetch_user_row", fake_fetch_user_row(store))
+    stamped = []
+
+    class Conn:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def execute(self, query, values):
+            stamped.append((query, values))
+            raise RuntimeError("database down")  # a failed stamp must not fail the sign-in
+
+    monkeypatch.setattr("config.database.get_db_connection", lambda: Conn())
+    ok = _client().post("/api/v1/auth/login", json={"email": "stamp@example.com", "password": password})
+    assert ok.status_code == 200
+    stamps = [v for q, v in stamped if q.startswith("UPDATE users SET last_login")]
+    assert [v["id"] for v in stamps] == [ok.json()["user"]["id"]]

@@ -152,7 +152,7 @@ export interface JourneyRequirement {
   title: string
   status: ReqStatus
   workflows: Array<{ id: string; name: string; relation: string; stage: string; pack: string; installed: boolean; latestRun: RunSummary | null }>
-  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean; result: ResultStatus | null }>
+  evaluations: Array<{ id: string; name: string; engine: EngineStatus; pack: string; installed: boolean; result: ResultStatus | null; relation: string }>
 }
 
 export interface Journey {
@@ -171,14 +171,26 @@ export interface Journey {
 }
 
 export type ResultStatus = 'passed' | 'failed' | 'insufficient' | 'not_run'
+/** How FairMind can run an evaluation on a system: call it, read its live runs, read the agent platform, or read uploaded files. */
+export type RunWay = 'calls_system' | 'live_runs' | 'platform' | 'fairmind_data' | 'files'
+/** Whether an evaluation is meant for the system's kind; unknown when the system has no kind yet. */
+export type Fit = 'applies' | 'other' | 'unknown'
+/** Read with ?system=: the evaluation's fit for that system and each way it runs, with whether that way is set up. */
+export interface SystemFit {
+  fit?: Fit
+  /** reason: why a set-up way still cannot run from here (a replay of live runs on a system the runner calls) */
+  ways?: Array<{ way: RunWay; ready: boolean; reason?: string }>
+}
 /** Results FairMind reads for an evaluation: the organisation-wide status and the latest result per AI system. */
 export interface EvaluationResults {
   status: ResultStatus
+  /** How many systems are at each status: passed overall only when every system with a result passed. */
+  counts?: Record<'passed' | 'failed' | 'insufficient', number>
   systems: Array<{ systemId: string; systemName: string; status: Exclude<ResultStatus, 'not_run'>; detail: string; evidenceId: string; at: string }>
   latestAt: string | null
 }
 
-export interface EvaluationRow {
+export interface EvaluationRow extends SystemFit {
   id: string
   name: string
   measures: string
@@ -191,8 +203,11 @@ export interface EvaluationRow {
   engine: EngineStatus
   /** FairMind computes this evaluation itself from files you upload. */
   runnable: boolean
+  /** A judge model reads this evaluation's verdicts, and no judge has been validated against labelled answers yet. */
+  judgeNotValidated?: boolean
   codeLocation: string | null
-  tests: Array<{ key: string; framework: string; control: string; title: string }>
+  /** Every requirement the evaluation counts toward, strongest relation first. */
+  tests: Array<{ key: string; framework: string; control: string; title: string; relation: string }>
   installed: boolean
   /** Null when FairMind does not record results for this evaluation yet. */
   results: EvaluationResults | null
@@ -341,7 +356,7 @@ function useResource<T>(path: string | null): Resource<T> {
   return { ...viewResource(state, path), reload }
 }
 
-const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`
+export const withOrg = (path: string, orgId: string) => `${path}${path.includes('?') ? '&' : '?'}org_id=${encodeURIComponent(orgId)}`
 
 /** A GET scoped to the organisation picked in the org switcher; waits while organisations load. */
 export function useOrgResource<T>(path: string | null): Resource<T> {
@@ -369,10 +384,13 @@ export function usePackNames() {
 }
 export const useBundles = () => useOrgResource<Bundle[]>(API_ENDPOINTS.packs.bundles)
 export const useJourneys = () => useOrgResource<JourneySummary[]>(API_ENDPOINTS.packs.journeys)
-export const useJourney = (frameworkKey: string | undefined) =>
-  useOrgResource<Journey>(frameworkKey ? API_ENDPOINTS.packs.journey(frameworkKey) : null)
+/** With systemId, each evaluation's result is that system's own latest result, not the organisation-wide one. */
+export const useJourney = (frameworkKey: string | undefined, systemId?: string) =>
+  useOrgResource<Journey>(
+    frameworkKey ? `${API_ENDPOINTS.packs.journey(frameworkKey)}${systemId ? `?system=${encodeURIComponent(systemId)}` : ''}` : null,
+  )
 /** The evaluation catalogue; filters are optional and applied by the server. */
-export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string } = {}) {
+export function useEvaluations(filters: { pillar?: string; engine?: string; q?: string; system?: string } = {}) {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v)
   const q = qs.toString()
@@ -486,7 +504,7 @@ export interface PlatformTest {
 export const usePlatformConnections = () => useOrgResource<PlatformConnection[]>(API_ENDPOINTS.packs.platformConnections)
 
 /** What an evaluation engine reads: one file per slot and optional settings, or, when `platform`, a platform connection. */
-export interface EngineSpec {
+export interface EngineSpec extends SystemFit {
   id: string
   method: string
   slots: Array<{ name: string; label: string; help: string; kind: 'csv' | 'text' | 'json' | 'binary'; required: boolean }>
@@ -498,6 +516,16 @@ export interface EngineSpec {
   live: '' | 'target' | 'agent'
   /** A second way to run the same evaluation, against the live system. */
   alternate?: EngineSpec | null
+  /** It can read the system's live runs of the last week instead of uploaded files. */
+  liveRuns?: boolean
+  /** A rate-bounded behaviour test: limit in percent (null when agreed), probes a pass needs, and the 95% bound in percent each offered count shows with none failing. */
+  sampling?: { limit: number | null; max: number; needed: number | null; bounds: Array<{ count: number; bound: number }> } | null
+  /** With ?system=: the system's kind, null when not set. */
+  kind?: string | null
+  /** The engine that reads live runs when it is not this one (its settings differ from the upload's). */
+  liveRunsEngine?: EngineSpec | null
+  /** Slots a person may upload beside live runs, with help for the form. */
+  liveRunsUploads?: Array<{ name: string; help: string }>
 }
 
 /** A behaviour test running in the background. */
@@ -518,6 +546,7 @@ export interface EvaluationJob {
 /** How FairMind calls an AI system for behaviour tests. The auth value never comes back, only a hint. */
 export interface SystemTarget {
   kind: 'openai' | 'http'
+  via?: 'runner'
   url: string
   model?: string
   systemPrompt?: string
@@ -536,6 +565,7 @@ export interface SystemTarget {
 
 export interface SystemTargetBody {
   kind: 'openai' | 'http'
+  via: 'fairmind' | 'runner'
   url: string
   model: string
   systemPrompt: string
@@ -558,20 +588,122 @@ export interface EngineRun {
   summary: string
   metrics: Record<string, number | string | null>
   files: Record<string, string>
-  source: 'upload' | 'connection'
+  source: 'upload' | 'connection' | 'traces'
   createdAt: string
   createdBy: string | null
   params?: Record<string, unknown>
   detail?: Array<Record<string, unknown>>
   detailTotal?: number
-  judge?: { provider: string; model: string }
+  judge?: { provider: string; model: string; sharesProviderWithSystem?: boolean | null }
   target?: { kind: string; url?: string }
+  /** How the run measured; null on runs stored before provenance classes. */
+  provenance?: { class: 'measured_live' | 'computed_from_upload'; modelJudged: boolean } | null
+  /** Settings looser than the catalogue's: the run shows its result but proves nothing. */
+  thresholdLoosened?: Array<{ param: string; value: number; catalogue: number | null }> | null
+  /** A zero-tolerance check that read only part of the week's live runs: a pass proves nothing. */
+  partialRead?: boolean
 }
 
+/** One step of a live run, as the system's own code reported it. `rationale` is the reason it stated; FairMind does not check it. */
+export interface TraceStep {
+  id: string
+  parentId: string | null
+  kind: 'llm' | 'tool' | 'retrieval' | 'memory' | 'decision' | 'other'
+  name: string
+  input: unknown
+  output: unknown
+  rationale: string | null
+  /** blocked: a guardrail stopped the call */
+  status: 'running' | 'ok' | 'error' | 'blocked'
+  error: string | null
+  startedAt: string | null
+  endedAt: string | null
+}
+
+export interface Trace {
+  traceId: string
+  name: string | null
+  status: 'running' | 'ok' | 'error'
+  input: unknown
+  output: unknown
+  rationale: string | null
+  startedAt: string | null
+  endedAt: string | null
+  receivedAt: string
+  truncated: boolean
+  stepCount: number
+  rationaleCoverage: number | null
+  steps: TraceStep[]
+  /** The run's latest explanation, from an Explanation quality run on live runs or a person's "Explain". */
+  explanation?: TraceExplanation | null
+  /** It has an input, a decision and a stated reason, so it can be explained. */
+  explainable?: boolean
+}
+
+/** One fact's change of decision when hidden: 0 never changed it, 1 always did. */
+export interface ExplainDriver { factor: string; value: string; score: number }
+export interface ExplainEdit { factor: string; from: string; to: string; changed: number; of: number }
+
+/** A recorded decision explained by replaying it on the model connection (EV-OVS-04 on live runs). */
+export interface TraceExplanation {
+  traceId: string
+  decision: string
+  reason: string
+  verdict: 'held' | 'did not hold' | 'untested' | 'not reproducible' | 'error'
+  baseline?: { same: number; of: number }
+  drivers?: ExplainDriver[]
+  named?: string[]
+  topDriver?: string | null
+  namedChange?: number | null
+  otherChange?: number | null
+  faithful?: boolean | null
+  reasonCheck?: ExplainEdit
+  flip?: ExplainEdit & { decision: string }
+  replays?: number
+  evidenceId?: string | null
+  createdAt?: string
+}
+
+/** Decision steps per day by outcome, for the system file's Decisions card. */
+export interface DecisionSummary {
+  total: number
+  withReason: number
+  labels: string[]
+  topLabel: string | null
+  topShare: number | null
+  priorTopShare: number | null
+  priorTotal: number
+  days: Array<{ date: string; total: number; byLabel: Record<string, number>; held: number; tested: number }>
+  explained: { held: number; notHeld: number; notReproducible: number; untested: number }
+}
+
+/** Records: every system's Explanation quality runs on live runs, and the runs explained in the last 30 days. */
+export interface ExplainedDecisions {
+  systems: Array<{ systemId: string; name: string; runs: Array<{ evidenceId: string; status: EngineRun['status']; reasonHeldRate: number | null; faithfulness: number | null; createdAt: string }> }>
+  totals: { systemsSending: number; explained: number; held: number; notHeld: number; notReproducible: number; scored: number; withFlip: number }
+}
+
+/** Live runs for the Watch drawer: runs per day, the last run, and the latest evaluations that read them. */
+export interface LiveRunSummary {
+  lastRunAt: string | null
+  week: { runs: number; errors: number }
+  days: Array<{ date: string; runs: number; errors: number }>
+  evaluations: Array<{ evaluationId: string; evidenceId: string; status: EngineRun['status']; summary: string; metrics: Record<string, unknown>; createdAt: string }>
+  /** None when the system sent no decision step in the last 28 days. */
+  decisions?: DecisionSummary | null
+}
+
+export const useExplainedDecisions = () => useOrgResource<ExplainedDecisions>('/api/v1/packs/explained-decisions')
+
+export const useTrace = (systemId: string | null, traceId: string | null) =>
+  useOrgResource<{ trace: Trace }>(systemId && traceId ? `/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}` : null)
+
+const forSystem = (path: string, systemId?: string) => (systemId ? `${path}?system=${encodeURIComponent(systemId)}` : path)
 export const useEvaluation = (evaluationId: string | undefined) =>
   useOrgResource<EvaluationRow>(evaluationId ? API_ENDPOINTS.packs.evaluation(evaluationId) : null)
-export const useEngine = (evaluationId: string | undefined, runnable: boolean) =>
-  useOrgResource<EngineSpec>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationEngine(evaluationId) : null)
+/** With systemId, the spec also says the system's kind, the evaluation's fit and which ways are set up. */
+export const useEngine = (evaluationId: string | undefined, runnable: boolean, systemId?: string) =>
+  useOrgResource<EngineSpec>(evaluationId && runnable ? forSystem(API_ENDPOINTS.packs.evaluationEngine(evaluationId), systemId) : null)
 export const useEngineRuns = (evaluationId: string | undefined, runnable: boolean) =>
   useOrgResource<EngineRun[]>(evaluationId && runnable ? API_ENDPOINTS.packs.evaluationRuns(evaluationId) : null)
 export const useEngineRun = (runId: string | null) => useOrgResource<EngineRun>(runId ? API_ENDPOINTS.packs.evaluationRun(runId) : null)
@@ -617,11 +749,14 @@ export function usePackActions() {
         send<EngineRun | { job: EvaluationJob }>(API_ENDPOINTS.packs.evaluationRuns(evaluationId), (p) => apiClient.post(p, form)),
       getJob: (jobId: string) => send<EvaluationJob>(API_ENDPOINTS.packs.evaluationJob(jobId), (p) => apiClient.get(p)),
       getRun: (runId: string) => send<EngineRun>(API_ENDPOINTS.packs.evaluationRun(runId), (p) => apiClient.get(p)),
+      explainTrace: (systemId: string, traceId: string) =>
+        send<{ explanation: TraceExplanation }>(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/${encodeURIComponent(traceId)}/explain`, (p) => apiClient.post(p)),
       saveTarget: (systemId: string, body: SystemTargetBody) =>
         send<{ target: SystemTarget | null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.put(p, body)),
       deleteTarget: (systemId: string) => send<{ target: null }>(API_ENDPOINTS.packs.systemTarget(systemId), (p) => apiClient.delete(p)),
+      // A cold endpoint can take a while; the server waits 60s for it (system_targets.TIMEOUT_S), past the client's 10s default.
       testTarget: (systemId: string) =>
-        send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p)),
+        send<{ ok: boolean; message: string; answer: string; latencyMs: number | null }>(API_ENDPOINTS.packs.systemTargetTest(systemId), (p) => apiClient.post(p, undefined, { timeout: 75_000 })),
       runAgent: (runId: string, stepId: string) => send<Run>(API_ENDPOINTS.packs.agentStep(runId, stepId), (p) => apiClient.post(p)),
       // The model can take a while; the server gives it 75s (llm.TIMEOUT_S), the client's 10s default would cut it off.
       ask: (question: string) => send<AskAnswer>(API_ENDPOINTS.packs.ask, (p) => apiClient.post(p, { question }, { timeout: 90_000 })),

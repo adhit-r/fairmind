@@ -7,8 +7,10 @@
 
 "use client";
 
+import { pollWhileVisible } from '@/lib/poll'
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api/api-client";
+import { useToast } from "@/hooks/use-toast";
 import { IconPlus, IconRefresh, IconCircleCheck, IconCircleX, IconDownload } from "@tabler/icons-react";
 
 interface SystemStatus {
@@ -31,8 +33,7 @@ export default function ComplianceAutomationPage() {
   // Fetch system status on mount and periodically
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+    return pollWhileVisible(fetchStatus, 30000); // every 30 seconds while the tab is visible
   }, []);
 
   const fetchStatus = async () => {
@@ -200,7 +201,7 @@ export default function ComplianceAutomationPage() {
           <p className="text-gray-600">
             Compliance Automation automatically checks your AI systems against regulatory frameworks
             (DPDP Act, NITI Aayog, EU AI Act, GDPR, and more) on a scheduled basis. Violations are
-            tracked with severity levels, and AI-powered remediation plans guide you toward compliance.
+            tracked with severity levels. Remediation plans are coming soon.
           </p>
         </div>
       </div>
@@ -208,10 +209,28 @@ export default function ComplianceAutomationPage() {
   );
 }
 
+// Mirrors the backend FrameworkEnum values.
+const FRAMEWORKS: Array<[string, string]> = [
+  ["DPDP_ACT_2023", "DPDP Act 2023"],
+  ["NITI_AAYOG_PRINCIPLES", "NITI Aayog Principles"],
+  ["MEITY_GUIDELINES", "MeitY Guidelines"],
+  ["EU_AI_ACT", "EU AI Act"],
+  ["GDPR", "GDPR"],
+  ["ISO_IEC_42001", "ISO/IEC 42001"],
+  ["NIST_AI_RMF", "NIST AI RMF"],
+  ["IEEE_7000", "IEEE 7000"],
+];
+
 function SchedulesSection() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [running, setRunning] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [framework, setFramework] = useState(FRAMEWORKS[0][0]);
+  const [frequency, setFrequency] = useState("weekly");
+  const [recipients, setRecipients] = useState("");
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchSchedules();
@@ -225,6 +244,40 @@ function SchedulesSection() {
       console.error("Failed to fetch schedules:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const createSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      const response = await apiClient.post("/api/v1/compliance/schedules", {
+        framework,
+        frequency,
+        recipients: recipients.split(",").map((r) => r.trim()).filter(Boolean),
+      });
+      if (!response.success) throw new Error(response.error || "Failed to create the schedule");
+      toast({ title: "Schedule created" });
+      setRecipients("");
+      setShowForm(false);
+      await fetchSchedules();
+    } catch (err) {
+      toast({ title: "Could not create the schedule", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const runNow = async (id: string) => {
+    setRunning(id);
+    try {
+      const response = await apiClient.post(`/api/v1/compliance/schedules/${id}/run`);
+      if (!response.success) throw new Error(response.error || "Failed to start the run");
+      toast({ title: "Run started", description: "The compliance check is running now." });
+    } catch (err) {
+      toast({ title: "Could not start the run", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setRunning(null);
     }
   };
 
@@ -246,10 +299,32 @@ function SchedulesSection() {
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-lg border border-[var(--fm-line)] bg-gray-50 p-6">
-          <h3 className="mb-4 text-xl font-bold">Create New Schedule</h3>
-          <p className="text-gray-600">Schedule creation form integrated with backend API.</p>
-        </div>
+        <form onSubmit={createSchedule} className="mb-6 grid gap-4 rounded-[14px] border border-[var(--fm-line)] bg-white p-6 md:grid-cols-2">
+          <h3 className="text-xl font-semibold md:col-span-2">Create New Schedule</h3>
+          <label className="grid gap-1 text-sm font-semibold">
+            Framework
+            <select value={framework} onChange={(e) => setFramework(e.target.value)} className="h-10 rounded-[10px] border border-[var(--fm-line)] bg-white px-3 font-normal">
+              {FRAMEWORKS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Frequency
+            <select value={frequency} onChange={(e) => setFrequency(e.target.value)} className="h-10 rounded-[10px] border border-[var(--fm-line)] bg-white px-3 font-normal">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm font-semibold md:col-span-2">
+            Recipients (comma-separated emails)
+            <input value={recipients} onChange={(e) => setRecipients(e.target.value)} required className="h-10 rounded-[10px] border border-[var(--fm-line)] bg-white px-3 font-normal" />
+          </label>
+          <div className="md:col-span-2">
+            <button type="submit" disabled={creating} className="rounded-full bg-[var(--fm-ink)] px-4 py-2 font-semibold text-white disabled:opacity-50">
+              {creating ? "Creating..." : "Create schedule"}
+            </button>
+          </div>
+        </form>
       )}
 
       {schedules.length === 0 ? (
@@ -269,11 +344,12 @@ function SchedulesSection() {
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-blue-600">
-                    Edit
-                  </button>
-                  <button className="rounded px-3 py-1 text-xs font-bold text-white bg-green-600">
-                    Run Now
+                  <button
+                    onClick={() => runNow(schedule.id)}
+                    disabled={running === schedule.id}
+                    className="rounded-full bg-[var(--fm-ink)] px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {running === schedule.id ? "Starting..." : "Run Now"}
                   </button>
                 </div>
               </div>
@@ -345,9 +421,6 @@ function ViolationsSection() {
                   {violation.framework} • {violation.status.toUpperCase()}
                 </p>
               </div>
-              <button className="rounded px-3 py-1 text-xs font-bold text-white bg-[var(--fm-ink)]">
-                View
-              </button>
             </div>
           </div>
         ))}
@@ -361,9 +434,9 @@ function RemediationSection() {
     <div>
       <h2 className="mb-6 text-2xl font-bold text-black">Remediation Plans</h2>
       <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-        <p className="text-gray-600">Remediation plans will appear here when violations are detected.</p>
+        <p className="font-semibold text-gray-700">Coming soon</p>
         <p className="mt-2 text-sm text-gray-500">
-          AI-generated step-by-step guidance for addressing compliance gaps.
+          Remediation plans are not generated here yet. Track fixes for findings under Findings.
         </p>
       </div>
     </div>
@@ -373,6 +446,7 @@ function RemediationSection() {
 function ReportsSection() {
   const [reports, setReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReports();
@@ -381,6 +455,7 @@ function ReportsSection() {
   const fetchReports = async () => {
     try {
       const response = await apiClient.get("/api/v1/compliance/reports?limit=20");
+      if (!response.success) setUnavailable(response.error || "Report history could not be loaded.");
       setReports((response.data as any)?.reports || []);
     } catch (err) {
       console.error("Failed to fetch reports:", err);
@@ -398,18 +473,18 @@ function ReportsSection() {
       <h2 className="mb-6 text-2xl font-bold text-black">Generated Reports</h2>
       {reports.length === 0 ? (
         <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-          <p className="text-gray-600">No reports generated yet. Create a schedule to get started.</p>
+          <p className="text-gray-600">{unavailable ?? "No reports generated yet. Create a schedule to get started."}</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--fm-line)]">
           <table className="w-full">
             <thead className="border-b border-[var(--fm-line)] bg-gray-100">
               <tr>
-                <th className="px-6 py-4 text-left font-bold text-black">Framework</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Status</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Score</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Generated</th>
-                <th className="px-6 py-4 text-left font-bold text-black">Action</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Framework</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Status</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Score</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Generated</th>
+                <th scope="col" className="px-6 py-4 text-left font-bold text-black">Action</th>
               </tr>
             </thead>
             <tbody>

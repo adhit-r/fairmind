@@ -134,7 +134,7 @@ export function MonitoringRunPanel({
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead className="text-left text-[11px] uppercase tracking-wide text-[var(--fm-ink3)]">
-                <tr><th className="pb-1.5 font-medium">Attribute</th><th className="pb-1.5 font-medium">Selection now vs baseline</th><th className="pb-1.5 text-right font-medium">Max rate drift</th><th className="pb-1.5 text-right font-medium">Impact ratio</th><th className="pb-1.5 text-right font-medium">Worst PSI</th></tr>
+                <tr><th scope="col" className="pb-1.5 font-medium">Attribute</th><th scope="col" className="pb-1.5 font-medium">Selection now vs baseline</th><th scope="col" className="pb-1.5 text-right font-medium">Max rate drift</th><th scope="col" className="pb-1.5 text-right font-medium">Impact ratio</th><th scope="col" className="pb-1.5 text-right font-medium">Impact-ratio change</th><th scope="col" className="pb-1.5 text-right font-medium">Worst PSI</th></tr>
               </thead>
               <tbody>
                 {result.result.attributes.map((a) => (
@@ -147,6 +147,7 @@ export function MonitoringRunPanel({
                     </td>
                     <td className={cn('py-2 text-right tabular-nums', a.checks.selection_rate_stable === false && 'font-semibold text-[#b4232c]')}>{num(a.max_rate_drift)}</td>
                     <td className={cn('py-2 text-right tabular-nums', !a.checks.disparate_impact && 'font-semibold text-[#b4232c]')}>{num(a.disparate_impact_ratio)}</td>
+                    <td className={cn('py-2 text-right tabular-nums', a.impact_ratio_change !== null && a.impact_ratio_change >= result.result.thresholds.rate_drift && 'font-semibold text-[#b4232c]')}>{num(a.impact_ratio_change)}</td>
                     <td className={cn('py-2 text-right tabular-nums', a.checks.score_stable === false && 'font-semibold text-[#b4232c]')}>{num(a.worst_psi)}</td>
                   </tr>
                 ))}
@@ -154,7 +155,7 @@ export function MonitoringRunPanel({
             </table>
           </div>
           <div className="text-[11.5px] text-[var(--fm-ink3)]">
-            Thresholds: rate drift at or below {result.result.thresholds.rate_drift}, impact ratio at or above {result.result.thresholds.disparate_impact_ratio}, PSI below {result.result.thresholds.psi_moderate} stable and above {result.result.thresholds.psi_significant} significant.
+            Thresholds: rate drift and impact-ratio change below {result.result.thresholds.rate_drift}, impact ratio at or above {result.result.thresholds.disparate_impact_ratio}, PSI below {result.result.thresholds.psi_moderate} stable and above {result.result.thresholds.psi_significant} significant.
           </div>
           <button type="button" onClick={() => void pick(null)} className="justify-self-start text-[12.5px] font-medium text-[var(--fm-ink2)] underline-offset-2 hover:underline">Record another snapshot</button>
         </div>

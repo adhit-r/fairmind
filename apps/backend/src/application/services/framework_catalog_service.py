@@ -1,4 +1,4 @@
-"""Import immutable framework catalogs from versioned AIUC workbooks and JSON principle sets."""
+"""Import immutable framework catalogs from versioned AIUC workbooks, JSON principle sets and the pack catalogue."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import re
 import uuid
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -19,6 +20,12 @@ from sqlalchemy.orm import Session
 
 from database.governance_models import GovernanceControlDefinition, GovernanceFrameworkVersion
 
+CATALOGUE_PATH = Path(__file__).resolve().parents[2] / "api" / "routers" / "pack_catalogue_data" / "catalogue.json"
+# pack catalogue framework key -> assurance-store framework key, for the frameworks the store holds
+CATALOGUE_STORE_KEYS = {"ISO42001": "iso-42001", "AIUC1": "aiuc-1", "OECDAI": "oecd-ai"}
+# store frameworks built from the pack catalogue itself: one control per clause, the clause ids clause_map uses
+CATALOGUE_FRAMEWORKS = {"iso-42001": "ISO42001"}
+GROUP_ID = re.compile(r"^(.*?\d[\d.]*)\s+(.+)$")  # "Clause 6 Planning" -> ("Clause 6", "Planning"); "A.6 AI system life cycle"
 REQUIRED_SHEETS = ("Instructions", "AIUC-1 requirements", "AIUC-1 Controls & Evidence")
 DEFAULT_COUNTS = (51, 135)
 REQUIREMENT_ID = re.compile(r"^([A-Z]\d{3}):")
@@ -337,6 +344,86 @@ def parse_principles_json(payload: bytes) -> ParsedFrameworkCatalog:
     )
 
 
+@lru_cache(maxsize=1)
+def _crosswalk() -> dict[str, tuple[dict, ...]]:
+    """Active catalogue clauses by the common control the crosswalk maps them to."""
+    data = json.loads(CATALOGUE_PATH.read_bytes())
+    active = {r["key"]: r for r in data["requirements"] if r.get("active", True)}
+    out: dict[str, list[dict]] = {}
+    for entry in data["crosswalk"]:
+        if entry["key"] in active:
+            out.setdefault(entry["commonControl"], []).append(active[entry["key"]])
+    return {control: tuple(clauses) for control, clauses in out.items()}
+
+
+def crosswalk_clauses(common_control: str | None, framework_key: str) -> set[str]:
+    """The store framework's control ids (clause ids) the crosswalk maps this common control to."""
+    source_key = CATALOGUE_FRAMEWORKS[framework_key]
+    return {c["control"] for c in _crosswalk().get(common_control or "", ()) if c["framework"] == source_key}
+
+
+@lru_cache(maxsize=1)
+def _evaluation_tests() -> dict[str, tuple[str, ...]]:
+    """Catalogue evaluation id -> the requirement keys it tests directly (its own ``tests`` list)."""
+    data = json.loads(CATALOGUE_PATH.read_bytes())
+    return {e["id"]: tuple(e.get("tests") or ()) for e in data["evaluations"]}
+
+
+def is_management_system_clause(control: str) -> bool:
+    """ISO/IEC 42001 clauses 4 to 10 describe the management system as a whole; Annex A controls start with "A."."""
+    return not control.startswith("A.")
+
+
+def evaluation_clauses(evaluation_id: str, framework_key: str) -> set[str]:
+    """The store framework's clause ids one catalogue evaluation's own evidence can support: the clauses it tests directly.
+
+    Its common control's whole crosswalk is far wider (a secrets scan would reach every life-cycle clause), so that is
+    not used. A management-system clause (4.x to 10.x) is never proposed from a single technical check.
+    """
+    source_key = CATALOGUE_FRAMEWORKS[framework_key]
+    controls = {key.split("|", 1)[1] for key in _evaluation_tests().get(evaluation_id, ()) if key.startswith(f"{source_key}|")}
+    return {c for c in controls if not is_management_system_clause(c)}
+
+
+def parse_catalogue_framework(framework_key: str) -> ParsedFrameworkCatalog:
+    """Build a store framework from the pack catalogue's active clauses; the hash covers only that framework's rows."""
+    data = json.loads(CATALOGUE_PATH.read_bytes())
+    source_key = CATALOGUE_FRAMEWORKS[framework_key]
+    framework = next(f for f in data["frameworks"] if f["key"] == source_key)
+    clauses = [r for r in data["requirements"] if r["framework"] == source_key and r.get("active", True)]
+    groups: dict[str, ParsedRequirement] = {}
+    controls = []
+    for clause in clauses:
+        group = clause.get("group") or framework["name"]
+        match = GROUP_ID.match(group)
+        group_id, group_title = match.groups() if match else (group, group)
+        groups.setdefault(group_id, ParsedRequirement(
+            external_id=group_id, source_title=group_title, statement=group, principle=group_title, application="",
+            frequency="", source_capabilities="", capabilities=(), active=True,
+        ))
+        controls.append(ParsedControl(
+            external_id=clause["control"], parent_requirement_id=group_id, source_parent_title=group_title,
+            source_statement=clause["title"], source_evidence_title=f"{clause['control']} Clause: {clause['title']}",
+            source_evidence_guidance="", category="", source_locations="", locations=(), source_capabilities="",
+            capabilities=(), additional_category="", source_additional_locations="", additional_locations=(),
+            source_additional_capabilities="", additional_capabilities=(), application="", active=True,
+            source_cell=clause["key"],
+        ))
+    if not controls:
+        raise WorkbookValidationError(f"catalogue has no active clauses for {source_key}")
+    snapshot = json.dumps({"framework": framework, "clauses": clauses}, sort_keys=True).encode()
+    return ParsedFrameworkCatalog(
+        framework_key=framework_key,
+        name=framework["name"],
+        version_label=framework["version"],
+        source_hash=hashlib.sha256(snapshot).hexdigest(),
+        requirements=tuple(groups.values()),
+        controls=tuple(controls),
+        parser="pack-catalogue",
+        source_uri=f"catalogue://{data['version']}/{source_key}",
+    )
+
+
 class FrameworkCatalogService:
     """Persist validated, immutable framework catalog versions."""
 
@@ -382,6 +469,12 @@ class FrameworkCatalogService:
         catalog = parse_principles_json(path.read_bytes())
         return self._import_catalog(
             catalog, source_filename=path.name, source_uri=catalog.source_uri, actor_id=actor_id
+        )
+
+    def import_catalogue_framework(self, framework_key: str, actor_id: str) -> FrameworkImportResult:
+        catalog = parse_catalogue_framework(framework_key)
+        return self._import_catalog(
+            catalog, source_filename=CATALOGUE_PATH.name, source_uri=catalog.source_uri, actor_id=actor_id
         )
 
     def _import_catalog(

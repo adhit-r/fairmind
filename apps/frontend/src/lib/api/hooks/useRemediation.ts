@@ -136,8 +136,9 @@ function normalizeTask(task: Partial<RemediationTask>): RemediationTask {
     retestRequired,
     retestStatus,
     notes,
-    createdAt: String(task.createdAt || new Date().toISOString()),
-    updatedAt: String(task.updatedAt || task.createdAt || new Date().toISOString()),
+    // no time on file reads as 'Unknown time', never as now
+    createdAt: String(task.createdAt || ''),
+    updatedAt: String(task.updatedAt || task.createdAt || ''),
     riskId: riskId || undefined,
     source: sourceType === 'risk' ? 'risk' : 'manual',
     evidenceNeeded: deriveEvidenceNeeded(notes),

@@ -50,7 +50,7 @@ Offsets are never subtracted from emissions and never improve confidence, tier, 
 
 - Provenance stays categorical and separate from uncertainty.
 - Location-based and market-based carbon are both emitted.
-- Vendor-reported confidence is capped at `0.60`.
+- Confidence is the provenance class midpoint; vendor-reported evidence scores `0.50` whatever score the caller claims.
 - Moderate impact plus unknown evidence returns `no_go`.
 - High-impact measured evidence with documented mitigations returns `conditional_go`.
 - Offsets and RECs do not improve gate results.

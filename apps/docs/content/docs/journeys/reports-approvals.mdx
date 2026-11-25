@@ -1,0 +1,25 @@
+---
+title: Approvals and report snapshots
+description: Record a human decision and generate a point-in-time assurance snapshot.
+---
+
+<Callout title="See it in the app">The [Decisions](../app/release/decisions.mdx) page shows this step in a recording and a click-through, captured in the demo.</Callout>
+
+Approvals and reports preserve what a reviewer knew at a specific time.
+
+## Request review
+
+1. Open the system file and read the release gate, open findings and missing evidence.
+2. Press **Request release decision**.
+3. A reviewer presses **Decide**, adds **Notes** (or **Conditions** on a conditional go) and chooses **Approve release** or **Reject**.
+4. The decision is sealed with the evidence behind it. [Decisions](/docs/app/release/decisions) lists every request and seal.
+
+Approval state is a recorded workflow decision. It is not a legal certification.
+
+## Keep a record of the state
+
+**Audit reports**, linked from the system file's side panel, opens **Reports & Assurance** for the system. It shows the framework scope, accepted controls, the evidence index, unresolved findings and the decision register.
+
+In **Assurance Report Studio**, save a snapshot of the risks, evidence, remediation and decisions recorded at that moment, and export it as PDF, DOCX or JSON. A snapshot does not change the live summary. Use one to show what was reviewed at a release meeting or audit checkpoint.
+
+A snapshot is not a certification. To hand an auditor something they can check for tampering themselves, build an [auditor pack](/docs/app/records/auditor-packs).

@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>FairMind promo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Figtree";
+        src: url("assets/fonts/figtree.woff2") format("woff2");
+        font-weight: 300 900;
+      }
+      :root {
+        --bg: #f4f4f2;
+        --ink: #15171a;
+        --ink2: #5a5f68;
+        --ink3: #666c76;
+        --line: rgba(21, 23, 26, 0.08);
+        --brand: #ff6b35;
+        --go: #1f9d7a;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Figtree", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+      }
+
+      /* ---------- full-canvas statement scenes (1, 2, 9) ---------- */
+      .statement {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 0 96px;
+      }
+      .big {
+        margin: 0;
+        font-size: 92px;
+        line-height: 1.04;
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        display: block;
+      }
+      .big.second {
+        color: var(--ink2);
+        margin-top: 28px;
+      }
+      .mark-lg {
+        width: 132px;
+        height: 132px;
+        display: block;
+      }
+      .wordmark {
+        margin: 28px 0 0;
+        font-size: 64px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+      }
+      .lede {
+        margin: 34px 0 0;
+        font-size: 40px;
+        line-height: 1.25;
+        font-weight: 500;
+        letter-spacing: -0.015em;
+        color: var(--ink2);
+        max-width: 820px;
+      }
+      .lede strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .cta {
+        margin-top: 56px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+      }
+      .pill {
+        display: block;
+        background: var(--ink);
+        color: #fff;
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        padding: 20px 40px;
+        border-radius: 999px;
+      }
+      .fine {
+        display: block;
+        font-size: 28px;
+        color: var(--ink3);
+        font-weight: 500;
+      }
+
+      /* ---------- product scenes: text block ---------- */
+      .copy {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        top: 64px;
+        height: 352px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+      .label {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink3);
+      }
+      .label i {
+        display: block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--brand);
+      }
+      .head {
+        margin: 22px 0 0;
+        font-size: 60px;
+        line-height: 1.07;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+      }
+      .sub {
+        margin: 18px 0 0;
+        font-size: 30px;
+        line-height: 1.3;
+        font-weight: 500;
+        color: var(--ink2);
+      }
+
+      /* ---------- the product card (persistent, not timed) ---------- */
+      #card {
+        position: absolute;
+        left: 48px;
+        top: 452px;
+        width: 984px;
+        height: 762px;
+        border-radius: 22px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(21, 23, 26, 0.06), 0 12px 40px rgba(21, 23, 26, 0.1);
+        outline: 1px solid var(--line);
+      }
+      .vwrap {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1440px;
+        height: 900px;
+        transform-origin: 0 0;
+      }
+      .vwrap video {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1440px;
+        height: 900px;
+        display: block;
+      }
+
+      /* ---------- footer ---------- */
+      #footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .brand img {
+        width: 44px;
+        height: 44px;
+        display: block;
+      }
+      .url {
+        font-size: 28px;
+        font-weight: 500;
+        color: var(--ink3);
+      }
+
+      /* ---------- 16:9 layout ---------- */
+      #root[data-width="1920"] .copy {
+        left: 112px;
+        right: auto;
+        width: 520px;
+        top: 300px;
+        height: auto;
+        justify-content: flex-start;
+      }
+      #root[data-width="1920"] .head {
+        font-size: 58px;
+      }
+      #root[data-width="1920"] #card {
+        left: 700px;
+        top: 96px;
+        width: 1124px;
+        height: 870px;
+      }
+      #root[data-width="1920"] #footer {
+        left: 112px;
+        right: auto;
+        width: 520px;
+        bottom: 104px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      #root[data-width="1920"] .big {
+        font-size: 104px;
+      }
+      #root[data-width="1920"] .lede {
+        max-width: 1100px;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-width="1920"
+      data-height="1080"
+      data-duration="63"
+    >
+      <!-- 1. The question -->
+      <section id="s1" class="clip statement" data-start="0" data-duration="5.8" data-track-index="1">
+        <h1 class="big first">May this AI system ship?</h1>
+        <h1 class="big second">And what is the evidence?</h1>
+      </section>
+
+      <!-- 2. The answer -->
+      <section id="s2" class="clip statement" data-start="5.8" data-duration="3.7" data-track-index="1">
+        <img class="mark-lg" src="assets/logo-mark.svg" alt="FairMind" />
+        <p class="wordmark">FairMind</p>
+        <p class="lede">Answers it with <strong>one reviewable record</strong>.</p>
+      </section>
+
+      <!-- product card, shared by scenes 3-8 -->
+      <div id="card">
+        <div class="vwrap" data-layout-ignore id="w-discovery">
+          <video id="v-discovery" src="assets/clips/discovery.mp4" muted playsinline data-start="9.2" data-duration="8.49" data-track-index="2"></video>
+        </div>
+        <div class="vwrap" data-layout-ignore id="w-home">
+          <video id="v-home" src="assets/clips/home.mp4" muted playsinline data-start="17.09" data-duration="8.32" data-track-index="3"></video>
+        </div>
+        <div class="vwrap" data-layout-ignore id="w-evals">
+          <video id="v-evals" src="assets/clips/evals.mp4" muted playsinline data-start="24.81" data-duration="8.44" data-track-index="2"></video>
+        </div>
+        <div class="vwrap" data-layout-ignore id="w-evidence">
+          <video id="v-evidence" src="assets/clips/evidence.mp4" muted playsinline data-start="32.65" data-duration="8.44" data-track-index="3"></video>
+        </div>
+        <div class="vwrap" data-layout-ignore id="w-gate">
+          <video id="v-gate" src="assets/clips/gate.mp4" muted playsinline data-start="40.49" data-duration="8.44" data-track-index="2"></video>
+        </div>
+        <div class="vwrap" data-layout-ignore id="w-decisions">
+          <video id="v-decisions" src="assets/clips/decisions.mp4" muted playsinline data-start="48.33" data-duration="7.91" data-track-index="3"></video>
+        </div>
+      </div>
+
+      <!-- 3-8. Product scene copy -->
+      <section id="s3" class="clip copy" data-start="9.5" data-duration="7.89" data-track-index="4">
+        <div class="label"><i></i>Find</div>
+        <h2 class="head">Find the AI you have not registered.</h2>
+        <p class="sub">Discovery reads MLflow, GitHub and Hugging Face.</p>
+      </section>
+      <section id="s4" class="clip copy" data-start="17.39" data-duration="7.72" data-track-index="4">
+        <div class="label"><i></i>See</div>
+        <h2 class="head">Every system, against every release check.</h2>
+        <p class="sub">Live. Click a cell to see what is behind it.</p>
+      </section>
+      <section id="s5" class="clip copy" data-start="25.11" data-duration="7.84" data-track-index="4">
+        <div class="label"><i></i>Test</div>
+        <h2 class="head">109 evaluations. 104 can run today.</h2>
+        <p class="sub">Each with its metric, its threshold and its engine.</p>
+      </section>
+      <section id="s6" class="clip copy" data-start="32.95" data-duration="7.84" data-track-index="4">
+        <div class="label"><i></i>Evidence</div>
+        <h2 class="head">Every result becomes evidence.</h2>
+        <p class="sub">Where it came from, and how much it counts.</p>
+      </section>
+      <section id="s7" class="clip copy" data-start="40.79" data-duration="7.84" data-track-index="4">
+        <div class="label"><i></i>Gate</div>
+        <h2 class="head">A release gate scores every check.</h2>
+        <p class="sub">And explains how the verdict was reached.</p>
+      </section>
+      <section id="s8" class="clip copy" data-start="48.63" data-duration="7.31" data-track-index="4">
+        <div class="label"><i></i>Decide</div>
+        <h2 class="head">The result is evidence. A person decides.</h2>
+        <p class="sub">Someone other than the person who asked.</p>
+      </section>
+
+      <div id="footer">
+        <div class="brand"><img src="assets/logo-mark.svg" alt="" />FairMind</div>
+        <div class="url">Open source, AGPL-3.0</div>
+      </div>
+
+      <!-- 9. Outro -->
+      <section id="s9" class="clip statement" data-start="55.94" data-duration="7.06" data-track-index="1">
+        <img class="mark-lg" src="assets/logo-mark.svg" alt="FairMind" />
+        <p class="wordmark">FairMind</p>
+        <p class="lede">Open-source AI assurance for models and agents.</p>
+        <div class="cta">
+          <span class="pill">Try the live demo: app.fairmind.xyz</span>
+          <span class="fine">AGPL-3.0 &#183; github.com/adhit-r/fairmind</span>
+        </div>
+      </section>
+
+      <audio
+        id="music"
+        src="assets/music/bed.mp3"
+        data-start="0"
+        data-duration="63"
+        data-track-index="6"
+        data-volume="1"
+        data-automation='{"version":1,"lanes":[{"target":"volume","points":[{"t":0,"v":0},{"t":0.6,"v":1},{"t":60,"v":1},{"t":63,"v":0}]}]}'
+      ></audio>
+    </div>
+
+    <script>
+      // Layout constants, read once from the root size (deterministic).
+      const root = document.getElementById("root");
+      const WIDE = root.getAttribute("data-width") === "1920";
+      const CARD_W = WIDE ? 1124 : 984;
+      const AR = 1.29; // card aspect, same in both formats
+      const SRC_W = 1440, SRC_H = 900;
+
+      // Camera keyframes per clip, in source pixels: [clipTime, x, y, w]. Height = w / AR.
+      const SHOTS = [
+        { id: "discovery", start: 9.2, end: 17.69, keys: [[0, 330, 40, 1110], [8.49, 360, 120, 980]] },
+        { id: "home", start: 17.09, end: 25.41, keys: [[0, 360, 60, 1060], [4.6, 370, 150, 860], [6.0, 370, 150, 860], [8.32, 560, 40, 880]] },
+        { id: "evals", start: 24.81, end: 33.25, keys: [[0, 345, 70, 1095], [8.44, 360, 90, 800]] },
+        { id: "evidence", start: 32.65, end: 41.09, keys: [[0, 345, 80, 1095], [6.0, 360, 200, 900], [6.9, 360, 200, 900], [8.0, 860, 0, 580], [8.44, 860, 0, 580]] },
+        { id: "gate", start: 40.49, end: 48.93, keys: [[0, 345, 100, 1095], [8.44, 360, 290, 720]] },
+        { id: "decisions", start: 48.33, end: 56.24, keys: [[0, 345, 70, 1060], [2.3, 345, 90, 980], [3.4, 830, 40, 610], [7.91, 830, 40, 600]] },
+      ];
+
+      function cam(x, y, w) {
+        const h = w / AR;
+        x = Math.max(0, Math.min(x, SRC_W - w));
+        y = Math.max(0, Math.min(y, SRC_H - h));
+        const s = CARD_W / w;
+        return { x: -x * s, y: -y * s, scale: s };
+      }
+
+      const tl = gsap.timeline({ paused: true });
+      const XF = 0.6; // crossfade
+
+      // 1. Question. beat-locked: second line at 3.70s
+      tl.set("#s1 .first", { opacity: 1 }, 0); // on screen at frame 0 (thumbnail)
+      tl.fromTo("#s1", { scale: 1 }, { scale: 1.04, duration: 5.8, ease: "none" }, 0); // slow push while the question sits
+      tl.fromTo("#s1 .second", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.9, ease: "power3.out" }, 3.18); // beat-locked: 3.18s
+      tl.to("#s1 .big", { opacity: 0, duration: 0.4, ease: "power2.in" }, 5.35);
+
+      // 2. Answer. beat-locked: mark at 5.80s
+      tl.fromTo("#s2 .mark-lg", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 5.8);
+      tl.fromTo("#s2 .wordmark", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 6.0);
+      tl.fromTo("#s2 .lede", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 6.45);
+      tl.to("#s2 > *", { opacity: 0, duration: 0.4, ease: "power2.in" }, 9.05);
+
+      // Card in / out
+      tl.fromTo("#card", { opacity: 0, y: 30, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power3.out" }, 9.3);
+      tl.to("#card", { opacity: 0, y: 16, duration: 0.5, ease: "power2.in" }, 55.6);
+      tl.fromTo("#footer", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 9.7);
+      tl.to("#footer", { opacity: 0, duration: 0.4 }, 55.55);
+
+      // Shots: crossfade + camera moves
+      SHOTS.forEach((s, i) => {
+        const w = "#w-" + s.id;
+        const k0 = s.keys[0];
+        tl.set(w, { opacity: i === 0 ? 1 : 0, ...cam(k0[1], k0[2], k0[3]) }, 0);
+        if (i > 0) tl.to(w, { opacity: 1, duration: XF, ease: "none" }, s.start);
+        for (let j = 1; j < s.keys.length; j++) {
+          const a = s.keys[j - 1], b = s.keys[j];
+          tl.to(w, { ...cam(b[1], b[2], b[3]), duration: b[0] - a[0], ease: "power1.inOut" }, s.start + a[0]);
+        }
+      });
+
+      // Copy for scenes 3-8
+      ["s3", "s4", "s5", "s6", "s7", "s8"].forEach((id) => {
+        const el = document.getElementById(id);
+        const st = parseFloat(el.dataset.start);
+        const en = st + parseFloat(el.dataset.duration);
+        tl.fromTo(`#${id} .label`, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, st + 0.15);
+        tl.fromTo(`#${id} .head`, { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, st + 0.25);
+        tl.fromTo(`#${id} .sub`, { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, st + 0.75);
+        tl.to(`#${id} > *`, { opacity: 0, duration: 0.35, ease: "power2.in" }, en - 0.4);
+      });
+
+      // 9. Outro
+      tl.fromTo("#s9 .mark-lg", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.8, ease: "power3.out" }, 56.1);
+      tl.fromTo("#s9 .wordmark", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 56.35);
+      tl.fromTo("#s9 .lede", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 56.8);
+      tl.fromTo("#s9 .cta", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 57.6);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

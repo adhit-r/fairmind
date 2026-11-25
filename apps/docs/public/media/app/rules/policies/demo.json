@@ -1,0 +1,63 @@
+{
+  "title": "Review policies and their alerts",
+  "width": 1280,
+  "height": 800,
+  "steps": [
+    {
+      "image": "step-1.jpg",
+      "text": "Policies shows your organisation policies, who has acknowledged them and whether their rules hold."
+    },
+    {
+      "image": "step-2.jpg",
+      "text": "Filter to the policies with an open alert.",
+      "box": {
+        "x": 408,
+        "y": 321,
+        "w": 141,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-3.jpg",
+      "text": "Back to all policies.",
+      "box": {
+        "x": 353,
+        "y": 321,
+        "w": 53,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-4.jpg",
+      "text": "Enforce rules now checks every published rule against every system.",
+      "box": {
+        "x": 334,
+        "y": 154,
+        "w": 137,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-5.jpg",
+      "text": "The agent can draft a policy from a short brief. It saves a draft for people to review.",
+      "box": {
+        "x": 479,
+        "y": 154,
+        "w": 204,
+        "h": 32
+      }
+    },
+    {
+      "image": "step-6.jpg",
+      "text": "We stop before drafting, because this demo is read-only.",
+      "box": {
+        "x": 726,
+        "y": 549,
+        "w": 98,
+        "h": 32
+      }
+    }
+  ],
+  "end": "end.jpg",
+  "seconds": 49
+}

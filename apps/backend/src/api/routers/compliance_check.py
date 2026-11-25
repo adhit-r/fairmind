@@ -55,6 +55,8 @@ class ComplianceCheckResponse(BaseModel):
     results: List[Dict[str, Any]]
     gaps: List[Dict[str, Any]]
     timestamp: datetime
+    # "self_reported": scored from the system_data the caller sent, not from anything FairMind measured
+    evidence_source: str = "self_reported"
 
 
 class EvidenceResponse(BaseModel):
@@ -70,7 +72,7 @@ class EvidenceResponse(BaseModel):
 
 
 @router.get("/frameworks")
-async def get_frameworks():
+def get_frameworks():
     """Get available regulatory frameworks"""
     return {
         "frameworks": [
@@ -107,7 +109,7 @@ async def get_frameworks():
 
 
 @router.get("/controls")
-async def get_technical_controls(framework: Optional[str] = None):
+def get_technical_controls(framework: Optional[str] = None):
     """Get available technical controls"""
     controls = evidence_service.technical_controls
     
@@ -160,6 +162,7 @@ async def check_compliance(
     )
     for evidence in evidence_list:
         evidence.metadata["org_id"] = m.org_id
+        evidence_service.evidence_store[evidence.id] = evidence  # save with its organisation
     
     # Calculate compliance score
     compliance_score = evidence_service.get_compliance_score(evidence_list)
@@ -212,7 +215,7 @@ async def check_compliance(
 
 
 @router.get("/evidence/{evidence_id}")
-async def get_evidence(evidence_id: str, m: OrgMembership = Depends(org_member)) -> EvidenceResponse:
+def get_evidence(evidence_id: str, m: OrgMembership = Depends(org_member)) -> EvidenceResponse:
     """Get detailed evidence by ID (only evidence this organisation collected)"""
     
     evidence = evidence_service.evidence_store.get(evidence_id)
@@ -260,7 +263,8 @@ async def get_model_compliance(
         # AUTOMATED: Collect evidence from FairMind's existing features
         system_data = await automated_collector.collect_evidence_for_model(
             model_id=model_id,
-            framework=framework
+            framework=framework,
+            db=db,
         )
         
         # Run compliance check with automatically collected evidence
@@ -270,6 +274,7 @@ async def get_model_compliance(
         )
         for evidence in evidence_list:
             evidence.metadata["org_id"] = m.org_id
+            evidence_service.evidence_store[evidence.id] = evidence  # save with its organisation
         
         # Calculate compliance score
         compliance_score = evidence_service.get_compliance_score(evidence_list)
@@ -324,7 +329,7 @@ async def get_model_compliance(
             "results": results,
             "gaps": gaps,
             "timestamp": datetime.now().isoformat(),
-            "note": "Evidence automatically collected from FairMind's bias detection, model registry, monitoring, and security testing features"
+            "note": "Checks with evidence_source 'default' or 'not_collected' had no stored evidence for this model and are reported as failed, not assumed."
         }
         
     except Exception as e:
@@ -334,20 +339,3 @@ async def get_model_compliance(
         )
 
 
-@router.post("/evidence/manual")
-async def upload_manual_evidence(
-    control_id: str,
-    framework: str,
-    evidence_type: str,
-    data: Dict[str, Any]
-):
-    """Upload manual evidence (documents, screenshots, attestations)"""
-    
-    # This would handle manual evidence uploads
-    # For now, return a placeholder
-    return {
-        "message": "Manual evidence upload coming soon",
-        "control_id": control_id,
-        "framework": framework,
-        "evidence_type": evidence_type
-    }

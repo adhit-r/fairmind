@@ -1,0 +1,17 @@
+WEBVTT
+
+1
+00:00:00.400 --> 00:00:04.091
+Decisions lists every release approval request for your systems.
+
+2
+00:00:04.985 --> 00:00:09.806
+The filter switches between pending, approved and rejected. Each shows its count.
+
+3
+00:00:10.678 --> 00:00:12.257
+Click a request to open it.
+
+4
+00:00:13.129 --> 00:00:19.998
+A pending request is decided on the system file, beside the release gate, by someone other than the person who asked.

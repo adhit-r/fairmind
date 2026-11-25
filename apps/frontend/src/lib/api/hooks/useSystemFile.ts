@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
+import type { CellState } from '@/components/ui/matrix'
+import { withOrg, type EngineRun, type LiveRunSummary } from './usePacks'
 
 const GOV = '/api/v1/ai-governance'
 
-export type StageKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'operate'
+export type StageKey = 'onboard' | 'assess' | 'govern' | 'remediate' | 'operate' | 'retired'
 
 export interface LifecycleSummary {
   stage: StageKey
@@ -61,7 +63,7 @@ export interface ApprovalRequestRecord {
 export interface ApprovalStatus {
   systemId: string
   request: ApprovalRequestRecord | null
-  decisions: Array<{ id: string; decision: string; decidedBy?: string | null; notes?: string | null; createdAt?: string }>
+  decisions: Array<{ id: string; decision: string; decided_by?: string | null; notes?: string | null; createdAt?: string }>
 }
 
 export interface RemediationStatus {
@@ -89,6 +91,14 @@ export interface GateCheck {
   confidence: number
   evidenceId: string | null
   detail: { all_checks_pass?: boolean | null; rows?: number; attributes?: string[] } | null
+  /** The provenance class of the record the check read; null when nothing current is on file. Absent in payloads older than the field. */
+  evidenceClass?: string | null
+  /** The monitoring snapshot is older than its cadence allows; the check reads open. */
+  stale?: true
+  /** A measured or tool-estimated record that fails its own thresholds. */
+  fails?: true
+  /** The number of the recorded change that reopened this check; its older evidence no longer counts. */
+  reopenedBy?: number
 }
 
 export interface ReleaseGate {
@@ -97,9 +107,15 @@ export interface ReleaseGate {
   band: 'measured' | 'estimated' | 'unknown'
   checks: GateCheck[]
   reasons: string[]
+  /** Checks proven and passing; a failing check is counted in failing instead. */
   proven: number
   attested: number
   open: number
+  failing?: number
+  /** The latest approval request's status, or not_requested. */
+  approvalStatus?: string
+  systemId?: string
+  riskTier?: SystemRecord['riskTier']
   /** Published policy rules that fail for this system once released. */
   policy?: { blocking: PolicyRuleFailure[]; warnings: PolicyRuleFailure[] }
   /** How the verdict was reached: the tier it was computed on and that tier's row of the decision matrix. */
@@ -129,11 +145,14 @@ export interface GateExplain {
 
 export interface GatePathStep {
   check: GateCheck['key']
-  action: 'fairness_run' | 'environmental_assessment' | 'monitoring_snapshot' | 'attest' | 'evidence_upload'
+  action: 'fairness_run' | 'evaluation_run' | 'environmental_assessment' | 'monitoring_snapshot' | 'attest' | 'evidence_upload'
   evidenceClass: 'measured' | 'tool_estimated' | 'manual'
   counts: number
   gain: number
   note: string | null
+  /** Set when the step names one evaluation: EV-MON-02 on live runs (source 'traces'). */
+  evaluationId?: string
+  source?: 'traces'
 }
 
 export interface GatePathOption {
@@ -212,6 +231,8 @@ export interface AttributeConfirmation {
   sha256: string
   removalReason?: string
   uncoveredReason?: string
+  /** Keep the file so the release autopilot can re-run it with these attributes. */
+  keepForAgent?: boolean
 }
 
 export interface FairnessMapping {
@@ -303,6 +324,7 @@ export interface MonitoringRunResult {
       rate_drift: Record<string, number>
       max_rate_drift: number | null
       disparate_impact_ratio: number
+      impact_ratio_change: number | null
       psi_by_group: Record<string, number | null>
       worst_psi: number | null
       checks: Record<string, boolean>
@@ -326,18 +348,26 @@ export interface DecisionSeal {
 export interface ClauseMapFramework {
   key: string
   name: string
-  counts: { proven: number; attested: number; open: number; total: number }
+  counts: { proven: number; partial?: number; attested: number; excluded?: number; open: number; total: number }
   clauses: Array<{
     key: string
     control: string
     title: string
     group: string | null
-    state: 'proven' | 'attested' | 'open'
-    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string }>
+    /** proven only through a check that satisfies the clause; partial when the proof comes through a weaker link. */
+    /** excluded: every control behind the clause is assessed not applicable for this system with a justification; counts as closed. */
+    state: 'proven' | 'partial' | 'attested' | 'excluded' | 'open'
+    /** From the system's control assessments, when any is recorded for the clause. */
+    applicability?: string
+    justification?: string | null
+    /** The grid state derived on the server from the contributing checks' class, result and freshness; none when nothing reaches the clause. */
+    cell: CellState | 'none'
+    checks: Array<{ check: string; label: string; state: 'proven' | 'attested' | 'open'; confidence: number; evidenceId: string | null; relation: string; evidenceClass?: GateCheck['evidenceClass']; stale?: true; fails?: true }>
   }>
 }
 
 export interface ClauseMap {
+  systemId?: string
   verdict: string | null
   confidence: number | null
   frameworks: ClauseMapFramework[]
@@ -345,6 +375,19 @@ export interface ClauseMap {
   scoped?: boolean
   /** The confirmed frameworks, including any with no clause mapped to a gate check. */
   confirmed?: Array<{ key: string; name: string }>
+}
+
+/** Saves one framework's Statement of Applicability for a system as the server's CSV; an error message, or null when saved. */
+export async function downloadSoa(systemId: string, framework: string): Promise<string | null> {
+  const res = await apiClient.get<Blob>(`${GOV}/systems/${systemId}/soa/${encodeURIComponent(framework)}`, { responseType: 'blob' })
+  if (!res.success || !res.data) return res.error || 'The Statement of Applicability could not be downloaded'
+  const url = URL.createObjectURL(res.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `soa-${framework}-${systemId}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+  return null
 }
 
 /** Environmental is not attested from the UI: an attestation would shadow any later assessment. */
@@ -359,10 +402,14 @@ export interface SystemFile {
   reports: AuditReport[]
   gate: ReleaseGate | null
   fairnessRuns: FairnessRunSummary[]
+  /** Catalogue evaluation runs for this system, every evaluation, newest first. */
+  evaluationRuns: EngineRun[]
   monitoringRuns: MonitoringRunSummary[]
   monitoringPolicy: MonitoringPolicy | null
   seals: DecisionSeal[]
   clauseMap: ClauseMap | null
+  /** Live runs the system's own code sends; null when there is no organisation to read them in. */
+  liveRuns: LiveRunSummary | null
 }
 
 function unwrap<T>(res: ApiResponse<T>, fallback: T): T {
@@ -377,7 +424,7 @@ export interface SystemFileView {
 /** System file state keyed by organisation and system. */
 export type SystemFileState = EvaluationScopeState<SystemFileView>
 
-const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null }
+const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], evaluationRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null, liveRuns: null }
 const PENDING: SystemFileView = { file: EMPTY_FILE, loading: true, error: null }
 
 export const systemFileScopeKey = (organizationId: string | null | undefined, systemId: string | undefined) =>
@@ -395,8 +442,9 @@ export const systemFileAwaitsOrg = (orgsLoading: boolean, organizationId: string
 
 type Get = <T>(path: string) => Promise<ApiResponse<T>>
 
-/** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope. */
-export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void) {
+/** Fetch one system's file into its scope; every write is dropped once the state has moved to another scope.
+ *  The packs routes are scoped by `orgId`; without one the file has no evaluation runs. */
+export async function loadSystemFile(get: Get, systemId: string, scopeKey: string, update: (next: (s: SystemFileState) => SystemFileState) => void, orgId?: string | null) {
   const write = (next: (v: SystemFileView) => SystemFileView) => update((s) => writeEvaluationScopeState(s, scopeKey, next(s.value)))
   write((v) => ({ ...v, loading: true }))
   const sys = await get<SystemRecord>(`${GOV}/systems/${systemId}`)
@@ -405,7 +453,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     return
   }
   const q = `system_id=${encodeURIComponent(systemId)}`
-  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, monitoringRuns, monitoringPolicy, seals, clauseMap] = await Promise.all([
+  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, liveRuns] = await Promise.all([
     get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
     get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
     get<RemediationStatus>(`${GOV}/remediation?${q}`),
@@ -413,10 +461,12 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     get<AuditReport[]>(`${GOV}/reports?${q}`),
     get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
     get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
+    orgId ? get<EngineRun[]>(withOrg(`/api/v1/packs/systems/${encodeURIComponent(systemId)}/evaluation-runs`, orgId)) : Promise.resolve<ApiResponse<EngineRun[]>>({ success: true, data: [] }),
     get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
     get<MonitoringPolicy>(`${GOV}/systems/${systemId}/monitoring-policy`),
     get<DecisionSeal[]>(`${GOV}/systems/${systemId}/seals`),
     get<ClauseMap>(`${GOV}/systems/${systemId}/clause-map`),
+    orgId ? get<LiveRunSummary | null>(withOrg(`/api/v1/packs/ai-systems/${encodeURIComponent(systemId)}/traces/summary`, orgId)) : Promise.resolve<ApiResponse<LiveRunSummary | null>>({ success: true, data: null }),
   ])
   const file: SystemFile = {
     system: sys.data,
@@ -427,10 +477,12 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     reports: unwrap(reports, []),
     gate: unwrap(gate, null),
     fairnessRuns: unwrap(fairnessRuns, []),
+    evaluationRuns: unwrap(evaluationRuns, []),
     monitoringRuns: unwrap(monitoringRuns, []),
     monitoringPolicy: unwrap(monitoringPolicy, null),
     seals: unwrap(seals, []),
     clauseMap: unwrap(clauseMap, null),
+    liveRuns: unwrap(liveRuns, null),
   }
   write(() => ({ file, loading: false, error: null }))
 }
@@ -445,8 +497,8 @@ export function useSystemFile(systemId: string | undefined) {
 
   const refresh = useCallback(async () => {
     if (!systemId || awaitsOrg) return
-    await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState)
-  }, [awaitsOrg, scopeKey, systemId])
+    await loadSystemFile((path) => apiClient.get(path), systemId, scopeKey, setState, selectedOrg?.id)
+  }, [awaitsOrg, scopeKey, systemId, selectedOrg?.id])
 
   useEffect(() => {
     setState((s) => enterSystemFileScope(s, scopeKey))
@@ -487,6 +539,7 @@ export function useSystemFile(systemId: string | undefined) {
       form.append('confirm_sha256', confirmation.sha256)
       if (confirmation.removalReason) form.append('removal_reason', confirmation.removalReason)
       if (confirmation.uncoveredReason) form.append('uncovered_reason', confirmation.uncoveredReason)
+      if (confirmation.keepForAgent) form.append('keep_for_agent', '1')
     }
     const res = await apiClient.post<FairnessRunResult>(`${GOV}/systems/${systemId}/fairness-runs`, form, { enableRetry: false, timeout: 120_000 })
     if (!res.success || !res.data) throw new Error(res.error || 'The run failed')

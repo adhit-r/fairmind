@@ -9,7 +9,7 @@ This service provides comprehensive AI governance capabilities including:
 - Versioned assurance planning and evidence review
 """
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -35,6 +35,7 @@ from core.middleware import ErrorHandlingMiddleware, RequestLoggingMiddleware
 from core.middleware.error_handling import public_validation_errors
 from middleware.security import (
     SecurityHeadersMiddleware,
+    DemoReadOnlyMiddleware,
     RateLimitMiddleware,
     JWTAuthenticationMiddleware,
 )
@@ -46,6 +47,63 @@ from src.application.services.governance_assurance_service import OrgMembership
 logger = get_logger("main")
 
 
+# Postgres advisory lock keys for the timed sweeps below (any distinct bigints).
+_AUTOPILOT_LOCK = 7_310_001
+_POLICY_ALERT_LOCK = 7_310_002
+_DISCOVERY_LOCK = 7_310_003
+_TASK_REMINDER_LOCK = 7_310_004
+
+
+async def _exclusively(key: int, work) -> bool:
+    """Run work() only if no other worker or replica is running the same sweep.
+
+    A session advisory lock on a dedicated connection, held for the sweep and
+    released after, so N workers do the work once instead of N times (duplicate
+    alert emails, duplicate autopilot runs). False when another holder has it.
+    """
+    from sqlalchemy import text as _sql
+    from database.connection import db_manager as orm_db_manager
+
+    conn = await asyncio.to_thread(orm_db_manager.engine.connect)
+    try:
+        got = await asyncio.to_thread(lambda: conn.execute(_sql("SELECT pg_try_advisory_lock(:k)"), {"k": key}).scalar())
+        if not got:
+            return False
+        try:
+            await work()
+        finally:
+            await asyncio.to_thread(lambda: conn.execute(_sql("SELECT pg_advisory_unlock(:k)"), {"k": key}))
+        return True
+    finally:
+        await asyncio.to_thread(conn.close)
+
+
+async def _autopilot_loop(interval: int) -> None:
+    """Run the release autopilot for every system set to run, on a timer."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.autopilot import sweep
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(_AUTOPILOT_LOCK, lambda: sweep(orm_db_manager.SessionLocal))
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Autopilot sweep failed: {e}")
+
+
+async def _discovery_loop(interval: int) -> None:
+    """Re-read discovery connectors whose schedule is due, so the inventory keeps watching on its own."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.integrations import sweep
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(_DISCOVERY_LOCK, lambda: sweep(orm_db_manager.SessionLocal))
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Discovery sweep failed: {e}")
+
+
 async def _policy_alert_loop(interval: int) -> None:
     """Re-check published policy rules on a timer and email the owner when one starts failing."""
     from database.connection import db_manager as orm_db_manager
@@ -55,9 +113,29 @@ async def _policy_alert_loop(interval: int) -> None:
     while True:
         await asyncio.sleep(interval)
         try:
-            await sweep_policy_alerts(orm_db_manager.SessionLocal, email_service.send_policy_alert, settings.frontend_url)
+            await _exclusively(
+                _POLICY_ALERT_LOCK,
+                lambda: sweep_policy_alerts(orm_db_manager.SessionLocal, email_service.send_policy_alert, settings.frontend_url),
+            )
         except Exception as e:  # a failed sweep must not stop the next one
             logger.warning(f"Policy alert sweep failed: {e}")
+
+
+async def _task_reminder_loop(interval: int) -> None:
+    """Email people about their tasks due tomorrow or past due, once per due date."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.tasks import sweep_task_reminders
+    from src.infrastructure.email.resend_service import email_service
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(
+                _TASK_REMINDER_LOCK,
+                lambda: sweep_task_reminders(orm_db_manager.SessionLocal, email_service.send_task_reminder, settings.frontend_url),
+            )
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Task reminder sweep failed: {e}")
 
 
 @asynccontextmanager
@@ -94,14 +172,28 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize database: {e}")
         raise
 
-    # ORM-managed tables (users, organisations, governance). Table by table,
-    # so one failing definition does not block the rest.
-    try:
-        from database.connection import db_manager as orm_db_manager
+    # Development only. Elsewhere the schema is scripts/setup_db.py's job, run before
+    # the app starts (deploy/lightsail runs it as the migrate service), so production
+    # never applies DDL from a request-serving process.
+    if settings.is_development:
+        # ORM-managed tables (users, organisations, governance). Table by table,
+        # so one failing definition does not block the rest.
+        try:
+            from database.connection import db_manager as orm_db_manager
 
-        orm_db_manager.create_tables()
-    except Exception as e:
-        logger.warning(f"ORM table creation incomplete: {e}")
+            orm_db_manager.create_tables()
+        except Exception as e:
+            logger.warning(f"ORM table creation incomplete: {e}")
+
+        # Sign-in reads users.token_version; create_tables never alters an existing table.
+        try:
+            from sqlalchemy import text as _sql
+            from database.connection import db_manager as orm_db_manager
+
+            with orm_db_manager.engine.begin() as conn:
+                conn.execute(_sql("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0"))
+        except Exception as e:
+            logger.error(f"users.token_version is missing and sign-in will fail; run scripts/setup_db.py: {e}")
 
     # Initialize cache connections
     try:
@@ -126,6 +218,15 @@ async def lifespan(app: FastAPI):
     policy_alerts = None
     if settings.policy_alert_interval_seconds > 0:
         policy_alerts = asyncio.create_task(_policy_alert_loop(settings.policy_alert_interval_seconds))
+    discovery = None
+    if settings.discovery_check_interval_seconds > 0:
+        discovery = asyncio.create_task(_discovery_loop(settings.discovery_check_interval_seconds))
+    task_reminders = None
+    if settings.task_reminder_interval_seconds > 0:
+        task_reminders = asyncio.create_task(_task_reminder_loop(settings.task_reminder_interval_seconds))
+    autopilot = None
+    if settings.autopilot_interval_seconds > 0:
+        autopilot = asyncio.create_task(_autopilot_loop(settings.autopilot_interval_seconds))
 
     logger.info("Application startup complete")
     
@@ -140,6 +241,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application shutdown")
     if policy_alerts:
         policy_alerts.cancel()
+    if autopilot:
+        autopilot.cancel()
+    if discovery:
+        discovery.cancel()
+    if task_reminders:
+        task_reminders.cancel()
     
     # Close database connections
     try:
@@ -226,6 +333,19 @@ openapi_tags = [
 ]
 
 # Create FastAPI application with production configuration
+# Error reporting: on only when SENTRY_DSN is set. No request bodies or user
+# details leave the process (send_default_pii stays off).
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        release=settings.api_version,
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+    )
+
 app = FastAPI(
     title=settings.api_title,
     description=f"""
@@ -272,6 +392,7 @@ app.add_middleware(AuditLoggingMiddleware)  # Audit logging for compliance
 app.add_middleware(ErrorHandlingMiddleware)
 app.add_middleware(OrgIsolationMiddleware)  # Org isolation and context injection
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(DemoReadOnlyMiddleware)  # inside auth: request.state.user is set
 if settings.neon_auth_enabled and settings.is_production:
     app.add_middleware(NeonAuthMiddleware)  # Neon JWT verification middleware
 else:
@@ -390,7 +511,12 @@ _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags=["fairness"], required=False)
+_include_router("api.routes.system_lifecycle", prefix="/api/v1/ai-governance", tags=["lifecycle"], required=True)
+_include_router("api.routes.autopilot", prefix="/api/v1/ai-governance", tags=["autopilot"], required=False)
+_include_router("api.routes.governance_plan", prefix="/api/v1/plan", tags=["plan"], required=False)
 _include_router("api.routes.applicability", prefix="/api/v1/ai-governance", tags=["applicability"], required=False)
+_include_router("api.routes.framework_scope", prefix="/api/v1/ai-governance", tags=["framework-scope"], required=False)
+_include_router("api.routes.internal_audits", prefix="/api/v1/ai-governance", tags=["internal-audits"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
@@ -530,6 +656,11 @@ else:
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.agent_traces", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.tasks", prefix="/api/v1", tags=["tasks"], required=True)
+_include_router("api.routes.tasks", prefix="/api/v1/public", tags=["tasks"], attr="public_router", required=True)
+_include_router("api.routes.whats_new", prefix="/api/v1", tags=["whats-new"], required=True)
+_include_router("api.routes.whats_new", prefix="/api/v1/public", tags=["whats-new"], attr="public_router", required=True)
 _include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
@@ -544,6 +675,18 @@ _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-co
 _include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
 _include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations"], required=False)
+_include_router("api.routes.discovery_review", prefix="/api/v1", tags=["discovery-review"], required=False)
+_include_router("api.routes.discovery_review", prefix="/api/v1/public", tags=["owner-check-public"], attr="public_router", required=False)
+_include_router("api.routes.shadow_ai", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.shadow_reading", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.laptop_reports", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.laptop_reports", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.browser_reports", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.browser_reports", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.agent", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.agent", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.agent", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="notifier_router")
+_include_router("api.routes.consent", prefix="/api/v1", tags=["consent"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)
@@ -620,13 +763,15 @@ async def list_audit_logs(
             return {"logs": logs}
 
     except Exception as e:
-        logger.warning(f"Audit logs query failed: {e}")
-        return {"logs": []}
+        # Never an empty list on failure: an audit trail that looks empty when it
+        # could not be read is a compliance defect.
+        logger.error(f"Audit logs query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="The audit log could not be read; see the server log")
 
 
 # Production-ready health check endpoints
 @app.get("/health")
-async def health_check():
+def health_check():
     """Simple health check endpoint."""
     try:
         return {
@@ -639,18 +784,19 @@ async def health_check():
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
-        return {
+        # A monitor reads the status code, not the body: unhealthy is a 503.
+        return JSONResponse(status_code=503, content={
             "status": "unhealthy",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "error": "Health check failed; see the server log",
-            "message": "Health check service error"
-        }
+        })
 
 
 @app.get("/health/ready")
 async def readiness_check():
-    """Kubernetes readiness probe endpoint."""
-    return await health_service.get_readiness_status()
+    """Readiness probe: 200 when the database answers, else 503 so traffic moves away."""
+    status = await health_service.get_readiness_status()
+    return status if status["status"] == "ready" else JSONResponse(status_code=503, content=status)
 
 
 @app.get("/health/live")
@@ -660,7 +806,7 @@ async def liveness_check():
 
 
 @app.get("/")
-async def root():
+def root():
     """Root endpoint with API information."""
     return {
         "message": "Fairmind AI Governance API",
@@ -669,21 +815,6 @@ async def root():
         "environment": settings.environment,
         "status": "running",
         "description": settings.api_description,
-        "features": [
-            "Advanced Bias Detection & Fairness Analysis",
-            "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
-            "Multimodal Bias Detection (Image, Audio, Video)",
-            "Real-time Monitoring & Alerting",
-            "Model Explainability & Interpretability",
-            "OWASP AI Security Testing",
-            "Model Provenance & Lineage Tracking",
-            "Comprehensive Evaluation Pipeline",
-            "Production-Ready API with Security",
-            "Rate Limiting & Request Monitoring",
-            "Health Checks & System Monitoring",
-            "Error Tracking & Logging",
-            "Automated Testing & Quality Assurance"
-        ],
         "endpoints": {
             "health": "/health",
             "readiness": "/health/ready",
@@ -694,11 +825,11 @@ async def root():
     }
 
 @app.get("/api")
-async def api_info():
+def api_info():
     """API information endpoint"""
     return {
-        "name": "Fairmind ML Service API",
-        "version": "1.0.0",
+        "name": settings.api_title,
+        "version": settings.api_version,
         "description": "Comprehensive AI governance and bias detection API with database support",
         "endpoints": {
             "health": "/health",

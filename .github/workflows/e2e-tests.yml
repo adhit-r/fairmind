@@ -12,6 +12,8 @@ on:
 env:
   E2E_ADMIN_EMAIL: e2e-admin@fairmind.ai
   E2E_ADMIN_PASSWORD: e2e-only-never-a-real-account
+  # The backend defaults to production; this run needs development behaviour.
+  ENVIRONMENT: development
 
 permissions:
   contents: read

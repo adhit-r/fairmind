@@ -1,0 +1,123 @@
+/* FairMind's lifecycle-shell look, mapped onto the kit's tokens. Every FairMind
+   demo puts .fm on its Stage. Values are the app's (apps/frontend globals.css). */
+.fm .ss-stage {
+  --fm-bg: #f4f4f2;
+  --fm-ink: #15171a;
+  --fm-ink2: #5a5f68;
+  --fm-ink3: #9096a0;
+  --fm-line: rgba(21, 23, 26, 0.08);
+  --fm-brand: #ff6b35;
+  --ss-font: var(--font-inter), Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ss-canvas: var(--fm-bg);
+  --ss-well: var(--fm-bg);
+  --ss-surface: #fff;
+  --ss-text-strong: var(--fm-ink);
+  --ss-text: var(--fm-ink2);
+  --ss-text-faint: var(--fm-ink3);
+  --ss-line: var(--fm-line);
+  --ss-accent: var(--fm-ink);
+  --ss-accent-soft: rgba(21, 23, 26, 0.06);
+  --ss-accent-text: var(--fm-ink);
+  --ss-radius-window: 14px;
+  --ss-radius-md: 10px;
+  --ss-shadow-hero: 0 1px 2px rgba(20, 20, 30, 0.04), 0 18px 44px -20px rgba(20, 20, 30, 0.22), 0 0 0 1px rgba(21, 23, 26, 0.06);
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--ss-font);
+  letter-spacing: -0.005em;
+}
+
+.fm .ss-button[data-variant='primary'] { border-radius: 999px; }
+.fm .ss-button { border-radius: 999px; }
+
+/* The grid cell, as components/ui/matrix.tsx draws it. */
+.fm .fm-cel {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(21, 23, 26, 0.14);
+  transition: background-color 0.45s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.fm .fm-cel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--fm-ink);
+  opacity: 0;
+  transition: opacity 0.45s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.fm .fm-cel[data-state='proven'] { background: var(--fm-ink); box-shadow: inset 0 0 0 1px var(--fm-ink); }
+.fm .fm-cel[data-state='planned'] { box-shadow: inset 0 0 0 1px var(--fm-ink); }
+.fm .fm-cel[data-state='attested'] { box-shadow: inset 0 0 0 1px var(--fm-ink); }
+.fm .fm-cel[data-state='attested']::before {
+  opacity: 1;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Cpath d='M-1 1l2-2M0 3l3-3M2 4l2-2' stroke='black' stroke-width='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Cpath d='M-1 1l2-2M0 3l3-3M2 4l2-2' stroke='black' stroke-width='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px;
+}
+.fm .fm-cel[data-state='estimated']::before {
+  opacity: 1;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px;
+}
+.fm .fm-cel[data-state='open'] { box-shadow: inset 0 0 0 1.5px var(--fm-brand); }
+.fm .fm-cel[data-state='fails'] { background: #fde9ea; box-shadow: inset 0 0 0 1.5px #b4232c; }
+.fm .fm-cel[data-state='stale'] { box-shadow: inset 0 0 0 1.5px #a14d00; }
+
+/* The rail: the five numbered stages, then the library. */
+.fm .fm-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  padding: 14px 10px;
+  border-right: 1px solid var(--fm-line);
+  background: var(--fm-bg);
+}
+.fm .fm-rail__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--fm-ink2);
+  transition: background-color 0.35s, color 0.35s, box-shadow 0.35s;
+}
+.fm .fm-rail__num { width: 16px; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--fm-ink3); }
+.fm .fm-rail__item[data-on] { background: #fff; color: var(--fm-ink); box-shadow: 0 1px 2px rgba(20, 20, 30, 0.06), 0 0 0 1px var(--fm-line); }
+.fm .fm-rail__item[data-on] .fm-rail__num { color: var(--fm-brand); }
+
+/* Small uppercase section label, the app's only uppercase. */
+.fm .fm-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fm-ink3); line-height: 1.3; }
+
+/* Verdict pills, the status colours the app uses as literals. */
+.fm .fm-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  background: rgba(21, 23, 26, 0.05);
+  color: var(--fm-ink2);
+  transition: background-color 0.45s, color 0.45s;
+  will-change: transform;
+}
+.fm .fm-verdict i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+.fm .fm-verdict[data-tone='go'] { background: #e7f4ec; color: #17663a; }
+.fm .fm-verdict[data-tone='cond'] { background: #fdf1e2; color: #8a4b00; }
+.fm .fm-verdict[data-tone='nogo'] { background: #fde9ea; color: #9b1c24; }
+
+.fm .fm-rail__group { margin: 18px 0 6px 8px; }

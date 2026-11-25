@@ -1,5 +1,6 @@
 'use client'
 
+import { HumanCheck, awaitingHumanCheck, humanCheckHeaders } from '@/components/auth/HumanCheck'
 import { useState } from 'react'
 import { OrangeLogo } from '@/components/OrangeLogo'
 import { Card } from '@/components/ui/card'
@@ -15,6 +16,8 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [answer, setAnswer] = useState<string | null>(null)
+  const [check, setCheck] = useState<string | null>(null)
+  const [checkRound, setCheckRound] = useState(0)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,9 +25,10 @@ export default function ForgotPasswordPage() {
     const response: ApiResponse<{ message: string }> = await apiClient.post(
       API_ENDPOINTS.auth.requestPasswordReset,
       { email },
-      { enableRetry: false },
+      { enableRetry: false, headers: humanCheckHeaders(check) },
     )
     setLoading(false)
+    setCheckRound((n) => n + 1)
     if (response.success && response.data) {
       setAnswer(response.data.message)
     } else {
@@ -57,7 +61,8 @@ export default function ForgotPasswordPage() {
                 onChange={e => setEmail(e.target.value)} className="border border-[var(--fm-line)]" />
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <HumanCheck onToken={setCheck} resetKey={checkRound} />
+            <Button type="submit" className="w-full" disabled={loading || awaitingHumanCheck(check)}>
               {loading ? 'Sending...' : 'Send reset link'}
             </Button>
           </form>

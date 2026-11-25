@@ -1,0 +1,6 @@
+{
+ "source": "results.sarif artifact of the first OpenSSF Scorecard workflow run (run 42062609750, 2026-11-05T16:16:08Z); the artifact expires, so the per-check scores it reported are recorded here",
+ "note": "Only checks with a finding appear in the SARIF results; a check that is absent passed or was inconclusive.",
+ "scores": {"Vulnerabilities": 0, "Dependency-Update-Tool": 0, "Fuzzing": 0, "Pinned-Dependencies": 3, "CII-Best-Practices": 0,
+            "Token-Permissions": 9, "SAST": 9, "Branch-Protection": 5, "Code-Review": 0}
+}

@@ -1,0 +1,28 @@
+---
+title: Inspection packs
+description: Build a hashed evidence pack for chosen systems and frameworks, share a read-only auditor link, and let the auditor verify it offline.
+---
+
+An inspection pack is the answer to "show me" from a validator or auditor. It freezes, for each system you choose, the release gate, the clause coverage for the frameworks you choose, a hash for every evidence record and the latest decision seals. The pack carries its own hash, so the auditor can check it without trusting FairMind.
+
+## Build a pack
+
+1. Open **Records › Auditor packs** and press **Build a pack**.
+2. Give it a title, pick frameworks (EU AI Act, ISO/IEC 42001, NIST AI RMF and India AI Governance Guidelines are preselected) and pick the systems. You need access to every system you include.
+3. **Build pack**. The pack is a snapshot: evidence added later does not change it. Build a new pack to capture it.
+
+## Share a read-only link
+
+On the pack card choose **Share a link**. The full address is shown once; FairMind keeps only a fingerprint of it, so it cannot be shown again. The link works for 30 days and shows the same summary the pack page does: gate verdict, clause coverage per framework, evidence count and seal status for each system. It cannot change anything.
+
+**Stop sharing** ends access at once. Sharing needs organisation mutation permission.
+
+A wrong link shows the same page as a pack that does not exist, so a link cannot be used to learn which packs exist. An expired link says it has expired.
+
+## Verify offline
+
+The auditor downloads the pack with **Download** and checks it on their own computer. **How to verify a pack** on the Auditor packs page shows the one command to run. The check needs no connection to FairMind: it recomputes the pack's hash and each system's evidence chain, and reports anything that was changed, added or removed.
+
+## What verification proves
+
+Verification proves the file is internally consistent: no field was edited and no evidence entry was added, removed or changed without recomputing every hash. It does not prove the file is the one FairMind produced, because someone who edits the pack can also recompute its hashes. To close that gap, compare the pack hash in the file with the hash on the auditor link page, which FairMind serves from its own record, or with the hash you were sent when the pack was built.

@@ -23,6 +23,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -367,6 +368,8 @@ class GovernanceControlAssessment(Base):
     applicability = Column(String, nullable=False, default="applicable")
     status = Column(String, nullable=False, default="not_started")
     owner = Column(String, nullable=True)
+    # Why a not_applicable control is excluded: the Statement of Applicability (ISO/IEC 42001 6.1.3).
+    justification = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
@@ -3929,6 +3932,66 @@ class GovernanceMonitoringPolicy(Base):
         return f"<GovernanceMonitoringPolicy(system_id={self.system_id}, cadence_hours={self.cadence_hours})>"
 
 
+class GovernanceSystemChange(Base):
+    """A recorded change to an AI system: the parts that changed and the gate checks they reopened."""
+
+    __tablename__ = "governance_system_changes"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    system_id = Column(String, nullable=False, index=True)
+    org_id = Column(String, nullable=True, index=True)
+    number = Column(Integer, nullable=False)
+    parts_json = Column(Text, nullable=False, default="[]")
+    reopens_json = Column(Text, nullable=False, default="[]")
+    material = Column(Boolean, nullable=False, default=False)
+    from_version = Column(String, nullable=True)
+    to_version = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    gate_before_json = Column(Text, nullable=False, default="[]")
+    recorded_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    prev_seal = Column(String, nullable=True)
+    seal = Column(String, nullable=False)
+
+
+class GovernanceSystemRetirement(Base):
+    """The retirement of an AI system: why, the closing tasks, how long records are kept, and who signed off."""
+
+    __tablename__ = "governance_system_retirements"
+
+    system_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=True, index=True)
+    reason = Column(String, nullable=False)
+    replaced_by = Column(String, nullable=True)
+    last_day = Column(String, nullable=False)
+    tasks_json = Column(Text, nullable=False, default="[]")
+    retain_until = Column(String, nullable=False)
+    retain_basis = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    gate_snapshot_json = Column(Text, nullable=False, default="[]")
+    retired_by = Column(String, nullable=False)
+    retired_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    prev_seal = Column(String, nullable=True)
+    seal = Column(String, nullable=False)
+
+
+class GovernanceBiasAnalysis(Base):
+    """A stored LLM-judge or advanced-bias analysis run against one AI system."""
+
+    __tablename__ = "governance_bias_analyses"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False, index=True)
+    kind = Column(String, nullable=False)  # "llm-judge" or an advanced-bias method, e.g. "causal"
+    inputs_json = Column(Text, nullable=False, default="{}")  # summary of what was analysed, not the raw rows
+    result_json = Column(Text, nullable=False, default="{}")
+    verdict = Column(String, nullable=False)  # "pass", "fail" or "insufficient"
+    severity = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
 class GovernanceRisk(Base):
     """Risk record linked to an AI system."""
 
@@ -3999,6 +4062,12 @@ class GovernanceAuditReport(Base):
     config_json = Column(Text, nullable=True)  # JSON: frameworks, date_range, sections
     data_json = Column(Text, nullable=True)  # Full snapshot of report data at generation time
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    # Role reports (report_type "role:<role>"): org-wide when system_id is null, sealed when a person approves them.
+    org_id = Column(String, nullable=True, index=True)
+    sha256 = Column(String, nullable=True)  # of the canonical {model, narrative}
+    narrative = Column(Text, nullable=True)  # the page-one summary as the approver left it
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(String, nullable=True)
 
     __table_args__ = (
         Index("idx_governance_audit_reports_system_id", "system_id"),
@@ -4016,14 +4085,34 @@ class GovernanceIntegration(Base):
 
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
-    kind = Column(String, nullable=False)  # mlflow | github
+    kind = Column(String, nullable=False)  # a key of api.routes.integrations._CONNECTORS
     name = Column(String, nullable=False)
     config_json = Column(Text, nullable=False, default="{}")
-    # ponytail: token stored at rest as-is in the local store; encrypt with an app key before production
+    # New tokens are stored encrypted (src/api/routers/integrations.py: encrypt on save, decrypt on use); legacy plaintext values are tolerated
     token = Column(Text, nullable=True)
     last_synced_at = Column(String, nullable=True)
     last_sync_summary = Column(Text, nullable=True)
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceIntegrationRun(Base):
+    """One read of a connector (manual, scheduled or an upload): its monitoring history."""
+
+    __tablename__ = "governance_integration_runs"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False, index=True)
+    trigger = Column(String, nullable=False)  # manual | schedule | upload
+    started_at = Column(String, nullable=False)
+    finished_at = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # ok | failed
+    found = Column(Integer, nullable=True)
+    created = Column(Integer, nullable=True)
+    updated = Column(Integer, nullable=True)
+    error = Column(Text, nullable=True)
+    new_names_json = Column(Text, nullable=False, default="[]")
+    steps_json = Column(Text, nullable=True)  # per step: found, created, off, a few samples
 
 
 class GovernanceDiscoveredAsset(Base):
@@ -4034,10 +4123,10 @@ class GovernanceDiscoveredAsset(Base):
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
     integration_id = Column(String, ForeignKey("governance_integrations.id"), nullable=False, index=True)
-    source = Column(String, nullable=False)  # mlflow | github
+    source = Column(String, nullable=False)  # the integration kind
     external_id = Column(String, nullable=False)
     name = Column(String, nullable=False)
-    kind = Column(String, nullable=False)  # ml_model | llm_app | ai_assisted_dev
+    kind = Column(String, nullable=False)  # ml_model | llm_app | ai_assisted_dev | agent | ai_service | mcp_server
     metadata_json = Column(Text, nullable=False, default="{}")
     suggested_tier = Column(String, nullable=False, default="medium")
     suggested_stage = Column(String, nullable=False, default="onboard")
@@ -4049,6 +4138,238 @@ class GovernanceDiscoveredAsset(Base):
     __table_args__ = (
         Index("idx_governance_discovered_assets_ext", "integration_id", "external_id", unique=True),
     )
+
+
+class GovernanceSourceFacts(Base):
+    """Directory facts a sign-in source read on its last run: each person's team and whether they left."""
+
+    __tablename__ = "governance_source_facts"
+
+    integration_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    source = Column(String, nullable=False)
+    facts_json = Column(Text, nullable=False, default="{}")
+    read_at = Column(String, nullable=False)
+
+
+class GovernanceDiscoverySplit(Base):
+    """A discovered asset a person said is not part of the system it was merged into."""
+
+    __tablename__ = "governance_discovery_splits"
+
+    asset_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    split_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceOwnerCheck(Base):
+    """A question sent to the likely owner of a discovered system. Only the link token's SHA-256 is stored."""
+
+    __tablename__ = "governance_owner_checks"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    anchor_asset_id = Column(String, nullable=True, index=True)  # null for a check about something else (subject_type)
+    email = Column(String, nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)
+    expires_at = Column(String, nullable=False)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    answered_at = Column(String, nullable=True)
+    answers_json = Column(Text, nullable=True)
+    subject_type = Column(String, nullable=True)
+    subject_id = Column(String, nullable=True, index=True)
+    questions_json = Column(Text, nullable=True)
+
+
+class FrameworkScopeDraft(Base):
+    """The agent's draft of whether a framework applies to one system, and the person's decision on it."""
+
+    __tablename__ = "framework_scope_drafts"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    framework_key = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    verdict = Column(String, nullable=False)  # in | out | unsure
+    reason = Column(Text, nullable=False)
+    confidence = Column(String, nullable=False)  # high | medium | low
+    evidence_json = Column(Text, nullable=False, default="[]")
+    model = Column(String, nullable=True)  # null when rules drafted it
+    test_version = Column(String, nullable=False)
+    drafted_at = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="draft")  # draft | confirmed | waiting_owner
+    decided_verdict = Column(String, nullable=True)
+    decided_by = Column(String, nullable=True)
+    decided_at = Column(String, nullable=True)
+    decided_reason = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    owner_check_id = Column(String, nullable=True)
+
+    __table_args__ = (UniqueConstraint("org_id", "framework_key", "system_id", name="uq_framework_scope_draft"),)
+
+
+class GovernanceDiscoveryDecision(Base):
+    """What a person decided about a discovered system, with its conditions: the audit record."""
+
+    __tablename__ = "governance_discovery_decisions"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    anchor_asset_id = Column(String, nullable=False, index=True)
+    decision = Column(String, nullable=False)  # approve | conditions | retire
+    system_id = Column(String, nullable=True)
+    risk_tier = Column(String, nullable=True)
+    owner = Column(String, nullable=True)
+    conditions_json = Column(Text, nullable=False, default="[]")
+    members_json = Column(Text, nullable=False, default="[]")
+    review_due = Column(String, nullable=True)
+    decided_by = Column(String, nullable=True)
+    decided_at = Column(String, nullable=False)
+
+
+class GovernanceApprovedAiTool(Base):
+    """An organisation's stance on a known AI service (catalog key): approved, approved for some teams, or not allowed."""
+
+    __tablename__ = "governance_approved_ai_tools"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    service_key = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # approved | limited | not_allowed
+    teams_json = Column(Text, nullable=False, default="[]")  # for limited: the teams it is approved for
+    sso_required = Column(Boolean, nullable=False, default=False)  # company accounts sign in through SSO only
+    tenant_ids_json = Column(Text, nullable=True)  # company workspace or organisation IDs, for proxy sign-in limits
+    note = Column(Text, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_governance_approved_ai_tools_org_service", "org_id", "service_key", unique=True),
+    )
+
+
+class GovernanceShadowState(Base):
+    """What has happened to one Shadow AI finding: when it was first seen and whether a person handled it."""
+
+    __tablename__ = "governance_shadow_states"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    finding_key = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="open")  # open | expected
+    reason = Column(Text, nullable=True)
+    first_seen = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
+    nudged_at = Column(String, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("idx_governance_shadow_states_org_key", "org_id", "finding_key", unique=True),
+    )
+
+
+class GovernanceShadowReading(Base):
+    """FairMind's reading of one Shadow AI finding or story: what the organisation's model wrote, kept until the
+    evidence it read changes (evidence_hash), so the model is called once per change, not per view."""
+
+    __tablename__ = "governance_shadow_readings"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    subject_key = Column(String, nullable=False)  # a finding key, or story:<service>:<team>
+    evidence_hash = Column(String, nullable=False)
+    reading_json = Column(Text, nullable=False)
+    model = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("idx_governance_shadow_readings_org_subject", "org_id", "subject_key", unique=True),)
+
+
+class GovernanceLaptopReport(Base):
+    """The latest report one laptop sent through the FairMind laptop script: AI apps, editor extensions, MCP
+    server names and, per app, whether it is signed in with a work or personal account (never the address)."""
+
+    __tablename__ = "governance_laptop_reports"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False)
+    device_key = Column(String, nullable=False)  # the serial number, or name and user without one
+    report_json = Column(Text, nullable=False)
+    received_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("idx_governance_laptop_reports_device", "integration_id", "device_key", unique=True),)
+
+
+class GovernanceBrowserReport(Base):
+    """The latest answers one browser sent through the FairMind browser extension: per AI site, whether the
+    signed-in account is a company one (never the address), for the person device management named."""
+
+    __tablename__ = "governance_browser_reports"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False)
+    browser_key = Column(String, nullable=False)  # person and browser
+    report_json = Column(Text, nullable=False)
+    received_at = Column(String, nullable=False)
+
+    __table_args__ = (Index("idx_governance_browser_reports_browser", "integration_id", "browser_key", unique=True),)
+
+
+class GovernanceAgentNode(Base):
+    """One laptop enrolled with FairMind through osquery: its node key (hashed), what it is, when it last checked in."""
+
+    __tablename__ = "governance_agent_nodes"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    integration_id = Column(String, nullable=False)
+    node_key_hash = Column(String, nullable=False, unique=True)
+    host_identifier = Column(String, nullable=True)
+    serial = Column(String, nullable=True)
+    name = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    osquery_version = Column(String, nullable=True)
+    console_user = Column(String, nullable=True)
+    problem = Column(Text, nullable=True)  # the last error the agent reported, such as Endpoint Security not allowed
+    models_json = Column(Text, nullable=True)  # the latest list of AI models downloaded on the laptop (edge models)
+    accounts_json = Column(Text, nullable=True)  # per app and person: work or personal, as the laptop computed it
+    enrolled_at = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
+
+
+class GovernanceAgentEvent(Base):
+    """Something the agent saw happen on a laptop: an AI app started. Kept for 30 days."""
+
+    __tablename__ = "governance_agent_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    node_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)  # app_started
+    service = Column(String, nullable=True)
+    detail_json = Column(Text, nullable=False)
+    at = Column(String, nullable=False, index=True)
+    delivered_at = Column(String, nullable=True)  # when the notifier showed the person its message
+
+
+class GovernanceNotifierClient(Base):
+    """The FairMind notifier on one laptop, in the person's session: its key (hashed) and which laptop it is."""
+
+    __tablename__ = "governance_notifier_clients"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    key_hash = Column(String, nullable=False, unique=True)
+    serial = Column(String, nullable=True)
+    person = Column(String, nullable=True)  # the account the notifier runs as
+    created_at = Column(String, nullable=False)
+    last_seen = Column(String, nullable=False)
 
 
 class PackInstall(Base):
@@ -4225,3 +4546,353 @@ class GovernanceEvidencePack(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     share_token_hash = Column(String, nullable=True)
     share_expires_at = Column(String, nullable=True)
+
+
+class SystemDataSource(Base):
+    """Data the release autopilot may re-run on: a kept upload or an https URL, one per system and purpose.
+
+    The columns and protected attributes come from a person-confirmed fairness run (``basis_evidence_id``),
+    so an agent run never chooses what to test.
+    """
+
+    __tablename__ = "system_data_sources"
+    __table_args__ = (UniqueConstraint("system_id", "purpose", name="uq_system_data_source_purpose"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    purpose = Column(String, nullable=False)  # fairness | monitoring
+    kind = Column(String, nullable=False)  # upload | url
+    url = Column(Text, nullable=True)
+    file_name = Column(String, nullable=True)
+    content = Column(LargeBinary, nullable=True)  # ponytail: kept uploads in Postgres (25 MB cap); move to the artifact store if they grow
+    sha256 = Column(String, nullable=True)
+    mapping_json = Column(Text, nullable=False, default="{}")
+    basis_evidence_id = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class SystemAutopilot(Base):
+    """Whether the release autopilot runs a system's measurable route steps: off, ask (a person runs each) or run."""
+
+    __tablename__ = "system_autopilot"
+
+    system_id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    mode = Column(String, nullable=False, default="off")
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    last_run_at = Column(String, nullable=True)
+
+
+class AutopilotEvent(Base):
+    """One thing the autopilot did or could not do for a system: the trace shown beside its route."""
+
+    __tablename__ = "autopilot_events"
+    __table_args__ = (Index("ix_autopilot_events_system_created", "system_id", "created_at"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, nullable=False)
+    check_key = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    status = Column(String, nullable=False)  # done | failed
+    detail = Column(Text, nullable=True)
+    evidence_id = Column(String, nullable=True)
+    actor = Column(String, nullable=False)  # who started it: "autopilot" on a schedule, else the person
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernancePlan(Base):
+    """An organisation's governance plan: what discovery learned, the frameworks it chose, and the last task snapshot.
+
+    The tasks themselves are recomputed from the catalogue crosswalk and the estate on every read; the snapshot only
+    lets a read say what changed since the last one.
+    """
+
+    __tablename__ = "governance_plans"
+
+    org_id = Column(String, primary_key=True)
+    status = Column(String, nullable=False, default="discovery")  # discovery | active
+    profile_json = Column(Text, nullable=False, default="{}")  # key -> {value, source, basis}
+    transcript_json = Column(Text, nullable=False, default="[]")  # the discovery conversation
+    snapshot_json = Column(Text, nullable=False, default="{}")  # task key -> state at the last read
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class PlanTaskOverride(Base):
+    """A person's choices on one plan task: the owner they assigned and a note."""
+
+    __tablename__ = "plan_task_overrides"
+
+    org_id = Column(String, primary_key=True)
+    task_key = Column(String, primary_key=True)
+    owner = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class PlanAttestation(Base):
+    """A person states an organisation-level control is in place, with a reference; it counts as attested, not measured."""
+
+    __tablename__ = "plan_attestations"
+    __table_args__ = (Index("ix_plan_attestations_org_task", "org_id", "task_key"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False)
+    task_key = Column(String, nullable=False)
+    statement = Column(Text, nullable=False)
+    reference = Column(Text, nullable=True)
+    attested_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class PlanChange(Base):
+    """What changed in an organisation's plan between two reads: tasks added, closed or proven, and why."""
+
+    __tablename__ = "plan_changes"
+    __table_args__ = (Index("ix_plan_changes_org_created", "org_id", "created_at"),)
+
+    id = Column(String, primary_key=True)
+    org_id = Column(String, nullable=False)
+    summary = Column(Text, nullable=False)
+    detail_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class ServiceRecord(Base):
+    """A JSON record kept for a service that has no table of its own (settings, monitoring, evidence, history)."""
+
+    __tablename__ = "service_records"
+    __table_args__ = (
+        UniqueConstraint("namespace", "record_key", name="uq_service_records_namespace_key"),
+        Index("ix_service_records_namespace_scope_created", "namespace", "scope", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=_new_id)
+    namespace = Column(String(64), nullable=False)
+    record_key = Column(String(255), nullable=False)
+    scope = Column(String(255), nullable=True)  # the owning user or organisation, when there is one
+    payload_json = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class OrgTask(Base):
+    """A piece of work assigned to a person in an organisation, about a system, requirement or finding."""
+
+    __tablename__ = "org_tasks"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    number = Column(Integer, nullable=False)  # per organisation, shown as "Task 24"
+    title = Column(String(300), nullable=False)
+    description = Column(Text, nullable=False, default="")
+    status = Column(String(20), nullable=False, default="open")  # open | in_progress | blocked | done
+    priority = Column(String(10), nullable=False, default="medium")  # high | medium | low
+    assignee_user_id = Column(String, nullable=True, index=True)
+    # An AI agent instead of a person: the agent key and the action it runs (tasks.AGENTS).
+    assignee_agent = Column(String(40), nullable=True)
+    agent_action = Column(String(60), nullable=True)
+    created_by = Column(String, nullable=False)
+    due_date = Column(String(10), nullable=True)  # YYYY-MM-DD
+    subject_type = Column(String(30), nullable=False, default="none")  # requirement | system | finding | source | none
+    subject_id = Column(String(300), nullable=True)
+    subject_label = Column(String(300), nullable=True)
+    system_id = Column(String, nullable=True, index=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    completed_at = Column(String, nullable=True)
+    # The due date each reminder was last sent for, so a new due date gets reminded again.
+    soon_reminded_for = Column(String(10), nullable=True)
+    overdue_reminded_for = Column(String(10), nullable=True)
+
+    __table_args__ = (UniqueConstraint("org_id", "number", name="uq_org_tasks_number"),)
+
+
+class OrgTaskComment(Base):
+    __tablename__ = "org_task_comments"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    task_id = Column(String, ForeignKey("org_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(String, nullable=False, index=True)
+    author_user_id = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class OrgTaskEvent(Base):
+    """What happened to a task: created, assigned, status, due date or priority changed."""
+
+    __tablename__ = "org_task_events"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    task_id = Column(String, ForeignKey("org_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(String, nullable=False, index=True)
+    actor_user_id = Column(String, nullable=False)
+    kind = Column(String(20), nullable=False)
+    detail_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceAgentTrace(Base):
+    """One run of an AI system or agent, as its own code reported it; see api/routes/agent_traces.py."""
+
+    __tablename__ = "governance_agent_traces"
+    __table_args__ = (
+        UniqueConstraint("system_id", "trace_id", name="uq_governance_agent_traces_system_trace"),
+        Index("ix_governance_agent_traces_system_received", "system_id", "received_at"),
+    )
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False)
+    trace_id = Column(String, nullable=False)  # the caller's id for the run
+    name = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="running")  # running, ok or error
+    input = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)  # the reason the system stated for the whole run; not checked
+    started_at = Column(String, nullable=True)
+    ended_at = Column(String, nullable=True)
+    expected_calls = Column(Text, nullable=True)  # JSON list of {tool, args} a test run should make, in order (EV-TST-06)
+    truncated = Column(Boolean, nullable=False, default=False)
+    received_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+    updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class GovernanceAgentTraceStep(Base):
+    """One step of a trace: a model call, tool call, retrieval, memory read or write, or decision."""
+
+    __tablename__ = "governance_agent_trace_steps"
+
+    trace_pk = Column(String, ForeignKey("governance_agent_traces.id"), primary_key=True)
+    step_id = Column(String, primary_key=True)  # the caller's id, so a re-sent step updates
+    org_id = Column(String, nullable=False, index=True)
+    parent_id = Column(String, nullable=True)
+    seq = Column(Integer, nullable=False)  # arrival order within the trace
+    kind = Column(String, nullable=False)
+    name = Column(String, nullable=False, default="")
+    input = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="ok")
+    error = Column(Text, nullable=True)
+    started_at = Column(String, nullable=True)
+    ended_at = Column(String, nullable=True)
+
+
+class GovernanceTraceExplanation(Base):
+    """The latest explanation of one live run: drivers, reason check and flip (eval_engines/explain.py)."""
+
+    __tablename__ = "governance_trace_explanations"
+    __table_args__ = (UniqueConstraint("system_id", "trace_id", name="uq_governance_trace_explanations_system_trace"),)
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    system_id = Column(String, ForeignKey("governance_ai_systems.id"), nullable=False)
+    trace_id = Column(String, nullable=False)
+    evidence_id = Column(String, nullable=True)  # the evaluation run it came from; None when a person explained the run alone
+    result_json = Column(Text, nullable=False)
+    created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+
+
+class ReleaseAnnouncement(Base):
+    """A release emailed to the people who asked for release emails; one row per release, so it goes out once."""
+
+    __tablename__ = "release_announcements"
+
+    tag = Column(String, primary_key=True)
+    sent_by = Column(String, nullable=False)
+    sent_at = Column(String, nullable=False)
+    recipients = Column(Integer, nullable=False, default=0)
+
+
+class InternalAudit(Base):
+    """An internal audit programme (ISO/IEC 42001 clause 9.2); see api/routers/internal_audits.py."""
+
+    __tablename__ = "internal_audits"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    framework_key = Column(String, nullable=False)
+    period_start = Column(String, nullable=True)
+    period_end = Column(String, nullable=True)
+    fieldwork_start = Column(String, nullable=True)
+    fieldwork_end = Column(String, nullable=True)
+    lead_auditor_id = Column(String, nullable=False)
+    plan_filename = Column(String, nullable=True)
+    plan_sha256 = Column(String, nullable=True)
+    plan_approved_by = Column(String, nullable=True)
+    plan_approved_at = Column(String, nullable=True)
+    unmatched_lines = Column(Text, nullable=False, default="[]")  # JSON: plan values that matched nothing
+    status = Column(String, nullable=False, default="planning")  # planning, fieldwork or issued
+    issued_by = Column(String, nullable=True)
+    issued_at = Column(String, nullable=True)
+    trace_head = Column(String, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
+class InternalAuditArea(Base):
+    """One area of the audit plan, with its auditor and process owner."""
+
+    __tablename__ = "internal_audit_areas"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    audit_id = Column(String, ForeignKey("internal_audits.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    clauses = Column(Text, nullable=False, default="[]")  # JSON list
+    system_ids = Column(Text, nullable=False, default="[]")  # JSON list
+    process_owner = Column(String, nullable=True)  # an email or a user id
+    auditor_id = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="fieldwork")  # fieldwork, sent_to_lead or accepted
+
+
+class InternalAuditCheck(Base):
+    """One clause audited on one AI system, and the auditor's conclusion."""
+
+    __tablename__ = "internal_audit_checks"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    audit_id = Column(String, ForeignKey("internal_audits.id"), nullable=False, index=True)
+    area_id = Column(String, ForeignKey("internal_audit_areas.id"), nullable=False, index=True)
+    org_id = Column(String, nullable=False)
+    clause = Column(String, nullable=False)
+    system_id = Column(String, nullable=False)
+    question = Column(Text, nullable=True)
+    assistant_summary = Column(Text, nullable=True)
+    evidence = Column(Text, nullable=False, default="[]")  # JSON list of {kind, ref, text, found}
+    cell_state = Column(String, nullable=True)
+    suggested_grade = Column(String, nullable=True)
+    suggested_basis = Column(Text, nullable=True)
+    grade = Column(String, nullable=True)  # conformity, observation, minor_nc or major_nc; set by the auditor
+    statement = Column(Text, nullable=True)
+    override_reason = Column(Text, nullable=True)
+    concluded_by = Column(String, nullable=True)
+    concluded_at = Column(String, nullable=True)
+    owner_check_id = Column(String, nullable=True)
+    remediation_task_id = Column(String, nullable=True)
+
+
+class InternalAuditEvent(Base):
+    """One link of an audit's hash chain."""
+
+    __tablename__ = "internal_audit_events"
+
+    audit_id = Column(String, ForeignKey("internal_audits.id"), primary_key=True)
+    seq = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False)
+    actor = Column(String, nullable=True)
+    payload = Column(Text, nullable=False, default="{}")
+    prev_hash = Column(String, nullable=False)
+    hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)

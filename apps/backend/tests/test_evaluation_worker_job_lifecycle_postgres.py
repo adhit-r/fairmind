@@ -106,7 +106,8 @@ def _job(factory, *, suite_count: int = 1, max_attempts: int = 3):
                  "updated_at=:now WHERE id=:run_id"),
             {"run_id": scenario.run_id, "now": _iso(session.scalar(text("SELECT clock_timestamp()")))},
         )
-    subject = f"service:lifecycle:{uuid.uuid4()}"
+    # Short suffix: a full uuid4 trips the high-entropy secret filter on about 3% of runs.
+    subject = f"service:lifecycle:{uuid.uuid4().hex[:8]}"
     worker_id = _register_worker(
         factory, org_id=scenario.org_id, subject=subject, worker_type="external_provider",
     )

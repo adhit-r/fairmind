@@ -2,8 +2,9 @@
 Production-ready security middleware for FairMind backend.
 """
 
+import re
 import time
-from typing import Callable
+from typing import Callable, Optional
 from fastapi import Request, Response, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -30,10 +31,8 @@ _PUBLIC_ROUTES = frozenset(
         ("GET", "/redoc"),
         ("GET", "/api/v1/auth/health"),
         ("POST", "/api/v1/auth/callback"),
+        ("POST", "/api/v1/auth/demo"),
         ("POST", "/api/v1/auth/login"),
-        ("POST", "/api/v1/auth/oauth2/refresh"),
-        ("POST", "/api/v1/auth/oauth2/sync-user"),
-        ("POST", "/api/v1/auth/oauth2/validate"),
         ("POST", "/api/v1/auth/password-reset"),
         ("POST", "/api/v1/auth/password-reset/request"),
         ("POST", "/api/v1/auth/refresh"),
@@ -41,6 +40,34 @@ _PUBLIC_ROUTES = frozenset(
         ("POST", "/api/v1/register"),
     }
 )
+
+
+# What the demo account may still send besides reads: ending its own session.
+_DEMO_WRITES = frozenset({("POST", "/api/v1/auth/logout"), ("POST", "/api/v1/auth/refresh")})
+
+
+class DemoReadOnlyMiddleware(BaseHTTPMiddleware):
+    """Refuses every change made as the public demo user (settings.demo_user_email).
+
+    Runs inside the authentication middleware, so request.state.user is set. One
+    guard for every route: a new endpoint cannot forget it.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        demo = (settings.demo_user_email or "").strip().lower()
+        user = getattr(request.state, "user", None)
+        if (
+            demo
+            and user is not None
+            and (getattr(user, "email", "") or "").lower() == demo
+            and request.method not in ("GET", "HEAD", "OPTIONS")
+            and (request.method, request.url.path) not in _DEMO_WRITES
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "The demo is read-only. Request access to use FairMind with your own systems."},
+            )
+        return await call_next(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -55,6 +82,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # API answers carry per-user data; no browser or edge cache may keep them.
+        if request.url.path.startswith("/api/") and "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         
         if settings.is_production:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -353,15 +383,36 @@ _PUBLIC_EXACT = {
     "/auth/login", "/auth/refresh", "/auth/health",
     "/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh",
     "/api/v1/auth/callback", "/api/v1/auth/health",
-    "/api/v1/auth/oauth2/validate", "/api/v1/auth/oauth2/refresh",
     "/api/v1/auth/password-reset", "/api/v1/auth/password-reset/request",
     "/api/v1/register",
 }
 _PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
+_INVITATION_PREVIEW = re.compile(r"/api/v1/organizations/invitations/[^/]+")
+_OWNER_CHECK = re.compile(r"/api/v1/public/owner-check/[^/]+")
+_LAPTOP_REPORT = "/api/v1/public/laptop-report"
+_BROWSER_REPORT = "/api/v1/public/browser-report"
+_OSQUERY = ("/api/v1/public/osquery/enroll", "/api/v1/public/osquery/config", "/api/v1/public/osquery/log")
+_NOTIFIER = ("/api/v1/public/notifier/enroll", "/api/v1/public/notifier/messages", "/api/v1/public/notifier/ack")
+_TASK_REMINDERS_OFF = "/api/v1/public/task-reminders/unsubscribe"
 
 
 def _is_public_path(path: str) -> bool:
     return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIXES)
+
+
+def dev_login_email(settings) -> Optional[str]:
+    """The local user that loopback requests without a token sign in as, or None.
+
+    Development only, and never against a remote database: behind a tunnel or a
+    same-host proxy every request arrives from loopback, so the client address
+    alone is no guard.
+    """
+    email = settings.fairmind_dev_login_email
+    if email and settings.is_development and settings.database_is_local:
+        return email
+    if email:
+        logger.warning("FAIRMIND_DEV_LOGIN_EMAIL ignored: needs ENVIRONMENT=development and a local DATABASE_URL")
+    return None
 
 
 class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
@@ -383,11 +434,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         self.InvalidTokenException = InvalidTokenException
         self.TokenMissingException = TokenMissingException
         self.log_jwt_security_event = log_jwt_security_event
-        # Local development only: sign loopback requests that carry no token in
-        # as this existing user. Never active outside ENVIRONMENT=development.
-        self.dev_login_email = (
-            settings.fairmind_dev_login_email if settings.is_development else None
-        )
+        self.dev_login_email = dev_login_email(settings)
 
     async def _dev_login(self, request: Request):
         """TokenData for the configured local user, or None when not applicable."""
@@ -427,6 +474,34 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Auditor pack links carry their own token; the route checks it.
         if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
+            return await call_next(request)
+
+        # An owner-check link carries its own token for a person without an account; the route checks it.
+        if request.method in ("GET", "POST") and _OWNER_CHECK.fullmatch(request.url.path):
+            return await call_next(request)
+
+        # A laptop report carries the organisation's ingest token, not a user's; the route checks it.
+        if request.method == "POST" and request.url.path == _LAPTOP_REPORT:
+            return await call_next(request)
+
+        # A browser report carries the organisation's browser token in its body; the route checks it.
+        if request.method == "POST" and request.url.path == _BROWSER_REPORT:
+            return await call_next(request)
+
+        # osquery enrols with the organisation's secret and then uses its own node key; the routes check both.
+        if request.method == "POST" and request.url.path in _OSQUERY:
+            return await call_next(request)
+
+        # The notifier enrols with the organisation's notifier secret and then uses its own key; the routes check both.
+        if request.method in ("GET", "POST") and request.url.path in _NOTIFIER:
+            return await call_next(request)
+
+        # The unsubscribe link in a task reminder is signed for one person; the route checks it.
+        if request.method in ("GET", "POST") and request.url.path == _TASK_REMINDERS_OFF:
+            return await call_next(request)
+
+        # An invitee previews an invitation before they have an account; accepting needs one.
+        if request.method == "GET" and _INVITATION_PREVIEW.fullmatch(request.url.path):
             return await call_next(request)
 
         # Extract JWT token from Authorization header

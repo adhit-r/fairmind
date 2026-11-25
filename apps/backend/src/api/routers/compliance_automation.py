@@ -53,7 +53,7 @@ router = APIRouter(prefix="/compliance", tags=["compliance-automation"], depende
 # ============================================================================
 
 @router.post("/schedules", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED)
-async def create_compliance_schedule(
+def create_compliance_schedule(
     request: ScheduleCreateRequest,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_mutator),
@@ -134,7 +134,7 @@ async def create_compliance_schedule(
 
 
 @router.get("/schedules", response_model=ScheduleListResponse)
-async def list_compliance_schedules(
+def list_compliance_schedules(
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     framework: Optional[str] = None,
@@ -197,7 +197,7 @@ async def list_compliance_schedules(
 
 
 @router.get("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def get_compliance_schedule(
+def get_compliance_schedule(
     schedule_id: str,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
@@ -244,7 +244,7 @@ async def get_compliance_schedule(
 
 
 @router.put("/schedules/{schedule_id}", response_model=ScheduleResponse)
-async def update_compliance_schedule(
+def update_compliance_schedule(
     schedule_id: str,
     request: ScheduleUpdateRequest,
     current_user=Depends(get_current_user),
@@ -314,7 +314,7 @@ async def update_compliance_schedule(
 
 
 @router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_compliance_schedule(
+def delete_compliance_schedule(
     schedule_id: str,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_mutator),
@@ -419,7 +419,7 @@ async def run_compliance_schedule_now(
 # ============================================================================
 
 @router.get("/violations", response_model=ViolationListResponse)
-async def list_violations(
+def list_violations(
     request: ViolationFilterRequest = Depends(),
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
@@ -488,7 +488,7 @@ async def list_violations(
 
 
 @router.get("/violations/{violation_id}", response_model=ViolationResponse)
-async def get_violation(
+def get_violation(
     violation_id: str,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
@@ -537,118 +537,19 @@ async def get_violation(
 
 
 @router.patch("/violations/{violation_id}/acknowledge", response_model=ViolationResponse)
-async def acknowledge_violation(
+def acknowledge_violation(
     violation_id: str,
     request: ViolationAcknowledgeRequest,
     current_user=Depends(get_current_user),
     m: OrgMembership = Depends(org_member),
 ) -> ViolationResponse:
     """Acknowledge a compliance violation."""
-    try:
-        session = db_manager.get_sync_session()
-        try:
-            violation = session.query(ComplianceViolation).filter(
-                ComplianceViolation.id == violation_id,
-                ComplianceViolation.org_id == m.org_id,
-            ).first()
+    # ponytail: compliance_violations has no acknowledgement columns; add them (migration) before storing this.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Acknowledging a violation is not stored yet, so it is refused rather than reported as done.",
+    )
 
-            if not violation:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Violation {violation_id} not found"
-                )
-
-            # Mark as acknowledged (update would be better with full model)
-            # For now, we just log the acknowledgment
-            logger.info(f"Violation acknowledged: {violation_id} by {current_user.get('email', 'unknown')}")
-            logger.info(f"Acknowledgment notes: {request.notes}")
-
-            return ViolationResponse(
-                id=violation.id,
-                model_id=violation.model_id,
-                framework=FrameworkEnum(violation.framework),
-                violation_type=violation.violation_type,
-                severity=SeverityEnum(violation.severity),
-                status=ViolationStatusEnum.ACKNOWLEDGED,
-                description=violation.description,
-                detected_at=violation.detected_at,
-                resolved=violation.resolved,
-                resolved_at=violation.resolved_at,
-                acknowledged_at=None,
-                remediation_plan_id=None,
-            )
-
-        finally:
-            session.close()
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error acknowledging violation: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to acknowledge violation"
-        )
-
-
-# ============================================================================
-# REMEDIATION ENDPOINTS
-# ============================================================================
-
-@router.post("/gap-remediation", response_model=GapRemediationResponse)
-async def get_remediation_plan(
-    request: GapRemediationRequest,
-    current_user=Depends(get_current_user),
-) -> GapRemediationResponse:
-    """
-    Get an AI-generated remediation plan for a compliance gap.
-
-    Uses LLM-powered analysis to generate step-by-step remediation
-    guidance for specific compliance gaps.
-    """
-    try:
-        # TODO: Call AIComplianceAutomationService.generate_remediation_plan()
-        logger.info(f"Generating remediation plan for gap: {request.gap_id}")
-
-        # Placeholder response
-        return GapRemediationResponse(
-            plan_id=str(uuid.uuid4()),
-            framework=request.framework,
-            gap_id=request.gap_id,
-            gap_description="Placeholder gap description",
-            severity=SeverityEnum.HIGH,
-            remediation_steps=[
-                RemediationStepRequest(
-                    step_number=1,
-                    action="Analyze requirement",
-                    description="Understand the compliance requirement",
-                    effort_hours=2,
-                ),
-                RemediationStepRequest(
-                    step_number=2,
-                    action="Implement fix",
-                    description="Implement the required fix",
-                    effort_hours=8,
-                ),
-            ],
-            estimated_effort_hours=10,
-            legal_citations=[request.framework.value],
-            success_criteria=["Requirement met", "Evidence documented"],
-            generated_by="ai",
-            generated_at=datetime.utcnow(),
-        )
-
-    except Exception as e:
-        logger.error(f"Error generating remediation plan: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate remediation plan"
-        )
-
-
-# ============================================================================
-# STATUS ENDPOINTS
-# ============================================================================
 
 @router.get("/status", response_model=AutomationStatusResponse)
 async def get_automation_status(
@@ -688,7 +589,7 @@ async def get_automation_status(
 # ============================================================================
 
 @router.get("/reports", response_model=ComplianceReportListResponse)
-async def get_compliance_reports(
+def get_compliance_reports(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -708,30 +609,9 @@ async def get_compliance_reports(
     The query should include:
     SELECT * FROM compliance_reports WHERE org_id = :org_id ORDER BY created_at DESC
     """
-    org_id, user_id = m.org_id, m.user_id
-    try:
-        logger.info(f"Fetching compliance reports for org: {org_id}, user: {user_id}")
-
-        session = db_manager.get_sync_session()
-        try:
-            # For now, return empty list as reports are generated asynchronously
-            # In production, this will query a ComplianceReport table with org_id filtering:
-            # SELECT * FROM compliance_reports
-            # WHERE org_id = :org_id AND (framework = :framework OR :framework IS NULL)
-            # ORDER BY created_at DESC LIMIT :limit OFFSET :skip
-
-            return ComplianceReportListResponse(
-                reports=[],
-                total=0,
-                offset=skip,
-                limit=limit
-            )
-        finally:
-            session.close()
-
-    except Exception as e:
-        logger.error(f"Error getting compliance reports for org {org_id}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get reports"
-        )
+    # ponytail: scheduled runs write certificate files but record nothing in a table, so there is no
+    # history to list. Add a compliance_reports table (migration) and insert in generate_automated_report.
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Report history is not stored yet, so it cannot be listed.",
+    )
