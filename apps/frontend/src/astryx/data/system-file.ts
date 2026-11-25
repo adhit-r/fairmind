@@ -13,7 +13,7 @@ export const RISK_TONE: Record<SystemRecord['riskTier'], Tone> = { low: 'neutral
 
 export const KIND_LABEL: Record<string, string> = { ml_model: 'ML model', llm_app: 'LLM app', ai_assisted_dev: 'AI-assisted development' }
 export const SOURCE_LABEL: Record<string, string> = { mlflow: 'MLflow registry', github: 'GitHub', huggingface: 'Hugging Face', manual: 'Registered manually' }
-export const STAGE_LABEL: Record<string, string> = { onboard: 'Onboard', assess: 'Assess', govern: 'Govern', remediate: 'Remediate', operate: 'Operate', decision: 'Decision' }
+export const STAGE_LABEL: Record<string, string> = { onboard: 'Onboard', assess: 'Assess', govern: 'Govern', remediate: 'Remediate', operate: 'Operate', decision: 'Decision', retired: 'Retired' }
 
 export const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : s)
 

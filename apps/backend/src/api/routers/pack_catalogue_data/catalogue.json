@@ -34961,7 +34961,8 @@
     "ISO42001|A.6.2.6",
     "UKAICOP|P12"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-DAT-02",
@@ -34983,7 +34984,8 @@
     "ATLAS|Persistence",
     "EUAIA|Art 15"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-03",
@@ -35005,7 +35007,8 @@
     "NISTRMF|MEASURE 2.11",
     "AIVERIFY|P8"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-04",
@@ -35026,7 +35029,8 @@
     "ISO42001|A.7.4",
     "AIVERIFY|P8"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-05",
@@ -35046,7 +35050,8 @@
     "ISO42001|A.7.4",
     "NISTRMF|MEASURE 2.1"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-06",
@@ -35068,7 +35073,8 @@
     "NISTRMF|MEASURE 2.10",
     "ISO42001|A.7.2"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-07",
@@ -35090,7 +35096,8 @@
     "OWASPAG|ASI06",
     "NISTADV|Indirect PI"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-PRV-01",
@@ -35113,7 +35120,8 @@
     "NISTADV|Privacy",
     "OWASPMCP|MCP10"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-PRV-02",
@@ -35133,7 +35141,8 @@
     "NISTADV|Privacy",
     "NISTRMF|MEASURE 2.10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-PRV-03",
@@ -35152,7 +35161,8 @@
    "tests": [
     "CSAAICM|DSP"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-01",
@@ -35174,7 +35184,8 @@
     "EUAIA|Art 15",
     "ISO42001|A.6.2.4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-02",
@@ -35194,7 +35205,8 @@
     "NISTRMF|MEASURE 2.5",
     "AIVERIFY|P3"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-TST-03",
@@ -35215,7 +35227,8 @@
     "OWASPLLM|LLM09",
     "NISTRMF|MEASURE 2.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-04",
@@ -35237,7 +35250,8 @@
     "NISTRMF|MEASURE 2.5",
     "NISTADV|Evasion"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-TST-05",
@@ -35257,7 +35271,8 @@
     "NISTRMF|MEASURE 2.3",
     "ISO42001|A.6.2.4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-06",
@@ -35277,7 +35292,8 @@
     "OWASPAG|ASI02",
     "NISTRMF|MEASURE 2.3"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-07",
@@ -35296,7 +35312,8 @@
    "tests": [
     "NISTRMF|MEASURE 2.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-01",
@@ -35319,7 +35336,8 @@
     "INDAI|Sutra 4",
     "EUAIA|Art 10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-02",
@@ -35339,7 +35357,8 @@
     "NISTRMF|MEASURE 2.11",
     "AIVERIFY|P7"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-03",
@@ -35359,7 +35378,8 @@
     "NISTRMF|MEASURE 2.11",
     "INDAI|Sutra 4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-04",
@@ -35379,7 +35399,8 @@
     "NISTRMF|MEASURE 2.11",
     "NIST600|Harmful bias"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-05",
@@ -35399,7 +35420,8 @@
     "NIST600|Harmful bias",
     "NISTRMF|MEASURE 2.11"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-FAI-06",
@@ -35419,7 +35441,8 @@
     "INDAI|Sutra 4",
     "NISTRMF|MEASURE 2.11"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-AGT-01",
@@ -35441,7 +35464,8 @@
     "OWASPLLM|LLM06",
     "CSAAICM|IAM"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-AGT-02",
@@ -35462,7 +35486,8 @@
     "OWASPLLM|LLM06",
     "ATLAS|Privilege Escalation"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-AGT-03",
@@ -35483,7 +35508,8 @@
     "OWASPMCP|MCP02",
     "OWASPAG|ASI04"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-AGT-04",
@@ -35503,7 +35529,8 @@
     "OWASPAG|ASI02",
     "ATLAS|Exfiltration"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-01",
@@ -35526,7 +35553,8 @@
     "ATLAS|Initial Access",
     "ATLAS|Execution"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-02",
@@ -35548,7 +35576,8 @@
     "OWASPMCP|MCP06",
     "OWASPAG|ASI01"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-03",
@@ -35569,7 +35598,8 @@
     "NISTADV|Misuse",
     "ATLAS|Defense Evasion"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-04",
@@ -35589,7 +35619,8 @@
     "OWASPLLM|LLM07",
     "ATLAS|Discovery"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-SEC-05",
@@ -35610,7 +35641,8 @@
     "OWASPMCP|MCP10",
     "ATLAS|Discovery"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-06",
@@ -35630,7 +35662,8 @@
     "OWASPLLM|LLM06",
     "OWASPAG|ASI02"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-07",
@@ -35651,7 +35684,8 @@
     "NIST600|Obscene-Abusive",
     "NISTRMF|MEASURE 2.6"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DEV-01",
@@ -35670,7 +35704,8 @@
    "tests": [
     "UKAICOP|P2"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DEV-02",
@@ -35690,7 +35725,8 @@
     "OWASPMCP|MCP01",
     "CSAAICM|CEK"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DEV-03",
@@ -35710,7 +35746,8 @@
     "SSDF218A|PW",
     "OWASPAG|ASI05"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-MON-01",
@@ -35732,7 +35769,8 @@
     "EUAIA|Art 72",
     "UKAICOP|P12"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-MON-02",
@@ -35753,7 +35791,8 @@
     "UKAICOP|P12",
     "CSAAICM|LOG"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-MON-03",
@@ -35772,7 +35811,8 @@
    "tests": [
     "OWASPLLM|LLM10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-MON-04",
@@ -35795,7 +35835,8 @@
     "ISO42001|A.6.2.8",
     "CSAAICM|LOG"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-RSK-01",
@@ -35814,7 +35855,8 @@
    "tests": [
     "NISTRMF|MEASURE 2.6"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-RSK-02",
@@ -35834,7 +35876,8 @@
     "EUAIA|Art 5(1)(a)",
     "EUAIA|Art 5(1)(b)"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-RSK-03",
@@ -35854,7 +35897,8 @@
     "NISTADV|Misuse",
     "NISTRMF|MEASURE 2.6"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TRN-01",
@@ -35874,7 +35918,8 @@
     "EUAIA|Art 50",
     "AIVERIFY|P1"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TRN-02",
@@ -35894,7 +35939,8 @@
     "EUAIA|Art 50",
     "NIST600|Info integrity"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OVS-01",
@@ -35914,7 +35960,8 @@
     "EUAIA|Art 14",
     "OWASPAG|ASI10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OVS-02",
@@ -35934,7 +35981,8 @@
     "EUAIA|Art 14",
     "AIVERIFY|P10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OVS-03",
@@ -35953,7 +36001,8 @@
    "tests": [
     "EUAIA|Art 14"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OVS-04",
@@ -35975,7 +36024,8 @@
     "AIVERIFY|P2",
     "INDAI|Sutra 6"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-REL-01",
@@ -35995,7 +36045,8 @@
     "NISTRMF|MEASURE 2.13",
     "ISO42001|A.6.2.4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-INC-01",
@@ -36015,7 +36066,8 @@
     "EUAIA|Art 20",
     "UKAICOP|P11"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-LEG-01",
@@ -36034,7 +36086,8 @@
    "tests": [
     "NIST600|IP"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-ENV-01",
@@ -36055,7 +36108,8 @@
     "NIST600|Environmental",
     "AIVERIFY|P11"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SLF-01",
@@ -36074,7 +36128,8 @@
    "tests": [
     "OWASPAG|ASI01"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-SLF-02",
@@ -36093,7 +36148,8 @@
    "tests": [
     "OWASPAG|ASI03"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SLF-03",
@@ -36113,7 +36169,8 @@
     "OWASPMCP|MCP08",
     "EUAIA|Art 12"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-01",
@@ -36132,7 +36189,8 @@
    "tests": [
     "EUAIA|Annex III.4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-02",
@@ -36151,7 +36209,8 @@
    "tests": [
     "EUAIA|Annex III.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-03",
@@ -36168,7 +36227,8 @@
    "engine": "Engine exists",
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-04",
@@ -36185,7 +36245,8 @@
    "engine": "Engine exists",
    "codeLocation": "src/application/services/eval_engines/behaviour.py",
    "tests": [],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-08",
@@ -36207,7 +36268,8 @@
     "OWASPAG|ASI05",
     "CSAAICM|AIS"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-09",
@@ -36227,7 +36289,8 @@
     "OWASPLLM|LLM08",
     "OWASPMCP|MCP10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-10",
@@ -36247,7 +36310,8 @@
     "OWASPLLM|LLM10",
     "OWASPAG|ASI08"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-11",
@@ -36269,7 +36333,8 @@
     "ATLAS|Exfiltration",
     "CSAAICM|MDS"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-12",
@@ -36289,7 +36354,8 @@
     "NISTADV|Privacy",
     "NISTRMF|MEASURE 2.10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-13",
@@ -36311,7 +36377,8 @@
     "ATLAS|Defense Evasion",
     "EUAIA|Art 15"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-14",
@@ -36333,9 +36400,11 @@
     "OWASPMCP|MCP04",
     "NISTADV|Supply chain",
     "ATLAS|Initial Access",
-    "CSAAICM|STA"
+    "CSAAICM|STA",
+    "ISO42001|A.4.4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-15",
@@ -36356,7 +36425,8 @@
     "NISTADV|Poisoning",
     "ATLAS|Persistence"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-16",
@@ -36376,7 +36446,8 @@
     "OWASPMCP|MCP01",
     "ATLAS|Credential Access"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-17",
@@ -36397,7 +36468,8 @@
     "OWASPMCP|MCP06",
     "OWASPAG|ASI02"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-18",
@@ -36417,7 +36489,8 @@
     "OWASPMCP|MCP09",
     "OWASPAG|ASI10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-19",
@@ -36438,17 +36511,18 @@
     "OWASPAG|ASI03",
     "CSAAICM|IAM"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-20",
    "name": "Code execution sandbox escape",
-   "measures": "Agent-run code reaching the host, network or other tenants",
-   "metric": "Escapes",
+   "measures": "Configured paths by which agent-run code reaches the network or another agent: unrestricted sandbox egress, self-hosted sandboxes, memory stores more than one agent can write",
+   "metric": "Configured paths out of the sandbox",
    "threshold": "Zero",
    "thresholdSource": "Default; set per system and risk tier",
    "appliesTo": "Coding agent, agent",
-   "inputs": "Sandbox, escape suite",
+   "inputs": "Platform configuration: environments, sessions, deployments, memory stores",
    "commonControl": "FMC-AGT-02",
    "pattern": "FP-SEC-07",
    "pillar": "SECURE",
@@ -36460,7 +36534,8 @@
     "ATLAS|Execution",
     "ATLAS|Privilege Escalation"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-21",
@@ -36480,7 +36555,8 @@
     "OWASPAG|ASI06",
     "OWASPLLM|LLM04"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-22",
@@ -36500,7 +36576,8 @@
     "OWASPAG|ASI07",
     "MAESTRO|L7"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-23",
@@ -36520,7 +36597,8 @@
     "OWASPAG|ASI08",
     "MAESTRO|L5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-24",
@@ -36540,7 +36618,8 @@
     "OWASPAG|ASI10",
     "ATLAS|Persistence"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-25",
@@ -36559,7 +36638,8 @@
    "tests": [
     "OWASPAG|ASI09"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-26",
@@ -36580,7 +36660,8 @@
     "ATLAS|Discovery",
     "ATLAS|Resource Development"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-27",
@@ -36602,7 +36683,8 @@
     "ATLAS|Command and Control",
     "OWASPLLM|LLM02"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-SEC-28",
@@ -36623,7 +36705,8 @@
     "NIST600|Confabulation",
     "NIST600|Info integrity"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-01",
@@ -36643,7 +36726,8 @@
     "NIST600|Info integrity",
     "EUAIA|Art 50"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-02",
@@ -36663,7 +36747,8 @@
     "NIST600|Info integrity",
     "NISTADV|Misuse"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-03",
@@ -36683,7 +36768,8 @@
     "NISTADV|Misuse",
     "UKAICOP|P1"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-04",
@@ -36703,7 +36789,8 @@
     "NIST600|Obscene-Abusive",
     "EUAIA|Art 5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-05",
@@ -36723,7 +36810,8 @@
     "NIST600|CBRN",
     "EUAIA|Art 55"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-06",
@@ -36742,7 +36830,8 @@
    "tests": [
     "NIST600|Violent-Hateful"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-07",
@@ -36762,7 +36851,8 @@
     "NIST600|Info integrity",
     "NISTADV|Misuse"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OFF-08",
@@ -36782,7 +36872,8 @@
     "NIST600|Human-AI config",
     "NISTRMF|MEASURE 2.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-08",
@@ -36802,7 +36893,8 @@
     "AIVERIFY|P6",
     "EUAIA|Art 15"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-09",
@@ -36822,7 +36914,8 @@
     "AIVERIFY|P3",
     "NISTRMF|MEASURE 2.1"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-10",
@@ -36842,7 +36935,8 @@
     "INDAI|Sutra 4",
     "NISTRMF|MEASURE 2.11"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-TST-11",
@@ -36862,7 +36956,8 @@
     "NIST600|Confabulation",
     "NISTRMF|MEASURE 2.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-07",
@@ -36883,7 +36978,8 @@
     "NISTRMF|MEASURE 4.3",
     "AIVERIFY|P7"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-FAI-08",
@@ -36903,7 +36999,8 @@
     "EUAIA|Art 16",
     "AIVERIFY|P11"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OVS-05",
@@ -36924,7 +37021,8 @@
     "EUAIA|Art 86",
     "NISTRMF|MEASURE 2.9"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-OVS-06",
@@ -36943,7 +37041,8 @@
    "tests": [
     "OWASPAG|ASI09"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-08",
@@ -36963,7 +37062,8 @@
     "EUAIA|Art 10",
     "ISO42001|A.7.4"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-09",
@@ -36983,7 +37083,8 @@
     "ISO42001|A.7.5",
     "UKAICOP|P8"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-DAT-10",
@@ -37002,7 +37103,8 @@
    "tests": [
     "NIST600|IP"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-PRV-04",
@@ -37022,7 +37124,8 @@
     "OWASPLLM|LLM02",
     "NIST600|Data privacy"
    ],
-   "maturity": "L4"
+   "maturity": "L1",
+   "maturityLabel": "Engine with unit tests"
   },
   {
    "id": "EV-PRV-05",
@@ -37042,7 +37145,8 @@
     "UKAICOP|P13",
     "NIST600|Data privacy"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-MON-05",
@@ -37062,7 +37166,8 @@
     "OWASPAG|ASI08",
     "OWASPLLM|LLM10"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-05",
@@ -37081,7 +37186,8 @@
    "tests": [
     "EUAIA|Art 50"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-06",
@@ -37101,7 +37207,8 @@
     "OWASPAG|ASI05",
     "SSDF218A|PW"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-07",
@@ -37120,7 +37227,8 @@
    "tests": [
     "EUAIA|Annex III.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-08",
@@ -37139,7 +37247,8 @@
    "tests": [
     "EUAIA|Annex III.3"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   },
   {
    "id": "EV-USE-09",
@@ -37158,7 +37267,8 @@
    "tests": [
     "EUAIA|Annex III.5"
    ],
-   "maturity": "L4"
+   "maturity": "L4",
+   "maturityLabel": "Known-answer tested (not independently benchmarked)"
   }
  ],
  "patterns": [

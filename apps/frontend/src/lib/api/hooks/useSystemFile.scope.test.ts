@@ -63,7 +63,7 @@ function harness(initialKey: string) {
       return gatePath
     },
     enter: (key: string) => update((s) => enterSystemFileScope(s, key)),
-    load: (systemId: string, orgId: string, key: string) => loadSystemFile(get, systemId, orgId, key, update),
+    load: (systemId: string, orgId: string, key: string) => loadSystemFile(get, systemId, key, update, orgId),
     release: (systemId: string) =>
       systems.get(systemId)!.resolve({ success: true, data: { id: systemId, name: `System ${systemId}` } }),
   }
@@ -133,5 +133,15 @@ describe('system file scope', () => {
     assert.equal(systemFileAwaitsOrg(true, 'org-1'), false)
     assert.equal(systemFileAwaitsOrg(false, 'org-1'), false)
     assert.equal(systemFileAwaitsOrg(false, null), false)
+  })
+
+  test('scopes the evaluation runs to the organisation, as every packs route requires', async () => {
+    const paths: string[] = []
+    const get = <T,>(path: string): Promise<ApiResponse<T>> => {
+      paths.push(path)
+      return Promise.resolve({ success: true, data: (path.endsWith('/systems/system-a') ? { id: 'system-a' } : []) as T })
+    }
+    await loadSystemFile(get, 'system-a', SYSTEM_A, () => {}, 'org-1')
+    assert.ok(paths.includes('/api/v1/packs/systems/system-a/evaluation-runs?org_id=org-1'))
   })
 })

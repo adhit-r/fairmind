@@ -2,14 +2,18 @@
 
 GET    /systems/{id}/autopilot                  the route, who does each step, data sources, mode and recent trace
 PUT    /systems/{id}/autopilot                  set the mode: off, ask (a person runs each step) or run (on a schedule)
-POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one of them with ?action=
+POST   /systems/{id}/autopilot/run              run the agent's ready steps now, or one kind of them with ?action=;
+                                                the run continues after the response (so does turning the mode to run);
+                                                409 while a run on the system is in progress (one at a time per system)
 PUT    /systems/{id}/data-sources/{purpose}     an https URL the agent fetches for fairness or monitoring data
 DELETE /systems/{id}/data-sources/{purpose}     forget a data source
 GET    /estate/autopilot                        systems on autopilot, steps done this week, steps that need a person
 
 The route is ``path_forward``'s, the one the gate already prices. The agent runs a fairness re-run or a
 monitoring snapshot when the system has a data source for it, always with the columns and protected attributes
-a person confirmed on an earlier fairness run. Everything else (attestations, uploads, the environmental
+a person confirmed on an earlier fairness run. For a chat model (a system with a saved connection) it runs the
+catalogue behaviour tests whose common control is an open or stale gate check, with the organisation's AI provider
+as judge, as a person's "Run" on the evaluations page would. Everything else (attestations, uploads, the environmental
 assessment, the release request) stays with people. Every run is measured evidence plus an event in the trace.
 
 Mounted under /api/v1/ai-governance next to the fairness router and sharing its org scoping and access rules.
@@ -19,17 +23,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from api.routes import llm
+from api.routes import evaluation_runs, llm
+from api.routes.agent_traces import TRACE_ENGINES, read_live_runs
 from api.routes.ai_governance import _authenticated_actor, _caller_org, _ensure_tables, _require_system_access
 from api.routes.fairness_runs import (
     MAX_UPLOAD_BYTES,
@@ -39,16 +47,24 @@ from api.routes.fairness_runs import (
     _monitoring_policy,
     _watch,
 )
+from api.routes.packs import _ai_row, _stored_connection
+from api.routes.pack_catalogue import EVALUATIONS
+from api.routes.system_targets import _row as _target_row, stored_target
 from config.auth import TokenData, get_current_active_user
 from database.connection import get_db
-from src.application.services.fairness_run_service import GATE_CHECKS, FairnessRunError, run_fairness, run_monitoring
+from src.application.services.eval_engines import ALTERNATES, REGISTRY, EngineError
+from src.application.services.fairness_run_service import (
+    EVALUATION_RUN, GATE_CHECKS, FairnessRunError, evaluation_status, gate_check, point_estimate_status, run_fairness, run_monitoring,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MODES = ("off", "ask", "run")
 PURPOSES = ("fairness", "monitoring")
 AGENT_ACTIONS = {"fairness_run": "fairness", "monitoring_snapshot": "monitoring"}  # action -> the data source it needs
-CHECK_LABELS = {key: label for key, label, _ in GATE_CHECKS}
+# EVALUATION_RUN with an evaluationId: a behaviour test the agent runs on the saved connection, with a judge, not a data source
+CHECK_LABELS = {**{key: label for key, label, _ in GATE_CHECKS}, "behaviour": "Behaviour tests"}
 FAIRNESS_RERUN_HOURS = 24  # a scheduled run repeats a fairness re-run at most daily; "Run now" is not limited
 FETCH_TIMEOUT_S = 30
 AUTOPILOT_ACTOR = "autopilot"
@@ -202,7 +218,9 @@ async def _fairness_rerun(db: Session, org_id: str, system_id: str) -> tuple:
                   "mapping": result["mapping"], "attribute_confirmation": confirmation, "thresholds": result["thresholds"],
                   "library": "fairness_library.metrics", "data_source_id": source["id"]},
     )
-    verdict = "passes" if result.get("all_checks_pass") else "falls outside thresholds"
+    status = point_estimate_status(result)
+    verdict = {"passed": "passes", "insufficient": "has groups too small to judge"}.get(status, "falls outside thresholds") if status else (
+        "passes" if result.get("all_checks_pass") else "falls outside thresholds")
     return evidence_id, f"Re-ran fairness on {result['rows']} rows; {verdict}"
 
 
@@ -232,6 +250,138 @@ async def _monitoring_snapshot(db: Session, org_id: str, system_id: str) -> tupl
 RUNNERS = {"fairness_run": _fairness_rerun, "monitoring_snapshot": _monitoring_snapshot}
 
 
+# --- behaviour tests on a chat model ----------------------------------------------
+
+
+def _behaviour_engine(evaluation_id: str):
+    """The evaluation's behaviour test on the system under test, when it needs no file or setting only a person can give."""
+    engine = REGISTRY.get(evaluation_id)
+    if not (engine and engine.live == "target"):
+        engine = ALTERNATES.get(evaluation_id)
+    if not (engine and engine.live == "target") or any(s.required for s in engine.slots) or any(p.required for p in engine.params):
+        return None
+    return engine
+
+
+def _chat_evaluations(checks: List[str]) -> List[tuple]:
+    """(gate check, evaluation) for each behaviour test whose run the gate counts for one of these checks."""
+    counts_for = {ev.id: gate_check({"evidenceType": EVALUATION_RUN, "content": {"evaluationId": ev.id}}) for ev in EVALUATIONS.values() if _behaviour_engine(ev.id)}
+    return [(check, EVALUATIONS[ev_id]) for check in checks for ev_id, c in counts_for.items() if c == check]
+
+
+def _chat_setup(db: Session, org_id: str, system_id: str) -> tuple:
+    """The judge and the saved connection the agent's behaviour tests use; AutopilotError says what a person must set up."""
+    row = _ai_row(db, org_id)
+    if not row or not row["enabled"]:
+        raise AutopilotError("Behaviour tests use your organisation's AI provider as the judge; set one up in organisation settings")
+    try:
+        judge, target = _stored_connection(row), stored_target(db, org_id, system_id)
+    except HTTPException as e:
+        raise AutopilotError(str(e.detail))
+    if target.via_runner:
+        raise AutopilotError("This system is on your private network, so only the runner can call it; run behaviour tests from there")
+    if not target.intended_use:  # the agent uploads no probe set, so the judge writes probes from it
+        raise AutopilotError("Behaviour tests write their probes from the system's intended use; add it to the system's connection settings")
+    return judge, target
+
+
+async def _evaluation_run(db: Session, org_id: str, system_id: str, evaluation_id: str, live_runs: Optional[tuple] = None) -> tuple:
+    """A behaviour test on the saved connection; live_runs=(engine, files, params, names) runs an engine that replays live runs instead."""
+    if live_runs:
+        engine, files, params, names = live_runs
+        judge, target = _replay_setup(db, org_id, system_id)
+    else:
+        judge, target = _chat_setup(db, org_id, system_id)
+        engine, files, params, names = _behaviour_engine(evaluation_id), {}, {}, {}
+    system = db.execute(text("SELECT name, risk_tier, lifecycle_stage FROM governance_ai_systems WHERE id = :id"), {"id": system_id}).fetchone()
+    facts = {"name": system[0], "risk_tier": system[1], "lifecycle_stage": system[2]}
+    previous = evaluation_runs._previous_metrics(db, system_id, evaluation_id)
+    by, now, job_id = f"agent:{AUTOPILOT_ACTOR}", _now(), str(uuid.uuid4())
+    db.execute(
+        text(
+            "INSERT INTO governance_evaluation_jobs (id, org_id, system_id, evaluation_id, status, phase, done, total, created_by, created_at, updated_at) "
+            "VALUES (:id, :org, :sys, :ev, 'running', 'Starting', 0, 0, :by, :now, :now)"
+        ),
+        {"id": job_id, "org": org_id, "sys": system_id, "ev": evaluation_id, "by": by, "now": now},
+    )
+    db.commit()
+    # A person's run, awaited here instead of in a request's background: probes, judge and the stored evidence.
+    await evaluation_runs._run_job(db.get_bind(), job_id, org_id, by, system_id, evaluation_id, engine, files, names, params, judge, target, facts, previous)
+    job = evaluation_runs._job_row(db, job_id)
+    if job["status"] != "done":
+        raise AutopilotError(job["error"] or "The behaviour test did not finish")
+    content = json.loads(db.execute(text("SELECT content_json FROM governance_evidence WHERE id = :id"), {"id": job["evidence_id"]}).scalar() or "{}")
+    status = evaluation_status({"evidenceType": EVALUATION_RUN, "content": content})
+    where = "this week's live runs, replayed on the saved connection" if live_runs else "the saved connection"
+    return job["evidence_id"], f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on {where}; {status}"
+
+
+def _replay_setup(db: Session, org_id: str, system_id: str) -> tuple:
+    """The judge and the saved connection for replaying live runs; unlike a behaviour test it writes no probes, so needs no intended use."""
+    row = _ai_row(db, org_id)
+    if not row or not row["enabled"]:
+        raise AutopilotError("Replaying live runs uses your organisation's AI provider as the judge; set one up in organisation settings")
+    try:
+        target = stored_target(db, org_id, system_id)
+    except HTTPException as e:
+        raise AutopilotError(str(e.detail))
+    if target.via_runner:
+        raise AutopilotError("This system is on your private network, so only the runner can call it; run this evaluation from there")
+    return _stored_connection(row), target
+
+
+# --- evaluations on live runs ---------------------------------------------------
+
+
+def _last_live_run_params(db: Session, system_id: str, evaluation_id: str) -> Optional[Dict[str, Any]]:
+    """The settings of the latest run of this evaluation on live runs that a person started; the agent reuses them."""
+    for (content,) in db.execute(
+        text(
+            "SELECT content_json FROM governance_evidence WHERE system_id = :s AND evidence_type = :t AND content_json LIKE :ev "
+            "AND metadata_json LIKE :src ORDER BY created_at DESC LIMIT 20"
+        ),
+        {"s": system_id, "t": EVALUATION_RUN, "ev": f'%"evaluationId": "{evaluation_id}"%', "src": '%"source": "traces"%'},
+    ).fetchall():
+        params = json.loads(content or "{}").get("params") or {}
+        if all(params.get(p.name) not in (None, "") for p in TRACE_ENGINES.get(evaluation_id, REGISTRY[evaluation_id]).params if p.required):
+            return params
+    return None
+
+
+def _live_run_needs(db: Session, system_id: str, evaluation_id: str) -> Optional[str]:
+    """None when the agent can run this evaluation on live runs, else what a person has to do first."""
+    if _last_live_run_params(db, system_id, evaluation_id) is None:
+        return f"Run {evaluation_id} on live runs once and set its agreed values; the agent reuses them after that"
+    if evaluation_id in TRACE_ENGINES:
+        system = _system(db, system_id)
+        try:
+            _replay_setup(db, system.org_id, system_id)
+        except AutopilotError as e:
+            return str(e)
+    return None
+
+
+async def _live_run_evaluation(db: Session, org_id: str, system_id: str, evaluation_id: str) -> tuple:
+    params = dict(_last_live_run_params(db, system_id, evaluation_id) or {})
+    engine = TRACE_ENGINES.get(evaluation_id, REGISTRY[evaluation_id])
+    try:
+        files, names, partial = read_live_runs(db, evaluation_id, system_id, params)
+        if evaluation_id in TRACE_ENGINES:  # replays the runs on the saved connection, as a person's job does
+            return await _evaluation_run(db, org_id, system_id, evaluation_id, (engine, files, params, names))
+        db.rollback()  # hold no transaction open while the engine computes
+        outcome = await run_in_threadpool(engine.run, files, params)
+    except HTTPException as e:
+        raise AutopilotError(str(e.detail))
+    except EngineError as e:
+        raise AutopilotError(str(e))
+    by = f"agent:{AUTOPILOT_ACTOR}"
+    evidence_id = evaluation_runs._store_run(db, org_id, by, system_id, evaluation_id,
+                                             {**outcome, "params": params, "files": names, "source": "traces", **({"partialRead": True} if partial else {}),
+                                              **evaluation_runs._record(engine, evaluation_id, "file", files, params),
+                                              "provenance": {"class": "computed_from_upload", "modelJudged": False}})
+    return evidence_id, f"Ran {evaluation_id} {EVALUATIONS[evaluation_id].name} on this week's live runs; {outcome['status']}"
+
+
 def _event(db: Session, org_id: str, system_id: str, check: str, action: str, status: str, detail: str, actor: str, evidence_id: Optional[str] = None) -> None:
     db.execute(
         text(
@@ -256,23 +406,65 @@ def _route(db: Session, system) -> Dict[str, Any]:
 
 
 def _monitoring_due(db: Session, system_id: str) -> bool:
-    """No monitoring snapshot inside the system's cadence: the gate would read monitoring as stale or open."""
+    """No measured monitoring snapshot inside the system's cadence: the gate would read monitoring as stale, open or attested.
+    A workflow attestation or manual upload is not a snapshot, so only FairMind's own measured ones count."""
     hours = _monitoring_policy(db, system_id)["cadenceHours"]
     since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     return db.execute(
-        text("SELECT 1 FROM governance_evidence WHERE system_id = :s AND evidence_type = 'monitoring' AND created_at >= :since LIMIT 1"),
+        text(
+            "SELECT 1 FROM governance_evidence WHERE system_id = :s AND evidence_type = 'monitoring' "
+            "AND source = 'fairmind.monitoring' AND created_at >= :since LIMIT 1"
+        ),
         {"s": system_id, "since": since},
     ).fetchone() is None
 
 
-def _steps(db: Session, system, option: Optional[Dict[str, Any]], sources: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _steps(db: Session, system, route: Dict[str, Any], sources: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The route's steps, plus a monitoring snapshot whenever one is due and the system has monitoring data:
-    the cheapest route may not need monitoring today, but letting it go stale would cost the verdict later."""
-    steps = list((option or {}).get("steps") or [])
+    the cheapest route may not need monitoring today, but letting it go stale would cost the verdict later.
+    A system with a saved connection (a chat model) gets a behaviour test for each open or stale check one speaks to: the
+    route's catalogue-evaluation step becomes the tests the agent can run (the first keeps the route's price), and checks
+    off the route get them as upkeep. A route step with no such test stays a person's, run from the evaluations page."""
+    steps = list((route["option"] or {}).get("steps") or [])
     if sources["monitoring"] and not any(s["action"] == "monitoring_snapshot" for s in steps) and _monitoring_due(db, system.id):
         steps.append({"check": "monitoring", "action": "monitoring_snapshot", "evidenceClass": "measured", "counts": None, "gain": 0,
                       "note": "keeps monitoring inside its cadence", "upkeep": True})
-    return steps
+    if not _target_row(db, system.id):
+        return steps
+    open_checks = [c["key"] for c in route["gate"].get("checks") or [] if c["state"] == "open"]  # a stale check reads as open
+    tests: Dict[str, List[Any]] = {}
+    for check, ev in _chat_evaluations(open_checks):
+        tests.setdefault(check, []).append(ev)
+    out = []
+    for step in steps:
+        if step["action"] == EVALUATION_RUN and tests.get(step["check"]) and step.get("source") != "traces":
+            out += [{**step, "evaluationId": ev.id, "note": f"{ev.id} {ev.name}", **({} if i == 0 else {"gain": 0})}
+                    for i, ev in enumerate(tests.pop(step["check"]))]
+        else:
+            out.append(step)
+    out += [{"check": check, "action": EVALUATION_RUN, "evaluationId": ev.id, "evidenceClass": "measured", "counts": None, "gain": 0,
+             "note": f"{ev.id} {ev.name}", "upkeep": True} for check, evs in tests.items() for ev in evs]
+    # Behaviour tests no gate check counts, which the system has run before: re-run any whose current result is not a pass
+    # (failed, or dropped by a material change), so the clauses they reach do not quietly reopen.
+    current = {e["evaluationId"]: e["status"] for e in route["gate"].get("evaluations") or []}
+    planned = {s.get("evaluationId") for s in out}
+    ran = {json.loads(r[0] or "{}").get("evaluationId") for r in db.execute(
+        text("SELECT content_json FROM governance_evidence WHERE system_id = :s AND evidence_type = :t"), {"s": system.id, "t": EVALUATION_RUN}
+    ).fetchall()}
+    for ev_id in sorted(i for i in ran if i in EVALUATIONS and i not in planned):
+        if current.get(ev_id) != "passed" and _behaviour_engine(ev_id) and gate_check({"evidenceType": EVALUATION_RUN, "content": {"evaluationId": ev_id}}) is None:
+            out.append({"check": "behaviour", "action": EVALUATION_RUN, "evaluationId": ev_id, "evidenceClass": "measured", "counts": None, "gain": 0,
+                        "note": f"{ev_id} {EVALUATIONS[ev_id].name}", "upkeep": True})
+    return out
+
+
+def _chat_needs(db: Session, system) -> Optional[str]:
+    """None when the agent can run behaviour tests on this system, else what a person has to set up."""
+    try:
+        _chat_setup(db, system.org_id, system.id)
+    except AutopilotError as e:
+        return str(e)
+    return None
 
 
 def _recent(db: Session, system_id: str, action: str, hours: float) -> bool:
@@ -290,18 +482,29 @@ async def run_steps(db: Session, system_id: str, actor: str, only: Optional[str]
         return []
     route = _route(db, system)
     sources = _sources(db, system_id)
+    steps = _steps(db, system, route, sources)
+    chat_ready = any(s.get("evaluationId") and s.get("source") != "traces" for s in steps) and _chat_needs(db, system) is None
+    # read before any step runs, so one behaviour test does not hold back the next in the same sweep
+    recent = {a for a in {s["action"] for s in steps} if scheduled and _recent(
+        db, system_id, a, _monitoring_policy(db, system_id)["cadenceHours"] if a == "monitoring_snapshot" else FAIRNESS_RERUN_HOURS)}
     done = []
-    for step in _steps(db, system, route["option"], sources):
+    for step in steps:
         action, check = step["action"], step["check"]
-        purpose = AGENT_ACTIONS.get(action)
-        if not purpose or not sources[purpose] or (only and action != only):
+        if step.get("source") == "traces":
+            ready = _live_run_needs(db, system_id, step["evaluationId"]) is None
+        else:
+            ready = chat_ready and bool(step.get("evaluationId")) if action == EVALUATION_RUN else bool(AGENT_ACTIONS.get(action) and sources[AGENT_ACTIONS[action]])
+        if not ready or (only and action != only):
             continue
-        if scheduled:
-            cadence = _monitoring_policy(db, system_id)["cadenceHours"] if action == "monitoring_snapshot" else FAIRNESS_RERUN_HOURS
-            if _recent(db, system_id, action, cadence):
-                continue  # a schedule does not repeat a step inside its cadence, whatever the last result was
+        if action in recent:
+            continue  # a schedule does not repeat a step inside its cadence, whatever the last result was
         try:
-            evidence_id, detail = await RUNNERS[action](db, system.org_id, system_id)
+            if step.get("source") == "traces":
+                evidence_id, detail = await _live_run_evaluation(db, system.org_id, system_id, step["evaluationId"])
+            elif action == EVALUATION_RUN:
+                evidence_id, detail = await _evaluation_run(db, system.org_id, system_id, step["evaluationId"])
+            else:
+                evidence_id, detail = await RUNNERS[action](db, system.org_id, system_id)
             status = "done"
         except AutopilotError as e:
             db.rollback()
@@ -309,9 +512,80 @@ async def run_steps(db: Session, system_id: str, actor: str, only: Optional[str]
         _event(db, system.org_id, system_id, check, action, status, detail, actor, evidence_id)
         db.commit()  # the next step's fetch rolls back any open transaction
         done.append({"action": action, "status": status, "detail": detail})
-    db.execute(text("UPDATE system_autopilot SET last_run_at = :now WHERE system_id = :s"), {"now": _now(), "s": system_id})
-    db.commit()
+    _mark_run(db, system.org_id, system_id)
     return done
+
+
+def _mark_run(db: Session, org_id: str, system_id: str) -> None:
+    """Stamp lastRunAt, which the system file waits on; a system whose mode was never set has no row yet."""
+    db.execute(
+        text(
+            "INSERT INTO system_autopilot (system_id, org_id, mode, updated_at, last_run_at) VALUES (:s, :org, 'off', :now, :now) "
+            "ON CONFLICT (system_id) DO UPDATE SET last_run_at = :now"
+        ),
+        {"s": system_id, "org": org_id, "now": _now()},
+    )
+    db.commit()
+
+
+RUN_IN_PROGRESS = "An autopilot run is already in progress for this system"
+
+
+def _lock_key(system_id: str) -> int:
+    return int.from_bytes(hashlib.sha256(f"autopilot:{system_id}".encode()).digest()[:8], "big", signed=True)
+
+
+@contextmanager
+def _system_lock(bind, system_id: str):
+    """Yields whether the caller holds the system's run lock, so runs from requests, the sweep and other workers or
+    replicas never overlap on one system. A transaction advisory lock on a dedicated connection whose transaction stays
+    open for the run: that pins the server backend behind a transaction-mode pooler, and rollback, commit or a lost
+    connection always releases it, so it cannot leak into a pool."""
+    conn = bind.connect()
+    try:
+        yield bool(conn.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _lock_key(system_id)}).scalar())
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def _not_running(db: Session, system_id: str) -> None:
+    """409 while a run holds the system's lock. The try-lock runs on the request's own connection and the rollback
+    releases it at once; the background run takes its own."""
+    free = bool(db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _lock_key(system_id)}).scalar())
+    db.rollback()
+    if not free:
+        raise HTTPException(status_code=409, detail=RUN_IN_PROGRESS)
+
+
+async def _run_later(bind, system_id: str, actor: str, only: Optional[str] = None, scheduled: bool = False) -> None:
+    """run_steps after the response, on its own session: a behaviour test outlasts Cloudflare's 100-second request
+    limit. The view's lastRunAt moves when it is done, which is what the system file waits for."""
+    with _system_lock(bind, system_id) as got:
+        if not got:  # another run on this system is going; it stamps lastRunAt when done
+            logger.info("autopilot run for %s skipped: one is already in progress", system_id)
+            if not scheduled:  # a run someone asked for shows in the trace that it did not happen
+                db = Session(bind=bind)
+                try:
+                    system = _system(db, system_id)
+                    if system:
+                        _event(db, system.org_id, system_id, "autopilot", only or "run", "skipped", RUN_IN_PROGRESS, actor)
+                        db.commit()
+                finally:
+                    db.close()
+            return
+        db = Session(bind=bind)
+        try:
+            await run_steps(db, system_id, actor, only=only, scheduled=scheduled)
+        except Exception:
+            logger.exception("autopilot run for %s failed", system_id)
+            db.rollback()
+            system = _system(db, system_id)
+            if system:  # show the failure in the trace and stop the system file waiting
+                _event(db, system.org_id, system_id, "autopilot", "run", "failed", "The autopilot run stopped on an unexpected error", actor)
+                _mark_run(db, system.org_id, system_id)
+        finally:
+            db.close()
 
 
 async def sweep(session_factory) -> int:
@@ -322,7 +596,9 @@ async def sweep(session_factory) -> int:
         ids = [r[0] for r in db.execute(text("SELECT system_id FROM system_autopilot WHERE mode = 'run'")).fetchall()]
         attempted = 0
         for system_id in ids:
-            attempted += len(await run_steps(db, system_id, AUTOPILOT_ACTOR, scheduled=True))
+            with _system_lock(db.get_bind(), system_id) as got:
+                if got:  # a system with a run in progress is left to it; the next sweep comes back
+                    attempted += len(await run_steps(db, system_id, AUTOPILOT_ACTOR, scheduled=True))
         return attempted
     finally:
         db.close()
@@ -341,13 +617,20 @@ def _view(db: Session, system) -> Dict[str, Any]:
     gate, option = route["gate"], route["option"]
     sources = _sources(db, system.id)
     basis = _basis_run(db, system.id)
+    raw = _steps(db, system, route, sources)
+    chat_needs = _chat_needs(db, system) if any(s.get("evaluationId") and s.get("source") != "traces" for s in raw) else None
     steps = []
-    for step in _steps(db, system, option, sources):
+    for step in raw:
         purpose = AGENT_ACTIONS.get(step["action"])
-        if purpose and sources[purpose]:
+        if step.get("source") == "traces":
+            needs = _live_run_needs(db, system.id, step["evaluationId"])
+            by, why = ("person", needs) if needs else ("agent", None)
+        elif step.get("evaluationId"):
+            by, why = ("person", chat_needs) if chat_needs else ("agent", None)
+        elif purpose and sources[purpose]:
             by, why = "agent", None
         elif purpose:
-            by, why = "person", f"Connect a {purpose} data source and the agent takes this over" if basis else "Run a fairness test in the app first; the agent reuses its columns"
+            by, why = "person", f"Connect a {purpose} data source and the agent takes this over" if basis else "Run a fairness test in the app first; the agent reuses its columns" + ("; for a chat model, save its model connection instead" if step["check"] == "fairness" else "")
         else:
             by, why = "person", None
         steps.append({**step, "label": CHECK_LABELS.get(step["check"], step["check"]), "by": by, "needs": why})
@@ -394,12 +677,14 @@ def get_autopilot(system_id: str, current_user: TokenData = Depends(get_current_
 
 
 @router.put("/systems/{system_id}/autopilot")
-async def set_autopilot(system_id: str, body: ModeBody, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+def set_autopilot(system_id: str, body: ModeBody, background: BackgroundTasks, current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
     if body.mode not in MODES:
         raise HTTPException(status_code=422, detail="Mode must be off, ask or run")
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_or_404(db, system_id)
+    if body.mode == "run":
+        _not_running(db, system_id)
     db.execute(
         text(
             "INSERT INTO system_autopilot (system_id, org_id, mode, updated_by, updated_at) VALUES (:s, :org, :mode, :by, :now) "
@@ -409,19 +694,20 @@ async def set_autopilot(system_id: str, body: ModeBody, current_user: TokenData 
     )
     db.commit()
     if body.mode == "run":
-        await run_steps(db, system_id, AUTOPILOT_ACTOR, scheduled=True)  # turning it on starts at once
+        background.add_task(_run_later, db.get_bind(), system_id, AUTOPILOT_ACTOR, scheduled=True)  # turning it on starts at once
     return _view(db, system)
 
 
 @router.post("/systems/{system_id}/autopilot/run")
-async def run_autopilot(system_id: str, action: Optional[str] = Query(default=None), current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    if action is not None and action not in AGENT_ACTIONS:
-        raise HTTPException(status_code=422, detail="The agent runs fairness_run or monitoring_snapshot")
+def run_autopilot(system_id: str, background: BackgroundTasks, action: Optional[str] = Query(default=None), current_user: TokenData = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    if action is not None and action not in (*AGENT_ACTIONS, EVALUATION_RUN):
+        raise HTTPException(status_code=422, detail="The agent runs fairness_run, monitoring_snapshot or evaluation_run")
     _ensure_tables(db)
     _require_system_access(db, system_id, current_user, mutate=True)
     system = _system_or_404(db, system_id)
-    ran = await run_steps(db, system_id, _authenticated_actor(current_user), only=action)
-    return {"ran": ran, **_view(db, system)}
+    _not_running(db, system_id)
+    background.add_task(_run_later, db.get_bind(), system_id, _authenticated_actor(current_user), only=action)
+    return _view(db, system)  # the run continues after the response; its events and lastRunAt show on the next read
 
 
 @router.put("/systems/{system_id}/data-sources/{purpose}")

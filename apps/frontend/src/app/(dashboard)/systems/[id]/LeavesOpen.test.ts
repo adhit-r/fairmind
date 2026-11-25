@@ -6,8 +6,9 @@ import type { Journey, JourneyRequirement } from '@/lib/api/hooks/usePacks'
 import type { ClauseMap, ClauseMapFramework } from '@/lib/api/hooks/useSystemFile'
 import { leavesOpen } from './LeavesOpen'
 
-const clause = (fw: string, n: number, cell: CellState): ClauseMapFramework['clauses'][number] => ({ key: `${fw}|${n}`, control: `${n}`, title: `Req ${n}`, group: null, state: 'open', cell, checks: [] })
-const fw = (key: string, cells: CellState[]): ClauseMapFramework => ({ key, name: `${key} name`, counts: { proven: 0, attested: 0, open: 0, total: cells.length }, clauses: cells.map((c, i) => clause(key, i, c)) })
+const stateOf = (cell: CellState | 'none') => (cell === 'proven' || cell === 'partial' || cell === 'attested' ? cell : 'open')
+const clause = (fw: string, n: number, cell: CellState | 'none'): ClauseMapFramework['clauses'][number] => ({ key: `${fw}|${n}`, control: `${n}`, title: `Req ${n}`, group: null, state: stateOf(cell), cell, checks: [] })
+const fw = (key: string, cells: Array<CellState | 'none'>): ClauseMapFramework => ({ key, name: `${key} name`, counts: { proven: 0, attested: 0, open: 0, total: cells.length }, clauses: cells.map((c, i) => clause(key, i, c)) })
 const map = (...frameworks: ClauseMapFramework[]): ClauseMap => ({ verdict: null, confidence: null, scoped: true, frameworks })
 const journey = (key: string, covered: number[]): Journey => ({
   key, name: key, pillar: 'governance', version: null, type: null, binding: null, status: null, active: 0, coveredAll: 0, coveredInstalled: 0, steps: [],
@@ -41,4 +42,15 @@ test('nothing open is nothing', () => {
 
 test('an unscoped map (no confirmed frameworks) leaves nothing open', () => {
   assert.equal(leavesOpen({ ...map(fw('A', ['open', 'fails'])), scoped: false }, []).n, 0)
+})
+
+test('a clause nothing reaches is left open, after the open ones', () => {
+  const v = leavesOpen(map(fw('A', ['none', 'open', 'proven'])), [])
+  assert.equal(v.n, 2)
+  assert.deepEqual(keys(v), [['A name', ['A|0', 'A|1']]])
+  assert.deepEqual(v.groups[0].rows[0].cells, ['open', null])
+  // past the cap the unreached clause is the one counted in "more"
+  const capped = leavesOpen(map(fw('A', ['none', ...Array(12).fill('open')])), [])
+  assert.equal(capped.n, 13)
+  assert.ok(!capped.groups[0].rows.some((r) => r.key === 'A|0'))
 })

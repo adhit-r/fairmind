@@ -1,0 +1,60 @@
+{
+  "reference": {
+    "file": "m4_power_reference.csv",
+    "column": "reference_kwh_total",
+    "caveat": "powermetrics reports per-subsystem SoC power from Apple's own model; the vendor documents these values as estimated. This is an independent, higher-directness reference, not ground truth, and it excludes display, storage, networking, and PSU losses."
+  },
+  "n_runs_skipped": 2,
+  "contamination": {
+    "threshold": 0.35,
+    "n_excluded": 1,
+    "excluded": [
+      {
+        "workload_id": "batch_embeddings",
+        "run_id": "real-i05",
+        "contamination_ratio": 0.6183
+      }
+    ],
+    "median_contamination": 0.0016,
+    "max_contamination": 0.6183
+  },
+  "methods": {
+    "codecarbon": {
+      "provenance_class": "manual",
+      "assigned_confidence": 0.3,
+      "n": 19,
+      "median_abs_pct_error": 106.11,
+      "mean_abs_pct_error": 72.59,
+      "median_signed_pct_error": 106.11,
+      "direction": "over-estimates",
+      "mean_log_ratio": 0.5085,
+      "median_abs_pct_error_after_median_rescale": 6.79
+    },
+    "manual_flop": {
+      "provenance_class": "manual",
+      "assigned_confidence": 0.2,
+      "n": 19,
+      "median_abs_pct_error": 202.99,
+      "mean_abs_pct_error": 589.51,
+      "median_signed_pct_error": 202.99,
+      "direction": "over-estimates",
+      "mean_log_ratio": 1.5855,
+      "median_abs_pct_error_after_median_rescale": 39.35
+    }
+  },
+  "confidence_vs_error": {
+    "spearman_rho": -0.6263,
+    "n": 38,
+    "expected_sign": "negative (higher confidence should mean lower error)",
+    "note": "with two provenance classes this is a two-group comparison expressed as a rank correlation; it tests ordering, not a dose-response relationship"
+  },
+  "verdict": {
+    "higher_confidence_method": "codecarbon",
+    "lower_confidence_method": "manual_flop",
+    "median_abs_pct_error_higher": 106.11,
+    "median_abs_pct_error_lower": 202.99,
+    "ordering_holds": true,
+    "trustworthy_direction": "either",
+    "reading": "the method the policy trusts more (codecarbon, confidence 0.3) is closer to the independent reference than manual_flop (confidence 0.2): median absolute error 106.11% vs 202.99%. The assigned ordering is consistent with observed error on this host."
+  }
+}

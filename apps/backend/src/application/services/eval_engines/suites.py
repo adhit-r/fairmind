@@ -7,13 +7,14 @@ explanation stability read records or per-case measurements uploaded as files.
 """
 
 import json
+from dataclasses import replace
 from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 
 from . import agentic, assess, model, ops
-from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_json, result, split
+from .common import Engine, EngineError, Param, Slot, columns, number, read_csv, read_json, result, sampled, split
 
 
 def _pct(part: int, whole: int) -> float:
@@ -55,11 +56,21 @@ def explanation_quality(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict
 
 # --- EV-OVS-05 explanation stability ----------------------------------------------------------------
 
+def _ids(frame: pd.DataFrame, col: str, what: str) -> pd.Series:
+    """Strips an id column read as text; a blank id raises, since it would silently drop or wrongly pair rows."""
+    ids = frame[col].str.strip()
+    blank = ids.isna() | (ids == "")
+    if blank.any():
+        raise EngineError(f"{what}: column {col} row {int(blank.to_numpy().argmax()) + 1} is blank")
+    return ids
+
+
 def explanation_stability(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     pair, feat = _name(params, "pair_column", "pair"), _name(params, "feature_column", "feature")
     a, b = _name(params, "original", "attribution_original"), _name(params, "perturbed", "attribution_perturbed")
-    frame = read_csv(files["pairs"], "The explanation pairs")
+    frame = read_csv(files["pairs"], "The explanation pairs", text=True)
     columns(frame, [pair, feat, a, b], "The explanation pairs")
+    frame[pair] = _ids(frame, pair, "The explanation pairs")
     for c in (a, b):
         frame[c] = pd.to_numeric(frame[c], errors="coerce")
     if frame[[a, b]].isna().any().any():
@@ -93,7 +104,7 @@ FAIRNESS_PARAMS = (
     Param("y_true", "Outcome column", "The true outcome, default y_true."),
     Param("favorable", "Favourable value", "The decision value that counts as favourable; empty reads 0/1 columns."),
     Param("max_gap", "Largest gap", "For intersections: the largest selection-rate gap accepted, default 0.1.", "number"),
-    Param("min_slice", "Smallest slice", "For intersections: fewest records for a slice to count, default 30.", "number"),
+    Param("min_slice", "Smallest slice", "For intersections: fewest records for a slice to count, default and at least 30.", "number"),
 )
 
 
@@ -156,10 +167,10 @@ PARTS: Dict[str, Tuple[Callable[..., Dict[str, Any]], Tuple[Slot, ...], Tuple[Pa
     "EV-OVS-04": (_explanation_part(explanation_quality), (EXPLAIN_SLOT,), EXPLAIN_PARAMS),
     **{i: _part(i) for i in ("EV-OVS-03", "EV-DEV-03", "EV-SEC-16")},
 }
-# The behaviour test EV-TST-04 (robustness) and EV-RSK-01, EV-PRV-04 call the system and run on their own, so a suite made of
-# uploaded files leaves them out; each suite says so in its method.
+# EV-TST-04, EV-RSK-01, EV-PRV-04 and EV-SEC-20 call the system or read its platform and run on their own; a suite reads
+# their latest stored result for the system, as it does for any file component whose file is not given in the run.
 SECTORS: Dict[str, Tuple[str, ...]] = {
-    "EV-USE-01": ("EV-TST-01", "EV-FAI-01", "EV-FAI-03"),
+    "EV-USE-01": ("EV-TST-01", "EV-FAI-01", "EV-FAI-03", "EV-TST-04"),
     "EV-USE-02": ("EV-TST-01", "EV-FAI-01", "EV-FAI-06", "EV-OVS-04"),
     "EV-USE-07": ("EV-TST-01", "EV-FAI-01", "EV-OVS-04"),
     "EV-USE-08": ("EV-TST-01", "EV-FAI-01", "EV-FAI-03"),
@@ -169,36 +180,67 @@ SECTORS: Dict[str, Tuple[str, ...]] = {
 }
 
 
+def _slot_params(parts: Tuple[str, ...]) -> Dict[str, Dict[str, Param]]:
+    """Each component's params keyed by the name the suite form shows. A param name two components read from different files
+    (y_true in the predictions and in the decisions) is prefixed with its file's slot, so one value cannot set both."""
+    owners: Dict[str, set] = {}
+    for p in parts:
+        for q in PARTS[p][2]:
+            owners.setdefault(q.name, set()).add(PARTS[p][1][0].name)
+    out: Dict[str, Dict[str, Param]] = {}
+    for p in parts:
+        slot = PARTS[p][1][0]
+        out[p] = {}
+        for q in PARTS[p][2]:
+            key = f"{slot.name}_{q.name}" if len(owners[q.name]) > 1 else q.name
+            out[p][key] = q if key == q.name else replace(q, name=key, label=f"{q.label} ({slot.label.lower()})")
+    return out
+
+
 def _suite_engine(suite_id: str, listed: Tuple[str, ...]) -> Engine:
     parts = tuple(p for p in listed if p in PARTS)
     apart = [p for p in listed if p not in PARTS]
+    named = _slot_params(parts)
     slots: Dict[str, Slot] = {}
     params: Dict[str, Param] = {}
     for p in parts:
         for s in PARTS[p][1]:
-            slots.setdefault(s.name, s)
-        for q in PARTS[p][2]:
-            params.setdefault(q.name, q)
+            slots.setdefault(s.name, replace(s, required=False))  # a file left out reads that component's stored result
+        for key, q in named[p].items():
+            params.setdefault(key, replace(q, required=False))  # the component enforces its own when it runs from a file
 
     def run(files: Dict[str, bytes], values: Dict[str, Any]) -> Dict[str, Any]:
+        stored = {r["evaluationId"]: r for r in json.loads((files.get("results") or b"[]").decode() or "[]")}
         cache: Dict[str, Any] = {}
         rows = []
-        for p in parts:
-            try:
-                out = PARTS[p][0](files, values, cache)
-            except EngineError as exc:
-                raise EngineError(f"{p}: {exc}")
-            rows.append({"evaluation": p, "status": out["status"], "summary": out["summary"], "metrics": out["metrics"]})
+        for p in listed:
+            if p in PARTS and all(s.name in files for s in PARTS[p][1] if s.required):
+                own = dict(values)
+                for key, q in zip(named[p], PARTS[p][2]):  # the form's name, the component's own param
+                    if key != q.name:
+                        own.pop(q.name, None)
+                        if key in values:
+                            own[q.name] = values[key]
+                try:
+                    out = PARTS[p][0](files, own, cache)
+                except EngineError as exc:
+                    raise EngineError(f"{p}: {exc}")
+                rows.append({"evaluation": p, "status": out["status"], "summary": out["summary"], "metrics": out["metrics"], "source": "this run"})
+            elif p in stored:
+                r = stored[p]
+                status = r["status"] if r["status"] in ("passed", "failed") else "insufficient"
+                rows.append({"evaluation": p, "status": status, "summary": r.get("detail"), "metrics": {}, "source": f"stored result of {r.get('at')}"})
+            else:
+                rows.append({"evaluation": p, "status": "insufficient", "summary": "No result on file for this system.", "metrics": {}, "source": "no result on file"})
         count = {s: sum(r["status"] == s for r in rows) for s in ("passed", "failed", "insufficient")}
         status = "failed" if count["failed"] else "insufficient" if count["insufficient"] else "passed"
-        bad = [f"{r['evaluation']} {r['status']}" for r in rows if r["status"] != "passed"]
-        summary = f"{count['passed']} of {len(rows)} components passed" + (f"; {', '.join(bad)}" if bad else "") + "."
+        summary = f"{count['passed']} of {len(rows)} components passed: " + "; ".join(f"{r['evaluation']} {r['status']} ({r['source']})" for r in rows) + "."
         return result(status, summary, {"components": len(rows), **count, **{r["evaluation"]: r["status"] for r in rows}}, rows)
 
-    method = ("Runs " + ", ".join(parts) + " on the files given and passes only when every component passes. "
-              + (f"These call the system or read its platform and run on their own: {', '.join(apart)}." if apart else
-                 "The behaviour tests that call the system (for example EV-TST-04) run on their own."))
-    return Engine(suite_id, method, tuple(slots.values()), run, tuple(params.values()))
+    method = ("Runs " + ", ".join(parts) + " on the files given; a component whose file is not given reads its latest stored result for this AI system"
+              + (f", as do {', '.join(apart)}, which call the system or read its platform and run on their own" if apart else "")
+              + ". Passes only when every component passed; a component with no result on file makes the suite insufficient.")
+    return Engine(suite_id, method, tuple(slots.values()), run, tuple(params.values()), collect=collect_results)
 
 
 # --- EV-REL-01 release regression ----------------------------------------------------------------------
@@ -240,8 +282,9 @@ def reproducibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str
     cfg_a, cfg_b = read_json(files["config_a"], "The first run's configuration"), read_json(files["config_b"], "The second run's configuration")
     runs = []
     for slot, label in (("run_a", "The first run"), ("run_b", "The second run")):
-        f = read_csv(files[slot], label)
+        f = read_csv(files[slot], label, text=True)
         columns(f, [idc, rc], label)
+        f[idc] = _ids(f, idc, label)
         if f[idc].duplicated().any():
             raise EngineError(f"{label} has a repeated {idc}")
         runs.append(f.set_index(idc)[rc].astype(str).str.strip().to_dict())
@@ -263,8 +306,8 @@ def reproducibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str
     metrics = {"items": len(detail), "agreed": agree, "agreement": round(rate, 4), "threshold": floor, "tolerance": tol,
                "onlyInOneRun": sum(i not in a or i not in b for i in ids), "configurationsEqual": True}
     detail.sort(key=lambda r: r["agree"])
-    return result("passed" if rate >= floor else "failed",
-                  f"{agree} of {len(detail)} items agree across the two runs ({rate:.2%}; required {floor:.2%}, tolerance {tol:g}).", metrics, detail)
+    status, why = sampled("passed" if rate >= floor else "failed", len(detail) - agree, len(detail), 1 - floor)
+    return result(status, f"{agree} of {len(detail)} items agree across the two runs ({rate:.2%}; required {floor:.2%}, tolerance {tol:g})." + why, metrics, detail)
 
 
 # --- EV-INC-01 incident regression --------------------------------------------------------------------
@@ -272,11 +315,11 @@ def reproducibility(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str
 def incident_regression(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict[str, Any]:
     idc, sc, tc = _name(params, "id_column", "id"), _name(params, "status_column", "status"), _name(params, "test_column", "regression_test")
     closed_values = {v.casefold() for v in split(params.get("closed_values") or "closed,resolved")}
-    f = read_csv(files["incidents"], "The incident records")
+    f = read_csv(files["incidents"], "The incident records", text=True)
     columns(f, [idc, sc, tc], "The incident records")
     known = None
     if files.get("tests"):
-        t = read_csv(files["tests"], "The test list")
+        t = read_csv(files["tests"], "The test list", text=True)
         columns(t, ["id"], "The test list")
         known = set(t["id"].astype(str).str.strip())
     closed = f[f[sc].astype(str).str.strip().str.casefold().isin(closed_values)]
@@ -285,7 +328,7 @@ def incident_regression(files: Dict[str, bytes], params: Dict[str, Any]) -> Dict
     detail = []
     for _, r in closed.iterrows():
         link = "" if pd.isna(r[tc]) else str(r[tc]).strip()
-        detail.append({"incident": str(r[idc]), "regressionTest": link, "covered": bool(link) and (known is None or link in known)})
+        detail.append({"incident": str(r[idc]).strip(), "regressionTest": link, "covered": bool(link) and (known is None or link in known)})
     covered = sum(r["covered"] for r in detail)
     rate = _pct(covered, len(detail))
     detail.sort(key=lambda r: r["covered"])

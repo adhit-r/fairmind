@@ -27,7 +27,7 @@ const LIBRARY: Array<{ section: string; links: Array<{ label: string; href: stri
       { label: 'Plan', href: '/plan', icon: ListChecks },
       { label: 'Findings', href: '/risks', icon: AlertTriangle },
       { label: 'Evidence', href: '/evidence', icon: FileCheck2 },
-      { label: 'Exports', href: '/audit-reports', icon: FileOutput },
+      { label: 'Exports', href: '/reports/system', icon: FileOutput },
     ],
   },
   {
@@ -157,7 +157,7 @@ function AgentStatus() {
   const config = useAIProvider().data?.config
   const active = runs.filter((r) => r.status === 'running' || r.status === 'queued').length
   return (
-    <Link href="/org-admin/settings" className="flex items-center gap-2 border-t border-[var(--fm-line)] px-2 pb-1 pt-3 text-[12px] text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]">
+    <Link href="/settings" className="flex items-center gap-2 border-t border-[var(--fm-line)] px-2 pb-1 pt-3 text-[12px] text-[var(--fm-ink2)] hover:text-[var(--fm-ink)]">
       <span aria-hidden className={cn('h-1.5 w-1.5 flex-none rounded-full', active ? 'animate-pulse bg-[#1D9E75]' : 'bg-[#c3c6cc]')} />
       {active ? `Agent: ${active} run${active === 1 ? '' : 's'} active` : 'Agent idle'}
       <span className="ml-auto truncate text-[var(--fm-ink3)]">{config?.enabled ? config.providerName : 'Rules only'}</span>

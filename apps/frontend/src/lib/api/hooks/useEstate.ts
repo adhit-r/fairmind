@@ -16,14 +16,15 @@ export interface EstateGate {
 }
 
 export interface FrameworkCellCheck {
-  check: GateCheck['key']
+  /** A gate check key, or an evaluation id such as EV-DAT-01. */
+  check: string
   label: string
   relation: string
   confidence: number
   evidenceId: string | null
   evidenceClass: GateCheck['evidenceClass']
-  /** This check's own cell, as the server derived it. */
-  cell?: CellState
+  /** This check's own cell, as the server derived it; "not in gate" for a check the organisation left out of its gate. */
+  cell?: CellState | 'not in gate'
   stale?: true
   fails?: true
 }
@@ -34,6 +35,9 @@ export interface FrameworkSystems {
   systems: Array<{ id: string; name: string; riskTier: SystemRecord['riskTier'] }>
   unconfirmed: number
   notInScope: number
+  /** Systems in scope because they inherit the plan's choice of this framework. */
+  inherited?: number
+  followedByPlan?: boolean
   requirements: Array<{ key: string; cells: Array<{ state: CellState; checks: FrameworkCellCheck[] } | null> }>
 }
 
@@ -49,6 +53,24 @@ export interface Controls {
   crosswalk: Array<{ commonControl: string; key: string; relation: string }>
 }
 
+/** Per framework some system confirmed: how many systems, and its tracked requirements counted by weakest state. */
+export interface EstateFrameworks {
+  unconfirmed: number
+  /** Frameworks the organisation chose in its plan; systems that have not confirmed their own inherit them. */
+  plan?: string[]
+  frameworks: Array<{
+    key: string
+    systems: number
+    tracked: number
+    states: Partial<Record<CellState | 'none', number>>
+    /** plan: chosen in the plan; system: only confirmed on systems. */
+    source?: 'plan' | 'system'
+    inherited?: number
+    confirmed?: number
+  }>
+}
+
+export const useEstateFrameworks = () => useOrgResource<EstateFrameworks>(API_ENDPOINTS.aiGovernance.estateFrameworks)
 export const useEstateGates = () => useOrgResource<EstateGate[]>(API_ENDPOINTS.aiGovernance.estateGates)
 export const useFrameworkSystems = (frameworkKey: string | undefined) =>
   useOrgResource<FrameworkSystems>(frameworkKey ? API_ENDPOINTS.aiGovernance.frameworkSystems(frameworkKey) : null)

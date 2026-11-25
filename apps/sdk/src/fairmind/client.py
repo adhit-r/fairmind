@@ -10,6 +10,7 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Union
+from urllib.parse import quote
 
 import httpx
 
@@ -42,6 +43,26 @@ def _split(value: Union[str, Sequence[str]]) -> str:
     return value if isinstance(value, str) else ",".join(value)
 
 
+def _integral_floats_as_ints(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {k: _integral_floats_as_ints(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_integral_floats_as_ints(v) for v in value]
+    return value
+
+
+def _entry_hash(entry: Dict[str, Any]) -> str:
+    confidence = entry.get("confidence")
+    fields = {
+        "id": entry.get("id"), "type": entry.get("type"), "title": entry.get("title"), "source": entry.get("source"), "content": entry.get("content"),
+        "confidence": None if confidence is None else float(confidence), "status": entry.get("status"), "metadata": entry.get("metadata"),
+        "created_at": entry.get("createdAt"),
+    }
+    return hashlib.sha256(json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+
+
 def _chain_head(entries: Sequence[Dict[str, Any]]) -> str:
     head = hashlib.sha256(b"fairmind-evidence-chain-v1").hexdigest()
     for entry in entries:
@@ -52,21 +73,26 @@ def _chain_head(entries: Sequence[Dict[str, Any]]) -> str:
 def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
     """Check an inspection pack offline: `{"manifest": {...}, "manifestHash": "..."}` as downloaded or shared.
 
-    Recomputes the SHA-256 of the canonical manifest and each system's evidence chain head. `intact` is true only
-    when the manifest hash and every chain head match. Pure: no network, no key.
+    Recomputes the SHA-256 of the canonical manifest and each system's evidence chain head; from manifest version 2
+    integral floats are hashed as integers and every entry hash is recomputed from its record, as the fairmind CLI
+    does. `intact` is true only when all of them match. Pure: no network, no key.
     """
     manifest, expected = document.get("manifest"), document.get("manifestHash")
     if not isinstance(manifest, dict) or not isinstance(expected, str):
         raise FairMindError('Not an inspection pack: expected {"manifest": {...}, "manifestHash": "..."}')
-    actual = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    v2 = isinstance(manifest.get("version"), int) and manifest["version"] >= 2
+    actual = hashlib.sha256(json.dumps(_integral_floats_as_ints(manifest) if v2 else manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
     systems = []
     for item in manifest.get("systems", []):
+        entries = item.get("evidence", [])
         try:
-            recomputed = _chain_head(item.get("evidence", []))
-        except (KeyError, TypeError) as exc:
+            recomputed = _chain_head(entries)
+            bad = [e.get("id") for e in entries if not hmac.compare_digest(str(e.get("hash")), _entry_hash(e))] if v2 else []
+        except (KeyError, TypeError, AttributeError, ValueError) as exc:
             raise FairMindError(f"Malformed evidence entry: {exc!r}") from exc
         system = item.get("system") or {}
-        systems.append({"name": system.get("name") or system.get("id"), "evidence": len(item.get("evidence", [])), "intact": hmac.compare_digest(str(item.get("chainHead")), recomputed)})
+        chain_ok = hmac.compare_digest(str(item.get("chainHead")), recomputed)
+        systems.append({"name": system.get("name") or system.get("id"), "evidence": len(entries), "chainOk": chain_ok, "entriesNotMatchingHash": bad, "intact": chain_ok and not bad})
     hash_ok = hmac.compare_digest(expected, actual)
     return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "intact": hash_ok and all(s["intact"] for s in systems)}
 
@@ -361,6 +387,47 @@ class FairMind:
             raise FairMindError("Not a share link: expected .../verify/<pack id>?t=<token>")
         shared = self.public_pack(pack_id, token)
         return verify_pack({"manifest": shared["manifest"], "manifestHash": shared["manifestHash"]})
+
+    # -- live traces ---------------------------------------------------------
+
+    def record_trace(
+        self,
+        system_id: str,
+        trace_id: str,
+        steps: Sequence[Dict[str, Any]] = (),
+        *,
+        name: Optional[str] = None,
+        status: Optional[Literal["running", "ok", "error"]] = None,
+        input: Any = None,
+        output: Any = None,
+        rationale: Optional[str] = None,
+        started_at: Optional[str] = None,
+        ended_at: Optional[str] = None,
+        expected_calls: Optional[Sequence[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Record or extend a trace of one run; call it again with the same `trace_id` as the run goes on.
+
+        Each step is a dict: `kind` (llm, tool, retrieval, memory, decision or other), `name`, `input`,
+        `output`, `rationale` (the reason the system stated for the step), and optionally `id` (re-sending
+        the same id updates the step), `parentId`, `status` (blocked for a tool call a guardrail stopped), `error`, `startedAt`, `endedAt`.
+        A test run may send `expected_calls`, the tool calls it should make in order, each {"tool", "args"}; a tool step's input is its arguments.
+        Fields left out, here or on a re-sent step, keep what an earlier call stored; the trace id cannot contain `/`.
+        """
+        body = {"traceId": trace_id, "steps": list(steps), "name": name, "status": status, "input": input, "output": output,
+                "rationale": rationale, "startedAt": started_at, "endedAt": ended_at,
+                "expectedCalls": list(expected_calls) if expected_calls is not None else None}
+        return self._packs("POST", f"/ai-systems/{system_id}/traces", json={k: v for k, v in body.items() if v is not None})
+
+    def traces(self, system_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """The latest traces for a system, each with `stepCount` and `rationaleCoverage`."""
+        return self._packs("GET", f"/ai-systems/{system_id}/traces", params={"limit": limit})["traces"]
+
+    def trace(self, system_id: str, trace_id: str) -> Dict[str, Any]:
+        """One trace with its steps in order."""
+        return self._packs("GET", f"/ai-systems/{system_id}/traces/{quote(trace_id, safe='')}")["trace"]
+
+    def delete_trace(self, system_id: str, trace_id: str) -> Dict[str, Any]:
+        return self._packs("DELETE", f"/ai-systems/{system_id}/traces/{quote(trace_id, safe='')}")
 
     # -- findings, remediation -----------------------------------------------
 

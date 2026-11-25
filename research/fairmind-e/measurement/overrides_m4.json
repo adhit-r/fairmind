@@ -1,0 +1,7 @@
+{
+  "_comment": "Workload scaling for the Apple M4 Mac mini (16 GB) power-reference host, 2026-11-16. With overrides_m1.json one iteration took 18.5s (W1), 40.7s (W2), 54.9s (W3) and 47.8s (W4) here, under the ~60s CodeCarbon needs for five 15s sampling windows. W1, W3 and W4 are scaled to roughly 80s. W2 is scaled to about 62s only: the bfloat16 mitigation rerun is ~36x slower than float32 on this CPU (145.7s vs 4.0s per 200 steps), so 4000 steps already costs ~48 min per bfloat16 run. Linear repeat knobs only, so the analytic FLOP estimate scales with the real work. Archive this file with the results.",
+  "classical_ml_training": {"repeats": 520},
+  "transformer_finetune": {"steps": 4000},
+  "rag_inference": {"repeats": 11},
+  "batch_embeddings": {"repeats": 54}
+}

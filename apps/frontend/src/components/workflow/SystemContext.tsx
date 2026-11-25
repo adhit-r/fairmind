@@ -20,8 +20,9 @@ export interface AISystemSummary {
   name: string
   owner: string
   riskTier: "low" | "medium" | "high" | "critical"
-  readiness: number
-  stage: "onboard" | "assess" | "govern" | "remediate" | "operate"
+  /** Null when the backend has not reported readiness for this system. */
+  readiness: number | null
+  stage: "onboard" | "assess" | "govern" | "remediate" | "operate" | "retired"
   workspaceId?: string
   metadata?: Record<string, unknown>
   /** When the system was registered; absent on the empty-state placeholder. */
@@ -51,7 +52,7 @@ interface AISystemRecord {
 }
 
 interface SelectedSystemStatus {
-  readiness: number
+  readiness: number | null
   stage: AISystemSummary["stage"]
   criticalBlockers: number
   failedControls: number
@@ -67,7 +68,7 @@ const NO_SYSTEM: AISystemSummary = {
   name: "No system registered",
   owner: "unassigned",
   riskTier: "low",
-  readiness: 0,
+  readiness: null,
   stage: "onboard",
   workspaceId: "",
   metadata: { source: "fallback" },
@@ -89,7 +90,7 @@ type SystemContextValue = {
     systemOwner: string
     riskTier: AISystemSummary["riskTier"]
     stage: AISystemSummary["stage"]
-    systemType?: string
+    kind?: string
     systemVersion?: string
     businessLine?: string
     complianceFrameworks?: string[]
@@ -125,7 +126,7 @@ export function chooseSelectedSystemId(
 
 function emptyDerivedStatus(system: AISystemSummary): SelectedSystemStatus {
   return {
-    readiness: 0,
+    readiness: null,
     stage: system.stage,
     criticalBlockers: 0,
     failedControls: 0,
@@ -138,8 +139,8 @@ function emptyDerivedStatus(system: AISystemSummary): SelectedSystemStatus {
 function normalizeSystem(record: AISystemRecord): AISystemSummary {
   const lifecycleSummary = record.lifecycleSummary || {}
   const stage = lifecycleSummary.stage || record.lifecycleStage
-  // The backend is the only source of readiness; a record without one reads 0.
-  const readiness = lifecycleSummary.readiness ?? record.readiness ?? 0
+  // The backend is the only source of readiness; a record without one is unknown, not 0.
+  const readiness = lifecycleSummary.readiness ?? record.readiness ?? null
   return {
     id: record.id,
     name: record.name,
@@ -214,7 +215,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
     systemOwner: string
     riskTier: AISystemSummary["riskTier"]
     stage: AISystemSummary["stage"]
-    systemType?: string
+    kind?: string
     systemVersion?: string
     businessLine?: string
     complianceFrameworks?: string[]
@@ -245,7 +246,7 @@ export function SystemContextProvider({ children }: { children: React.ReactNode 
         metadata: {
           created_from: "onboard",
           workspace_name: params.workspaceName,
-          ...(params.systemType && { system_type: params.systemType }),
+          ...(params.kind && { asset_kind: params.kind }),
           ...(params.systemVersion && { system_version: params.systemVersion }),
           ...(params.businessLine && { business_line: params.businessLine }),
           ...(params.complianceFrameworks && { compliance_frameworks: params.complianceFrameworks }),
@@ -391,7 +392,7 @@ export function SystemContextBar() {
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase text-muted-foreground">Readiness</p>
             <div className="border border-[var(--fm-line)] bg-white px-3 py-2 font-semibold">
-              {selectedSystemStatus.readiness}%
+              {selectedSystemStatus.readiness === null ? "Unknown" : `${selectedSystemStatus.readiness}%`}
             </div>
           </div>
 

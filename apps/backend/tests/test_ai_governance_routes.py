@@ -547,6 +547,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
         "/api/v1/ai-governance/evidence/collect-v2",
         json={
             "system_id": system_id,
+            "confidence": 0.8,
             "type": "review_note",
             "title": "Scoped narrative",
             "content": {"text": "Collected without an external pointer."},
@@ -559,6 +560,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
         "/api/v1/ai-governance/evidence/collect-v2",
         json={
             "system_id": system_id,
+            "confidence": 0.8,
             "type": "machine_observation",
             "title": "Opaque URL-shaped content",
             "content": {"url": "urn:internal:observation"},
@@ -573,6 +575,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
             "/api/v1/ai-governance/evidence/collect-v2",
             json={
                 "system_id": system_id,
+                "confidence": 0.8,
                 "type": "external_report",
                 "title": "External report",
                 "content": {"url": "https://untrusted.example.test/report"},
@@ -584,6 +587,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
             "/api/v1/ai-governance/evidence/collect-v2",
             json={
                 "system_id": system_id,
+                "confidence": 0.8,
                 "type": "external_report",
                 "title": "Split-field external report",
                 "content": {"url": "https://untrusted.example.test/split-v2"},
@@ -595,6 +599,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
             "/api/v1/ai-governance/evidence/collect",
             json={
                 "system_id": system_id,
+                "confidence": 0.8,
                 "type": "external_report",
                 "content": {},
                 "metadata": {"file_url": "https://untrusted.example.test/v1"},
@@ -604,6 +609,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
             "/api/v1/ai-governance/evidence/collect",
             json={
                 "system_id": system_id,
+                "confidence": 0.8,
                 "type": "external_report",
                 "content": {"url": "https://untrusted.example.test/split-v1"},
                 "metadata": {"artifact_kind": "url"},
@@ -613,6 +619,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
             "/api/v1/ai-governance/evidence/upload",
             json={
                 "system_id": system_id,
+                "confidence": 0.8,
                 "type": "external_report",
                 "content": {},
                 "metadata": {"file_url": "https://untrusted.example.test/upload"},
@@ -622,6 +629,7 @@ def test_untrusted_external_evidence_writes_default_deny_without_persistence(
             "/api/v1/ai-governance/evidence/upload",
             json={
                 "system_id": system_id,
+                "confidence": 0.8,
                 "type": "external_report",
                 "content": {"url": "https://untrusted.example.test/split-upload"},
                 "metadata": {"artifact_kind": "url"},
@@ -778,6 +786,7 @@ def test_reviewed_untrusted_linking_capability_can_be_explicitly_enabled(
         "/api/v1/ai-governance/evidence/collect-v2",
         json={
             "system_id": system_id,
+            "confidence": 0.8,
             "type": "external_report",
             "title": "Reviewed source",
             "content": {"url": "https://reviewed.example.test/report"},
@@ -937,3 +946,13 @@ def test_compliance_frameworks_come_from_the_pack_catalogue(authenticated_org_da
     assert body["ISO42001"]["controls"] == sorted(FRAMEWORK_KEYS["ISO42001"])
     assert body["NISTRMF"]["name"] == FRAMEWORKS["NISTRMF"].name
     assert body["ISO42001"]["priority"] == "P0"
+
+
+def test_evidence_summary_missing_signals_follow_the_release_gate():
+    from api.routes.ai_governance import _summarize_evidence
+
+    assert _summarize_evidence([], "s")["missingSignals"] == [
+        "fairness evidence", "data governance evidence", "human oversight evidence", "monitoring evidence",
+    ]
+    records = [{"type": "Policy", "confidence": 0.3}, {"type": "monitoring_snapshot", "confidence": 0.9, "linkedEntityCount": 1}, {"type": "audit_log"}]
+    assert _summarize_evidence(records, "s")["missingSignals"] == ["fairness evidence", "data governance evidence"]

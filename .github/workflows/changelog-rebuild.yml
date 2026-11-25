@@ -1,0 +1,23 @@
+# Rebuild fairmind.xyz when a release is published, so /changelog shows it without waiting for the next push.
+# Needs the repository secret NETLIFY_BUILD_HOOK: a build hook URL from Netlify (Site configuration, Build hooks).
+name: Changelog rebuild
+
+on:
+  release:
+    types: [published, edited]
+
+permissions: {}
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Netlify to rebuild the website
+        env:
+          HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::notice::NETLIFY_BUILD_HOOK is not set; the changelog updates on the website's next build"
+            exit 0
+          fi
+          curl -fsS -X POST -d '{}' "$HOOK"

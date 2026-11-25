@@ -26,3 +26,9 @@
 .dsc-form { display: grid; gap: 12px; max-width: 520px; }
 .dsc-kinds { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 700px) { .dsc-row { grid-template-columns: minmax(0, 1fr); } }
+.sys-retired { border: 1px solid var(--color-border); border-radius: var(--radius-container); background: var(--color-background-card); padding: 12px 16px; }
+.sys-retired summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); }
+.sys-retired summary b { font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.sys-retired ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.sys-retired a { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--color-background-muted); color: var(--color-text-secondary); font-size: 13px; text-decoration: none; }
+.sys-retired a:hover { color: var(--color-text-primary); }

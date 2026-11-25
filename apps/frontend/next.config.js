@@ -29,7 +29,7 @@ const nextConfig = {
     return [
       {
         source: '/audit-reports',
-        destination: '/reports?view=builder',
+        destination: '/reports/system',
         permanent: false,
       },
       {
@@ -45,7 +45,13 @@ const nextConfig = {
       { source: '/compliance/runs', destination: '/runs', permanent: false },
       { source: '/compliance/evaluations', destination: '/evaluations', permanent: false },
       { source: '/evidence/packs', destination: '/auditor-packs', permanent: false },
+      // The old org admin pages: people, roles and the audit log live in Settings now.
+      { source: '/org-admin', destination: '/settings?section=team', permanent: false },
+      { source: '/org-admin/members', destination: '/settings?section=team', permanent: false },
+      { source: '/org-admin/roles', destination: '/settings?section=team', permanent: false },
+      { source: '/org-admin/audit-log', destination: '/settings?section=audit-log', permanent: false },
       { source: '/org-admin/settings', destination: '/settings', permanent: false },
+      { source: '/admin/roles', destination: '/settings?section=team', permanent: false },
       { source: '/remediation-wizard', destination: '/findings', permanent: false },
       // Retired tool pages: the evaluations they stood for live in the catalogue now.
       ...['/bias', '/advanced-bias', '/llm-judge', '/llm-testing', '/benchmarks', '/fairness-documentation', '/explainability-studio', '/multimodal-bias'].map(

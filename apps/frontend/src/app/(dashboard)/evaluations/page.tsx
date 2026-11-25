@@ -2,8 +2,8 @@
 
 import '@/astryx/pages/evaluations.css'
 import Link from 'next/link'
-import { Fragment, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Activity, ChevronDown, ChevronRight, Database, FileText, Network, Plug } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Divider } from '@astryxdesign/core/Divider'
@@ -12,11 +12,14 @@ import { VStack, HStack } from '@astryxdesign/core/Layout'
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Selector } from '@astryxdesign/core/Selector'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
-import { useEvaluations, type EvaluationRow, type ResultStatus } from '@/lib/api/hooks/usePacks'
-import { RESULT_COLOR, RESULT_WORD, fmtWhen } from '@/astryx/data/evaluations'
+import { useEvaluations, type EvaluationRow, type ResultStatus, type RunWay } from '@/lib/api/hooks/usePacks'
+import { useSystemContext } from '@/components/workflow/SystemContext'
+import { KIND_LABEL } from '@/astryx/data/discovery'
+import { RESULT_COLOR, RESULT_WORD, fmtWhen, groupRows, type Bucket } from '@/astryx/data/evaluations'
 
 /** Pillar labels as the catalogue names them; a pillar not listed here shows as it comes. */
 const PILLAR_ORDER = ['GOVERN', 'EVALUATE', 'SECURE', 'COMPLY']
@@ -53,6 +56,7 @@ function Panel({ row, onClose }: { row: EvaluationRow; onClose: () => void }) {
           <MetadataListItem label="Pack">{row.pack.name}{row.installed ? '' : ' (not installed)'}</MetadataListItem>
           <MetadataListItem label="Engine">
             <Token size="sm" color={row.runnable ? 'green' : 'gray'} label={row.runnable ? 'Runnable' : 'Not built yet'} />
+            {row.judgeNotValidated && <Token size="sm" color="gray" label="Judge not validated" />}
           </MetadataListItem>
         </MetadataList>
         <Button label={row.runnable ? 'Open to run' : 'Open details'} variant={row.runnable ? 'primary' : 'secondary'} href={`/compliance/evaluations/${row.id}`} />
@@ -84,8 +88,95 @@ function Panel({ row, onClose }: { row: EvaluationRow; onClose: () => void }) {
   )
 }
 
+const ALL = 'all'
+const SHOWN = 8
+const BUCKET: Record<Bucket, string> = { ready: 'Ready now', file: 'Need a file', setup: 'Need setup', other: 'Do not apply' }
+const ROW_ICON: Record<RunWay, typeof Plug> = { calls_system: Plug, live_runs: Activity, platform: Network, fairmind_data: Database, files: FileText }
+/** The way a row's icon shows: the first one set up, else the first listed. */
+const rowWay = (r: EvaluationRow): RunWay => (r.ways?.find((w) => w.ready) ?? r.ways?.[0])?.way ?? 'files'
+
+function Group({ bucket, rows, systemId }: { bucket: Bucket; rows: EvaluationRow[]; systemId: string }) {
+  const [all, setAll] = useState(false)
+  if (rows.length === 0) return null
+  const shown = all ? rows : rows.slice(0, SHOWN)
+  const Icon = bucket === 'ready' ? Plug : FileText
+  return (
+    <section className="fm-ev-card fm-ev-group-card" aria-labelledby={`ev-${bucket}`}>
+      <div className="fm-ev-group-head">
+        <span className={`fm-ev-group-icon${bucket === 'ready' ? ' is-ready' : ''}`} aria-hidden><Icon size={14} /></span>
+        <h2 id={`ev-${bucket}`} className="fm-ev-h2">{BUCKET[bucket]}</h2>
+        <span className="fm-ev-muted">{rows.length}</span>
+      </div>
+      <ul className="fm-ev-rows">
+        {shown.map((r) => {
+          const RowIcon = ROW_ICON[rowWay(r)]
+          const mine = r.results?.systems.find((s) => s.systemId === systemId)
+          return (
+            <li key={r.id}>
+              <Link href={`/compliance/evaluations/${encodeURIComponent(r.id)}?system=${encodeURIComponent(systemId)}`}>
+                <span className="fm-ev-row-icon" aria-hidden><RowIcon size={14} /></span>
+                <span className="fm-ev-row-name">{r.name}</span>
+                <span className="fm-ev-row-limit" title={r.threshold}>{r.threshold}</span>
+                <Token size="sm" color={mine ? RESULT_COLOR[mine.status] : 'gray'} label={mine ? RESULT_WORD[mine.status] : 'Not run'} />
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+      {rows.length > SHOWN && (
+        <div className="fm-ev-group-more">
+          <Button label={all ? 'Show fewer' : `${rows.length - SHOWN} more`} variant="ghost" size="sm" onClick={() => setAll((v) => !v)} />
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ForSystem({ rows, systemId }: { rows: EvaluationRow[]; systemId: string }) {
+  const [showOther, setShowOther] = useState(false)
+  const g = useMemo(() => groupRows(rows), [rows])
+  const order: Bucket[] = ['ready', 'file', 'setup', 'other']
+  const total = order.reduce((n, b) => n + g[b].length, 0)
+  if (total === 0) return <EmptyState title="Nothing FairMind can run" description="No runnable evaluation is listed for this system." isCompact />
+  return (
+    <VStack gap={4}>
+      <section className="fm-ev-card fm-ev-cover" aria-label="Coverage for this system">
+        <div className="fm-ev-cover-bar" aria-hidden>
+          {order.map((b) => g[b].length > 0 && <span key={b} className={`b-${b}`} style={{ flex: g[b].length }} />)}
+        </div>
+        <div className="fm-ev-legend">
+          {order.map((b) => g[b].length > 0 && (
+            <span key={b} className={b === 'other' ? 'fm-ev-muted' : undefined}>
+              <span className={`fm-ev-swatch b-${b}`} aria-hidden />
+              <strong>{g[b].length}</strong> {BUCKET[b].toLowerCase()}{b === 'other' && !showOther ? ', hidden' : ''}
+            </span>
+          ))}
+          {g.other.length > 0 && (
+            <span className="fm-ev-end">
+              <Button label={showOther ? 'Hide them' : 'Show them'} variant="ghost" size="sm" onClick={() => setShowOther((v) => !v)} />
+            </span>
+          )}
+        </div>
+      </section>
+      {order.filter((b) => b !== 'other' || showOther).map((b) => (
+        <Group key={b} bucket={b} rows={g[b]} systemId={systemId} />
+      ))}
+    </VStack>
+  )
+}
+
 export default function EvaluationsPage() {
-  const evals = useEvaluations()
+  const { systems: allSystems } = useSystemContext()
+  const systems = allSystems.filter((s) => s.metadata?.source !== 'fallback')
+  const [systemId, setSystemId] = useState(ALL)
+  // The system file links here with ?system=; read once on load (useSearchParams would need a Suspense boundary on this static page).
+  useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get('system')
+    if (asked) setSystemId(asked)
+  }, [])
+  const forSystem = systems.find((s) => s.id === systemId)
+  const evals = useEvaluations(forSystem ? { system: forSystem.id } : {})
+  const kind = forSystem?.metadata?.asset_kind as string | undefined
   const [q, setQ] = useState('')
   const [pillar, setPillar] = useState('all')
   // Runnable first: an evaluation with no engine behind it is listed, but not by default.
@@ -133,6 +224,7 @@ export default function EvaluationsPage() {
   return (
     <div className="fm-page">
       <VStack gap={5}>
+        <div className="fm-ev-head">
         <VStack gap={1}>
           <Heading level={1}>Evaluations</Heading>
           <Text color="secondary">
@@ -141,6 +233,24 @@ export default function EvaluationsPage() {
               : `${counts.total} evaluations. ${counts.runnable} can run today, ${counts.installed} are in installed packs, ${counts.withResults} have results on at least one system.`}
           </Text>
         </VStack>
+          {systems.length > 0 && (
+            <HStack gap={2} vAlign="center">
+              <div className="fm-ev-picker">
+                <Selector
+                  label="For system"
+                  isLabelHidden
+                  options={[{ value: ALL, label: 'All systems' }, ...systems.map((s) => ({ value: s.id, label: s.name }))]}
+                  value={forSystem ? forSystem.id : ALL}
+                  onChange={(v) => {
+                    setSystemId(v)
+                    setSelectedId(null)
+                  }}
+                />
+              </div>
+              {forSystem && <Token size="sm" color={kind ? 'blue' : 'gray'} label={kind ? KIND_LABEL[kind] ?? kind : 'Kind not set'} />}
+            </HStack>
+          )}
+        </div>
 
         {evals.error && (
           <Banner
@@ -156,6 +266,8 @@ export default function EvaluationsPage() {
             <Skeleton height={40} />
             <Skeleton height={220} />
           </VStack>
+        ) : evals.data && forSystem ? (
+          <ForSystem rows={evals.data} systemId={forSystem.id} />
         ) : evals.data ? (
           <>
             <div className="fm-ev-filters">
@@ -236,6 +348,7 @@ export default function EvaluationsPage() {
                                   </td>
                                   <td>
                                     <Token size="sm" color={r.runnable ? 'green' : 'gray'} label={r.runnable ? 'Runnable' : 'Not built yet'} />
+                                    {r.judgeNotValidated && <Token size="sm" color="gray" label="Judge not validated" />}
                                   </td>
                                   <td>
                                     <ResultToken row={r} />

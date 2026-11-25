@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { ConsentCheck } from '@/components/auth/ConsentCheck'
 import { SystemContextProvider, useSystemContext } from '@/components/workflow/SystemContext'
 import { OrgProvider } from '@/context/OrgContext'
 import { NeedsYouProvider } from '@/astryx/data/needsYou'
@@ -11,7 +12,7 @@ import { SessionProvider } from '@/context/SessionContext'
 import { AstryxShell } from '@/astryx/AstryxShell'
 
 // Pages in the new menu are built on Astryx. Any other page is an older tool page: it keeps its own styles inside a padded frame.
-const ASTRYX = /^\/(dashboard|needs-you|systems|discovery|plan|frameworks|policies|evaluations|runs|agent-audits|decisions|monitoring|findings|environment|evidence|auditor-packs|autopilot|ask|settings)$|^\/systems\/[^/]+$/
+const ASTRYX = /^\/(dashboard|needs-you|systems|discovery|shadow-ai|plan|frameworks|policies|evaluations|runs|agent-audits|decisions|monitoring|findings|environment|evidence|auditor-packs|reports|autopilot|ask|settings)$|^\/systems\/[^/]+$/
 
 /** An older tool page opened from a system file keeps a way back to it. */
 function BackToSystem() {
@@ -35,6 +36,7 @@ export default function DashboardLayout({
   return (
     <SessionProvider>
       <AuthGuard>
+        <ConsentCheck />
         <OrgProvider>
           <SystemContextProvider>
             <NeedsYouProvider>

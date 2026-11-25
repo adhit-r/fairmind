@@ -499,7 +499,7 @@ function ScopedEvaluationRunsPage({
           <p className={`max-w-[560px] text-[13px] ${MUTED}`}>
             Select or create an organization before loading scoped plans, runs, or governance evidence.
           </p>
-          <Link href="/org-admin" className={BTN_P}>Manage organizations</Link>
+          <Link href="/settings?section=team" className={BTN_P}>Manage organizations</Link>
         </section>
       ) : !realSystem && !initialLoading ? (
         <section className="fm-card grid content-start justify-items-start gap-3 p-6">

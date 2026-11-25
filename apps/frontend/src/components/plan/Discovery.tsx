@@ -146,7 +146,7 @@ export function Discovery({ d, onAnswer, onGenerate }: { d: DiscoveryState; onAn
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--fm-brand)]" aria-hidden />
           <h1 className="text-[17px] font-semibold tracking-[-0.01em]">Set up your governance plan</h1>
-          <span className="ml-auto text-[12px] text-[var(--fm-ink3)]">{d.agent === 'llm' ? 'Reading with your AI provider' : <>Keyword reading. <Link href="/org-admin/settings" className="underline underline-offset-2">Add a provider</Link> for better reading</>}</span>
+          <span className="ml-auto text-[12px] text-[var(--fm-ink3)]">{d.agent === 'llm' ? 'Reading with your AI provider' : <>Keyword reading. <Link href="/settings?section=ai-provider" className="underline underline-offset-2">Add a provider</Link> for better reading</>}</span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-[var(--fm-line)]" aria-label={`${pct}% of discovery done`}><span className="block h-full bg-[var(--fm-ink)]" style={{ width: `${pct}%` }} /></div>
 

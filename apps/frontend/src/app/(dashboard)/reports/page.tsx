@@ -1,364 +1,197 @@
 'use client'
 
+import '@/astryx/pages/reports.css'
 import Link from 'next/link'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useSearchParams } from 'next/navigation'
-
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { VStack } from '@astryxdesign/core/Layout'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
+import { Selector } from '@astryxdesign/core/Selector'
+import { Skeleton } from '@astryxdesign/core/Skeleton'
+import { Heading, Text } from '@astryxdesign/core/Text'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { BTN, BTN_P, ErrorNote, LABEL, Loading, MUTED, Pill } from '@/components/packs/parts'
-import { useOrg } from '@/context/OrgContext'
-import {
-  useGovernanceAssurance,
-  type EvidenceMapping,
-} from '@/lib/api/hooks/useGovernanceAssurance'
-import { AssuranceReportStudio } from './components/AssuranceReportStudio'
+import { API_ENDPOINTS } from '@/lib/api/endpoints'
+import { useOrgResource } from '@/lib/api/hooks/usePacks'
+import { LIBRARY, useReportCalls, type Format } from '@/astryx/reports/api'
+import { Briefing } from '@/astryx/reports/Briefing'
+import { CrosswalkCard, GridCard, TasksCard } from '@/astryx/reports/Compliance'
+import { DriftCard, FixesCard, GateCard, ToolsCard } from '@/astryx/reports/Engineering'
+import { DecisionsCard, GovernedCard, OversightCard, RoadCard, TopRisksCard } from '@/astryx/reports/Executive'
+import { AcceptanceCard, HeatCard, LedgerCard, PacksCard, RegisterCard, SampleCard, SoaCard } from '@/astryx/reports/AuditorRisk'
+import { LibraryCard, RecentCard, ReportDrawer } from '@/astryx/reports/Library'
+import { Card, ProofBars } from '@/astryx/reports/parts'
+import { ROLES, type Briefing as BriefingModel, type ReportModel, type Role, type SealedReport } from '@/astryx/reports/types'
 
-const field =
-  'h-9 rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[13.5px] outline-none focus:border-[var(--fm-ink)]'
-const sub = `mt-1 text-[12.5px] ${MUTED}`
-const row = 'border-t border-[var(--fm-line)] py-3'
+const isRole = (v: string | null): v is Role => ROLES.some((r) => r.key === v)
 
-function formatDate(value: string | null) {
-  if (!value) return 'Not recorded'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Not recorded'
-  return date.toLocaleString()
+function Body({ m, role }: { m: ReportModel; role: Role }) {
+  const proofBySystem = m.proof ? <Card span={6} title="Proof depth" sub="How each requirement is backed. Auditors weigh measured proof over a person's word."><ProofBars proof={m.proof} by="system" /></Card> : null
+  const proofByGroup = (span: 5 | 7) => m.proof ? <Card span={span} title="Proof depth by clause group" sub="How each group of clauses is backed."><ProofBars proof={m.proof} by="group" /></Card> : null
+  switch (role) {
+    case 'executive':
+      return (
+        <>
+          {m.road ? <RoadCard road={m.road} span={8} /> : null}
+          {m.governed || m.decisions ? (
+            <div className="rp-stack rp-c4">
+              {m.governed ? <GovernedCard g={m.governed} /> : null}
+              {m.decisions ? <DecisionsCard list={m.decisions} /> : null}
+            </div>
+          ) : null}
+          {proofBySystem}
+          {m.oversight ? <OversightCard o={m.oversight} /> : null}
+          {m.risk ? <TopRisksCard risk={m.risk} /> : null}
+        </>
+      )
+    case 'compliance':
+      return (
+        <>
+          {m.road ? <RoadCard road={m.road} span={12} /> : null}
+          {proofByGroup(5)}
+          {m.crosswalk ? <CrosswalkCard c={m.crosswalk} /> : null}
+          {m.tasks ? <TasksCard t={m.tasks} /> : null}
+          {m.grid ? <GridCard g={m.grid} /> : null}
+        </>
+      )
+    case 'engineering':
+      return (
+        <>
+          {m.systems ? <GateCard systems={m.systems} framework={m.framework.name} outOfScope={m.outOfScope ?? 0} /> : null}
+          {m.engineering ? (
+            <>
+              <ToolsCard tools={m.engineering.toolExposure} />
+              <DriftCard drift={m.engineering.fairnessDrift} />
+              <FixesCard fixes={m.engineering.fixes} />
+            </>
+          ) : null}
+        </>
+      )
+    case 'auditor':
+      return (
+        <>
+          {m.auditor ? <LedgerCard l={m.auditor.ledger} /> : null}
+          {m.auditor ? <SoaCard soa={m.auditor.soa} /> : null}
+          {m.auditor ? <SampleCard s={m.auditor.sample} /> : null}
+          {proofByGroup(7)}
+          {m.auditor ? <PacksCard packs={m.auditor.packs} /> : null}
+        </>
+      )
+    case 'risk':
+      return m.risk ? (
+        <>
+          <HeatCard risk={m.risk} />
+          <AcceptanceCard list={m.risk.acceptanceWaiting} />
+          <RegisterCard risks={m.risk.risks} />
+        </>
+      ) : null
+  }
 }
 
-function countLabel(value: number, singular: string, plural = `${singular}s`) {
-  return `${value} ${value === 1 ? singular : plural}`
-}
-
-function latestReview(mapping: EvidenceMapping) {
-  return mapping.reviewHistory[mapping.reviewHistory.length - 1]
-}
-
-function Fact({ name, value, mono }: { name: string; value: ReactNode; mono?: boolean }) {
-  return (
-    <div className="min-w-0">
-      <dt className={LABEL}>{name}</dt>
-      <dd className={`mt-0.5 text-[13.5px] tabular-nums ${mono ? 'break-all font-mono text-[12px]' : '[overflow-wrap:anywhere]'}`}>{value}</dd>
-    </div>
+function ReportsHub() {
+  const router = useRouter()
+  const search = useSearchParams()
+  const role: Role = isRole(search.get('role')) ? (search.get('role') as Role) : 'executive'
+  const system = search.get('system') || ''
+  const { systems } = useSystemContext()
+  const options = useMemo(
+    () => [{ value: 'org', label: 'Whole organisation' }, ...systems.filter((s) => s.metadata?.source !== 'fallback').map((s) => ({ value: s.id, label: s.name }))],
+    [systems],
   )
-}
-
-function Crumb() {
-  return (
-    <div className="text-[12.5px] font-medium text-[var(--fm-ink2)]">
-      <Link href="/dashboard" className="hover:text-[var(--fm-ink)]">Today</Link> · Exports
-    </div>
-  )
-}
-
-// A value that is still loading shows a dash, and one whose load failed says so; neither is shown as a real value.
-const Pending = () => (
-  <>
-    <span aria-hidden="true">–</span>
-    <span className="sr-only">Loading</span>
-  </>
-)
-
-export default function ReportsPage() {
-  const searchParams = useSearchParams()
-  const { selectedOrg } = useOrg()
-  const { selectedSystem, loading: systemsLoading, error: systemsError, refreshSystems } = useSystemContext()
-  const hasSystem = Boolean(selectedSystem.id)
-  const orgId = selectedOrg?.id
-  const assuranceBase = useGovernanceAssurance(orgId, selectedSystem.id)
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState('')
-  useEffect(() => {
-    if (!assuranceBase.resolvedAssignments.some(({ assignment }) => assignment.id === selectedAssignmentId)) {
-      setSelectedAssignmentId(assuranceBase.resolvedAssignments[0]?.assignment.id || '')
-    }
-  }, [assuranceBase.resolvedAssignments, selectedAssignmentId])
-  const activeScope = assuranceBase.resolvedAssignments.find(
-    ({ assignment }) => assignment.id === selectedAssignmentId,
-  )
-  const activeAssignment = activeScope?.assignment
-  const assurance = useGovernanceAssurance(orgId, selectedSystem.id, activeAssignment?.id)
-  const assignedVersion = activeScope?.version
-  const assignedFramework = activeScope?.framework
-  const frameworkName = assignedFramework?.name || assignedVersion?.name || 'Framework'
-  const canEdit = selectedOrg?.role === 'admin'
-    || selectedOrg?.role === 'owner'
-    || selectedOrg?.permissions?.includes('model:write') === true
-  const auditorMode = searchParams.get('mode') === 'auditor' || !canEdit
-  const readiness = assurance.readiness
-  const loading = assuranceBase.loading || assurance.loading || assurance.readinessLoading
-  const error = assuranceBase.error || assurance.error
-
-  const evidencePeriod = useMemo(() => {
-    const captured = assurance.evidenceRuns
-      .map((run) => run.capturedAt)
-      .filter((value): value is string => Boolean(value))
-      .map((value) => new Date(value))
-      .filter((value) => !Number.isNaN(value.getTime()))
-      .sort((left, right) => left.getTime() - right.getTime())
-    if (captured.length === 0) return 'No recorded evidence period'
-    const first = captured[0].toLocaleDateString()
-    const last = captured[captured.length - 1].toLocaleDateString()
-    return first === last ? first : `${first} to ${last}`
-  }, [assurance.evidenceRuns])
-
-  const runsNewestFirst = useMemo(
-    () => [...assurance.evidenceRuns].sort((left, right) => (right.capturedAt || '').localeCompare(left.capturedAt || '')),
-    [assurance.evidenceRuns],
-  )
-  const reviewedMappings = useMemo(
-    () => assurance.evidenceRuns.flatMap((run) => run.candidateMappings)
-      .filter((mapping) => mapping.state === 'accepted' || mapping.state === 'rejected'),
-    [assurance.evidenceRuns],
-  )
-  const controlById = useMemo(
-    () => new Map(assurance.controls.map((control) => [control.id, control])),
-    [assurance.controls],
-  )
-  const limitations = useMemo(
-    () => [...new Set(assurance.evidenceRuns.flatMap((run) => run.limitations).filter(Boolean))],
-    [assurance.evidenceRuns],
-  )
-  const knownControlFindingCounts = assurance.controls
-    .map((control) => control.openFindings)
-    .filter((value): value is number => typeof value === 'number')
-  const controlFindingsIncomplete = knownControlFindingCounts.length !== assurance.controls.length
-  const knownControlFindings = knownControlFindingCounts.reduce((sum, count) => sum + count, 0)
-
-  const refresh = async () => {
-    await Promise.all([assuranceBase.refresh(), assurance.refresh()])
+  const go = (next: { role?: Role; system?: string }) => {
+    const q = new URLSearchParams()
+    q.set('role', next.role ?? role)
+    const s = next.system ?? system
+    if (s) q.set('system', s)
+    router.replace(`/reports?${q.toString()}`)
   }
 
-  const scoped = (value: ReactNode): ReactNode => (loading ? <Pending /> : error ? 'Unavailable' : value)
+  const path = `${API_ENDPOINTS.aiGovernance.reportOverview}?role=${role}${system ? `&system_id=${encodeURIComponent(system)}` : ''}`
+  const overview = useOrgResource<ReportModel>(path)
+  const recent = useOrgResource<SealedReport[]>(API_ENDPOINTS.aiGovernance.roleReports)
+  const { briefing: reword } = useReportCalls()
+  const model = overview.data
+
+  // The organisation's model may reword the briefing; the record's own wording stays if it cannot.
+  const [reworded, setReworded] = useState<{ key: string; briefing: BriefingModel } | null>(null)
+  const key = model ? `${model.role}|${model.scope.systemId ?? ''}|${model.generatedAt}` : ''
+  useEffect(() => {
+    if (!model) return
+    let live = true
+    void reword({ role: model.role, ...(model.scope.systemId ? { system_id: model.scope.systemId } : {}), ...(model.framework.key ? { framework: model.framework.key } : {}) }).then((b) => {
+      if (live && b && b.source === 'model') setReworded({ key, briefing: b })
+    })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  const shown: ReportModel | null = model ? { ...model, briefing: reworded && reworded.key === key ? reworded.briefing : model.briefing } : null
+
+  const [drawer, setDrawer] = useState<{ item: (typeof LIBRARY)[Role][number]; format: Format } | null>(null)
+  const scopeName = shown?.scope.systemName ?? 'Whole organisation'
 
   return (
-    <main data-testid="assurance-report" className="grid gap-4 pb-10 text-[var(--fm-ink)]">
-      <Crumb />
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="mt-1.5 text-[30px] font-semibold leading-[1.1] tracking-[-.03em]">Reports &amp; Assurance</h1>
-          <p className={`mt-2 max-w-[640px] text-[15px] ${MUTED}`}>
-            {hasSystem
-              ? `A version-pinned summary for ${selectedSystem.name}: control state, evidence, reviewer decisions, open findings and known limits. Save it as a report to export it.`
-              : 'A version-pinned summary for each AI system: control state, evidence, reviewer decisions, open findings and known limits.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Pill>{auditorMode ? 'Auditor mode' : 'Builder mode'}</Pill>
-          {hasSystem && (
-            <button type="button" onClick={() => void refresh()} className={BTN}>Refresh summary</button>
-          )}
-        </div>
-      </header>
-
-      {auditorMode && (
-        <section aria-label="Auditor access" className="fm-card px-5 py-3.5 text-[13px]">
-          <span className="font-semibold">Read-only auditor view.</span>{' '}
-          <span className={MUTED}>The same summary, without control or evidence review actions.</span>
-        </section>
-      )}
-
-      {!hasSystem ? (
-        <section aria-label="No system" className="fm-card grid content-start justify-items-start gap-3 p-6">
-          {systemsLoading ? (
-            <p role="status" className={`text-[13px] ${MUTED}`}>Loading your systems</p>
-          ) : systemsError ? (
-            <>
-              <h2 className="text-[15px] font-semibold">Could not load your systems</h2>
-              <p role="alert" className={`max-w-[560px] text-[13px] ${MUTED}`}>
-                An assurance summary belongs to a system, so it cannot be shown until your systems load. {systemsError}
-              </p>
-              <button type="button" onClick={() => void refreshSystems()} className={BTN_P}>Try again</button>
-            </>
-          ) : (
-            <>
-              <h2 className="text-[15px] font-semibold">No AI system is registered yet</h2>
-              <p className={`max-w-[560px] text-[13px] ${MUTED}`}>
-                An assurance summary belongs to a system, so there is nothing to report or export until one exists.
-              </p>
-              {!auditorMode && <Link href="/onboard" className={BTN_P}>Register a system</Link>}
-            </>
-          )}
-        </section>
-      ) : (
-        <>
-          <div className="fm-card p-5">
-            {assuranceBase.resolvedAssignments.length > 0 && (
-              <label className="mb-4 flex flex-wrap items-center gap-2.5">
-                <span className={LABEL}>Framework scope</span>
-                <select
-                  aria-label="Framework scope"
-                  value={selectedAssignmentId}
-                  onChange={(event) => setSelectedAssignmentId(event.target.value)}
-                  className={field}
-                >
-                  {assuranceBase.resolvedAssignments.map(({ assignment, framework, version }) => (
-                    <option key={assignment.id} value={assignment.id}>{framework.name} {version.versionLabel}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <section aria-label="Assurance scope">
-              <h2 className="text-[15px] font-semibold">Assurance scope</h2>
-              <dl className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-5">
-                <Fact name="Company" value={selectedOrg?.name || 'Not selected'} />
-                <Fact name="AI system" value={selectedSystem.name} />
-                <Fact name="Framework" value={scoped(assignedVersion ? `${frameworkName} ${assignedVersion.versionLabel}` : 'Not assigned')} />
-                <Fact name="Catalog hash" mono value={scoped(assignedVersion?.sourceHash || 'Not available')} />
-                <Fact name="Evidence period" value={scoped(evidencePeriod)} />
-              </dl>
-            </section>
-            {!loading && !error && activeAssignment && assignedVersion && (
-              <section aria-label={`${frameworkName} readiness summary`} className="mt-4 border-t border-[var(--fm-line)] pt-4">
-                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
-                  <div>
-                    <dt className={LABEL}>Accepted controls</dt>
-                    <dd className="mt-0.5 text-[22px] font-semibold tabular-nums">
-                      {readiness ? `${readiness.accepted} of ${readiness.applicable}` : 'Unknown'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className={LABEL}>Ready for review</dt>
-                    <dd className="mt-0.5 flex flex-wrap items-center gap-2 text-[22px] font-semibold tabular-nums">
-                      {readiness?.readyForReview ?? 'Unknown'}
-                      {(readiness?.readyForReview ?? 0) > 0 && <Pill tone="you" dot>Needs a reviewer</Pill>}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className={LABEL}>Missing accepted evidence</dt>
-                    <dd className="mt-0.5 text-[22px] font-semibold tabular-nums">{readiness?.missingEvidence ?? 'Unknown'}</dd>
-                  </div>
-                </dl>
-              </section>
-            )}
-          </div>
-
-          {error ? (
-            <ErrorNote message={`Could not load the assurance summary. ${error.message}`} onRetry={() => void refresh()} />
-          ) : loading ? (
-            <Loading label="Loading assurance report" />
-          ) : !activeAssignment || !assignedVersion ? (
-            <section className="fm-card grid content-start justify-items-start gap-3 p-6">
-              <h2 className="text-[15px] font-semibold">No version-pinned scope</h2>
-              <p className={`max-w-[560px] text-[13px] ${MUTED}`}>
-                Assign a framework version to {selectedSystem.name} before preparing an assurance summary. Until then readiness is unknown, not zero.
-              </p>
-              {!auditorMode && <Link href="/compliance-dashboard" className={BTN_P}>Assign framework scope</Link>}
-            </section>
-          ) : (
-            <>
-              <div className="grid gap-4 xl:grid-cols-2">
-                <section aria-label="Evidence index" className="fm-card p-5">
-                  <h2 className="text-[15px] font-semibold">Evidence index</h2>
-                  <p className={sub}>Every run in scope, newest first, with its content hash.</p>
-                  {runsNewestFirst.length === 0 ? (
-                    <p className={`mt-3 ${row} text-[13px] ${MUTED}`}>No evidence runs are recorded for this AI system.</p>
-                  ) : (
-                    <ol className="mt-3">
-                      {runsNewestFirst.map((run) => (
-                        <li key={run.id} className={row}>
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="text-[13.5px] font-semibold">{run.suiteName || run.sourceIdentifier}</p>
-                            <Pill>{run.assuranceSource?.replace(/_/g, ' ') || 'Source unknown'}</Pill>
-                          </div>
-                          <p className={`mt-0.5 text-[12px] ${MUTED}`}>
-                            {run.sourceIdentifier} · {run.result.replace(/_/g, ' ')} · run {run.runId} · captured {formatDate(run.capturedAt)}
-                          </p>
-                          <p className="mt-1 break-all font-mono text-[11.5px]">{run.contentHash}</p>
-                          <p className={`mt-1 text-[12px] ${MUTED}`}>
-                            Subject {run.subjectVersion || 'not recorded'} · Suite {run.suiteVersion || 'not recorded'} · Runner {run.runnerVersion || 'not recorded'}
-                          </p>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </section>
-
-                <section aria-label="Unresolved findings" className="fm-card p-5">
-                  <h2 className="text-[15px] font-semibold">Unresolved findings</h2>
-                  <p className={sub}>Counts appear only when the framework assessment reports them.</p>
-                  <p className={`mt-3 text-[28px] font-semibold tabular-nums ${readiness && readiness.blockingFindings > 0 ? 'text-[#b42318]' : ''}`}>
-                    {readiness?.blockingFindings ?? 'Unknown'}
-                  </p>
-                  <p className="text-[13px] font-medium">
-                    {readiness ? countLabel(readiness.blockingFindings, 'rejected assessment') : 'Rejected assessment count unavailable'}
-                  </p>
-                  <div className={`mt-4 ${row}`}>
-                    <p className={LABEL}>Control-linked detail</p>
-                    <p className="mt-0.5 text-[13px]">
-                      {controlFindingsIncomplete
-                        ? `${knownControlFindings} known; at least one control does not report a finding count.`
-                        : countLabel(knownControlFindings, 'open control finding')}
-                    </p>
-                  </div>
-                </section>
-
-                <section aria-label="Decision register" className="fm-card p-5">
-                  <h2 className="text-[15px] font-semibold">Decision register</h2>
-                  <p className={sub}>Recorded mapping reviews. Candidate suggestions are not decisions.</p>
-                  {reviewedMappings.length === 0 ? (
-                    <p className={`mt-3 ${row} text-[13px] ${MUTED}`}>No accepted or rejected mapping decisions are recorded.</p>
-                  ) : (
-                    <ol className="mt-3">
-                      {reviewedMappings.map((mapping) => {
-                        const review = latestReview(mapping)
-                        const control = controlById.get(mapping.controlAssessmentId)
-                        return (
-                          <li key={mapping.id} className={row}>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Pill tone={mapping.state === 'accepted' ? 'done' : 'block'}>
-                                {mapping.state === 'accepted' ? 'Accepted' : 'Rejected'}
-                              </Pill>
-                              <p className="text-[13.5px] font-semibold">{control ? `${control.externalId} ${control.title}` : 'Control reference unavailable'}</p>
-                            </div>
-                            <p className="mt-1.5 text-[13px]">{review?.rationale || mapping.rationale || 'No rationale recorded.'}</p>
-                            <p className={`mt-1 text-[12px] ${MUTED}`}>Reviewed by {review?.reviewedBy || 'identity unavailable'} · {formatDate(review?.reviewedAt || null)}</p>
-                          </li>
-                        )
-                      })}
-                    </ol>
-                  )}
-                </section>
-
-                <section aria-label="Limitations" className="fm-card p-5">
-                  <h2 className="text-[15px] font-semibold">Limitations</h2>
-                  <p className={sub}>Known evaluation and assurance limits stay part of the report.</p>
-                  <ul className="mt-3 text-[13px]">
-                    {limitations.length > 0 ? limitations.map((limitation) => (
-                      <li key={limitation} className={row}>{limitation}</li>
-                    )) : (
-                      <li className={`${row} ${MUTED}`}>
-                        {assurance.evidenceRuns.length === 0
-                          ? 'No evidence runs are in scope, so evaluation limitations are unknown.'
-                          : 'No evaluation limitations were recorded in the in-scope runs.'}
-                      </li>
-                    )}
-                    <li className={`${row} ${MUTED}`}>This summary supports readiness review. It is not an official certification or an assurance opinion.</li>
-                  </ul>
-                </section>
-              </div>
-
-              <AssuranceReportStudio
-                system={{
-                  id: selectedSystem.id,
-                  name: selectedSystem.name,
-                  owner: selectedSystem.owner,
-                  riskTier: selectedSystem.riskTier,
-                  lifecycleStage: selectedSystem.stage,
-                  readiness: selectedSystem.readiness,
-                }}
-                frameworkLabel={`${frameworkName} ${assignedVersion.versionLabel}`}
-                readOnly={auditorMode}
-              />
-
-              {!auditorMode && (
-                <nav aria-label="Assurance builder actions" className="flex flex-wrap gap-2.5">
-                  <Link href="/compliance-dashboard" className={BTN_P}>Review control assessments</Link>
-                  <Link href="/evidence?view=evaluations" className={BTN}>Review evidence mappings</Link>
-                </nav>
+    <div className="fm-page rp-page">
+      <VStack gap={5}>
+        <div className="rp-head">
+          <VStack gap={1}>
+            <Heading level={1}>Reports</Heading>
+            <Text color="secondary">
+              {shown?.framework.name ? (
+                <>Framework: {shown.framework.name}</>
+              ) : shown ? (
+                <>No framework followed. <Link href="/plan">Choose one in your plan</Link></>
+              ) : (
+                'Reading the record'
               )}
-            </>
-          )}
-        </>
-      )}
-    </main>
+            </Text>
+          </VStack>
+          <div className="rp-controls">
+            <div className="rp-scope">
+              <Selector label="Scope" options={options} value={system || 'org'} onChange={(v) => go({ system: String(v) === 'org' ? '' : String(v) })} />
+            </div>
+            <Button label="Download report" variant="primary" isDisabled={!shown} onClick={() => setDrawer({ item: LIBRARY[role][0], format: LIBRARY[role][0].formats[0] })} />
+          </div>
+        </div>
+
+        <div className="rp-lens">
+          <SegmentedControl label="Who is reading" value={role} onChange={(v) => go({ role: String(v) as Role })} size="sm">
+            {ROLES.map((r) => <SegmentedControlItem key={r.key} label={r.label} value={r.key} />)}
+          </SegmentedControl>
+        </div>
+
+        {overview.error ? (
+          <Banner status="error" title="The report could not load" description={overview.error} />
+        ) : !shown ? (
+          <div className="rp-grid" aria-busy="true">
+            <div className="rp-c12"><Skeleton height={120} /></div>
+            <div className="rp-c8"><Skeleton height={280} /></div>
+            <div className="rp-c4"><Skeleton height={280} /></div>
+          </div>
+        ) : (
+          <div className="rp-grid">
+            <Briefing briefing={shown.briefing} generatedAt={shown.generatedAt} />
+            <Body m={shown} role={role} />
+            <LibraryCard role={role} onPick={(item, format) => setDrawer({ item, format })} />
+            <RecentCard role={role} reports={recent.data} loading={recent.loading} error={recent.error} />
+          </div>
+        )}
+      </VStack>
+
+      {/* The page-one draft is the record's own wording, the same figures the page shows: never the model's rewording. */}
+      {drawer && model ? (
+        <ReportDrawer item={drawer.item} format={drawer.format} model={model} scopeName={scopeName} onClose={() => setDrawer(null)} onSealed={recent.reload} />
+      ) : null}
+    </div>
+  )
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ReportsHub />
+    </Suspense>
   )
 }

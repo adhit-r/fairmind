@@ -17,7 +17,7 @@ import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
 import { VStack } from '@astryxdesign/core/Layout'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { useRisks, type Risk } from '@/lib/api/hooks/useRisks'
+import { isOpenRisk, useRisks, type Risk } from '@/lib/api/hooks/useRisks'
 import { useRemediation, type RemediationPriority, type RemediationStatus } from '@/lib/api/hooks/useRemediation'
 
 type Severity = Risk['severity']
@@ -159,7 +159,7 @@ function FindingsView() {
                 <span>All findings</span>
               </li>
               <li>
-                <b>{focus ? risks.filter((r) => r.status === 'open').length : (summary?.open ?? 0)}</b>
+                <b>{focus ? risks.filter(isOpenRisk).length : (summary?.open ?? 0)}</b>
                 <span>Open</span>
               </li>
               {SEVERITIES.map((s) => (
@@ -200,7 +200,7 @@ function FindingsView() {
                             <td>{nameOf(systemIdOf(r))}</td>
                             <td>{sourceName(r.source)}</td>
                             <td>
-                              <Token size="sm" color={r.status === 'open' ? sev.color : 'default'} label={words(r.status)} />
+                              <Token size="sm" color={isOpenRisk(r) ? sev.color : 'default'} label={words(r.status)} />
                             </td>
                           </tr>
                         ))}

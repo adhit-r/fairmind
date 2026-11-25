@@ -1,7 +1,7 @@
 'use client'
 
 import '@/astryx/pages/evidence.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
@@ -31,6 +31,7 @@ import { useSystemSeals } from '@/astryx/data/evidence'
 import { EvidenceUploader } from './components/EvidenceUploader'
 import { EvidenceDetailDrawer } from './components/EvidenceDetailDrawer'
 import { EvaluationRunList } from './components/EvaluationRunList'
+import { ExplainedDecisions } from './components/ExplainedDecisions'
 import { EvaluatorRegistrationCatalogSection } from '@/components/evaluations/EvaluatorRegistrationCatalogPanel'
 
 const EVALUATOR_CATALOG_UI_ENABLED = process.env.NEXT_PUBLIC_ASSURANCE_V2_EVALUATOR_CATALOG_UI_ENABLED === 'true'
@@ -61,7 +62,8 @@ const short = (hash: string) => (hash.length > 16 ? `${hash.slice(0, 8)} ${hash.
 
 /** An old link to ?view=evaluations still opens the run list and the evaluator catalog. */
 export default function EvidencePage() {
-  return useSearchParams().get('view') === 'evaluations' ? <EvidenceEvaluations /> : <EvidenceList />
+  const view = useSearchParams().get('view')
+  return view === 'evaluations' ? <EvidenceEvaluations /> : view === 'explained' ? <ExplainedDecisions /> : <EvidenceList />
 }
 
 function EvidenceList() {
@@ -86,6 +88,16 @@ function EvidenceList() {
   const [adding, setAdding] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
   const [selected, setSelected] = useState<Evidence | null>(null)
+
+  // A system file's "Record evidence" step links here with ?check=: open the uploader once, set for that check.
+  const check = useSearchParams().get('check')
+  const openedForCheck = useRef(false)
+  useEffect(() => {
+    if (check && hasSystem && canReview && !openedForCheck.current) {
+      openedForCheck.current = true
+      setAdding(true)
+    }
+  }, [check, hasSystem, canReview])
 
   useEffect(() => {
     setSearch('')
@@ -184,6 +196,7 @@ function EvidenceList() {
             </Text>
           </VStack>
           <HStack gap={2} wrap="wrap">
+            <Button label="Explained decisions" variant="secondary" href="/evidence?view=explained" />
             <Button label="Auditor packs" variant="secondary" href="/auditor-packs" />
             {hasSystem && canReview && <Button label="Add evidence" variant="primary" onClick={() => setAdding(true)} />}
           </HStack>
@@ -256,6 +269,7 @@ function EvidenceList() {
             onCollect={handleCollect}
             onClose={() => setAdding(false)}
             externalUrlsEnabled={EVIDENCE_HUB_FEATURE_GATES.untrustedExternalEvidenceLinking}
+            initialCheck={check}
           />
         </div>
       </Dialog>
@@ -331,6 +345,7 @@ function EvidenceEvaluations() {
           error={evaluationState.error || assignments.error || assessmentState.error}
           canReview={roleKnown ? canReview : null}
           onReview={mappingReview.reviewMapping}
+          onMap={mappingReview.createMapping}
           onRefresh={async () => {
             await Promise.all([evaluationState.refresh(), assignments.refresh(), assessmentState.refresh()])
           }}

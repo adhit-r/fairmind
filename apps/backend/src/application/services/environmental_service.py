@@ -856,7 +856,8 @@ def normalize_connector_payload(connector_type: str, content: Any) -> dict[str, 
     base: dict[str, Any] = {
         "measurement_source": kind,
         "provenance_class": "tool_estimated",
-        "uncertainty_pct": 20.0,
+        # Only a figure the export itself reports; none is assumed per connector.
+        "uncertainty_pct": _metric(record, "uncertainty_pct", "uncertainty"),
         "metrics": {},
     }
 
@@ -882,7 +883,6 @@ def normalize_connector_payload(connector_type: str, content: Any) -> dict[str, 
     if kind in {"cloud_billing", "cloud_billing_csv", "aws_billing", "gcp_billing", "azure_billing"}:
         base["measurement_source"] = kind
         base["provenance_class"] = "vendor_reported"
-        base["uncertainty_pct"] = 30.0
         base["metrics"] = {
             "total_kwh": _metric(record, "total_kwh", "kwh", "energy_kwh"),
             "total_kg_co2e_location": _metric(record, "total_kg_co2e_location", "location_kg_co2e", "kg_co2e"),

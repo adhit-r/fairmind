@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { MonitoringPolicy, MonitoringRunSummary } from '@/lib/api/hooks/useSystemFile'
+import type { LiveRunSummary } from '@/lib/api/hooks/usePacks'
 import { cn } from '@/lib/utils'
 
 const CADENCES = [
@@ -67,21 +69,105 @@ export function snapshotLabel(run: Pick<MonitoringRunSummary, 'allChecksPass' | 
   return `${lead}, outside thresholds: ${failing.length ? failing.join(', ') : 'at least one check'}`
 }
 
-/** Expected cadence, snapshot age, the last snapshots as bars, and the cron job that keeps them coming. */
+const LIVE_RUN_EVALUATIONS: Record<string, string> = {
+  'EV-MON-02': 'Tool calls', 'EV-TST-03': 'Groundedness', 'EV-DAT-01': 'Prompt drift', 'EV-AGT-02': 'Out-of-scope actions',
+  'EV-TST-06': 'Tool-call correctness', 'EV-MON-05': 'Runaway loops', 'EV-SEC-16': 'Secrets in context',
+}
+const RESULT_TONE: Record<string, string> = { passed: 'text-[#1f7a4d]', failed: 'text-[#b4232c]', insufficient: 'text-[var(--fm-ink2)]' }
+
+export const traceSnippet = (systemId: string) => `from fairmind import FairMind
+
+fm = FairMind()
+fm.record_trace("${systemId}", run_id, steps=steps, status="ok")
+`
+
+/** Live runs the system's own code sends: runs per day with errors, the last run, and the evaluations that read them. */
+function LiveRuns({ systemId, live, onCopy, copied }: { systemId: string; live: LiveRunSummary | null; onCopy: (text: string) => void; copied: boolean }) {
+  const max = Math.max(1, ...(live?.days ?? []).map((d) => d.runs))
+  const sending = !!live?.lastRunAt
+  return (
+    <div className="grid min-w-0 gap-3 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
+      <div>
+        <div className="text-[13.5px] font-semibold">Live runs</div>
+        <div className="text-[12px] text-[var(--fm-ink2)]">
+          {sending ? <>Last run {age(live.lastRunAt as string)}. Evaluations read the last 7 days.</> : 'None sent yet. Add the code below where your agent finishes a run.'}
+        </div>
+      </div>
+      {sending && live && (
+        <>
+          <div className="flex flex-wrap gap-5 tabular-nums">
+            <div><div className="text-[11px] font-medium uppercase tracking-wide text-[var(--fm-ink3)]">Last 7 days</div><div className="text-[18px] font-semibold">{live.week.runs.toLocaleString()}</div></div>
+            <div><div className="text-[11px] font-medium uppercase tracking-wide text-[var(--fm-ink3)]">Errors</div><div className={`text-[18px] font-semibold ${live.week.errors ? 'text-[#b4232c]' : ''}`}>{live.week.errors.toLocaleString()}</div></div>
+          </div>
+          <div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--fm-ink3)]">Runs per day, errors in red</div>
+            <div className="mt-2 flex gap-1 overflow-x-auto">
+              {live.days.map((d) => {
+                const h = Math.round((40 * d.runs) / max)
+                const e = d.runs ? Math.max(d.errors ? 2 : 0, Math.round((h * d.errors) / d.runs)) : 0
+                return (
+                  <div key={d.date} className="grid w-[22px] shrink-0 justify-items-center gap-0.5 text-[11px] tabular-nums text-[var(--fm-ink3)]">
+                    <svg width="18" height="40" viewBox="0 0 18 40" role="img" aria-label={`${d.date}: ${d.runs} runs, ${d.errors} errors`}>
+                      <rect x="0" y="0" width="18" height="40" rx="3" fill="var(--fm-line)" />
+                      <rect x="0" y={40 - h} width="18" height={h} rx="3" fill="#1f7a4d" />
+                      {e > 0 && <rect x="0" y={40 - h} width="18" height={e} rx="2" fill="#b4232c" />}
+                    </svg>
+                    <span>{Number(d.date.slice(8))}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            {Object.entries(LIVE_RUN_EVALUATIONS).map(([id, name]) => {
+              const run = live.evaluations.find((e) => e.evaluationId === id)
+              return (
+                <div key={id} className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+                  <span><span className="font-semibold">{name}</span> <span className="text-[var(--fm-ink3)]">{id}</span>{' '}
+                    {run ? <span className={RESULT_TONE[run.status] ?? ''}>{run.status}, {age(run.createdAt)}</span> : <span className="text-[var(--fm-ink2)]">not run on live runs yet</span>}
+                  </span>
+                  <Link href={`/compliance/evaluations/${id}?system=${encodeURIComponent(systemId)}&source=traces`} className="h-8 rounded-full border border-[var(--fm-line)] bg-white px-3 py-1.5 text-[12px] font-semibold">
+                    {run ? 'Open' : 'Run on live runs'}
+                  </Link>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+      <div className="grid gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[13px] font-semibold">Send live runs</div>
+            <div className="text-[12px] text-[var(--fm-ink2)]">Add this where your agent finishes a run. The API key stays on your side.</div>
+          </div>
+          <button type="button" onClick={() => onCopy(traceSnippet(systemId))} className="h-9 rounded-full border border-[var(--fm-line)] bg-white px-4 text-[12.5px] font-semibold">
+            {copied ? 'Copied' : 'Copy code'}
+          </button>
+        </div>
+        <pre className="overflow-auto rounded-[10px] border border-[var(--fm-line)] bg-white p-3 text-[11.5px] leading-relaxed">{traceSnippet(systemId)}</pre>
+      </div>
+    </div>
+  )
+}
+
+/** Expected cadence, snapshot age, the last snapshots as bars, and the cron job that keeps them coming; then live runs. */
 export function WatchPanel({
   systemId,
   policy,
   runs,
+  live = null,
   save,
 }: {
   systemId: string
   policy: MonitoringPolicy | null
   runs: MonitoringRunSummary[]
+  live?: LiveRunSummary | null
   save: (policy: { cadenceHours: number }) => Promise<unknown>
 }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'workflow' | 'code' | null>(null)
   const [now] = useState(() => Date.now())
   if (!policy) return null
 
@@ -112,18 +198,19 @@ export function WatchPanel({
     }
   }
 
-  async function copy() {
+  async function copy(text = snippet, which: 'workflow' | 'code' = 'workflow') {
     try {
-      await navigator.clipboard.writeText(snippet)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(text)
+      setCopied(which)
+      setTimeout(() => setCopied(null), 2000)
     } catch {
       setError('Copy is blocked by the browser; select the text and copy it')
     }
   }
 
   return (
-    <div className="grid min-w-0 gap-4 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4 sm:col-span-2 xl:col-span-3">
+    <div className="grid min-w-0 gap-4 sm:col-span-2 xl:col-span-3">
+    <div className="grid min-w-0 gap-4 rounded-[12px] border border-[var(--fm-line)] bg-[var(--fm-bg)] p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-[13.5px] font-semibold">Watch</div>
@@ -173,7 +260,7 @@ export function WatchPanel({
             </div>
           </div>
           <button type="button" onClick={() => void copy()} className="h-9 rounded-full border border-[var(--fm-line)] bg-white px-4 text-[12.5px] font-semibold">
-            {copied ? 'Copied' : 'Copy workflow'}
+            {copied === 'workflow' ? 'Copied' : 'Copy workflow'}
           </button>
         </div>
         <pre className="max-h-72 overflow-auto rounded-[10px] border border-[var(--fm-line)] bg-white p-3 text-[11.5px] leading-relaxed">{snippet}</pre>
@@ -181,6 +268,8 @@ export function WatchPanel({
           Add the repository secret FAIRMIND_API_KEY and the variables FAIRMIND_API_URL and FAIRMIND_PREDICTION_COLUMN{latest ? '' : ', FAIRMIND_ATTRIBUTES'}. The job fails when a snapshot drifts, so your team hears about it in Actions as well.
         </div>
       </div>
+    </div>
+    <LiveRuns systemId={systemId} live={live} copied={copied === 'code'} onCopy={(text) => void copy(text, 'code')} />
     </div>
   )
 }

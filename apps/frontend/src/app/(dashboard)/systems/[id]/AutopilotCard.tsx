@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, Database, Loader2, Route, User, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAutopilot, type AutopilotMode, type AutopilotStep, type DataPurpose } from '@/lib/api/hooks/useAutopilot'
@@ -15,6 +15,7 @@ const CLASS_LABEL: Record<string, string> = { measured: 'measured', tool_estimat
 const ACTION_TEXT: Record<AutopilotStep['action'], (label: string) => string> = {
   fairness_run: () => 'Re-run the fairness test',
   monitoring_snapshot: () => 'Take a monitoring snapshot',
+  evaluation_run: (label) => `Run a catalogue evaluation for ${label.toLowerCase()}`,
   environmental_assessment: () => 'Run an environmental assessment',
   attest: (label) => `Attest ${label.toLowerCase()}`,
   evidence_upload: (label) => `Record ${label.toLowerCase()} evidence`,
@@ -24,6 +25,9 @@ const PURPOSE_TEXT: Record<DataPurpose, string> = {
   fairness: 'Fairness data: labelled decisions the agent re-tests',
   monitoring: 'Monitoring data: recent production decisions',
 }
+
+const POLL_MS = 4000
+const MAX_POLLS = 225 // 15 minutes: give up waiting on a run that never reports back
 
 const pct = (v: number) => `${Math.max(0, Math.min(1, v)) * 100}%`
 const ago = (iso: string) => {
@@ -42,20 +46,38 @@ export function AutopilotCard({ systemId, reloadKey, onChanged, onPersonStep }: 
   const [busy, setBusy] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const [urls, setUrls] = useState<Record<DataPurpose, string>>({ fairness: '', monitoring: '' })
+  // A run continues on the server after the call answers: reload until lastRunAt moves, then refresh the system file.
+  const [wait, setWait] = useState<{ from: string | null; polls: number } | null>(null)
   const d = ap.data
+  const { reload } = ap
+  useEffect(() => {
+    if (!wait) return
+    const t = setTimeout(async () => {
+      const now = await reload()
+      if ((now && now.lastRunAt !== wait.from) || wait.polls <= 1) {
+        setWait(null)
+        setBusy(null)
+        onChanged()
+      } else setWait({ ...wait, polls: wait.polls - 1 })
+    }, POLL_MS)
+    return () => clearTimeout(t)
+  }, [wait, reload, onChanged])
   if (!d) return ap.error ? <section className="fm-card p-5 text-[13px] text-[var(--fm-ink2)]">{ap.error}</section> : null
 
-  const act = async (key: string, fn: () => Promise<unknown>, changesEvidence = false) => {
+  const act = async (key: string, fn: () => Promise<unknown>, startsRun = false) => {
+    const from = d.lastRunAt
     setBusy(key)
     setFailure(null)
     try {
       await fn()
-      if (changesEvidence) onChanged()
+      if (startsRun) {
+        setWait({ from, polls: MAX_POLLS })
+        return // busy stays until the run reports back
+      }
     } catch (e) {
       setFailure(e instanceof Error ? e.message : 'Request failed')
-    } finally {
-      setBusy(null)
     }
+    setBusy(null)
   }
 
   const target = d.target
@@ -115,14 +137,16 @@ export function AutopilotCard({ systemId, reloadKey, onChanged, onPersonStep }: 
         {d.steps.map((s) => {
           const agent = s.by === 'agent'
           return (
-            <li key={`${s.check}-${s.action}`} className="flex items-center gap-3 border-t border-[var(--fm-line)] py-2.5 text-[13px]">
+            <li key={`${s.check}-${s.action}-${s.evaluationId ?? ''}`} className="flex items-center gap-3 border-t border-[var(--fm-line)] py-2.5 text-[13px]">
               <span className={cn('grid h-6 w-6 flex-none place-items-center rounded-full', agent ? 'bg-[var(--fm-bg)] text-[var(--fm-ink)]' : 'bg-[#fff1ea] text-[var(--fm-brand)]')} aria-hidden>
                 {agent ? <Database className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="font-medium">{ACTION_TEXT[s.action]?.(s.label) ?? s.label}</span>
                 <span className="block truncate text-[12px] text-[var(--fm-ink3)]">
-                  {agent ? (s.upkeep ? 'The agent keeps this fresh on its cadence' : 'The agent runs this from the data source') : s.needs ?? (d.owner ? `For ${d.owner}` : 'For the system owner')}
+                  {s.action === 'evaluation_run' && agent
+                    ? `${s.note}, on the saved connection with your AI provider as judge`
+                    : agent ? (s.upkeep ? 'The agent keeps this fresh on its cadence' : 'The agent runs this from the data source') : s.needs ?? (d.owner ? `For ${d.owner}` : 'For the system owner')}
                 </span>
               </span>
               {s.evidenceClass && <span className="hidden rounded-full border border-[var(--fm-line)] px-2 py-0.5 text-[11px] text-[var(--fm-ink2)] sm:inline">{CLASS_LABEL[s.evidenceClass]}</span>}

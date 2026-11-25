@@ -49,7 +49,7 @@ class BiasTestResult:
     library: TestingLibrary
     test_name: str
     bias_score: float
-    confidence: float
+    confidence: Optional[float]
     p_value: Optional[float]
     effect_size: Optional[float]
     raw_output: Dict[str, Any]
@@ -185,14 +185,14 @@ class BiasTestingLibrary:
             # Calculate effect size (Cohen's d)
             effect_size = weat_score / np.std(scores) if np.std(scores) > 0 else 0
             
-            # Bootstrap p-value (simplified)
+            # Permutation p-value over the attribute words
             p_value = self._bootstrap_p_value(embeddings, target_words, attribute_words_a, attribute_words_b)
             
             return BiasTestResult(
                 library=TestingLibrary.WEAT,
                 test_name="Word Embedding Association Test",
                 bias_score=abs(weat_score),
-                confidence=0.95,  # 95% confidence interval
+                confidence=None,  # not measured; see p_value
                 p_value=p_value,
                 effect_size=abs(effect_size),
                 raw_output={
@@ -370,30 +370,8 @@ class BiasTestingLibrary:
                                    test_prompt: str,
                                    expected_features: List[str]) -> Optional[BiasTestResult]:
         """Analyze a single image for bias"""
-        try:
-            # This would integrate with computer vision libraries
-            # For now, return placeholder results
-            
-            return BiasTestResult(
-                library=TestingLibrary.OPENCV,
-                test_name="Image Bias Analysis",
-                bias_score=0.0,
-                confidence=0.85,
-                p_value=0.05,
-                effect_size=0.0,
-                raw_output={
-                    "image_path": image_path,
-                    "test_prompt": test_prompt,
-                    "expected_features": expected_features
-                },
-                timestamp=datetime.now(),
-                metadata={"method": "Computer Vision Analysis"}
-            )
-            
-        except Exception as e:
-            logger.error(f"Error analyzing single image: {e}")
-            return None
-    
+        raise NotImplementedError("No image bias analyser is wired in; refusing to return placeholder scores.")
+
     async def analyze_text_bias(self, 
                                texts: List[str],
                                test_prompts: List[str],
@@ -431,82 +409,56 @@ class BiasTestingLibrary:
                                   test_prompt: str,
                                   sensitive_attributes: List[str]) -> Optional[BiasTestResult]:
         """Analyze a single text for bias"""
-        try:
-            # This would integrate with NLP libraries
-            # For now, return placeholder results
-            
-            return BiasTestResult(
-                library=TestingLibrary.SPACY,
-                test_name="Text Bias Analysis",
-                bias_score=0.0,
-                confidence=0.90,
-                p_value=0.05,
-                effect_size=0.0,
-                raw_output={
-                    "text": text,
-                    "test_prompt": test_prompt,
-                    "sensitive_attributes": sensitive_attributes
-                },
-                timestamp=datetime.now(),
-                metadata={"method": "NLP Analysis"}
-            )
-            
-        except Exception as e:
-            logger.error(f"Error analyzing single text: {e}")
-            return None
-    
-    def _bootstrap_p_value(self, 
+        raise NotImplementedError("No text bias analyser is wired in; refusing to return placeholder scores.")
+
+    def _bootstrap_p_value(self,
                           embeddings: Dict[str, np.ndarray],
                           target_words: List[str],
                           attribute_words_a: List[str],
                           attribute_words_b: List[str],
-                          iterations: int = 1000) -> float:
-        """Calculate bootstrap p-value for WEAT test"""
+                          iterations: int = 1000) -> Optional[float]:
+        """Two-sided permutation p-value for the WEAT score.
+
+        The attribute words of A and B are pooled and re-split into groups of
+        the original sizes; the p-value is the share of re-splits whose mean
+        target association difference is at least as large as the observed one.
+        Returns None when the test cannot be computed.
+        """
         try:
-            # Simplified bootstrap implementation
-            # In practice, this would be more sophisticated
-            
-            observed_score = 0.0
-            bootstrap_scores = []
-            
-            # Calculate observed score
-            for target in target_words:
-                if target in embeddings:
-                    # Simplified calculation
-                    observed_score += 0.1  # Placeholder
-            
-            # Bootstrap sampling
+            targets = [w for w in target_words if w in embeddings]
+            a_words = [w for w in attribute_words_a if w in embeddings]
+            b_words = [w for w in attribute_words_b if w in embeddings]
+            if not targets or not a_words or not b_words:
+                return None
+
+            def unit(v):
+                v = np.asarray(v, dtype=float)
+                n = np.linalg.norm(v)
+                return v / n if n > 0 else v
+
+            t = np.stack([unit(embeddings[w]) for w in targets])
+            attrs = np.stack([unit(embeddings[w]) for w in a_words + b_words])
+            sims = t @ attrs.T  # targets x attributes cosine similarities
+            n_a = len(a_words)
+
+            def score(idx_a, idx_b):
+                return float(np.mean(sims[:, idx_a].mean(axis=1) - sims[:, idx_b].mean(axis=1)))
+
+            all_idx = np.arange(attrs.shape[0])
+            observed = score(all_idx[:n_a], all_idx[n_a:])
+            rng = np.random.default_rng(0)  # fixed seed: same inputs, same p-value
+            extreme = 0
             for _ in range(iterations):
-                # Randomly shuffle attribute words
-                import random
-                all_attributes = attribute_words_a + attribute_words_b
-                random.shuffle(all_attributes)
-                
-                # Split into two groups
-                split_point = len(all_attributes) // 2
-                shuffled_a = all_attributes[:split_point]
-                shuffled_b = all_attributes[split_point:]
-                
-                # Calculate score for this bootstrap sample
-                bootstrap_score = 0.0
-                for target in target_words:
-                    if target in embeddings:
-                        bootstrap_score += 0.1  # Placeholder
-                
-                bootstrap_scores.append(bootstrap_score)
-            
-            # Calculate p-value
-            if bootstrap_scores:
-                bootstrap_scores = np.array(bootstrap_scores)
-                p_value = np.mean(np.abs(bootstrap_scores) >= np.abs(observed_score))
-                return p_value
-            
-            return 0.05  # Default p-value
-            
+                perm = rng.permutation(all_idx)
+                if abs(score(perm[:n_a], perm[n_a:])) >= abs(observed) - 1e-12:
+                    extreme += 1
+            # +1 correction so the p-value is never exactly zero
+            return (extreme + 1) / (iterations + 1)
+
         except Exception as e:
-            logger.error(f"Error calculating bootstrap p-value: {e}")
-            return 0.05
-    
+            logger.error(f"Error calculating permutation p-value: {e}")
+            return None
+
     def get_available_libraries(self) -> Dict[TestingLibrary, bool]:
         """Get list of available testing libraries"""
         return self.available_libraries

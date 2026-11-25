@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 import type {
   ControlAssessment,
   EvidenceMapping,
@@ -8,7 +10,7 @@ import type {
 } from '@/lib/api/hooks/useGovernanceAssurance'
 import { evidenceRunDisplayName } from '@/lib/api/hooks/useGovernanceAssurance'
 
-import { BTN, LABEL, MUTED, Pill } from '@/components/packs/parts'
+import { BTN, BTN_P, LABEL, MUTED, Pill } from '@/components/packs/parts'
 import { cn } from '@/lib/utils'
 
 import { EvidenceMappingReview } from './EvidenceMappingReview'
@@ -21,7 +23,60 @@ type EvaluationRunListProps = {
   /** null while the role is still loading. */
   canReview: boolean | null
   onReview: (mappingId: string, review: EvidenceMappingReviewInput) => Promise<EvidenceMapping>
+  onMap: (evidenceId: string, controlAssessmentId: string) => Promise<EvidenceMapping>
   onRefresh: () => Promise<void>
+}
+
+/** A reviewer links a passed run to a control by hand; the mapping then waits for review like any other. */
+function MapToControl({ evidenceId, controls, onMap, onRefresh }: {
+  evidenceId: string
+  controls: ControlAssessment[]
+  onMap: EvaluationRunListProps['onMap']
+  onRefresh: () => Promise<void>
+}) {
+  const [controlId, setControlId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (controls.length === 0) return null
+
+  const map = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await onMap(evidenceId, controlId)
+      setControlId('')
+      await onRefresh()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Mapping failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <label className="block text-[12px] font-medium text-[var(--fm-ink2)]" htmlFor={`map-control-${evidenceId}`}>
+        Map this run to a control
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <select
+          id={`map-control-${evidenceId}`}
+          value={controlId}
+          onChange={(event) => setControlId(event.target.value)}
+          className="h-9 min-w-0 flex-1 rounded-[10px] border border-[rgba(21,23,26,.14)] bg-white px-3 text-[13px]"
+        >
+          <option value="">Choose a control</option>
+          {controls.map((control) => (
+            <option key={control.id} value={control.id}>{control.externalId} {control.title}</option>
+          ))}
+        </select>
+        <button type="button" disabled={!controlId || saving} onClick={() => void map()} className={cn(BTN_P, 'h-9 px-4 text-[12.5px]')}>
+          {saving ? 'Mapping' : 'Map to control'}
+        </button>
+      </div>
+      {error ? <p role="alert" className="m-0 text-[13px] text-[#b42318]">{error}</p> : null}
+    </div>
+  )
 }
 
 function readable(value: string) {
@@ -45,7 +100,7 @@ function RunLoading() {
   )
 }
 
-export function EvaluationRunList({ runs, controls, loading, error, canReview, onReview, onRefresh }: EvaluationRunListProps) {
+export function EvaluationRunList({ runs, controls, loading, error, canReview, onReview, onMap, onRefresh }: EvaluationRunListProps) {
   const controlsByAssessment = new Map(controls.map((control) => [control.id, control]))
 
   if (loading && runs.length === 0) return <RunLoading />
@@ -151,6 +206,14 @@ export function EvaluationRunList({ runs, controls, loading, error, canReview, o
                     No control mappings were suggested for this run.
                   </p>
                 )}
+                {canReview && run.result === 'passed' && run.evidenceId ? (
+                  <MapToControl
+                    evidenceId={run.evidenceId}
+                    controls={controls.filter((control) => !run.candidateMappings.some((m) => m.controlAssessmentId === control.id))}
+                    onMap={onMap}
+                    onRefresh={onRefresh}
+                  />
+                ) : null}
               </section>
             </div>
           </article>

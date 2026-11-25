@@ -89,8 +89,9 @@ def test_real_runner_evaluates_a_tar(sandbox):
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:
         for name, data in (
-            ("request.json", json.dumps({"v": 1, "engine": "EV-TST-01", "params": {"baseline": 0.5}}).encode()),
-            ("inputs/predictions", b"y_true,y_pred\n1,1\n0,0\n1,0\n1,1\n"),
+            ("request.json", json.dumps({"v": 1, "engine": "EV-TST-01", "params": {"baseline": 0.6}}).encode()),
+            # 80 rows: 20 misclassified bound under 40% at 95%, so the pass is provable (4 rows would be insufficient)
+            ("inputs/predictions", b"y_true,y_pred\n" + b"1,1\n0,0\n1,0\n1,1\n" * 20),
         ):
             info = tarfile.TarInfo(name)
             info.size = len(data)

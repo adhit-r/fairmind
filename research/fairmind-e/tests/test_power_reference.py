@@ -212,6 +212,17 @@ class CalibrationTest(unittest.TestCase):
         summary = json.loads(out.read_text())
         self.assertIn("not ground truth", summary["reference"]["caveat"])
 
+    def test_rescaled_errors_ignore_a_constant_scale(self) -> None:
+        import math
+
+        # A method that is exactly 3x the reference on every run has zero error
+        # once its scale is removed; one that wobbles by 2x does not.
+        steady = [math.log(3.0)] * 4
+        wobbly = [math.log(1.0), math.log(2.0), math.log(1.0), math.log(2.0)]
+        self.assertTrue(all(e < 1e-9 for e in self.calib.rescaled_abs_pct_errors(steady)))
+        self.assertGreater(max(self.calib.rescaled_abs_pct_errors(wobbly)), 25.0)
+        self.assertEqual(self.calib.rescaled_abs_pct_errors([]), [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

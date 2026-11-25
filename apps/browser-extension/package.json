@@ -1,0 +1,5 @@
+{
+  "name": "fairmind-browser-extension",
+  "private": true,
+  "scripts": { "test": "node --test" }
+}

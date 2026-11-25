@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FairMind: the lifecycle</title>
+<link rel="stylesheet" href="assets/social.css">
+<style>
+  .eyebrow { position: absolute; left: 72px; top: 72px; font-size: 24px; }
+  h1 { position: absolute; left: 72px; right: 72px; top: 124px; font-size: 60px; line-height: 1.06; letter-spacing: -0.035em; }
+  h1 span { color: var(--ink2); }
+  ol { position: absolute; left: 72px; right: 72px; top: 316px; margin: 0; padding: 0; list-style: none; }
+  li { position: relative; display: grid; grid-template-columns: 56px 250px 1fr; align-items: baseline; padding: 31px 0; border-top: 1px solid rgba(21,23,26,.12); }
+  li:last-child { border-bottom: 1px solid rgba(21,23,26,.12); }
+  .i { font-size: 22px; font-weight: 600; color: var(--ink3); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+  .s { font-size: 40px; font-weight: 600; letter-spacing: -0.025em; }
+  .d { font-size: 26px; font-weight: 500; line-height: 1.28; color: var(--ink2); }
+  footer { position: absolute; left: 72px; right: 72px; bottom: 58px; display: flex; align-items: center; justify-content: space-between; }
+  footer .brand { font-size: 30px; }
+  footer .url { font-size: 26px; font-weight: 600; }
+</style></head>
+<body><div class="frame">
+  <div class="eyebrow">The lifecycle</div>
+  <h1>One reviewable record,<br><span>from onboarding to operation.</span></h1>
+  <ol>
+    <li><span class="i">01</span><span class="s">Onboard</span><span class="d">Register a system, or discover it from MLflow, GitHub or the Hugging Face Hub.</span></li>
+    <li><span class="i">02</span><span class="s">Assess</span><span class="d">Results are stored as measured evidence.</span></li>
+    <li><span class="i">03</span><span class="s">Govern</span><span class="d">Policies mapped to controls, evaluated live.</span></li>
+    <li><span class="i">04</span><span class="s">Remediate</span><span class="d">Findings, owners, retests.</span></li>
+    <li><span class="i">05</span><span class="s">Operate</span><span class="d">Sustained drift opens a finding.</span></li>
+  </ol>
+  <footer>
+    <div class="brand"><img src="assets/logo-mark.svg" alt="">FairMind</div>
+    <div class="url">fairmind.xyz</div>
+  </footer>
+</div></body></html>

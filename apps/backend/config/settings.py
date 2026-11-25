@@ -38,7 +38,18 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:3000"
-    
+
+    # Olai consent management (https://olai.axonome.xyz). Unset = consent check off.
+    # The key needs the principal-token and state:read scopes.
+    olai_base_url: str = ""
+    olai_api_key: Optional[str] = None
+    olai_tenant_id: str = ""
+    olai_collection_point_id: str = ""
+    # The Olai purpose a person grants or withdraws with the release email switch. Unset = recorded in FairMind only.
+    olai_release_purpose_id: str = ""
+    # The public GitHub repository whose releases are FairMind's release notes (What's new, the email, the changelog).
+    release_repo: str = "adhit-r/fairmind"
+
     # Security
     secret_key: str = secrets.token_urlsafe(32)
     jwt_secret: str = secrets.token_urlsafe(32)
@@ -177,7 +188,12 @@ class Settings(BaseSettings):
     policy_alert_interval_seconds: int = 900
     # How often the release autopilot runs systems set to run; 0 turns the schedule off (Run now still works).
     autopilot_interval_seconds: int = 3600
-    admin_email: str = "admin@fairmind.ai"
+    # How often tasks are checked for due-tomorrow and overdue reminders; 0 turns reminders off.
+    task_reminder_interval_seconds: int = 3600
+    # How often discovery connectors are checked for a due schedule; 0 turns scheduled discovery off.
+    discovery_check_interval_seconds: int = 300
+    # Where access requests are sent (ADMIN_EMAIL); unset means no notice is sent and a warning is logged.
+    admin_email: Optional[str] = None
     
     # Error Tracking
     sentry_dsn: Optional[str] = None

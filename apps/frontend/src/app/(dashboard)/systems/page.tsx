@@ -73,7 +73,7 @@ function Lanes() {
     const byId = new Map((gates.data ?? []).map((g) => [g.systemId, g]))
     const real = systems.filter((s) => s.metadata?.source !== 'fallback' && s.id)
     const registered = real
-      .filter((s) => !stage || s.stage === stage)
+      .filter((s) => s.stage !== 'retired' && (!stage || s.stage === stage))
       .map((s) => {
         const gate = byId.get(s.id)
         const src = typeof s.metadata?.source === 'string' && s.metadata.source ? (s.metadata.source as string) : HAND
@@ -94,6 +94,8 @@ function Lanes() {
     return seen.sort((a, b) => (a === HAND ? 1 : b === HAND ? -1 : a.localeCompare(b)))
   }, [items])
 
+  // Retired systems leave the lanes and fold away below; their files stay readable.
+  const retired = useMemo(() => systems.filter((s) => s.stage === 'retired' && s.id), [systems])
   const sel = items.find((i) => `${i.type}:${i.id}` === openKey) ?? null
   const count = (c: Column) => items.filter((i) => i.column === c).length
   const srcLabel = (s: string) => (s === HAND ? 'Added by hand' : SOURCE_LABEL[s] ?? s)
@@ -233,6 +235,15 @@ function Lanes() {
             })}
           </div>
         </div>
+      )}
+
+      {retired.length > 0 && (
+        <details className="sys-retired">
+          <summary><b>{retired.length}</b> Retired</summary>
+          <ul>
+            {retired.map((r) => <li key={r.id}><a href={`/systems/${encodeURIComponent(r.id)}`}>{r.name}</a></li>)}
+          </ul>
+        </details>
       )}
 
       <Drawer isOpen={sel !== null} onOpenChange={(o) => { if (!o) { setOpenKey(null); setActionError(null) } }} label={sel?.name ?? 'System'} width={460} padding={5}>

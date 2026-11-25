@@ -361,11 +361,20 @@ def _detect(client, headers):
 
 @pytest.fixture
 def clean_bias_history():
-    from api.services.llm_bias_detection_service import llm_bias_service
+    from sqlalchemy import text
 
-    llm_bias_service.bias_history.clear()
+    from database.connection import db_manager
+    from database.record_store import RecordStore
+
+    RecordStore("bias_detection_runs").list()  # creates the table if needed
+
+    def clear():
+        with db_manager.get_session() as session:
+            session.execute(text("DELETE FROM service_records WHERE namespace = 'bias_detection_runs'"))
+
+    clear()
     yield
-    llm_bias_service.bias_history.clear()
+    clear()
 
 
 def test_bias_history_and_export_are_per_organisation(client, clean_bias_history):
@@ -382,7 +391,8 @@ def test_bias_history_and_export_are_per_organisation(client, clean_bias_history
 
 def test_bias_library_install_is_platform_admin_only(client):
     assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A).status_code == 403
-    assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A_ADMIN).status_code == 200
+    # Admins pass the gate; nothing is installed at runtime, and the route says so.
+    assert client.post("/api/v1/bias-detection/libraries/aif360/install", headers=A_ADMIN).status_code == 501
 
 
 # --------------------------------------------------------------------------- stateless compute still works when signed in
@@ -671,6 +681,44 @@ def test_india_check_digital_india_act_is_pending_not_an_error(client):
     assert result["status"] == "pending" and result["total_requirements"] == 0
 
 
+def test_india_pending_framework_does_not_lower_the_score(client):
+    body = {"system_id": "system-a", "frameworks": ["digital_india_act"]}
+    pending = client.post("/api/v1/india/check", json=body, headers=A).json()
+    assert pending["status"] == "pending"
+    both = client.post(
+        "/api/v1/india/check", json={**body, "frameworks": ["dpdp_act_2023", "digital_india_act"]}, headers=A
+    ).json()
+    dpdp = client.post("/api/v1/india/check", json={**body, "frameworks": ["dpdp_act_2023"]}, headers=A).json()
+    assert both["overall_score"] == dpdp["overall_score"]
+
+
+def test_india_evidence_report_and_gender_bias(client):
+    from api.routes import india_compliance as router
+
+    client.post("/api/v1/india/check", json={"system_id": "system-a", "frameworks": ["dpdp_act_2023"]}, headers=A)
+    stored = router._india_evidence.list(scope="system-a")
+    assert stored, "the check keeps the evidence it collected"
+    evidence_id = stored[-1]["id"]
+    got = client.get(f"/api/v1/india/evidence/{evidence_id}", headers=A)
+    assert got.status_code == 200, got.text
+    assert got.json()["system_id"] == "system-a"
+    assert client.get(f"/api/v1/india/evidence/{evidence_id}", headers=B).status_code == 404
+    assert client.get("/api/v1/india/evidence/never-collected", headers=A).status_code == 404
+
+    report = client.post(
+        "/api/v1/india/report", params={"system_id": "system-a", "frameworks": "dpdp_act_2023"}, headers=A
+    )
+    assert report.status_code == 200, report.text
+    assert report.json()["report_data"]["overall_compliance"]["frameworks_assessed"] == ["dpdp_act_2023"]
+
+    gender = client.post(
+        "/api/v1/india/bias-detection",
+        json={"system_id": "system-a", "model_id": "m", "bias_types": ["gender_bias"], "test_data": {}},
+        headers=A,
+    )
+    assert gender.status_code == 501, gender.text
+
+
 def test_cross_border_control_without_data_flows_is_not_assessed():
     import asyncio
 
@@ -751,24 +799,21 @@ def test_user_listing_is_limited_to_the_admins_organisation(client, monkeypatch)
 
 @pytest.fixture
 def monitoring(db):
-    from api.routes import monitoring as monitoring_routes
+    from sqlalchemy import text
 
-    for store in (
-        monitoring_routes.monitoring_service.metrics_store,
-        monitoring_routes.monitoring_service.configs,
-        monitoring_routes.alert_service.rules,
-        monitoring_routes.alert_service.alerts,
-    ):
-        store.clear()
+    from database.connection import db_manager
+    from database.record_store import RecordStore
+
+    RecordStore("monitoring_metrics").list()  # creates the table if needed
+
+    def clear():
+        with db_manager.get_session() as session:
+            session.execute(text("DELETE FROM service_records WHERE namespace LIKE 'monitoring_%'"))
+
+    clear()
     with _mini_app(db, "api.routes.monitoring") as mini:
         yield mini
-    for store in (
-        monitoring_routes.monitoring_service.metrics_store,
-        monitoring_routes.monitoring_service.configs,
-        monitoring_routes.alert_service.rules,
-        monitoring_routes.alert_service.alerts,
-    ):
-        store.clear()
+    clear()
 
 
 def test_monitoring_requires_an_organisation_member(monitoring):
@@ -954,7 +999,7 @@ def test_compliance_violations_are_per_organisation(automation):
     assert automation.get("/api/v1/compliance/violations/violation-orphan", headers=A).status_code == 404
     assert automation.patch(
         f"/api/v1/compliance/violations/violation-{ORG_B}/acknowledge", headers=A, json={"notes": "n"}
-    ).status_code == 404
+    ).status_code == 501  # not stored yet, refused for every violation alike
 
 
 def test_compliance_schedules_of_another_organisation_are_not_found(automation):

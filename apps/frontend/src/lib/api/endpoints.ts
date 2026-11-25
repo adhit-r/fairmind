@@ -48,7 +48,6 @@ export const API_ENDPOINTS = {
     countryMetrics: '/api/v1/database/country-metrics',
     dashboardStats: '/api/v1/database/dashboard-stats',
     models: '/api/v1/database/models',
-    reports: '/api/v1/database/reports',
     health: '/api/v1/database/health',
   },
 
@@ -116,8 +115,13 @@ export const API_ENDPOINTS = {
     systemApplicabilityAcceptOverride: (systemId: string) => `/api/v1/ai-governance/systems/${systemId}/applicability/accept-override`,
     generateReport: '/api/v1/ai-governance/reports/generate',
     listReports: '/api/v1/ai-governance/reports',
-    exportReport: (id: string, format: 'pdf' | 'docx') => `/api/v1/reports/snapshots/${encodeURIComponent(id)}/${format}`,
+    exportReport: (id: string, format: 'pdf' | 'docx' | 'csv') => `/api/v1/reports/snapshots/${encodeURIComponent(id)}/${format}`,
+    reportOverview: '/api/v1/ai-governance/reports/overview',
+    reportBriefing: '/api/v1/ai-governance/reports/briefing',
+    roleReports: '/api/v1/ai-governance/reports/snapshots',
     assessRisks: '/api/v1/ai-governance/risks/assess',
+    treatRisk: (riskId: string) => `/api/v1/ai-governance/risks/${encodeURIComponent(riskId)}`,
+    riskAcceptance: (riskId: string, action: 'approve' | 'withdraw') => `/api/v1/ai-governance/risks/${encodeURIComponent(riskId)}/acceptance/${action}`,
     riskDashboard: '/api/v1/ai-governance/dashboard/risk',
     status: '/api/v1/ai-governance/status',
     // Model Inventory
@@ -175,6 +179,7 @@ export const API_ENDPOINTS = {
     reviewEvidenceMapping: (orgId: string, mappingId: string) =>
       `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
     estateGates: '/api/v1/ai-governance/estate/gates',
+    estateFrameworks: '/api/v1/ai-governance/estate/frameworks',
     frameworkSystems: (frameworkKey: string) => `/api/v1/ai-governance/frameworks/${encodeURIComponent(frameworkKey)}/systems`,
   },
 
@@ -188,49 +193,9 @@ export const API_ENDPOINTS = {
   monitoring: {
     metrics: '/api/v1/monitoring/metrics',
     alerts: '/api/v1/monitoring/alerts',
-    logs: '/api/v1/monitoring/logs',
     health: '/api/v1/monitoring/health',
   },
 
-  // Modern Tools Integration
-  modernToolsIntegration: {
-    comprehensiveIntegration: '/api/v1/modern-tools-integration/comprehensive-integration',
-    cometLLM: '/api/v1/modern-tools-integration/comet-llm',
-    deepeval: '/api/v1/modern-tools-integration/deepeval',
-    arizePhoenix: '/api/v1/modern-tools-integration/arize-phoenix',
-    awsClarify: '/api/v1/modern-tools-integration/aws-clarify',
-    confidentAI: '/api/v1/modern-tools-integration/confident-ai',
-    transformerLens: '/api/v1/modern-tools-integration/transformer-lens',
-    bertviz: '/api/v1/modern-tools-integration/bertviz',
-    availableTools: '/api/v1/modern-tools-integration/available-tools',
-    configureTool: (toolId: string) => `/api/v1/modern-tools-integration/configure-tool/${toolId}`,
-    toolStatus: '/api/v1/modern-tools-integration/tool-status',
-    batchIntegration: '/api/v1/modern-tools-integration/batch-integration',
-    integrationHistory: '/api/v1/modern-tools-integration/integration-history',
-    health: '/api/v1/modern-tools-integration/health',
-  },
-
-  // Comprehensive Bias Evaluation
-  comprehensiveBiasEvaluation: {
-    runComprehensive: '/api/v1/comprehensive-bias-evaluation/run-comprehensive',
-    runPhase: '/api/v1/comprehensive-bias-evaluation/run-phase',
-    evaluationHistory: '/api/v1/comprehensive-bias-evaluation/evaluation-history',
-    evaluation: (evaluationId: string) => `/api/v1/comprehensive-bias-evaluation/evaluation/${evaluationId}`,
-    availablePhases: '/api/v1/comprehensive-bias-evaluation/available-phases',
-    riskLevels: '/api/v1/comprehensive-bias-evaluation/risk-levels',
-    complianceFrameworks: '/api/v1/comprehensive-bias-evaluation/compliance-frameworks',
-    configurePhase: '/api/v1/comprehensive-bias-evaluation/configure-phase',
-    pipelineStatus: '/api/v1/comprehensive-bias-evaluation/pipeline-status',
-    batchEvaluation: '/api/v1/comprehensive-bias-evaluation/batch-evaluation',
-    evaluationMetrics: '/api/v1/comprehensive-bias-evaluation/evaluation-metrics',
-    health: '/api/v1/comprehensive-bias-evaluation/health',
-  },
-
-  // Model Performance Benchmarking
-  modelPerformanceBenchmarking: {
-    benchmarkRuns: '/api/v1/model-performance-benchmarking/benchmark-runs',
-    runBenchmark: '/api/v1/model-performance-benchmarking/run-benchmark',
-  },
   // MLOps Integration
   mlops: {
     status: '/api/v1/mlops/status',

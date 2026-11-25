@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { useInstaller, useJourney, usePackNames, type ReqStatus } from '@/lib/api/hooks/usePacks'
+import { useInstaller, useJourney, usePackNames, type JourneyRequirement, type ReqStatus } from '@/lib/api/hooks/usePacks'
 import { IsoFigure } from '@/components/packs/IsoFigure'
 import { journeyFigure, type FigWorkflow } from '@/components/packs/figures'
 import { BTN, BTN_P, CoverageBar, Crumbs, EnginePill, ErrorNote, Heading, LABEL, LINE, Loading, MUTED, Pill, REQ_ORDER, ReqPill, ResultPill, StatusPill, StagePill, cap, reqHint, reqLabel } from '@/components/packs/parts'
@@ -326,18 +326,7 @@ export default function JourneyPage() {
                                   {!w.installed && <span className="text-[12px] text-[var(--fm-ink3)]">in {packName(w.pack)}, not installed</span>}
                                 </li>
                               ))}
-                              {r.evaluations.map((e) => (
-                                <li key={`e${e.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                  <Link
-                                    href={`/compliance/evaluations#${encodeURIComponent(e.id)}`}
-                                    className={cn('hover:underline', e.installed ? 'font-semibold text-[var(--fm-ink)]' : 'text-[var(--fm-ink2)]')}
-                                  >
-                                    {e.name}
-                                  </Link>
-                                  {e.result ? <ResultPill status={e.result} /> : <EnginePill engine={e.engine} />}
-                                  {!e.installed && <span className="text-[12px] text-[var(--fm-ink3)]">in {packName(e.pack)}, not installed</span>}
-                                </li>
-                              ))}
+                              <EvaluationLinks evaluations={r.evaluations} packName={packName} />
                             </ul>
                           )}
                         </td>
@@ -351,5 +340,43 @@ export default function JourneyPage() {
         })}
       </section>
     </div>
+  )
+}
+
+type ReqEvaluation = JourneyRequirement['evaluations'][number]
+const SHOWN = 5
+
+/** The evaluations that count toward a requirement: those with a result first, then strongest relation, five in view. */
+function EvaluationLinks({ evaluations, packName }: { evaluations: ReqEvaluation[]; packName: (id: string) => string }) {
+  const hasResult = (e: ReqEvaluation) => (e.result && e.result !== 'not_run' ? 1 : 0)
+  const sorted = [...evaluations].sort((a, b) => hasResult(b) - hasResult(a)) // stable: the API sends strongest first
+  const row = (e: ReqEvaluation) => (
+    <li key={`e${e.id}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <Link
+        href={`/compliance/evaluations#${encodeURIComponent(e.id)}`}
+        className={cn('hover:underline', e.installed ? 'font-semibold text-[var(--fm-ink)]' : 'text-[var(--fm-ink2)]')}
+      >
+        {e.name}
+      </Link>
+      <Pill>{e.relation}</Pill>
+      {e.result ? <ResultPill status={e.result} /> : <EnginePill engine={e.engine} />}
+      {!e.installed && <span className="text-[12px] text-[var(--fm-ink3)]">in {packName(e.pack)}, not installed</span>}
+    </li>
+  )
+  const rest = sorted.slice(SHOWN)
+  return (
+    <>
+      {sorted.slice(0, SHOWN).map(row)}
+      {rest.length > 0 && (
+        <li>
+          <details>
+            <summary className="cursor-pointer text-[12.5px] font-semibold text-[var(--fm-ink2)]">
+              {rest.length} more {rest.length === 1 ? 'evaluation' : 'evaluations'}
+            </summary>
+            <ul className="m-0 mt-1.5 flex list-none flex-col gap-1.5 p-0">{rest.map(row)}</ul>
+          </details>
+        </li>
+      )}
+    </>
   )
 }

@@ -25,8 +25,8 @@ _spec = importlib.util.spec_from_file_location(
 runner = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(runner)
 
-CSV = b"y_true,y_pred\nalice,alice\nbob,bob\nalice,bob\nbob,bob\n"
-REQUEST = {"v": 1, "engine": "EV-TST-01", "params": {"baseline": 0.7}}
+CSV = b"y_true,y_pred\n" + b"alice,alice\nbob,bob\nalice,bob\nbob,bob\n" * 20  # 80 rows: 20 misclassified bound under 40% at 95%
+REQUEST = {"v": 1, "engine": "EV-TST-01", "params": {"baseline": 0.6}}
 
 
 def tar(*members):

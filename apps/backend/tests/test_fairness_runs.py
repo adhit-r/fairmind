@@ -180,7 +180,7 @@ def test_confirmed_run_records_the_confirmation_and_the_next_inspect_reuses_it()
 
     # A confirmation planted through the generic evidence route is neither listed nor reused.
     planted = {"confirmed": True, "confirmedBy": "compliance-lead@test.invalid", "confirmedAt": "2026-11-01T00:00:00+00:00", "attributes": ["region"], "uncoveredGrounds": []}
-    collected = client.post("/api/v1/ai-governance/evidence/collect", json={"system_id": sid, "type": "fairness_test", "content": {"rows": 600}, "metadata": {"attribute_confirmation": planted}})
+    collected = client.post("/api/v1/ai-governance/evidence/collect", json={"system_id": sid, "type": "fairness_test", "content": {"rows": 600}, "confidence": 0.8, "metadata": {"attribute_confirmation": planted}})
     assert collected.status_code == 200, collected.text
     listed = client.get(f"{base}/fairness-runs").json()
     assert listed[0]["evidenceId"] == collected.json()["id"] and listed[0]["confirmation"] is None
@@ -316,12 +316,52 @@ def test_a_ratio_below_the_threshold_passes_only_on_significance_and_the_summary
     run = client.post(f"/api/v1/ai-governance/systems/{sid}/fairness-runs", files={"file": ("p.csv", _small_gap_csv(), "text/csv")}, data={"outcome": "label", "prediction": "prediction", "attributes": "gender"})
     assert run.status_code == 200, run.text
     listed = client.get(f"/api/v1/ai-governance/systems/{sid}/fairness-runs").json()[0]
-    assert listed["allChecksPass"] is True and "disparate_impact" in listed["attributes"][0]["passedOnSignificance"]
+    # The list follows the point estimate, as EV-FAI-01 and the gate do; significance stays information only.
+    assert listed["allChecksPass"] is False and listed["status"] in ("failed", "insufficient")
+    assert "disparate_impact" in listed["attributes"][0]["passedOnSignificance"]
 
     # An impact ratio at or above 0.80 is not listed as passing on significance.
     client.post(f"/api/v1/ai-governance/systems/{sid}/fairness-runs", files={"file": ("f.csv", _csv(n=400, seed=11), "text/csv")}, data={"outcome": "label", "prediction": "prediction", "attributes": "gender"})
     newest = client.get(f"/api/v1/ai-governance/systems/{sid}/fairness-runs").json()[0]
     assert newest["attributes"][0]["disparateImpactRatio"] >= 0.80 and "disparate_impact" not in newest["attributes"][0]["passedOnSignificance"]
+
+def test_ev_fai_01_judges_the_point_estimate_not_its_significance():
+    from src.application.services.evaluation_results import RULES
+
+    # 60 rows a group, M selected 30 and F 21: an impact ratio of 0.70 the run's own check passes as not significant.
+    frame = pd.DataFrame({"gender": ["M"] * 60 + ["F"] * 60, "prediction": [1] * 30 + [0] * 30 + [1] * 21 + [0] * 39})
+    frame["label"] = frame["prediction"]
+    out = run_fairness(frame.to_csv(index=False).encode(), outcome="label", prediction="prediction", attributes=["gender"])
+    assert out["attributes"][0]["checks"]["disparate_impact"] is True
+    assert RULES["EV-FAI-01"][1](out) == ("failed", "Impact ratio gender 0.70")
+    # 20 rows a group is too few to judge either way.
+    small = run_fairness(_small_gap_csv(), outcome="label", prediction="prediction", attributes=["gender"])
+    assert RULES["EV-FAI-01"][1](small)[0] == "insufficient"
+
+
+def test_the_gate_judges_a_fairness_run_on_its_point_estimate():
+    # The same 0.70 run EV-FAI-01 fails: the run's own check passes it as not significant, the gate's fairness check fails.
+    frame = pd.DataFrame({"gender": ["M"] * 60 + ["F"] * 60, "prediction": [1] * 30 + [0] * 30 + [1] * 21 + [0] * 39})
+    frame["label"] = frame["prediction"]
+    out = run_fairness(frame.to_csv(index=False).encode(), outcome="label", prediction="prediction", attributes=["gender"])
+    assert out["all_checks_pass"] is True
+    record = {"id": "e1", "evidenceType": "fairness_test", "confidence": 0.85, "metadata": {"provenance_class": "measured"}, "content": out}
+    fairness = next(c for c in release_gate("low", [record])["checks"] if c["key"] == "fairness")
+    assert fairness["fails"] is True and fairness["detail"]["all_checks_pass"] is False
+    # 20 rows a group is insufficient, so it proves nothing, as an insufficient evaluation run does.
+    small = {**record, "content": run_fairness(_small_gap_csv(), outcome="label", prediction="prediction", attributes=["gender"])}
+    assert next(c for c in release_gate("low", [small])["checks"] if c["key"] == "fairness")["state"] == "open"
+
+
+def test_a_selection_rate_change_of_exactly_the_threshold_is_drift():
+    from src.application.services.fairness_run_service import run_monitoring
+
+    # EV-FAI-07 alerts on a change of 0.05 or more: F moves from 0.00 to 0.05 (1 of 20).
+    frame = pd.DataFrame({"gender": ["F"] * 20 + ["M"] * 20, "prediction": ([1] + [0] * 19) * 2})
+    baseline = {"attributes": [{"attribute": "gender", "selection_rates": {"F": 0.0, "M": 0.05}}]}
+    out = run_monitoring(frame.to_csv(index=False).encode(), attributes=["gender"], prediction="prediction", baseline=baseline)
+    assert out["attributes"][0]["max_rate_drift"] == 0.05 and out["attributes"][0]["checks"]["selection_rate_stable"] is False
+
 
 def test_monitoring_run_and_attestations_move_the_gate():
     from src.application.services.fairness_run_service import psi, run_monitoring
@@ -477,12 +517,13 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     by_key = {f["key"]: f for f in out["frameworks"]}
     assert [f["key"] for f in out["frameworks"]][:3] == ["EUAIA", "ISO42001", "NISTRMF"]
     eu = {c["control"]: c for c in by_key["EUAIA"]["clauses"]}
-    assert eu["Art 10"]["state"] == "proven" and any(ch["check"] == "fairness" for ch in eu["Art 10"]["checks"])
+    # fairness only supports Art 10, so a proven fairness check makes it partial, not proven
+    assert eu["Art 10"]["state"] == "partial" and any(ch["check"] == "fairness" for ch in eu["Art 10"]["checks"])
     assert eu["Art 14"]["state"] == "attested" and eu["Art 72"]["state"] == "open"
     controls = [c["control"] for c in by_key["EUAIA"]["clauses"]]
     assert controls.index("Art 10") < controls.index("Art 12") < controls.index("Art 53") < controls.index("Art 72")
     counts = by_key["EUAIA"]["counts"]
-    assert counts["total"] == counts["proven"] + counts["attested"] + counts["open"] and counts["proven"] >= 1
+    assert counts["total"] == counts["proven"] + counts["partial"] + counts["attested"] + counts["open"] and counts["partial"] >= 1
     only_nist = clause_map(gate, frameworks=["NISTRMF"])
     assert [f["key"] for f in only_nist["frameworks"]] == ["NISTRMF"]
     assert {c["control"] for c in only_nist["frameworks"][0]["clauses"]} >= {"MEASURE 2.11", "MAP 3.5", "MANAGE 4.1"}
@@ -491,10 +532,10 @@ def test_clause_map_reads_the_gate_per_framework_clause():
     order = [f["key"] for f in out["frameworks"]]
     assert order.index("RBIFREEAI") == order.index("INDAI") + 1
     rbi_clauses = {c["control"]: c for c in rbi["clauses"]}
-    assert rbi_clauses["Sutra 4"]["title"] == "Fairness and equity" and rbi_clauses["Sutra 4"]["state"] == "proven"
+    assert rbi_clauses["Sutra 4"]["title"] == "Fairness and equity" and rbi_clauses["Sutra 4"]["state"] == "partial"
     assert any(ch["check"] == "fairness" and ch["state"] == "proven" for ch in rbi_clauses["Sutra 4"]["checks"])
     assert rbi_clauses["Sutra 2"]["state"] == "attested" and rbi_clauses["Rec 15"]["state"] == "open"
-    assert rbi["counts"]["total"] == len(rbi["clauses"]) and rbi["counts"]["proven"] >= 1
+    assert rbi["counts"]["total"] == len(rbi["clauses"]) and rbi["counts"]["partial"] >= 1
     for alias in ("rbi_free_ai", "RBI FREE-AI", "RBIFREEAI"):
         assert [f["key"] for f in clause_map(gate, frameworks=framework_keys([alias]))["frameworks"]] == ["RBIFREEAI"]
 
@@ -608,3 +649,41 @@ def test_fairness_metrics_match_the_hand_calculation():
     # Ten rows per group cannot show the gap is real; two hundred rows can.
     assert all(small["checks"].values())
     assert not any(large["checks"].values())
+
+
+def _eval_run(evaluation_id, status, at):
+    return {"id": f"{evaluation_id}-{at}", "type": "evaluation_run", "confidence": 1.0, "metadata": {"provenance_class": "measured"},
+            "timestamp": f"2026-11-06T{at}:00+00:00", "content": {"evaluationId": evaluation_id, "status": status}}
+
+
+def test_a_failed_evaluation_run_stands_until_that_evaluation_passes_again():
+    gate = lambda evidence: release_gate("low", evidence, include_environmental=False)  # noqa: E731
+    check = lambda g, key: next(c for c in g["checks"] if c["key"] == key)  # noqa: E731
+    # (a) a newer pass of another evaluation of the same control does not clear the failure
+    other = gate([_eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-USE-01", "passed", "10:05")])
+    assert check(other, "fairness")["fails"] is True and other["verdict"] != "go"
+    assert any("EV-FAI-05 failed" in r for r in other["reasons"])
+    # (b) nor does a newer attestation of the check
+    attestation = {"id": "att", "evidenceType": "human_oversight", "confidence": 0.30, "metadata": {"provenance_class": "manual"}, "timestamp": "2026-11-06T10:05:00+00:00"}
+    attested = gate([_eval_run("EV-OVS-01", "failed", "10:00"), attestation])
+    assert check(attested, "human_oversight")["fails"] is True and attested["verdict"] != "go"
+    # a newer pass of the same evaluation does
+    again = gate([_eval_run("EV-FAI-05", "failed", "10:00"), _eval_run("EV-FAI-05", "passed", "10:05")])
+    assert "fails" not in check(again, "fairness") and not any("failed" in r for r in again["reasons"])
+
+
+def test_an_environmental_run_never_shadows_the_assessment():
+    gate = release_gate("high", [_eval_run("EV-ENV-01", "failed", "10:00")], environmental_assessed={"provenance_class": "tool_estimated", "confidence": 0.85})
+    env = next(c for c in gate["checks"] if c["key"] == "environmental")
+    assert (env["state"], env["confidence"], env["evidenceClass"], env["evidenceId"]) == ("proven", 0.85, "tool_estimated", None) and "fails" not in env
+    # the run still reaches its clauses through the clause map
+    assert [r["evaluationId"] for r in gate["evaluations"]] == ["EV-ENV-01"]
+
+
+def test_the_clause_map_keeps_every_evaluation_of_a_control():
+    gate = release_gate("medium", [_eval_run("EV-SEC-01", "failed", "10:00"), _eval_run("EV-SEC-02", "passed", "10:05")])
+    assert sorted((r["evaluationId"], r["status"]) for r in gate["evaluations"]) == [("EV-SEC-01", "failed"), ("EV-SEC-02", "passed")]
+    from src.application.services.clause_map_service import clause_map
+
+    reached = [c for fw in clause_map(gate)["frameworks"] for c in fw["clauses"] if any(ch["check"] == "EV-SEC-01" for ch in c["checks"])]
+    assert reached and all(c["cell"] == "fails" and c["state"] != "proven" for c in reached)

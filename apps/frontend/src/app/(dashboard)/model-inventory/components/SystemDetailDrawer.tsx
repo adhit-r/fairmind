@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import {
   IconAlertHexagon,
   IconAlertTriangle,
@@ -19,6 +20,8 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { AISystem, GovernanceRisk, SystemApproval } from '@/lib/api/hooks/useModelInventory'
+import type { GateCheck, ReleaseGate } from '@/lib/api/hooks/useSystemFile'
+import { apiClient } from '@/lib/api/api-client'
 import { LifecycleStepper } from './LifecycleStepper'
 import { RiskHeatmap } from './RiskHeatmap'
 
@@ -28,6 +31,12 @@ interface SystemDetailDrawerProps {
   onClose: () => void
   onFetchRisks: (systemId: string) => Promise<{ risks: GovernanceRisk[]; summary: any }>
   onFetchApprovals: (systemId: string) => Promise<SystemApproval[]>
+}
+
+const OVERSIGHT_STATE: Record<GateCheck['state'], { text: string; tone: string }> = {
+  proven: { text: 'Proven', tone: 'text-emerald-700' },
+  attested: { text: 'Attested', tone: 'text-amber-700' },
+  open: { text: 'Nothing on file', tone: 'text-red-700' },
 }
 
 const RISK_SEVERITY_COLORS: Record<string, string> = {
@@ -55,6 +64,8 @@ export function SystemDetailDrawer({
   const [approvals, setApprovals] = useState<SystemApproval[]>([])
   const [loadingRisks, setLoadingRisks] = useState(false)
   const [loadingApprovals, setLoadingApprovals] = useState(false)
+  // undefined while loading, null when the gate could not be read
+  const [oversight, setOversight] = useState<GateCheck | null | undefined>(undefined)
 
   useEffect(() => {
     if (!system || !open) return
@@ -69,6 +80,11 @@ export function SystemDetailDrawer({
       .then((a) => setApprovals(a))
       .catch(() => {})
       .finally(() => setLoadingApprovals(false))
+
+    setOversight(undefined)
+    apiClient.get<ReleaseGate>(`/api/v1/ai-governance/systems/${system.id}/gate`)
+      .then((r) => setOversight(r.success ? r.data?.checks.find((c) => c.key === 'human_oversight') ?? null : null))
+      .catch(() => setOversight(null))
   }, [system?.id, open])
 
   if (!system) return null
@@ -255,6 +271,21 @@ export function SystemDetailDrawer({
             {/* System info tab */}
             <TabsContent value="info" className="mt-4">
               <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--fm-line)] bg-white p-3">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Human oversight</p>
+                  <div className="flex items-center gap-3 text-xs font-semibold">
+                    {oversight === undefined ? (
+                      <IconLoader2 className="h-3.5 w-3.5 animate-spin" aria-label="Loading" />
+                    ) : oversight === null ? (
+                      <span className="text-muted-foreground">Unavailable</span>
+                    ) : (
+                      <span className={OVERSIGHT_STATE[oversight.state].tone}>{OVERSIGHT_STATE[oversight.state].text}</span>
+                    )}
+                    <Link href={`/systems/${system.id}`} className="text-[var(--fm-ink2)] underline underline-offset-2 hover:text-[var(--fm-ink)]">
+                      {oversight?.state === 'open' ? 'Attest' : 'Open file'}
+                    </Link>
+                  </div>
+                </div>
                 {[
                   { label: 'System ID', value: system.id },
                   { label: 'Workspace', value: system.workspaceId || '—' },

@@ -1,11 +1,15 @@
 import {
   Bot,
   ClipboardCheck,
+  ClipboardList,
+  EyeOff,
+  FileBarChart,
   FileCheck2,
   FlaskConical,
   Gauge,
   Home,
   Inbox,
+  ListTodo,
   Layers,
   Leaf,
   ListChecks,
@@ -25,7 +29,7 @@ import {
 } from 'lucide-react'
 
 /** A page in the menu. `count` names a live count the shell reads from the API; the shell never shows a made-up number. */
-export type Place = { href: string; label: string; icon: LucideIcon; count?: 'needs' | 'systems' | 'found' | 'runs' | 'findings' }
+export type Place = { href: string; label: string; icon: LucideIcon; count?: 'needs' | 'systems' | 'found' | 'runs' | 'findings' | 'shadow' }
 export type Group = { key: string; short: string; title: string; icon: LucideIcon; places: Place[] }
 
 export const NAV: Group[] = [
@@ -37,6 +41,7 @@ export const NAV: Group[] = [
     places: [
       { href: '/dashboard', label: 'Home', icon: Gauge },
       { href: '/needs-you', label: 'Needs you', icon: Inbox, count: 'needs' },
+      { href: '/tasks', label: 'Tasks', icon: ListTodo },
     ],
   },
   {
@@ -47,6 +52,7 @@ export const NAV: Group[] = [
     places: [
       { href: '/systems', label: 'AI systems', icon: Layers, count: 'systems' },
       { href: '/discovery', label: 'Discovery', icon: Radar, count: 'found' },
+      { href: '/shadow-ai', label: 'Shadow AI', icon: EyeOff, count: 'shadow' },
     ],
   },
   {
@@ -58,6 +64,7 @@ export const NAV: Group[] = [
       { href: '/plan', label: 'Plan', icon: ListChecks },
       { href: '/frameworks', label: 'Frameworks', icon: Scale },
       { href: '/policies', label: 'Policies', icon: ScrollText },
+      { href: '/internal-audit', label: 'Internal audit', icon: ClipboardList },
     ],
   },
   {
@@ -89,6 +96,7 @@ export const NAV: Group[] = [
     title: 'Records',
     icon: FileCheck2,
     places: [
+      { href: '/reports', label: 'Reports', icon: FileBarChart },
       { href: '/evidence', label: 'Evidence', icon: ClipboardCheck },
       { href: '/auditor-packs', label: 'Auditor packs', icon: Package },
     ],

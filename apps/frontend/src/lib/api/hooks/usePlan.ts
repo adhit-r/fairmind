@@ -6,7 +6,7 @@ import { apiClient } from '../api-client'
 
 const PLAN = '/api/v1/plan'
 
-export type TaskState = 'todo' | 'needs_you' | 'agent' | 'review' | 'proven'
+export type TaskState = 'todo' | 'needs_you' | 'agent' | 'review' | 'attested' | 'proven'
 export type Options = Record<string, string>
 
 export interface Question {
@@ -40,6 +40,8 @@ export interface Discovery {
   progress: { answered: number; total: number }
   transcript: Array<{ role: 'agent' | 'user'; key: string; text: string; at: string }>
   facts: Fact[]
+  /** Frameworks the plan's answers point to, with why. */
+  suggested?: Array<{ key: string; name: string; reason: string }>
   map: {
     frameworks: Array<{ key: string; name: string; reason: string; requirements: number }>
     controls: Array<{ id: string; name: string; lane: string; requirements: number; maturity: string | null }>

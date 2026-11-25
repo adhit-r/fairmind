@@ -24,6 +24,7 @@ const LANES: Array<{ key: TaskState; label: string }> = [
   { key: 'needs_you', label: 'Needs you' },
   { key: 'agent', label: 'Agent working' },
   { key: 'review', label: 'In review' },
+  { key: 'attested', label: 'Attested' },
   { key: 'proven', label: 'Proven' },
 ]
 const LANE_LABEL = Object.fromEntries(LANES.map((l) => [l.key, l.label])) as Record<TaskState, string>

@@ -3,10 +3,11 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { Empty, ErrorNote, Loading, ReqPill } from '@/components/packs/parts'
+import { Button } from '@/components/ui/button'
 import { CellDrawer, CellMeaning, classLabel, DrawerBlock, Matrix, type Cell, type MatrixGroup } from '@/components/ui/matrix'
 import { shortFrameworkName } from '@/lib/api/hooks/useApplicability'
 import { useJourney, type Journey } from '@/lib/api/hooks/usePacks'
-import type { ClauseMap } from '@/lib/api/hooks/useSystemFile'
+import { downloadSoa, type ClauseMap } from '@/lib/api/hooks/useSystemFile'
 import { cn } from '@/lib/utils'
 import { NOT_TRACKED, ORG_BLANK, STRENGTH, type GridBase } from '../../frameworks/[key]/grid'
 
@@ -26,13 +27,14 @@ export function requirementsGrid(journey: Journey, clauseMap: ClauseMap | null):
     label: g.name,
     rows: g.requirements.map((r) => {
       const clause = clauses.get(r.key)
+      const state = clause && clause.cell !== 'none' ? clause.cell : null
       return {
         key: r.key,
         code: r.control,
         label: r.title,
         title: `${r.control} · ${r.title} · ${g.name}`,
-        cells: [r.status === 'covered' || r.status === 'tested' ? 'atorg' : null, ...packs.map((p) => bestRelation(r.workflows, p.pack)), clause?.cell ?? null],
-        blank: [ORG_BLANK, ...packs.map(() => 'No workflow of this pack maps here'), clause ? 'No state recorded for this system' : NOT_TRACKED],
+        cells: [r.status === 'covered' || r.status === 'tested' ? 'atorg' : null, ...packs.map((p) => bestRelation(r.workflows, p.pack)), state],
+        blank: [ORG_BLANK, ...packs.map(() => 'No workflow of this pack maps here'), state ? 'No state recorded for this system' : NOT_TRACKED],
       }
     }),
   }))
@@ -50,6 +52,7 @@ export function requirementsGrid(journey: Journey, clauseMap: ClauseMap | null):
 
 /** The system's requirements, one confirmed framework at a time. */
 export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ key: string; name: string }>; clauseMap: ClauseMap | null }) {
+  const [soaError, setSoaError] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | undefined>(confirmed[0]?.key)
   const fw = confirmed.some((f) => f.key === picked) ? picked : confirmed[0]?.key
   const journey = useJourney(fw)
@@ -81,8 +84,19 @@ export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ k
       <div className="flex flex-wrap items-center gap-2 px-[18px] pb-3 pt-4">
         <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Requirements</h2>
         {grid && <span className="text-[12px] tabular-nums text-[var(--fm-ink3)]">{grid.groups.reduce((n, g) => n + g.rows.length, 0)}</span>}
+        {clauseMap?.systemId && fw && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            title={soaError ?? `Statement of Applicability for ${short}, one row per clause`}
+            onClick={async () => setSoaError(await downloadSoa(clauseMap.systemId as string, fw))}
+          >
+            {soaError ? 'Download failed, retry' : 'Statement of Applicability (CSV)'}
+          </Button>
+        )}
         {confirmed.length > 1 && (
-          <nav aria-label="Framework" className={cn(SEG, 'ml-auto')}>
+          <nav aria-label="Framework" className={cn(SEG, !clauseMap?.systemId && 'ml-auto')}>
             {confirmed.map((f) => (
               <button key={f.key} type="button" onClick={() => setPicked(f.key)} aria-pressed={f.key === fw} className={cn(SEG_ITEM, f.key === fw && SEG_ON)} title={f.name}>
                 {shortFrameworkName(f.name)}
@@ -127,7 +141,8 @@ export function RequirementsTab({ confirmed, clauseMap }: { confirmed: Array<{ k
         {found && cell?.col === 'state' && (
           <>
             <DrawerBlock label="This system">
-              <CellMeaning cell={clause?.cell ?? null} />
+              <CellMeaning cell={clause && clause.cell !== 'none' ? clause.cell : null} />
+              {clause?.justification && <span className="text-[var(--fm-ink2)]">{clause.justification}</span>}
             </DrawerBlock>
             <DrawerBlock label="Release checks behind it">
               {clause?.checks.length ? (

@@ -294,11 +294,19 @@ def test_generic_evidence_upload_cannot_forge_an_applicability_record():
     for evidence_type in ("applicability_decision", "applicability_override_accepted"):
         writes = [
             (f"{GOV}/systems/{sid}/evidence", {"evidence_type": evidence_type, "title": "x", "content": {}}),
-            *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": evidence_type, "content": {"tier": "low"}}) for route in ("collect", "collect-v2", "upload")),
+            *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": evidence_type, "content": {"tier": "low"}, "confidence": 0.8}) for route in ("collect", "collect-v2", "upload")),
         ]
         for url, payload in writes:
             forged = client.post(url, json=payload)
             assert forged.status_code == 422 and forged.json()["detail"] == detail, (url, forged.text)
+    assert client.get(f"{GOV}/systems/{sid}/evidence").json() == []
+    # only the evaluation engines write runs: an uploaded one would read as measured in the clause map
+    run = {"evaluationId": "EV-TST-01", "status": "passed"}
+    for url, payload in [
+        (f"{GOV}/systems/{sid}/evidence", {"evidence_type": "evaluation_run", "title": "x", "content": run}),
+        *((f"{GOV}/evidence/{route}", {"system_id": sid, "type": "evaluation_run", "content": run, "confidence": 1.0}) for route in ("collect", "collect-v2", "upload")),
+    ]:
+        assert client.post(url, json=payload).status_code == 422, url
     assert client.get(f"{GOV}/systems/{sid}/evidence").json() == []
 
     # The seal names the record the system file points at, not the newest row of that type.
@@ -316,3 +324,34 @@ def test_generic_evidence_upload_cannot_forge_an_applicability_record():
     req = client.post(f"{GOV}/approval/system/{sid}/request", json={}).json()["request"]["id"]
     seal = client.post(f"{GOV}/approval-requests/{req}/decision", json={"decision": "rejected", "notes": "not yet"}).json()["seal"]
     assert seal["evidenceCount"] == 2 and seal["gate"]["applicabilityEvidenceId"] == record["evidenceId"]
+
+
+def test_confirming_a_framework_the_store_holds_assigns_its_newest_version_once():
+    from sqlalchemy import text
+
+    from database.connection import db_manager
+    from src.application.services.framework_catalog_service import FrameworkCatalogService
+
+    with db_manager.SessionLocal() as session:
+        version_id = FrameworkCatalogService(session).import_catalogue_framework("iso-42001", actor_id="test").version_id
+    client = _client(str(uuid.uuid4()), "owner@test.invalid")
+    sid = _system(client)
+    body = {"answers": CREDIT_EU, "tier": "high", "frameworks": ["EUAIA", "ISO42001"], "reason": "Preparing ISO 42001 certification"}
+    assert client.put(f"{GOV}/systems/{sid}/applicability", json=body).status_code == 200
+    assert client.put(f"{GOV}/systems/{sid}/applicability", json=body).status_code == 200  # idempotent
+
+    with db_manager.SessionLocal() as session:
+        assigned = session.execute(text("SELECT framework_version_id FROM governance_framework_assignments WHERE system_id = :id"), {"id": sid}).scalars().all()
+        assessed = session.execute(text("SELECT count(*) FROM governance_control_assessments WHERE system_id = :id"), {"id": sid}).scalar()
+    assert assigned == [version_id] and assessed == 65  # EUAIA is not in the store, so only ISO is assigned
+
+    # A catalogue edit imports a newer ISO version on the next deploy; re-confirming keeps the pinned one.
+    from database.governance_models import GovernanceFrameworkVersion
+    with db_manager.SessionLocal() as session:
+        session.execute(GovernanceFrameworkVersion.__table__.insert().values(
+            framework_key="iso-42001", name="ISO/IEC 42001", version_label="2023", source_hash=str(uuid.uuid4()), imported_at="9999-01-01T00:00:00+00:00",
+        ))
+        session.commit()
+    assert client.put(f"{GOV}/systems/{sid}/applicability", json={**body, "tier": "critical"}).status_code == 200
+    with db_manager.SessionLocal() as session:
+        assert session.execute(text("SELECT framework_version_id FROM governance_framework_assignments WHERE system_id = :id"), {"id": sid}).scalars().all() == [version_id]

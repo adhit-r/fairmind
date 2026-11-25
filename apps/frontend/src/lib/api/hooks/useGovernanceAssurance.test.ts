@@ -8,6 +8,7 @@ import { API_ENDPOINTS } from '../endpoints'
 import { runHook, stub } from './runHookForTest'
 import { EvaluationRunList } from '../../../app/(dashboard)/evidence/components/EvaluationRunList'
 import type {
+  ControlAssessment,
   ControlAssessmentUpdateResult,
   EvidenceMappingReviewInput,
   EvidencePassportInput,
@@ -214,11 +215,24 @@ test('the evaluation-list consumer renders the backward-compatible GET DTO', asy
   const markup = renderToStaticMarkup(createElement(EvaluationRunList, {
     runs: [run], controls: [], loading: false, error: null, canReview: false,
     onReview: async () => { throw new Error('No mapping is rendered in this fixture') },
+    onMap: async () => { throw new Error('No mapping is made in this fixture') },
     onRefresh: async () => {},
   }))
   assert.match(markup, /Evaluation run Bias suite/)
   assert.match(markup, /bias-suite/)
   assert.match(markup, /Content hash/)
+
+  // A reviewer can map a passed catalogue run to a control by hand; a failed run offers no mapping.
+  const control = { id: 'assessment-1', externalId: 'A.6.2.4', title: 'Verification and validation' } as ControlAssessment
+  const reviewable = (result: string) => renderToStaticMarkup(createElement(EvaluationRunList, {
+    runs: [{ ...run, evidenceId: 'evidence-1', result }], controls: [control], loading: false, error: null, canReview: true,
+    onReview: async () => { throw new Error('No review in this fixture') },
+    onMap: async () => { throw new Error('No mapping is made in this fixture') },
+    onRefresh: async () => {},
+  }))
+  assert.match(reviewable('passed'), /Map to control/)
+  assert.match(reviewable('passed'), /A\.6\.2\.4 Verification and validation/)
+  assert.doesNotMatch(reviewable('failed'), /Map to control/)
 })
 
 test('resolves every system assignment to its matching framework version', async () => {

@@ -424,7 +424,7 @@ export default function AIGovernancePage() {
               </Link>
             </Button>
             <Button asChild variant="neutral" className="border border-[var(--fm-line)] bg-white font-semibold">
-              <Link href="/reports?view=builder">
+              <Link href="/reports/system">
                 Open reports and assurance
                 <IconArrowRight aria-hidden="true" />
               </Link>

@@ -655,7 +655,8 @@ class SqlAlchemyEvidenceIngestionStore:
             .mappings()
             .first()
         )
-        if latest is None:
+        # A catalogue evaluation run (evaluation_runs._store_run) is not a passport and has no revision.
+        if latest is None and run["schema_version"] != "fairmind-catalogue-1":
             raise RuntimeError("evidence run has no passport revision")
         artifacts = (
             self.db.execute(
@@ -680,8 +681,8 @@ class SqlAlchemyEvidenceIngestionStore:
             run_id=run["run_id"],
             run_content_hash=run["content_hash"],
             passport_id=run["passport_id"],
-            latest_revision=latest["passport_revision"],
-            latest_canonical_content_hash=latest["canonical_content_hash"],
+            latest_revision=latest["passport_revision"] if latest else 0,
+            latest_canonical_content_hash=latest["canonical_content_hash"] if latest else run["content_hash"],
             result=run["result"],
             capability_state=run["capability_state"],
             limitations=tuple(json.loads(run["limitations_json"] or "[]")),

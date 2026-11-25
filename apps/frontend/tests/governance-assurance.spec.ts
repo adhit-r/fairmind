@@ -655,6 +655,7 @@ test('activates a framework and completes the control review journey by keyboard
 
   await trace.getByLabel('Control owner').fill('assurance-lead@acme.test')
   await trace.getByLabel('Applicability').selectOption('not_applicable')
+  await trace.getByLabel('Justification').fill('The system makes no decisions about people.')
   await trace.getByLabel('Assessment state').selectOption('ready_for_review')
   await trace.getByRole('button', { name: 'Save control changes' }).focus()
   await page.keyboard.press('Enter')

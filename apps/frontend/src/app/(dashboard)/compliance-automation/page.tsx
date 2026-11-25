@@ -201,7 +201,7 @@ export default function ComplianceAutomationPage() {
           <p className="text-gray-600">
             Compliance Automation automatically checks your AI systems against regulatory frameworks
             (DPDP Act, NITI Aayog, EU AI Act, GDPR, and more) on a scheduled basis. Violations are
-            tracked with severity levels, and AI-powered remediation plans guide you toward compliance.
+            tracked with severity levels. Remediation plans are coming soon.
           </p>
         </div>
       </div>
@@ -434,9 +434,9 @@ function RemediationSection() {
     <div>
       <h2 className="mb-6 text-2xl font-bold text-black">Remediation Plans</h2>
       <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-        <p className="text-gray-600">Remediation plans will appear here when violations are detected.</p>
+        <p className="font-semibold text-gray-700">Coming soon</p>
         <p className="mt-2 text-sm text-gray-500">
-          AI-generated step-by-step guidance for addressing compliance gaps.
+          Remediation plans are not generated here yet. Track fixes for findings under Findings.
         </p>
       </div>
     </div>
@@ -446,6 +446,7 @@ function RemediationSection() {
 function ReportsSection() {
   const [reports, setReports] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReports();
@@ -454,6 +455,7 @@ function ReportsSection() {
   const fetchReports = async () => {
     try {
       const response = await apiClient.get("/api/v1/compliance/reports?limit=20");
+      if (!response.success) setUnavailable(response.error || "Report history could not be loaded.");
       setReports((response.data as any)?.reports || []);
     } catch (err) {
       console.error("Failed to fetch reports:", err);
@@ -471,7 +473,7 @@ function ReportsSection() {
       <h2 className="mb-6 text-2xl font-bold text-black">Generated Reports</h2>
       {reports.length === 0 ? (
         <div className="rounded-lg border border-gray-300 bg-gray-50 p-8 text-center">
-          <p className="text-gray-600">No reports generated yet. Create a schedule to get started.</p>
+          <p className="text-gray-600">{unavailable ?? "No reports generated yet. Create a schedule to get started."}</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--fm-line)]">

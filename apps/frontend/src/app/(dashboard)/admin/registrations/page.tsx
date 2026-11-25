@@ -18,6 +18,10 @@ interface RegistrationRequest {
   review_notes: string | null
   reviewed_at: string | null
   created_at: string
+  /** Pending with an org: someone on one of that org's domains asking to join; its admins decide. */
+  join?: boolean
+  /** Existing orgs whose names look like this request's, so a duplicate is spotted before approving. */
+  similar_orgs?: Array<{ id: string; name: string; domains: string[] }>
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -67,7 +71,8 @@ export default function RegistrationsPage() {
     if (!reviewModal) return
     setSubmitting(true)
     try {
-      await apiClient.post(`/api/v1/registrations/${reviewModal.id}/${reviewModal.action}`, { notes })
+      const res = await apiClient.post(`/api/v1/registrations/${reviewModal.id}/${reviewModal.action}`, { notes })
+      if (!res.success) throw new Error(res.error || 'Please try again.')
       toast({
         title: reviewModal.action === 'approve' ? 'Request approved' : 'Request denied',
         description: 'The applicant has been notified by email.',
@@ -141,12 +146,22 @@ export default function RegistrationsPage() {
                         &ldquo;{req.message}&rdquo;
                       </p>
                     )}
+                    {req.join && (
+                      <p className="mt-3 text-sm text-[var(--fm-ink2)]">
+                        Joining <b className="text-[var(--fm-ink)]">{req.org_name}</b>: the address is on its domain, so its owners and admins decide this in Settings.
+                      </p>
+                    )}
+                    {!req.join && (req.similar_orgs?.length ?? 0) > 0 && (
+                      <p className="mt-3 rounded-[10px] bg-[#fff4d6] px-3 py-2 text-sm text-[#8a5a00]">
+                        Looks like an existing organisation: {req.similar_orgs!.map((o) => `${o.name}${o.domains.length ? ` (${o.domains.join(', ')})` : ''}`).join('; ')}. If they belong there, deny this and ask its owner to invite them.
+                      </p>
+                    )}
                     {req.review_notes && (
                       <p className="mt-2 text-sm text-gray-500">Notes: {req.review_notes}</p>
                     )}
                   </div>
 
-                  {req.status === 'pending' && (
+                  {req.status === 'pending' && !req.join && (
                     <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => { setReviewModal({ id: req.id, action: 'approve' }); setNotes('') }}

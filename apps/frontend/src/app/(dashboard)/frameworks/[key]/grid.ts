@@ -9,7 +9,8 @@ export const TIERS: Tier[] = ['critical', 'high', 'medium', 'low']
 const TIER_LABEL: Record<Tier, string> = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
 export const NOT_TRACKED = 'Not tracked per system yet'
 export const ORG_BLANK = 'Not covered by organisation packs'
-const PROVEN_LIKE = new Set<CellState>(['proven', 'estimated', 'attested'])
+/** Proven as the clause map counts it: a proven check, measured or tool-estimated; an attestation alone is not proof. */
+const PROVEN_LIKE = new Set<CellState>(['proven', 'estimated'])
 /** Crosswalk relation to cell strength; "Aligns with" draws blank and is named in the cell title. */
 export const STRENGTH: Record<string, 1 | 2 | 3> = { Satisfies: 3, 'Partially satisfies': 2, Supports: 1 }
 
@@ -23,7 +24,7 @@ export function confirmedFrameworks(systems: Array<{ metadata?: Record<string, u
   return [...out].map(([key, name]) => ({ key, name }))
 }
 
-const emptyTotals = (): Record<CellState, number> => ({ proven: 0, estimated: 0, attested: 0, planned: 0, open: 0, fails: 0, stale: 0, atorg: 0 })
+const emptyTotals = (): Record<CellState, number> => ({ proven: 0, estimated: 0, partial: 0, attested: 0, excluded: 0, planned: 0, open: 0, fails: 0, stale: 0, atorg: 0 })
 
 /** Requirements by system: an Org column, then one group per risk tier of the systems that confirmed the framework. */
 export function systemGrid(journey: Journey, fw: FrameworkSystems, showAll: boolean) {
@@ -37,9 +38,11 @@ export function systemGrid(journey: Journey, fw: FrameworkSystems, showAll: bool
     rows: g.requirements.flatMap((r) => {
       total += 1
       const cells = byKey.get(r.key)
+      // a requirement no check reaches comes back with every cell null; it is untracked like a missing one
+      const tracked = !!cells?.some(Boolean)
       const sys = order.map((i) => cells?.[i]?.state ?? null)
       const org: Cell = r.status === 'covered' || r.status === 'tested' ? 'atorg' : null
-      if (!cells && !showAll) return []
+      if (!tracked && !showAll) return []
       // The footer totals what the grid draws, so it moves with Show all.
       for (const c of [org, ...sys]) if (c) totals[c] += 1
       return [
@@ -49,8 +52,8 @@ export function systemGrid(journey: Journey, fw: FrameworkSystems, showAll: bool
           label: r.title,
           title: `${r.control} · ${r.title} · ${g.name}`,
           cells: [org, ...sys],
-          blank: cells ? 'No state recorded for this system' : NOT_TRACKED,
-          count: cells && order.length ? `${sys.filter((c) => c && PROVEN_LIKE.has(c)).length}/${order.length}` : undefined,
+          blank: tracked ? 'No state recorded for this system' : NOT_TRACKED,
+          count: tracked && order.length ? `${sys.filter((c) => c && PROVEN_LIKE.has(c)).length}/${order.length}` : undefined,
         },
       ]
     }),
@@ -68,7 +71,7 @@ export function systemGrid(journey: Journey, fw: FrameworkSystems, showAll: bool
     countHead: order.length ? 'Proven' : undefined,
     legendLabels: { atorg: 'covered by organisation packs' },
   }
-  return { matrix, totals, tracked: fw.requirements.length, total }
+  return { matrix, totals, tracked: fw.requirements.filter((r) => r.cells.some(Boolean)).length, total }
 }
 
 const NEEDS_WORK = new Set<CellState>(['open', 'fails', 'stale'])

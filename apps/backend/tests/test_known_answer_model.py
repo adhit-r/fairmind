@@ -24,16 +24,18 @@ P10 = [1, 1, 1, 1, 0, 0, 0, 0, 1, 1]
 
 @known_answer("EV-TST-01")
 def test_tst01_accuracy_and_macro_f1_by_hand():
-    out = run("EV-TST-01", {"baseline": 0.6}, predictions=preds(T10, P10))
+    out = run("EV-TST-01", {"baseline": 0.6}, predictions=preds(T10 * 10, P10 * 10))  # 30 of 100 wrong: 95% bound 38.4% <= 40%
     assert out["metrics"]["accuracy"] == pytest.approx(0.7)
     assert out["metrics"]["macroF1"] == pytest.approx(23 / 33, abs=1e-4)
     assert out["status"] == "passed"
+    small = run("EV-TST-01", {"baseline": 0.6}, predictions=preds(T10, P10))  # 3 of 10 wrong: bound 60.7%, too few rows
+    assert small["status"] == "insufficient" and "at least" in small["summary"]
 
 
 @known_answer("EV-TST-01")
 def test_tst01_boundary_and_failure():
     d = preds(T10, P10)
-    assert run("EV-TST-01", {"baseline": 0.7}, predictions=d)["status"] == "passed"  # at or above baseline
+    assert run("EV-TST-01", {"baseline": 0.7}, predictions=d)["status"] == "insufficient"  # met, but never shown exactly at the limit
     assert run("EV-TST-01", {"baseline": 0.71}, predictions=d)["status"] == "failed"
     out = run("EV-TST-01", {"baseline": 0.5, "last_release": 0.75}, predictions=d)  # lost 0.05 > 0.02
     assert out["metrics"]["dropVsLastRelease"] == pytest.approx(0.05) and out["status"] == "failed"
@@ -50,10 +52,11 @@ def answers(bad):
 
 @known_answer("EV-TST-02")
 def test_tst02_consistent_share_boundary_and_failure():
-    # 1 of 10 prompts inconsistent -> share 0.9, passes at min_consistent 0.9 (>=)
+    # 1 of 10 prompts inconsistent -> share 0.9, within min_consistent 0.9 (>=), but 1 of 10 bounds the inconsistent
+    # share only under 39%: insufficient rather than passed
     one = run("EV-TST-02", answers=answers(1))
     assert one["metrics"]["consistentShare"] == pytest.approx(0.9) and one["metrics"]["inconsistentPrompts"] == 1
-    assert one["status"] == "passed"
+    assert one["status"] == "insufficient"
     assert run("EV-TST-02", {"min_consistent": 0.91}, answers=answers(1))["status"] == "failed"
     two = run("EV-TST-02", answers=answers(2))  # 0.8 < 0.9
     assert two["metrics"]["consistentShare"] == pytest.approx(0.8) and two["status"] == "failed"
@@ -62,7 +65,8 @@ def test_tst02_consistent_share_boundary_and_failure():
 
 # bins of width 0.1. Four rows at 0.25 with two positives: |0.5-0.25| = 0.25. Four at 0.75 with three: |0.75-0.75| = 0.
 # ECE = (4/8)*0.25 + (4/8)*0 = 0.125.
-ECE_ROWS = [[1, 0.25], [1, 0.25], [0, 0.25], [0, 0.25], [1, 0.75], [1, 0.75], [1, 0.75], [0, 0.75]]
+# Three copies (24 rows) keep ECE 0.125; resolving a limit of 0.125 takes at least 23 rows, so 8 rows are insufficient.
+ECE_ROWS = [[1, 0.25], [1, 0.25], [0, 0.25], [0, 0.25], [1, 0.75], [1, 0.75], [1, 0.75], [0, 0.75]] * 3
 
 
 @known_answer("EV-TST-07")
@@ -72,6 +76,8 @@ def test_tst07_ece_by_hand_boundary_and_failure():
     assert out["metrics"]["ece"] == pytest.approx(0.125) and out["status"] == "passed"  # at the limit
     assert run("EV-TST-07", {"max_ece": 0.124}, predictions=d)["status"] == "failed"
     assert run("EV-TST-07", predictions=d)["status"] == "failed"  # default 0.05
+    few = run("EV-TST-07", {"max_ece": 0.125}, predictions=rows_csv(["y_true", "score"], ECE_ROWS[:8]))
+    assert few["metrics"]["ece"] == pytest.approx(0.125) and few["status"] == "insufficient" and "at least 23" in few["summary"]
 
 
 # AUROC = P(ood score > in score) + 0.5 ties. in 1,2,3,4 ; ood 3,5,6,7: 3 beats 1,2 and ties 3 (2.5), 5/6/7 beat all (12) -> 14.5/16.
@@ -87,12 +93,13 @@ def test_tst08_auroc_by_hand_boundary_and_failure():
     assert run("EV-TST-08", {"min_auroc": 0.91}, scores=OOD)["status"] == "failed"
 
 
-# en 8/8 = 1.0, hi 7/8 = 0.875, gap 0.125 (exact in binary). Compared when a language has >= min_rows rows.
+# en 8/8 = 1.0, hi 7/8 = 0.875, gap 0.125 (exact in binary), each repeated 4 times: 32 rows a language.
+# Compared when a language has >= min_rows rows; a min_rows under 30 is raised to 30.
 def langs():
     t = [1, 0] * 4
     en = [[x, x, "en"] for x in t]
     hi = [[x, x, "hi"] for x in t[:7]] + [[1, 0, "hi"]]
-    return rows_csv(["y_true", "y_pred", "language"], en + hi)
+    return rows_csv(["y_true", "y_pred", "language"], (en + hi) * 4)
 
 
 @known_answer("EV-TST-10")
@@ -101,8 +108,10 @@ def test_tst10_gap_by_hand_boundary_and_failure():
     assert out["metrics"]["gap"] == pytest.approx(0.125) and out["metrics"]["best"] == "en" and out["metrics"]["worst"] == "hi"
     assert out["status"] == "passed"  # gap <= limit
     assert run("EV-TST-10", {"max_gap": 0.124, "min_rows": 8}, predictions=langs())["status"] == "failed"
-    skipped = run("EV-TST-10", {"min_rows": 9}, predictions=langs())  # neither language has 9 rows
+    skipped = run("EV-TST-10", {"min_rows": 33}, predictions=langs())  # neither language has 33 rows
     assert skipped["status"] == "insufficient"
+    small = rows_csv(["y_true", "y_pred", "language"], [[1, 1, "en"]] * 8 + [[1, 1, "hi"]] * 8)
+    assert run("EV-TST-10", {"min_rows": 1}, predictions=small)["status"] == "insufficient"  # min_rows 1 is raised to 30
 
 
 # Sorted by confidence the correctness is 1,1,1,1,0,1,0,0,1,0. At coverage 0.5 the top 5 hold 4 right -> 0.8; overall 6/10.
@@ -117,17 +126,20 @@ def test_tst11_selective_accuracy_by_hand_boundary_and_failure():
     out = run("EV-TST-11", {"coverage": 0.5, "min_accuracy": 0.8}, predictions=confident())
     m = out["metrics"]
     assert m["selectiveAccuracy"] == pytest.approx(0.8) and m["overallAccuracy"] == pytest.approx(0.6) and m["answered"] == 5
-    assert out["status"] == "passed"  # at or above
+    assert out["status"] == "insufficient"  # met, but 5 answered records cannot show 80% at 95% confidence
+    one = rows_csv(["y_true", "y_pred", "confidence"], [[1, 1, 0.9]])
+    assert run("EV-TST-11", {"min_accuracy": 0.95}, predictions=one)["status"] == "insufficient"  # 1 of 1 right proves nothing
     assert run("EV-TST-11", {"coverage": 0.5, "min_accuracy": 0.81}, predictions=confident())["status"] == "failed"
     assert out["detail"][0]["accuracy"] == pytest.approx(1.0) and out["detail"][-1]["accuracy"] == pytest.approx(0.6)
 
 
-# Four intersections of 4 records. Selection rates .75 .75 .5 .25 -> gap .5. Labels [1,1,0,0] per slice give TPR 1, 1, .5, 0 -> gap 1.
+# Four intersections of 4 records, each repeated 8 times (32 records, over the floor of 30 that min_slice 4 is raised to).
+# Selection rates .75 .75 .5 .25 -> gap .5. Labels [1,1,0,0] per slice give TPR 1, 1, .5, 0 -> gap 1.
 def slices(with_truth, preds_by_slice=None):
     preds_by_slice = preds_by_slice or [[1, 1, 1, 0], [1, 1, 1, 0], [1, 0, 1, 0], [0, 0, 1, 0]]
     rows = []
     for (g, r), p in zip([("f", "a"), ("f", "b"), ("m", "a"), ("m", "b")], preds_by_slice):
-        rows += [[g, r, p[i], [1, 1, 0, 0][i]] for i in range(4)]
+        rows += [[g, r, p[i], [1, 1, 0, 0][i]] for i in range(4)] * 8
     cols = ["g", "r", "y_pred", "y_true"]
     return rows_csv(cols, rows) if with_truth else rows_csv(cols[:3], [x[:3] for x in rows])
 
@@ -149,18 +161,20 @@ def test_fai03_boundary_gap_equal_to_limit_passes():
     assert run("EV-FAI-03", {**p, "max_gap": 0.49}, decisions=slices(False))["status"] == "failed"
 
 
-# 50 pairs, k flipped: flip rate k/50. Limit 2% -> 1 flip (0.02) passes, 2 flips (0.04) fail.
-def pairs(flips):
-    return rows_csv(["original", "counterfactual"], [[1, 0 if i < flips else 1] for i in range(50)])
+# 50 pairs, k flipped: flip rate k/50. Limit 2% -> 1 flip (0.02) is within it but its 95% upper bound (9.1%) is not, so
+# insufficient; 2 flips (0.04) fail. 0 of 50 bounds the rate only under 5.8%; 0 of 150 under 1.98%, which passes.
+def pairs(flips, n=50):
+    return rows_csv(["original", "counterfactual"], [[1, 0 if i < flips else 1] for i in range(n)])
 
 
 @known_answer("EV-FAI-04")
 def test_fai04_flip_rate_by_hand_boundary_and_failure():
     one = run("EV-FAI-04", pairs=pairs(1))
-    assert one["metrics"]["flipRate"] == pytest.approx(0.02) and one["metrics"]["pairs"] == 50 and one["status"] == "passed"
+    assert one["metrics"]["flipRate"] == pytest.approx(0.02) and one["metrics"]["pairs"] == 50 and one["status"] == "insufficient"
     two = run("EV-FAI-04", pairs=pairs(2))
     assert two["metrics"]["flipRate"] == pytest.approx(0.04) and two["status"] == "failed"
-    assert run("EV-FAI-04", pairs=pairs(0))["status"] == "passed"
+    assert run("EV-FAI-04", pairs=pairs(0))["status"] == "insufficient"
+    assert run("EV-FAI-04", pairs=pairs(0, 150))["status"] == "passed"
 
 
 # Production accuracy 6/8 = 0.75; relative drop vs baseline 1.0 is exactly 0.25.
@@ -251,3 +265,24 @@ def test_tst02_tfidf_not_used_for_exact_repeats():
     # identical answers after case/punctuation normalisation agree without any vector similarity
     d = rows_csv(["prompt", "answer"], [["q", "Pay by July."], ["q", "pay by july"]])
     assert run("EV-TST-02", answers=d)["metrics"]["consistentShare"] == pytest.approx(1.0)
+
+
+@known_answer("EV-TST-02")
+def test_tst02_reversals_and_changed_numbers_disagree_however_similar():
+    # Each pair shares nearly every word, so TF-IDF alone calls it consistent; each still gives a different answer.
+    pairs = [
+        ("q0", "Yes, you can claim the refund online.", "No, you can claim the refund online."),  # yes against no
+        ("q1", "The refund is allowed for this order.", "The refund is not allowed for this order."),  # one negated
+        ("q2", "The fee is 1,000 rupees and is due in 30 days.", "The fee is 1,500 rupees and is due in 30 days."),  # numbers
+        ("q3", "No, the refund isn't allowed.", "The refund is not allowed."),  # both negative: agree
+        ("q4", "Pay 1,000 rupees within 30 days.", "Pay 1000 rupees within 30 days."),  # the same numbers written two ways: agree
+        ("q5", "Paris is the capital.", "Paris is the capital, home to 2 million people."),  # one adds a figure: agree
+        ("q6", "Sure, it works.", "It works, no problem."),  # an idiom is not a negation: agree
+        ("q7", "Right now it is closed.", "No, it is closed."),  # "right now" is no reply word, "No," no negation: agree
+    ]
+    d = rows_csv(["prompt", "answer"], [r for p, a, b in pairs for r in ([p, a], [p, b])])
+    out = run("EV-TST-02", {"similarity": 0.1}, answers=d)
+    assert (out["metrics"]["inconsistentPrompts"], out["metrics"]["contradictedPrompts"]) == (3, 3)
+    assert {r["prompt"]: r["contradiction"] for r in out["detail"]} == {
+        "q0": "yes against no", "q1": "one answer is negated", "q2": "different numbers"}
+    assert out["metrics"]["consistentShare"] == pytest.approx(5 / 8) and out["status"] == "failed"

@@ -119,6 +119,20 @@ def spearman(xs: list[float], ys: list[float]) -> tuple[float, int]:
     return (num / den if den else float("nan")), n
 
 
+def rescaled_abs_pct_errors(log_ratios: list[float]) -> list[float]:
+    """Absolute percent errors after dividing by the method's own median ratio.
+
+    A method with an arbitrary scale constant (the FLOP model's GFLOP/s per
+    watt) has an arbitrary absolute error. Removing each method's median
+    log-ratio first leaves only how consistently it tracks the reference, which
+    is comparable across methods whatever their constants.
+    """
+    if not log_ratios:
+        return []
+    centre = statistics.median(log_ratios)
+    return [abs(math.exp(x - centre) - 1.0) * 100.0 for x in log_ratios]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", required=True, type=Path)
@@ -216,6 +230,11 @@ def main(argv: list[str] | None = None) -> int:
             "mean_log_ratio": (
                 round(statistics.mean(logs), 4)
                 if (logs := [r["log_ratio"] for r in records if r["log_ratio"] is not None])
+                else None
+            ),
+            "median_abs_pct_error_after_median_rescale": (
+                round(statistics.median(rescaled), 2)
+                if (rescaled := rescaled_abs_pct_errors(logs))
                 else None
             ),
         }

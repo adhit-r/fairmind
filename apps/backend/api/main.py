@@ -50,6 +50,8 @@ logger = get_logger("main")
 # Postgres advisory lock keys for the timed sweeps below (any distinct bigints).
 _AUTOPILOT_LOCK = 7_310_001
 _POLICY_ALERT_LOCK = 7_310_002
+_DISCOVERY_LOCK = 7_310_003
+_TASK_REMINDER_LOCK = 7_310_004
 
 
 async def _exclusively(key: int, work) -> bool:
@@ -89,6 +91,19 @@ async def _autopilot_loop(interval: int) -> None:
             logger.warning(f"Autopilot sweep failed: {e}")
 
 
+async def _discovery_loop(interval: int) -> None:
+    """Re-read discovery connectors whose schedule is due, so the inventory keeps watching on its own."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.integrations import sweep
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(_DISCOVERY_LOCK, lambda: sweep(orm_db_manager.SessionLocal))
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Discovery sweep failed: {e}")
+
+
 async def _policy_alert_loop(interval: int) -> None:
     """Re-check published policy rules on a timer and email the owner when one starts failing."""
     from database.connection import db_manager as orm_db_manager
@@ -104,6 +119,23 @@ async def _policy_alert_loop(interval: int) -> None:
             )
         except Exception as e:  # a failed sweep must not stop the next one
             logger.warning(f"Policy alert sweep failed: {e}")
+
+
+async def _task_reminder_loop(interval: int) -> None:
+    """Email people about their tasks due tomorrow or past due, once per due date."""
+    from database.connection import db_manager as orm_db_manager
+    from api.routes.tasks import sweep_task_reminders
+    from src.infrastructure.email.resend_service import email_service
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await _exclusively(
+                _TASK_REMINDER_LOCK,
+                lambda: sweep_task_reminders(orm_db_manager.SessionLocal, email_service.send_task_reminder, settings.frontend_url),
+            )
+        except Exception as e:  # a failed sweep must not stop the next one
+            logger.warning(f"Task reminder sweep failed: {e}")
 
 
 @asynccontextmanager
@@ -186,6 +218,12 @@ async def lifespan(app: FastAPI):
     policy_alerts = None
     if settings.policy_alert_interval_seconds > 0:
         policy_alerts = asyncio.create_task(_policy_alert_loop(settings.policy_alert_interval_seconds))
+    discovery = None
+    if settings.discovery_check_interval_seconds > 0:
+        discovery = asyncio.create_task(_discovery_loop(settings.discovery_check_interval_seconds))
+    task_reminders = None
+    if settings.task_reminder_interval_seconds > 0:
+        task_reminders = asyncio.create_task(_task_reminder_loop(settings.task_reminder_interval_seconds))
     autopilot = None
     if settings.autopilot_interval_seconds > 0:
         autopilot = asyncio.create_task(_autopilot_loop(settings.autopilot_interval_seconds))
@@ -205,6 +243,10 @@ async def lifespan(app: FastAPI):
         policy_alerts.cancel()
     if autopilot:
         autopilot.cancel()
+    if discovery:
+        discovery.cancel()
+    if task_reminders:
+        task_reminders.cancel()
     
     # Close database connections
     try:
@@ -469,9 +511,12 @@ _include_router("api.routes.database", prefix="/api/v1", tags=["database"], attr
 _include_router("api.routes.database", prefix="/api/v1", tags=["main-api"], attr="main_router", required=True)
 _include_router("api.routes.ai_governance", prefix="/api/v1/ai-governance", tags=["ai-governance"], required=True)
 _include_router("api.routes.fairness_runs", prefix="/api/v1/ai-governance", tags=["fairness"], required=False)
+_include_router("api.routes.system_lifecycle", prefix="/api/v1/ai-governance", tags=["lifecycle"], required=True)
 _include_router("api.routes.autopilot", prefix="/api/v1/ai-governance", tags=["autopilot"], required=False)
 _include_router("api.routes.governance_plan", prefix="/api/v1/plan", tags=["plan"], required=False)
 _include_router("api.routes.applicability", prefix="/api/v1/ai-governance", tags=["applicability"], required=False)
+_include_router("api.routes.framework_scope", prefix="/api/v1/ai-governance", tags=["framework-scope"], required=False)
+_include_router("api.routes.internal_audits", prefix="/api/v1/ai-governance", tags=["internal-audits"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/ai-governance", tags=["evidence-packs"], required=True)
 _include_router("api.routes.evidence_packs", prefix="/api/v1/public", tags=["evidence-packs-public"], attr="public_router", required=True)
 _include_router("api.routes.governance_assurance", prefix="/api/v1/ai-governance", tags=["governance-assurance"], required=True)
@@ -611,6 +656,11 @@ else:
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.agent_traces", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.tasks", prefix="/api/v1", tags=["tasks"], required=True)
+_include_router("api.routes.tasks", prefix="/api/v1/public", tags=["tasks"], attr="public_router", required=True)
+_include_router("api.routes.whats_new", prefix="/api/v1", tags=["whats-new"], required=True)
+_include_router("api.routes.whats_new", prefix="/api/v1/public", tags=["whats-new"], attr="public_router", required=True)
 _include_router("api.routes.platform_connections", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.environmental", tags=["environmental"], required=False)
 _include_router("api.routes.settings", prefix="/api/v1", tags=["settings"], required=False)
@@ -625,6 +675,18 @@ _include_router("api.routes.india_compliance", prefix="/api/v1", tags=["india-co
 _include_router("api.routes.llm_judge", prefix="/api/v1", tags=["llm-judge"], required=False)
 _include_router("api.routes.mlops", prefix="/api/v1", tags=["mlops"], required=False)
 _include_router("api.routes.integrations", prefix="/api/v1", tags=["integrations"], required=False)
+_include_router("api.routes.discovery_review", prefix="/api/v1", tags=["discovery-review"], required=False)
+_include_router("api.routes.discovery_review", prefix="/api/v1/public", tags=["owner-check-public"], attr="public_router", required=False)
+_include_router("api.routes.shadow_ai", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.shadow_reading", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.laptop_reports", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.laptop_reports", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.browser_reports", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.browser_reports", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.agent", prefix="/api/v1", tags=["shadow-ai"], required=False)
+_include_router("api.routes.agent", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="public_router")
+_include_router("api.routes.agent", prefix="/api/v1/public", tags=["shadow-ai"], required=False, attr="notifier_router")
+_include_router("api.routes.consent", prefix="/api/v1", tags=["consent"], required=False)
 _include_router("api.routes.monitoring", prefix="/api/v1", tags=["monitoring"], required=False)
 _include_router("api.routes.provenance", prefix="/api/v1/provenance", tags=["provenance"], required=False)
 _include_router("api.routes.reports", tags=["reports"], required=False)
@@ -753,21 +815,6 @@ def root():
         "environment": settings.environment,
         "status": "running",
         "description": settings.api_description,
-        "features": [
-            "Advanced Bias Detection & Fairness Analysis",
-            "Modern LLM Bias Detection (WEAT, SEAT, Minimal Pairs)",
-            "Multimodal Bias Detection (Image, Audio, Video)",
-            "Real-time Monitoring & Alerting",
-            "Model Explainability & Interpretability",
-            "OWASP AI Security Testing",
-            "Model Provenance & Lineage Tracking",
-            "Comprehensive Evaluation Pipeline",
-            "Production-Ready API with Security",
-            "Rate Limiting & Request Monitoring",
-            "Health Checks & System Monitoring",
-            "Error Tracking & Logging",
-            "Automated Testing & Quality Assurance"
-        ],
         "endpoints": {
             "health": "/health",
             "readiness": "/health/ready",
@@ -781,8 +828,8 @@ def root():
 def api_info():
     """API information endpoint"""
     return {
-        "name": "Fairmind ML Service API",
-        "version": "1.0.0",
+        "name": settings.api_title,
+        "version": settings.api_version,
         "description": "Comprehensive AI governance and bias detection API with database support",
         "endpoints": {
             "health": "/health",

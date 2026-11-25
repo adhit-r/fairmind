@@ -2,13 +2,15 @@
 
 <!-- mcp-name: io.github.adhit-r/fairmind -->
 
-An MCP server that lets a coding agent ask FairMind whether an AI system may ship, and run fairness tests on CSVs from your machine. It is a thin layer over the [`fairmind` Python SDK](../sdk/README.md) and talks to the server over stdio.
+An MCP server that lets a coding agent ask FairMind whether an AI system may ship, and run fairness tests on CSVs from your machine, record findings and remediation tasks, and build inspection packs. It is a thin layer over the [`fairmind` Python SDK](../sdk/README.md) and talks to the server over stdio.
 
 ## Tools
 
 | Tool | What it does |
 | --- | --- |
 | `list_systems` | AI systems your key can see, with id, risk tier and lifecycle stage |
+| `get_system` | One AI system: name, owner, risk tier, lifecycle stage and metadata |
+| `register_system` | Registers an AI system (optionally in a given workspace) with the risk tier the user states |
 | `release_gate` | Verdict (`go`, `conditional_go`, `no_go`), confidence, the five checks and the reasons |
 | `clause_map` | The gate read per regulatory clause; optional `frameworks` such as `EUAIA`, `ISO42001` |
 | `run_fairness_test` | Uploads a local CSV, stores the measured result as evidence, returns metrics and the new gate |
@@ -17,8 +19,16 @@ An MCP server that lets a coding agent ask FairMind whether an AI system may shi
 | `list_evaluations` | Searches the evaluation catalogue (drift, leakage, prompt injection, jailbreaks, counterfactual flip rate, agent configuration and more) and says which FairMind can run |
 | `describe_evaluation` | The files and params an evaluation takes, and whether it also runs as a behaviour test against the live system |
 | `run_evaluation` | Runs an evaluation on local files, against the live system (`live`) or on the connected agent platform (`use_connection`); stores the result as measured evidence |
+| `create_evidence_pack` | Builds a hashed inspection pack of chosen systems' evidence and clause maps; `share` also mints a read-only auditor token |
+| `verify_evidence_pack` | Recomputes a pack's manifest hash and each system's evidence chain head, from a local `pack.json`, an auditor link or a pack id |
+| `record_finding` | Records a risk finding (type, severity, description) against a system |
+| `list_findings` | Recorded findings with counts by severity, and a system's remediation tasks |
+| `create_remediation_task` | Opens a remediation task for a system, optionally tied to a finding |
+| `update_remediation_task` | Moves a remediation task to a new status and/or adds notes |
+| `request_release_approval` | Asks for a release decision, or reads where the latest request stands; a person approves or rejects it in FairMind, not this server |
+| `generate_report` | Generates and stores a compliance, bias or governance report snapshot for a system and lists earlier ones |
 
-Each tool returns a compact text summary and the full API response as structured content. `run_evaluation` waits for behaviour tests, which run as background jobs and can take minutes. The evaluation tools act in the key's first organisation; set `FAIRMIND_ORG_ID` to pick another. API failures come back as tool errors carrying the HTTP status and the server's message. `attest_check` writes manual evidence, so the tool tells the agent to use only statements the user gave or confirmed.
+Each tool returns a compact text summary and the full API response as structured content. `run_evaluation` waits for behaviour tests, which run as background jobs and can take minutes. The evaluation tools act in the key's first organisation; set `FAIRMIND_ORG_ID` to pick another. API failures come back as tool errors carrying the HTTP status and the server's message. `attest_check` writes manual evidence, and `record_finding` writes a finding, so the tools tell the agent to use only statements and observations that are real.
 
 ## Install
 

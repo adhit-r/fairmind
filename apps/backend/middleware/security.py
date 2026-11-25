@@ -388,6 +388,12 @@ _PUBLIC_EXACT = {
 }
 _PUBLIC_PREFIXES = ("/health", "/docs/", "/static/", "/api/v1/public/packs/")
 _INVITATION_PREVIEW = re.compile(r"/api/v1/organizations/invitations/[^/]+")
+_OWNER_CHECK = re.compile(r"/api/v1/public/owner-check/[^/]+")
+_LAPTOP_REPORT = "/api/v1/public/laptop-report"
+_BROWSER_REPORT = "/api/v1/public/browser-report"
+_OSQUERY = ("/api/v1/public/osquery/enroll", "/api/v1/public/osquery/config", "/api/v1/public/osquery/log")
+_NOTIFIER = ("/api/v1/public/notifier/enroll", "/api/v1/public/notifier/messages", "/api/v1/public/notifier/ack")
+_TASK_REMINDERS_OFF = "/api/v1/public/task-reminders/unsubscribe"
 
 
 def _is_public_path(path: str) -> bool:
@@ -468,6 +474,30 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Auditor pack links carry their own token; the route checks it.
         if request.method == "GET" and request.url.path.startswith("/api/v1/public/packs/"):
+            return await call_next(request)
+
+        # An owner-check link carries its own token for a person without an account; the route checks it.
+        if request.method in ("GET", "POST") and _OWNER_CHECK.fullmatch(request.url.path):
+            return await call_next(request)
+
+        # A laptop report carries the organisation's ingest token, not a user's; the route checks it.
+        if request.method == "POST" and request.url.path == _LAPTOP_REPORT:
+            return await call_next(request)
+
+        # A browser report carries the organisation's browser token in its body; the route checks it.
+        if request.method == "POST" and request.url.path == _BROWSER_REPORT:
+            return await call_next(request)
+
+        # osquery enrols with the organisation's secret and then uses its own node key; the routes check both.
+        if request.method == "POST" and request.url.path in _OSQUERY:
+            return await call_next(request)
+
+        # The notifier enrols with the organisation's notifier secret and then uses its own key; the routes check both.
+        if request.method in ("GET", "POST") and request.url.path in _NOTIFIER:
+            return await call_next(request)
+
+        # The unsubscribe link in a task reminder is signed for one person; the route checks it.
+        if request.method in ("GET", "POST") and request.url.path == _TASK_REMINDERS_OFF:
             return await call_next(request)
 
         # An invitee previews an invitation before they have an account; accepting needs one.

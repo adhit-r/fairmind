@@ -65,7 +65,29 @@ docker compose up -d --build
 docker compose logs -f backend
 ```
 
-Update: `git pull && docker compose up -d --build`.
+Update: `git pull && docker compose up -d --build`, or let the instance do it (below).
+
+### Automatic deploys
+
+A timer on the instance checks `main` every 5 minutes and, when it has moved since the last good
+deploy, fast-forwards and runs `docker compose up -d --build`. A deploy counts only once the backend
+answers its health check and the backend, frontend and tunnel are all running (within 3 minutes). It pulls rather than being pushed to,
+so the instance still takes no inbound traffic and GitHub holds no key to it. A failed build or
+migration leaves the running containers alone and is tried again on the next run. Install once:
+
+```bash
+cd ~/fairmind/deploy/lightsail
+git rev-parse HEAD > .deployed   # what is running now, so the first run does not rebuild it
+sudo cp systemd/fairmind-deploy.service systemd/fairmind-deploy.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now fairmind-deploy.timer
+```
+
+- What happened: `journalctl -u fairmind-deploy -n 50`
+- Which commit is live: `cat ~/fairmind/deploy/lightsail/.deployed`
+- Deploy now: `sudo systemctl start fairmind-deploy`
+- Pause: `sudo systemctl stop fairmind-deploy.timer` (start it again to resume)
+
+Local edits on the instance stop the fast-forward; the journal says so. Keep changes in git.
 
 Every `up` first runs the `migrate` service (`scripts/setup_db.py`: schema upgrade,
 reference data, then verify). The backend starts only if it succeeds; otherwise the
@@ -94,3 +116,10 @@ Before the first customer signs in, apply the WAF, rate-limit, cache and Access 
 
 - 100 MB request body: larger dataset uploads fail at the edge.
 - 100 s response timeout: longer analyses return 524; run them as background jobs.
+
+## Maintenance page
+
+During a deploy the containers restart for up to a minute. A Cloudflare Worker on
+`app.fairmind.xyz/*` ([maintenance/](maintenance/)) passes every request through and, when the
+app answers 502-530 or not at all, shows browsers a "FairMind is updating" page that reloads
+itself once the app is back. Deploy it from `deploy/lightsail/maintenance` with `npx wrangler deploy`.

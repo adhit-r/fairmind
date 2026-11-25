@@ -159,13 +159,16 @@ button.fm-cel:focus-visible { outline: 2px solid var(--fm-ink); outline-offset: 
 .fm-cel.estimated::before { -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='3' height='3'%3E%3Ccircle cx='1.5' cy='1.5' r='.8'/%3E%3C/svg%3E") 0 0 / 3px 3px; }
 .fm-cel.attested { box-shadow: inset 0 0 0 1px var(--fm-ink); }
 /* Partially satisfies is half filled, not hatched: hatch means attested, and grids can show both legends. */
-.fm-cel.r2 { box-shadow: inset 0 -6px 0 var(--fm-ink), inset 0 0 0 1px var(--fm-ink); }
+.fm-cel.r2, .fm-cel.partial { box-shadow: inset 0 -6px 0 var(--fm-ink), inset 0 0 0 1px var(--fm-ink); }
 .fm-cel.planned,
 .fm-cel.r1 { box-shadow: inset 0 0 0 1px var(--fm-ink); }
 .fm-cel.open { box-shadow: inset 0 0 0 1.5px var(--fm-brand); }
 .fm-cel.fails { background: #fde9ea; box-shadow: inset 0 0 0 1.5px #b4232c; }
 .fm-cel.stale { box-shadow: inset 0 0 0 1.5px #a14d00; }
 .fm-cel.atorg { background: var(--fm-ink3); opacity: 0.55; }
+/* Excluded: declared not applicable, so a quiet struck-through outline rather than a state that asks for work. */
+.fm-cel.excluded { position: relative; box-shadow: inset 0 0 0 1px var(--fm-ink3); }
+.fm-cel.excluded::before { content: ''; position: absolute; inset: 0; margin: auto; width: 70%; height: 1px; background: var(--fm-ink3); transform: rotate(-45deg); }
 
 /* Matrix grid */
 .mx-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 0 18px 10px; font-size: 11px; color: var(--fm-ink3); }
@@ -234,4 +237,21 @@ a.mx-vh:hover { text-decoration: underline; }
 @media (max-width: 767px) {
   .mx-legend { padding-left: 16px; padding-right: 16px; }
   .mx-grid .mx-rq { padding-left: 16px; }
+}
+
+/* Print / Save as PDF for a page marked .fm-print (the inspection pack). Every ancestor of the marked part is laid out
+   as a plain block that grows with its content, and everything beside it (the app's menus and panels) is hidden. */
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+  html, body { background: #fff !important; }
+  body :has(.fm-print) { display: block !important; position: static !important; width: auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; background: #fff !important; }
+  body :has(.fm-print) > :not(:has(.fm-print)):not(.fm-print) { display: none !important; }
+  .fm-pack { font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .fm-pack * { box-shadow: none !important; }
+  .fm-pack .overflow-x-auto { overflow: visible !important; }
+  .fm-pack table { width: 100%; font-size: 8.5pt; }
+  .fm-pack thead { display: table-header-group; }
+  .fm-pack tr { break-inside: avoid; }
+  .fm-pack td, .fm-pack th { overflow-wrap: anywhere; }
+  .fm-pack h2, .fm-pack summary { break-after: avoid; }
 }

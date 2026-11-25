@@ -48,6 +48,8 @@ export interface ControlAssessment {
   applicability: string
   status: string
   owner: string | null
+  /** Why the control is not applicable: its Statement of Applicability entry. */
+  justification?: string | null
   obligation: string | null
   application: string | null
   acceptedEvidenceCount: number | null
@@ -467,7 +469,7 @@ export function useFrameworkAssignmentControls(orgId?: string, assignmentId?: st
 
   const updateAssessment = useCallback(async (
     assessmentId: string,
-    update: Partial<Pick<ControlAssessment, 'applicability' | 'status' | 'owner'>>,
+    update: Partial<Pick<ControlAssessment, 'applicability' | 'status' | 'owner' | 'justification'>>,
   ) => {
     if (!orgId) throw new Error('An organization is required to update a control assessment')
     const assessment = requireResponseScope(

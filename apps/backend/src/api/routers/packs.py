@@ -12,12 +12,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.routes.ai_governance import _ensure_tables, _utc_now_iso
+from api.routes.ai_governance import _ensure_tables, _load_json_value, _utc_now_iso
 from src.application.services import evaluation_results
 from api.routes import llm
 from src.application.services import eval_engines
-from src.application.services.clause_map_service import _catalogue
+from src.application.services.clause_map_service import GATE_CONTROLS, RELATION_RANK, _catalogue
+from src.application.services.fairness_run_service import ATTESTATION_CONFIDENCE, PROVEN_CLASSES, counted_runs, gate_check
 from src.application.services.llm_runtime import grok_cli
+from src.application.services.system_lifecycle_service import drop_superseded, reopened_since
+from src.application.services.system_kinds import system_kind
 from api.routes import pack_catalogue as cat
 from api.routes.pack_catalogue import (
     BUNDLES,
@@ -422,9 +425,19 @@ def list_packs(m: OrgMembership = Depends(_member), db: Session = Depends(get_db
     return [_pack_json(pid, pid in installed) for pid in PACKS]
 
 
-def _org_coverage(db: Session, org_id: str, installed: List[str]) -> Coverage:
-    """What the organisation has now: workflows of installed packs, plus evaluations with a passing result."""
-    return Coverage(installed, tested_by=evaluation_results.passed(evaluation_results.results(db, org_id)))
+def _org_coverage(db: Session, org_id: str, installed: List[str], res: Optional[dict] = None) -> Coverage:
+    """What the organisation has done: workflows with a done run the reviewer did not reject (the rule _file_gate_evidence
+    uses), plus evaluations with a passing result. Any such run counts, so a re-run in progress keeps the coverage."""
+    res = evaluation_results.results(db, org_id) if res is None else res
+    done = db.execute(
+        text(
+            "SELECT DISTINCT r.workflow_id FROM workflow_runs r "
+            "LEFT JOIN governance_approval_requests a ON a.id = r.approval_request_id "
+            "WHERE r.org_id = :org AND r.status = 'done' AND (a.status IS NULL OR a.status <> 'rejected')"
+        ),
+        {"org": org_id},
+    ).scalars().all()
+    return Coverage(installed, tested_by=evaluation_results.passed(res), done_workflows=done)
 
 
 def _evaluation_json(ev, installed: set, res: dict) -> dict:
@@ -442,10 +455,13 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
         "pack": _pack_ref(pack_id),
         "engine": ev.engine,
         "runnable": ev.id in eval_engines.REGISTRY,  # FairMind computes it from uploaded files
+        "judgeNotValidated": ev.id in eval_engines.JUDGED,  # a judge model reads its verdicts, and no judge is validated yet
         "codeLocation": ev.codeLocation,
+        "commonControl": ev.commonControl,
+        # every requirement the evaluation counts toward (clause_map_service.reach), strongest relation first
         "tests": [
-            {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title}
-            for k in ev.tests
+            {"key": k, "framework": REQUIREMENTS[k].framework, "control": REQUIREMENTS[k].control, "title": REQUIREMENTS[k].title, "relation": r}
+            for k, r in sorted(cat.EVALUATION_LINKS[ev.id].items(), key=lambda kr: (RELATION_RANK[kr[1]], kr[0]))
         ],
         "installed": pack_id in installed,
         # None when FairMind does not read this evaluation's results yet; else its status and latest result per system.
@@ -453,11 +469,22 @@ def _evaluation_json(ev, installed: set, res: dict) -> dict:
     }
 
 
+def _for_system(db: Session, org_id: str, system_id: Optional[str]):
+    """With ?system=, a function adding fit and ways to an evaluation's json; else one that leaves it as it is."""
+    if not system_id:
+        return lambda ev_id, out: out
+    from api.routes.evaluation_runs import fit_and_ways, system_setup  # evaluation_runs imports this module
+
+    setup = system_setup(db, org_id, system_id)
+    return lambda ev_id, out: {**out, **fit_and_ways(ev_id, setup)}
+
+
 @router.get("/evaluations")
 def list_evaluations(
     pillar: Optional[str] = Query(default=None),
     engine: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
+    system: Optional[str] = Query(default=None),
     m: OrgMembership = Depends(_member),
     db: Session = Depends(get_db),
 ):
@@ -465,8 +492,9 @@ def list_evaluations(
     installed = set(_installed_ids(db, m.org_id))
     res = evaluation_results.results(db, m.org_id)
     needle = q.strip().lower() if q else ""
+    add = _for_system(db, m.org_id, system)
     return [
-        _evaluation_json(ev, installed, res)
+        add(ev.id, _evaluation_json(ev, installed, res))
         for ev in EVALUATIONS.values()
         if (not pillar or ev.pillar == pillar.upper())
         and (not engine or ev.engine == engine)
@@ -475,12 +503,15 @@ def list_evaluations(
 
 
 @router.get("/evaluations/{evaluation_id}")
-def get_evaluation(evaluation_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_evaluation(
+    evaluation_id: str, system: Optional[str] = Query(default=None), m: OrgMembership = Depends(_member), db: Session = Depends(get_db)
+):
     ev = EVALUATIONS.get(evaluation_id)
     if not ev:
         raise HTTPException(status_code=404, detail="Evaluation not found")
     _ensure_tables(db)
-    return _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
+    out = _evaluation_json(ev, set(_installed_ids(db, m.org_id)), evaluation_results.results(db, m.org_id))
+    return _for_system(db, m.org_id, system)(ev.id, out)
 
 
 @router.get("/library/{pack_id}")
@@ -608,14 +639,28 @@ def install_framework(framework_key: str, m: OrgMembership = Depends(_manager), 
 
 
 @router.get("/journeys/{framework_key}")
-def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+def get_journey(
+    framework_key: str,
+    system: Optional[str] = Query(default=None),
+    m: OrgMembership = Depends(_member),
+    db: Session = Depends(get_db),
+):
     fw = FRAMEWORKS.get(framework_key)
     if not fw:
         raise HTTPException(status_code=404, detail="Journey not found")
     _ensure_tables(db)
     ids = _installed_ids(db, m.org_id)
     res = evaluation_results.results(db, m.org_id)
-    installed, org = set(ids), Coverage(ids, tested_by=evaluation_results.passed(res))
+    installed, org = set(ids), _org_coverage(db, m.org_id, ids, res)
+
+    def result(eid: str) -> Optional[str]:
+        """The organisation-wide status, or with ?system= that system's own latest result."""
+        if eid not in res:
+            return None
+        if not system:
+            return res[eid]["status"]
+        return (evaluation_results.system_result(res, eid, system) or {"status": "not_run"})["status"]
+
     keys = FRAMEWORK_KEYS[framework_key]
     latest = _latest_runs(db, m.org_id, {w for k in keys for w, _ in cat.REQUIREMENT_WORKFLOWS.get(k, [])})
     groups: Dict[str, list] = {}
@@ -647,9 +692,10 @@ def get_journey(framework_key: str, m: OrgMembership = Depends(_member), db: Ses
                         "engine": EVALUATIONS[eid].engine,
                         "pack": cat.EVALUATION_PACK[eid],
                         "installed": cat.EVALUATION_PACK[eid] in installed,
-                        "result": res[eid]["status"] if eid in res else None,
+                        "result": result(eid),
+                        "relation": relation,
                     }
-                    for eid in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
+                    for eid, relation in cat.REQUIREMENT_EVALUATIONS.get(req.key, [])
                 ],
             }
         )
@@ -1004,6 +1050,7 @@ def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -
     if step_id is None:
         status, finished_at = "done", _utc_now_iso()
         _append(db, run["id"], "run.completed", None, {})
+        _file_gate_evidence(db, run, wf, approval_request_id, user_id)
     db.execute(
         text(
             "UPDATE workflow_runs SET status = :status, current_step = :current_step, finished_at = :finished_at, "
@@ -1016,6 +1063,59 @@ def _advance(db: Session, run, step_id: Optional[str], user_id: Optional[str]) -
             "approval_request_id": approval_request_id,
             "now": _utc_now_iso(),
             "id": run["id"],
+        },
+    )
+
+
+# Gate checks a completed workflow run attests, by the workflow's common control. Fairness needs a measured run,
+# and an environmental record would hide the assessment from the gate, so only these three take a run.
+RUN_EVIDENCE = {control: k for control, k in GATE_CONTROLS.items() if k in ("data_governance", "human_oversight", "monitoring")}
+
+
+def _file_gate_evidence(db: Session, run, wf, approval_request_id: Optional[str], user_id: Optional[str]) -> None:
+    """File a completed run as attested evidence for its gate check on its system, which release_gate reads by evidence type.
+
+    Skipped when the gate rejected the run, or when the check's newest record (as release_gate's gate_check counts it,
+    measured evaluation runs included) is measured: a newer attestation would hide it.
+    """
+    check = RUN_EVIDENCE.get(wf.commonControl or "")
+    if not check or not run["ai_system_id"]:
+        return
+    if approval_request_id and db.execute(
+        text("SELECT status FROM governance_approval_requests WHERE id = :id"), {"id": approval_request_id}
+    ).scalar() == "rejected":
+        return
+    rows = db.execute(
+        text("SELECT evidence_type, content_json, metadata_json, created_at FROM governance_evidence WHERE system_id = :sys ORDER BY created_at DESC"),
+        {"sys": run["ai_system_id"]},
+    ).fetchall()
+    records = [{"type": t, "content": _load_json_value(c, {}), "metadata": _load_json_value(meta, {}), "createdAt": at} for t, c, meta, at in rows]
+    # only what the gate still counts: a record a material change superseded must not block this attestation
+    records = drop_superseded(records, {k: at for k, (at, _) in reopened_since(db, run["ai_system_id"]).items()})
+    newest = next((r for r in counted_runs(records) if gate_check(r) == check), None)
+    if newest and str(newest["metadata"].get("provenance_class") or "").lower() in PROVEN_CLASSES:
+        return
+    head = db.execute(
+        text("SELECT hash FROM workflow_run_events WHERE run_id = :id ORDER BY seq DESC LIMIT 1"), {"id": run["id"]}
+    ).scalar()
+    now = _utc_now_iso()
+    db.execute(
+        text(
+            "INSERT INTO governance_evidence "
+            "(id, system_id, org_id, evidence_type, title, source, content_json, confidence, status, uploaded_by, metadata_json, captured_at, created_at) "
+            "VALUES (:id, :sys, :org, :type, :title, 'fairmind.workflows', :content, :confidence, 'collected', :by, :metadata, :now, :now)"
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "sys": run["ai_system_id"],
+            "org": run["org_id"],
+            "type": check,
+            "title": f"{wf.name}: completed",
+            "content": json.dumps({"runId": run["id"], "workflowId": wf.id, "sealedHeadHash": head}),
+            "confidence": ATTESTATION_CONFIDENCE,
+            "by": user_id,
+            "metadata": json.dumps({"provenance_class": "manual", "workflowRunId": run["id"], "computed_at": now}),
+            "now": now,
         },
     )
 
@@ -1099,12 +1199,12 @@ def _agent_facts(db: Session, run, step: Step, labels: List[str]) -> dict:
     if system_id:
         row = db.execute(
             text(
-                "SELECT name, system_type, version, owner, risk_tier, lifecycle_stage, framework "
+                "SELECT name, version, owner, risk_tier, lifecycle_stage, framework "
                 "FROM governance_ai_systems WHERE id = :id AND org_id = :org"
             ),
             {"id": system_id, "org": org_id},
         ).mappings().fetchone()
-        system = dict(row) if row else None
+        system = {**row, "kind": system_kind(db, system_id)} if row else None
     evidence = db.execute(
         text(
             "SELECT e.evidence_type, e.title, e.status, e.source, e.created_at, s.name AS system "
@@ -1114,9 +1214,13 @@ def _agent_facts(db: Session, run, step: Step, labels: List[str]) -> dict:
         {"org": org_id, "sys": system_id},
     ).mappings().all()
     evaluations = []
-    for ev_id, res in evaluation_results.results(db, org_id).items():
-        mine = [x for x in res["systems"] if x["systemId"] == system_id] if system_id else []
-        status, detail = (mine[0]["status"], mine[0]["detail"]) if mine else (res["status"], None)
+    results = evaluation_results.results(db, org_id)
+    for ev_id, res in results.items():
+        if system_id:  # a system's run hears only that system's results, never another system's pass
+            mine = evaluation_results.system_result(results, ev_id, system_id) or {"status": "not_run", "detail": None}
+            status, detail = mine["status"], mine["detail"]
+        else:
+            status, detail = res["status"], None
         if status != "not_run":
             evaluations.append({"name": EVALUATIONS[ev_id].name, "status": status, "detail": detail})
     titles = {s.id: s.title for s in _run_steps(db, run)}
