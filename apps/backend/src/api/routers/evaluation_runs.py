@@ -343,7 +343,7 @@ async def create_run(
     }
     evidence_id = _store_run(db, m.org_id, m.user_id, system_id, evaluation_id, outcome)
     row = db.execute(text(_RUN_COLS + "WHERE e.id = :id"), {"id": evidence_id}).mappings().fetchone()
-    return _with_reviews(db, _run_json(row, full=True))
+    return _with_reviews(db, _run_json(row, full=True), m)
 
 
 def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluation_id: str, outcome: Dict[str, Any]) -> str:
@@ -700,7 +700,7 @@ def get_run(evidence_id: str, m: OrgMembership = Depends(_member), db: Session =
     ).mappings().fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Run not found")
-    return _with_reviews(db, _run_json(row, full=True))
+    return _with_reviews(db, _run_json(row, full=True), m)
 
 
 def _reviews(db: Session, evidence_id: str) -> List[Dict[str, Any]]:
@@ -711,10 +711,24 @@ def _reviews(db: Session, evidence_id: str) -> List[Dict[str, Any]]:
     return [{"item": r["item"], "decision": r["decision"], "note": r["note"], "by": r["reviewed_by"], "at": r["created_at"]} for r in rows]
 
 
-def _with_reviews(db: Session, out: Dict[str, Any]) -> Dict[str, Any]:
-    """A run awaiting review lists each person's decision so far and the choices a reviewer has."""
+def _review_superseded(db: Session, system_id: str, evaluation_id: str, created_at: str) -> bool:
+    return db.execute(
+        text("SELECT 1 FROM governance_evidence WHERE system_id = :sys AND evidence_type = :type "
+             "AND content_json LIKE :tag AND created_at > :at LIMIT 1"),
+        {"sys": system_id, "type": EVIDENCE_TYPE, "tag": f'%"evaluationId": "{evaluation_id}"%', "at": created_at},
+    ).first() is not None
+
+
+def _with_reviews(db: Session, out: Dict[str, Any], membership: OrgMembership) -> Dict[str, Any]:
     if out.get("review") and not out.get("reviewOf"):
-        out["review"] = {**out["review"], "decisions": _reviews(db, out["id"]), "choices": list(REVIEW_DECISIONS.get(out["evaluationId"], {}))}
+        choices = REVIEW_DECISIONS.get(out["evaluationId"], {})
+        state = "read_only"
+        if out["status"] == "insufficient" and choices:
+            if _review_superseded(db, out["systemId"], out["evaluationId"], out["createdAt"]):
+                state = "superseded"
+            elif GovernanceAssuranceService.may_mutate(membership):
+                state = "ready"
+        out["review"] = {**out["review"], "decisions": _reviews(db, out["id"]), "choices": list(choices), "state": state}
     return out
 
 
@@ -741,11 +755,7 @@ def review_item(evidence_id: str, body: ReviewBody, m: OrgMembership = Depends(_
     evaluation_id, review = content.get("evaluationId"), content.get("review")
     if not review or content.get("reviewOf") or content.get("status") != "insufficient" or evaluation_id not in REVIEW_DECISIONS:
         raise HTTPException(status_code=409, detail="This run has nothing waiting for review")
-    newer = db.execute(
-        text("SELECT 1 FROM governance_evidence WHERE system_id = :sys AND evidence_type = :type AND content_json LIKE :tag AND created_at > :at LIMIT 1"),
-        {"sys": row["system_id"], "type": EVIDENCE_TYPE, "tag": f'%"evaluationId": "{evaluation_id}"%', "at": row["created_at"]},
-    ).first()
-    if newer:  # a run that replaced this one, or the verdict its reviews already reached
+    if _review_superseded(db, row["system_id"], evaluation_id, row["created_at"]):
         raise HTTPException(status_code=409, detail="A newer run of this evaluation stands for the system; review that one")
     items = [i["item"] for i in review["items"]]
     if body.item not in items:

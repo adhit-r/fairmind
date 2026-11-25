@@ -592,6 +592,7 @@ export interface EngineRun {
     items: Array<{ item: string; label: string }>
     decisions?: Array<{ item: string; decision: string; note: string; by: string; at: string }>
     choices?: string[]
+    state?: 'ready' | 'read_only' | 'superseded'
   } | null
   /** Set on the run that stores the verdict once every flagged item of the run it names was reviewed. */
   reviewOf?: string | null

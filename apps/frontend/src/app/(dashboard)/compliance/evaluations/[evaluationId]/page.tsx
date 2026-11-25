@@ -151,8 +151,9 @@ function ReviewList({ run, onReviewed }: { run: EngineRun; onReviewed: (run: Eng
   const [error, setError] = useState<string | null>(null)
   const open = items.filter((i) => !latest.has(i.item))
   const chosen = item ?? open[0]?.item
+  const state = run.review?.state
   async function save() {
-    if (!chosen || !decision || !note.trim()) return
+    if (state !== 'ready' || !chosen || !decision || !note.trim()) return
     setBusy(true)
     setError(null)
     const res = await reviewRunItem(run.id, chosen, decision, note.trim())
@@ -178,15 +179,23 @@ function ReviewList({ run, onReviewed }: { run: EngineRun; onReviewed: (run: Eng
           )
         })}
       </ul>
-      {error && <Banner status="error" title="Review not saved" description={error} />}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Selector label="Item" options={items.map((i) => ({ value: i.item, label: `${i.item}${latest.has(i.item) ? ' (reviewed)' : ''}` }))} value={chosen} onChange={setItem} />
-        <Selector label="Decision" placeholder="Choose a decision" options={choices.map((c) => ({ value: c, label: DECISION_LABEL[c] ?? c }))} value={decision} onChange={setDecision} />
-      </div>
-      <TextArea label="Note" rows={2} value={note} onChange={(v) => setNote(v)} description="What you checked; kept with the run as evidence, under your name." />
-      <div>
-        <Button label="Save review" variant="primary" isDisabled={!chosen || !decision || !note.trim() || busy} isLoading={busy} onClick={() => void save()} />
-      </div>
+      {state === 'ready' ? (
+        <>
+          {error && <Banner status="error" title="Review not saved" description={error} />}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Selector label="Item" options={items.map((i) => ({ value: i.item, label: `${i.item}${latest.has(i.item) ? ' (reviewed)' : ''}` }))} value={chosen} onChange={setItem} />
+            <Selector label="Decision" placeholder="Choose a decision" options={choices.map((c) => ({ value: c, label: DECISION_LABEL[c] ?? c }))} value={decision} onChange={setDecision} />
+          </div>
+          <TextArea label="Note" rows={2} value={note} onChange={(v) => setNote(v)} description="What you checked; kept with the run as evidence, under your name." />
+          <div>
+            <Button label="Save review" variant="primary" isDisabled={!chosen || !decision || !note.trim() || busy} isLoading={busy} onClick={() => void save()} />
+          </div>
+        </>
+      ) : (
+        <p className={`m-0 text-sm ${MUTED}`}>
+          {state === 'superseded' ? 'This run was superseded. Open the latest result under Runs.' : 'You have read-only access to this review.'}
+        </p>
+      )}
     </section>
   )
 }

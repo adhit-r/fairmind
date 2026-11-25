@@ -24,6 +24,15 @@ sys.path[:0] = [str(BACKEND), str(BACKEND / "src" / "infrastructure" / "db")]
 import psycopg2  # noqa: E402
 from sqlalchemy import create_engine, inspect, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
+from config.migration_integrity import (  # noqa: E402
+    FROZEN_EVALUATION_REVIEW_MIGRATION,
+    FROZEN_POSTGRESQL_EVALUATION_REVIEW_CATALOGS,
+    MigrationIntegrityError,
+    postgresql_runtime_search_path,
+    verify_bundled_migration_checksums,
+    verify_postgresql_assurance_catalog,
+    verify_postgresql_migration_ledger,
+)
 
 MIGRATIONS = BACKEND / "migrations"
 AIUC_WORKBOOK = BACKEND / "reference_data" / "frameworks" / "aiuc-1-april-2026.xlsx"
@@ -76,7 +85,6 @@ ALWAYS = (
     "017_org_ai_providers.sql",
     "028_framework_scope.sql",
     "029_internal_audits.sql",
-    "033_evaluation_reviews.sql",
 )
 
 
@@ -158,6 +166,46 @@ def apply_always(url: str) -> None:
                 print(f"migrations: applied {name}")
     finally:
         conn.close()
+    engine = create_engine(url)
+    try:
+        apply_evaluation_review_migration(engine)
+    finally:
+        engine.dispose()
+
+
+def _verify_evaluation_review_catalog(connection, schema: str) -> None:
+    connection.execute(
+        text("SELECT pg_catalog.set_config('search_path', :path, true)"),
+        {"path": postgresql_runtime_search_path(schema)},
+    )
+    verify_postgresql_assurance_catalog(
+        connection, trusted_schema=schema, frozen_by_major=FROZEN_POSTGRESQL_EVALUATION_REVIEW_CATALOGS,
+    )
+
+
+def apply_evaluation_review_migration(engine) -> None:
+    migration = FROZEN_EVALUATION_REVIEW_MIGRATION
+    verify_bundled_migration_checksums(expected=(migration,))
+    with engine.begin() as connection:
+        schema = connection.execute(text("SELECT pg_catalog.current_schema()")).scalar_one()
+        ledger = f"{connection.dialect.identifier_preparer.quote_schema(schema)}.fairmind_operator_migration_ledger"
+        connection.exec_driver_sql(f"LOCK TABLE {ledger} IN SHARE ROW EXCLUSIVE MODE")
+        existing = connection.execute(
+            text(f"SELECT migration_checksum FROM {ledger} WHERE migration_key = :key"),
+            {"key": migration.ledger_key},
+        ).scalar_one_or_none()
+        if existing is not None and existing != migration.checksum:
+            raise MigrationIntegrityError(f"{migration.ledger_key} checksum drift")
+        if existing is None:
+            with connection.connection.cursor() as cursor:
+                cursor.execute(migration.source_path.read_text(encoding="utf-8"))
+        _verify_evaluation_review_catalog(connection, schema)
+        if existing is None:
+            connection.execute(
+                text(f"INSERT INTO {ledger} (migration_key, migration_checksum) VALUES (:key, :checksum)"),
+                {"key": migration.ledger_key, "checksum": migration.checksum},
+            )
+    print(f"migrations: verified {migration.source_path.name}")
 
 
 def add_orm_tables_and_columns(engine) -> None:
@@ -223,11 +271,14 @@ def verify(engine) -> int:
                 "WHERE v.framework_key = :key AND v.status = 'active'"
             ), {"key": key}).scalar() if "governance_control_definitions" in existing else 0
     problems += [f"{key} controls not loaded" for key, n in counts.items() if not n]
-    from config.migration_integrity import MigrationIntegrityError, verify_postgresql_migration_ledger
-
     with engine.connect() as conn:
         try:
-            verify_postgresql_migration_ledger(conn, trusted_schema=conn.execute(text("SELECT current_schema()")).scalar())
+            schema = conn.execute(text("SELECT current_schema()")).scalar_one()
+            verify_postgresql_migration_ledger(conn, trusted_schema=schema)
+            review_migration = (FROZEN_EVALUATION_REVIEW_MIGRATION,)
+            verify_bundled_migration_checksums(expected=review_migration)
+            verify_postgresql_migration_ledger(conn, trusted_schema=schema, expected=review_migration)
+            _verify_evaluation_review_catalog(conn, schema)
         except MigrationIntegrityError as error:
             problems.append(f"migration ledger: {error}")
     for p in problems:

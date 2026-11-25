@@ -16,6 +16,15 @@ CREATE TABLE IF NOT EXISTS governance_evaluation_reviews (
     reviewed_by TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- The ORM created these columns as unrestricted varchar in earlier installs.
+ALTER TABLE governance_evaluation_reviews
+    ALTER COLUMN id TYPE TEXT,
+    ALTER COLUMN org_id TYPE TEXT,
+    ALTER COLUMN evidence_id TYPE TEXT,
+    ALTER COLUMN reviewed_by TYPE TEXT,
+    ALTER COLUMN created_at TYPE TEXT;
+
 CREATE INDEX IF NOT EXISTS ix_governance_evaluation_reviews_org_id ON governance_evaluation_reviews(org_id);
 CREATE INDEX IF NOT EXISTS ix_governance_evaluation_reviews_evidence_id ON governance_evaluation_reviews(evidence_id);
 
@@ -28,6 +37,16 @@ BEGIN
         USING ERRCODE = '55000';
 END;
 $function$;
+
+DO $review_function_path$
+BEGIN
+    EXECUTE pg_catalog.format(
+        'ALTER FUNCTION %I.reject_governance_evaluation_review_mutation() SET search_path TO pg_catalog, %I, pg_temp',
+        pg_catalog.current_schema(), pg_catalog.current_schema()
+    );
+END;
+$review_function_path$;
+REVOKE EXECUTE ON FUNCTION reject_governance_evaluation_review_mutation() FROM PUBLIC;
 
 DROP TRIGGER IF EXISTS governance_evaluation_reviews_no_update ON governance_evaluation_reviews;
 CREATE TRIGGER governance_evaluation_reviews_no_update
