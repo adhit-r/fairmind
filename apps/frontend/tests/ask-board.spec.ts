@@ -134,4 +134,24 @@ test.describe('Ask FairMind board', () => {
     await expect(page.getByText(/That system could not be loaded/)).toBeVisible()
     await expect(page.getByRole('region', { name: 'System history' })).toHaveCount(0)
   })
+
+  test('the trend draws one bar per week from the failed-run counts', async ({ page }) => {
+    const starts = ['2026-10-05', '2026-10-12', '2026-10-19', '2026-10-26', '2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23']
+    const weeks = [2, 0, 1, 3, 0, 0, 4, 1].map((failed, i) => ({ weekStart: starts[i], failed }))
+    await asking(page, 'root = Board([k])\nk = FailedRunsTrend()', [], async (p) => {
+      await p.route(/\/api\/v1\/ai-governance\/estate\/failed-runs(\?|$)/, (route) => json(route, weeks))
+    })
+    const chart = page.getByRole('region', { name: 'Failed runs by week' })
+    await expect(chart.getByRole('img')).toHaveAttribute('aria-label', 'Failed runs per week: 2, 0, 1, 3, 0, 0, 4, 1')
+    await expect(chart.locator('time')).toHaveCount(8)
+    await expect(chart.getByText('No run failed')).toHaveCount(0)
+  })
+
+  test('the trend says so when nothing failed', async ({ page }) => {
+    const weeks = Array.from({ length: 8 }, (_, i) => ({ weekStart: `2026-11-${String(1 + i).padStart(2, '0')}`, failed: 0 }))
+    await asking(page, 'root = Board([k])\nk = FailedRunsTrend()', [], async (p) => {
+      await p.route(/\/api\/v1\/ai-governance\/estate\/failed-runs(\?|$)/, (route) => json(route, weeks))
+    })
+    await expect(page.getByText('No run failed in these eight weeks.')).toBeVisible()
+  })
 })

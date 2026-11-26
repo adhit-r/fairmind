@@ -150,3 +150,37 @@ def test_a_framework_chosen_in_the_plan_is_followed_and_unconfirmed_systems_inhe
     detail = client.get(f"{AIG}/frameworks/ISO42001/systems").json()
     assert detail["followedByPlan"] is True and detail["inherited"] == 2 and detail["notInScope"] == 1
     assert {s["id"] for s in detail["systems"]} == {open_a, open_b}
+
+
+def _evidence(sid: str, kind: str, content: dict, days_ago: int, source: str = "upload") -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from database.connection import db_manager
+
+    at = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+    with db_manager.SessionLocal() as session:
+        session.execute(
+            sql("INSERT INTO governance_evidence (id, system_id, evidence_type, source, content_json, created_at) VALUES (:id, :sid, :kind, :src, :c, :at)"),
+            {"id": uuid.uuid4().hex, "sid": sid, "kind": kind, "src": source, "c": json.dumps(content), "at": at},
+        )
+        session.commit()
+
+
+def test_failed_runs_by_week_count_only_failures_in_my_org():
+    mine, theirs = _client(), _client()
+    sid, other = _system(mine, "Lending", "high"), _system(theirs, "Elsewhere", "low")
+    _evidence(sid, "evaluation_run", {"status": "failed"}, 0)
+    _evidence(sid, "evaluation_run", {"status": "passed"}, 0)
+    _evidence(sid, "evaluation_run", {"status": "insufficient"}, 0)
+    _evidence(sid, "fairness_test", {"all_checks_pass": False}, 1)
+    _evidence(sid, "monitoring", {"all_checks_pass": False}, 21, source="fairmind.monitoring")
+    _evidence(sid, "monitoring", {"all_checks_pass": False}, 21, source="upload")  # not a FairMind monitoring run
+    _evidence(sid, "evaluation_run", {"status": "failed"}, 400)  # older than the eight weeks
+    _evidence(other, "evaluation_run", {"status": "failed"}, 0)
+
+    rows = mine.get(f"{AIG}/estate/failed-runs").json()
+    assert len(rows) == 8 and [r["weekStart"] for r in rows] == sorted(r["weekStart"] for r in rows)
+    assert all(set(r) == {"weekStart", "failed"} for r in rows)
+    assert sum(r["failed"] for r in rows) == 3  # this week's two and the monitoring run three weeks back
+    assert rows[-1]["failed"] >= 1 and rows[-4]["failed"] >= 1
+    assert sum(r["failed"] for r in theirs.get(f"{AIG}/estate/failed-runs").json()) == 1
