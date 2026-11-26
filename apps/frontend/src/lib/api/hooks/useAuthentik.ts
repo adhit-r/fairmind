@@ -88,7 +88,7 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
   const redirectUri =
     options.redirectUri ||
     (typeof window !== "undefined"
-      ? `${window.location.origin}/auth/callback`
+      ? `${window.location.origin}/callback`
       : process.env.NEXT_PUBLIC_AUTHENTIK_REDIRECT_URI);
 
   if (!clientId || !authentikUrl) {
@@ -153,7 +153,7 @@ export function useAuthentik(options: UseAuthentikOptions = {}) {
    * Handle OAuth2 callback
    * Exchanges authorization code for tokens
    *
-   * Should be called from /auth/callback page
+   * Should be called from /callback page
    */
   const handleCallback = useCallback(
     async (code: string, state: string) => {

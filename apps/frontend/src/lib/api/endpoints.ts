@@ -88,6 +88,8 @@ export const API_ENDPOINTS = {
   // AI Governance
   aiGovernance: {
     policies: (orgId: string) => `/api/v1/ai-governance/organizations/${orgId}/policies`,
+    policyGate: (orgId: string, systemId: string) =>
+      `${API_ENDPOINTS.aiGovernance.policies(orgId)}/gate/${encodeURIComponent(systemId)}/latest`,
     complianceFrameworks: '/api/v1/ai-governance/compliance/frameworks',
     lifecycleSummary: (systemId: string) => `/api/v1/ai-governance/lifecycle/${systemId}/summary`,
     evidenceCollectV2: '/api/v1/ai-governance/evidence/collect-v2',
@@ -220,6 +222,7 @@ export const API_ENDPOINTS = {
     systemTarget: (systemId: string) => `/api/v1/packs/ai-systems/${systemId}/target`,
     systemTargetTest: (systemId: string) => `/api/v1/packs/ai-systems/${systemId}/target/test`,
     workflow: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}`,
+    workflowVersions: (workflowId: string) => `/api/v1/packs/workflows/${encodeURIComponent(workflowId)}/versions`,
     startRun: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/runs`,
     draft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft`,
     publishDraft: (workflowId: string) => `/api/v1/packs/workflows/${workflowId}/draft/publish`,
@@ -229,6 +232,8 @@ export const API_ENDPOINTS = {
     decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
     agentStep: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/agent`,
     ask: '/api/v1/packs/ask',
+    boards: '/api/v1/packs/boards',
+    board: (id: string) => `/api/v1/packs/boards/${encodeURIComponent(id)}`,
     aiProviders: '/api/v1/packs/ai-providers',
     aiProvider: '/api/v1/packs/ai-provider',
     aiProviderTest: '/api/v1/packs/ai-provider/test',

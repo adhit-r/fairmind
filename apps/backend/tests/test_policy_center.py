@@ -1,6 +1,8 @@
 """Org AI policies: lifecycle, policy-as-code enforcement, distribution, framework coverage."""
 
-from database.governance_models import GovernanceApprovalRequest, GovernanceApprovalWorkflow, GovernanceAISystem
+from sqlalchemy import func, select
+
+from database.governance_models import GovernanceApprovalRequest, GovernanceApprovalWorkflow, GovernanceAISystem, OrgPolicyEvaluation
 from src.application.services.framework_catalog_service import FrameworkCatalogService
 from src.application.services.policy_service import evaluate_rule, validate_rules
 from tests.test_framework_catalog_service import OECD_PRINCIPLES
@@ -122,6 +124,64 @@ def test_policy_lifecycle_enforcement_distribution_and_coverage(assurance_client
     assert client.get(url).status_code == 403
     assert client.get(f"/api/v1/ai-governance/organizations/{ORG_B}/policies/{policy['id']}").status_code == 404
     assert client.get(f"/api/v1/ai-governance/organizations/{ORG_B}/policies/gate/system-a").status_code == 404
+
+
+def test_latest_policy_gate_reads_the_stored_run_without_recording(assurance_client):
+    client, session_factory, _ = assurance_client
+    with session_factory() as session:
+        _seed_org(session, ORG_A, USER_A, role="admin")
+        _seed_catalog_and_system(session)
+        session.execute(
+            GovernanceAISystem.__table__.update().where(GovernanceAISystem.__table__.c.id == "system-a").values(risk_tier="high")
+        )
+        session.commit()
+
+    created = client.post(BASE, json={"name": "AI use policy", "body": "We govern AI.", "rules": [APPROVAL_RULE]})
+    assert created.status_code == 201, created.text
+    policy = created.json()
+    url = f"{BASE}/{policy['id']}"
+    for action in ("submit", "approve", "publish"):
+        assert client.post(f"{url}/actions", json={"action": action}).status_code == 200, action
+
+    def stored_rows() -> int:
+        with session_factory() as session:
+            return session.execute(select(func.count()).select_from(OrgPolicyEvaluation.__table__)).scalar_one()
+
+    # The live gate records a run: the high-risk system has no approval.
+    gate = client.get(f"{BASE}/gate/system-a").json()
+    assert gate["allowed"] is False and gate["blocking"][0]["ruleId"] == "high-risk-approval"
+    assert stored_rows() > 0
+    before = stored_rows()
+
+    latest = client.get(f"{BASE}/gate/system-a/latest")
+    assert latest.status_code == 200, latest.text
+    body = latest.json()
+    assert body["allowed"] is False
+    assert body["blocking"][0]["ruleId"] == "high-risk-approval"
+    assert body["blocking"][0]["ruleTitle"] == "High-risk systems need a release approval"
+    assert body["blocking"][0]["policyName"] == "AI use policy"
+    assert body["runId"] == gate["runId"] and body["evaluatedAt"] == gate["evaluatedAt"]
+    assert stored_rows() == before  # reading the latest gate records nothing
+
+    # A second live run moves the latest read with it.
+    with session_factory() as session:
+        session.execute(GovernanceApprovalWorkflow.__table__.insert().values(id="wf", name="wf", entity_type="ai_system", steps_json="[]"))
+        session.execute(
+            GovernanceApprovalRequest.__table__.insert().values(
+                id="req", workflow_id="wf", entity_type="ai_system", entity_id="system-a", status="approved"
+            )
+        )
+        session.commit()
+    assert client.get(f"{BASE}/gate/system-a").json()["allowed"] is True
+    latest = client.get(f"{BASE}/gate/system-a/latest").json()
+    assert (
+        latest["allowed"] is True
+        and latest["blocking"] == []
+        and latest["warnings"] == []
+    )
+
+    # No stored run for an unknown system: 404.
+    assert client.get(f"{BASE}/gate/system-missing/latest").status_code == 404
 
 
 def test_members_without_mutation_rights_can_read_and_acknowledge_only(assurance_client):

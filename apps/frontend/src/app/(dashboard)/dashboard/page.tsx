@@ -7,6 +7,7 @@ import { Heading, Text } from '@astryxdesign/core/Text'
 import { HStack, VStack } from '@astryxdesign/core/Layout'
 import { useSystemContext } from '@/components/workflow/SystemContext'
 import { LiveBoard } from '@/astryx/LiveBoard'
+import { PinnedBoards } from '@/astryx/ask/PinnedBoards'
 
 /** The lifecycle stages a registered system moves through, as the API names them. */
 const STAGES = [
@@ -42,6 +43,8 @@ export default function HomePage() {
         </HStack>
 
         <LiveBoard />
+
+        <PinnedBoards />
 
         {!loading && systems.length > 0 && (
           <section className="fm-card" aria-labelledby="stages-title">
