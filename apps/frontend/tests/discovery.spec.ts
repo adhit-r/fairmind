@@ -3,7 +3,8 @@ import { installGridFixtures } from './grid-fixtures'
 
 // Discovery overview, source monitoring and the connect flow; API calls are answered here, nothing reaches a database.
 const BASE = '/api/v1/integrations'
-const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+const cors = { 'Access-Control-Allow-Origin': 'http://localhost:1111', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS' }
+const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(body) })
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
 const minsAhead = (m: number) => new Date(Date.now() + m * 60_000).toISOString()
 const run = (id: string, m: number, status: 'ok' | 'failed', found: number, created: number, names: string[] = [], error: string | null = null) => ({
@@ -44,6 +45,8 @@ const discovered = [
 const candidates = [
   { id: 'c-chatgpt', name: 'ChatGPT Enterprise', kind: 'ai_service', strength: 'strong', sources: ['okta'], sightings: 1, firstSeen: minsAgo(60), lastSeen: minsAgo(12), suggestedTier: 'medium', ownerCheck: null, owners: [] },
 ]
+const candidateDetail = { ...candidates[0], members: [discovered[0]], checks: [], reach: [], tierReasons: [], frameworks: [], answers: null, mismatches: [], tools: [] }
+const systems = [{ id: 'sys-existing', workspaceId: 'ws-1', name: 'Employee assistant', owner: 'owner@example.com', riskTier: 'medium', lifecycleStage: 'operate', metadata: {}, createdAt: minsAgo(3000) }]
 
 test.describe('Discovery', () => {
   let created: Record<string, unknown> | null
@@ -51,14 +54,20 @@ test.describe('Discovery', () => {
   let previewed: Record<string, unknown> | null
   let synced: string[]
   let uploaded: string | null
+  let linked: Record<string, unknown> | null
 
   test.beforeEach(async ({ page }) => {
-    created = patched = previewed = uploaded = null
+    created = patched = previewed = uploaded = linked = null
     synced = []
     await installGridFixtures(page)
-    await page.route('**/api/proxy/**', async (route) => {
+    const handleApi = async (route: Route) => {
       const req = route.request()
       const path = new URL(req.url()).pathname.replace('/api/proxy', '')
+      if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors })
+      if (path === '/api/v1/auth/me') return json(route, { id: 'user-1', username: 'reviewer', email: 'reviewer@grid.test' })
+      if (path === '/api/v1/organizations') return json(route, { organizations: [{ id: 'org-1', name: 'Grid org', slug: 'grid-org', owner_id: 'user-1', created_at: '2026-01-01T00:00:00Z', role: 'admin' }] })
+      if (path === '/api/v1/shadow-ai') return json(route, { findings: [], resolved: [], map: { tools: [], teams: [], cells: {} }, coverage: { proxyLogs: false, okta: false, entra: false, gateway: false, mcpRegistry: false, people: 0, approvedTools: 0, ssoTools: 0 } })
+      if (path === '/api/v1/ai-governance/systems') return json(route, systems)
       if (path === BASE && req.method() === 'GET') return json(route, integrations)
       if (path === BASE && req.method() === 'POST') {
         created = req.postDataJSON()
@@ -87,8 +96,15 @@ test.describe('Discovery', () => {
       }
       if (path === `${BASE}/discovered`) return json(route, discovered)
       if (path === '/api/v1/discovery/candidates') return json(route, candidates)
-      return route.fallback()
-    })
+      if (path === '/api/v1/discovery/candidates/c-chatgpt' && req.method() === 'GET') return json(route, candidateDetail)
+      if (path === '/api/v1/discovery/candidates/c-chatgpt/link' && req.method() === 'POST') {
+        linked = req.postDataJSON()
+        return json(route, { decision: 'link', systemId: 'sys-existing' })
+      }
+      return req.url().includes('/api/proxy/') ? route.fallback() : json(route, [])
+    }
+    await page.route('**/api/proxy/**', handleApi)
+    await page.route('**/api/v1/**', handleApi)
   })
 
   test('overview shows watched and unwatched areas and what waits', async ({ page }) => {
@@ -143,6 +159,31 @@ test.describe('Discovery', () => {
     expect(created).toMatchObject({ kind: 'aws', name: 'AWS', token: 'secret-value', config: { access_key_id: 'AKIAEXAMPLE', schedule_minutes: 60 } })
     expect(JSON.stringify((created as { config: unknown }).config)).not.toContain('secret-value')
     expect(synced).toEqual(['i-new'])
+  })
+
+  test('edit source updates its account and schedule while keeping the saved credential', async ({ page }) => {
+    await page.goto('/discovery?view=sources')
+    await page.locator('.dv-src', { hasText: 'Prod AWS' }).getByRole('link', { name: 'Edit' }).click()
+    await expect(page.getByRole('heading', { name: 'Edit Prod AWS' })).toBeVisible()
+    await expect(page.getByLabel('Access key ID')).toHaveValue('AKIA')
+    await expect(page.getByText(/Leave blank to keep the saved credential/)).toBeVisible()
+    await page.getByLabel('Access key ID').fill('AKIANEW')
+    await page.getByLabel(/^Name/).fill('Production AI')
+    await page.getByRole('radio', { name: 'Hourly' }).click()
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await page.waitForURL('**/discovery?view=sources')
+    expect(patched).toMatchObject({ name: 'Production AI', config: { access_key_id: 'AKIANEW' }, schedule_minutes: 60, clear_token: false })
+    expect((patched as Record<string, unknown>).token).toBeUndefined()
+    expect(synced).toEqual(['i-aws'])
+  })
+
+  test('reviewer can link a separate sighting to an existing AI system', async ({ page }) => {
+    await page.goto('/discovery?view=waiting')
+    await expect(page.getByRole('heading', { name: 'ChatGPT Enterprise' })).toBeVisible()
+    await page.getByRole('radio', { name: /Link to an existing AI system/ }).click()
+    await expect(page.getByText(/Adds this sighting to Employee assistant/)).toBeVisible()
+    await page.getByRole('button', { name: 'Link to AI system' }).click()
+    await expect.poll(() => linked).toEqual({ system_id: 'sys-existing' })
   })
 
   test('flow shows each step with what it fetched, and saves a scope change', async ({ page }) => {
