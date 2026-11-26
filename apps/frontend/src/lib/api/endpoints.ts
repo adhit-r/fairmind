@@ -229,6 +229,8 @@ export const API_ENDPOINTS = {
     decision: (runId: string) => `/api/v1/packs/runs/${runId}/decision`,
     agentStep: (runId: string, stepId: string) => `/api/v1/packs/runs/${runId}/steps/${stepId}/agent`,
     ask: '/api/v1/packs/ask',
+    boards: '/api/v1/packs/boards',
+    board: (id: string) => `/api/v1/packs/boards/${encodeURIComponent(id)}`,
     aiProviders: '/api/v1/packs/ai-providers',
     aiProvider: '/api/v1/packs/ai-provider',
     aiProviderTest: '/api/v1/packs/ai-provider/test',

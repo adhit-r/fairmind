@@ -4452,6 +4452,19 @@ class WorkflowVersion(Base):
     )
 
 
+class SavedBoard(Base):
+    """A board pinned from Ask FairMind: the question and the widget layout, private to one person in one organization."""
+
+    __tablename__ = "saved_boards"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    org_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False)
+    question = Column(Text, nullable=False)
+    board = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+
 class OrgAIProvider(Base):
     """The model an organization brings for the packs agent: one per organization, key encrypted at rest."""
 

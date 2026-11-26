@@ -2,7 +2,7 @@
 
 import './askBoard.css'
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Renderer } from '@openuidev/react-lang'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { useSystemContext } from '@/components/workflow/SystemContext'
@@ -119,8 +119,13 @@ const library = buildAskLibrary({
 })
 
 /** The model's board, drawn with FairMind's own widgets. Anything that does not parse or validate draws nothing, and the written answer stands alone. */
-export function AskBoard({ board }: { board?: string | null }) {
+export function AskBoard({ board, actions }: { board?: string | null; actions?: ReactNode }) {
   const [failed, setFailed] = useState(false)
   if (!board?.trim() || failed) return null
-  return <Renderer response={board} library={library} onError={(errors) => setFailed(errors.length > 0)} />
+  return (
+    <>
+      <Renderer response={board} library={library} onError={(errors) => setFailed(errors.length > 0)} />
+      {actions}
+    </>
+  )
 }
