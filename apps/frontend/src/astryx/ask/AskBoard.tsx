@@ -6,10 +6,13 @@ import { useMemo, useState } from 'react'
 import { Renderer } from '@openuidev/react-lang'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
+import { useEstateFrameworks, useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
 import { useNeedsYou } from '@/astryx/data/needsYou'
 import { checkCell, type CellState } from '@/components/ui/matrix'
-import { buildAskLibrary, type RELEASE_FILTERS, type WAITING_KINDS } from './boardSpec'
+import '@/astryx/pages/frameworks.css'
+import { ReadinessBar, readinessCounts } from '@/app/(dashboard)/frameworks/parts'
+import { useJourneys } from '@/lib/api/hooks/usePacks'
+import { buildAskLibrary, type FRAMEWORK_SCOPES, type RELEASE_FILTERS, type WAITING_KINDS } from './boardSpec'
 
 type Pill = { text: string; tone: 'fail' | 'ok' | 'part' | 'na' }
 
@@ -111,10 +114,38 @@ function WaitingOnYou({ props }: { props: { kind: (typeof WAITING_KINDS)[number]
   )
 }
 
+function FrameworkReadiness({ props }: { props: { scope: (typeof FRAMEWORK_SCOPES)[number] } }) {
+  const estate = useEstateFrameworks()
+  const journeys = useJourneys()
+  const names = useMemo(() => new Map((journeys.data ?? []).map((j) => [j.key, j.name])), [journeys.data])
+  const rows = useMemo(
+    () =>
+      (estate.data?.frameworks ?? [])
+        .filter((f) => names.has(f.key))
+        .map((f) => ({ key: f.key, name: names.get(f.key) ?? f.key, counts: readinessCounts(f.states) }))
+        .filter((f) => props.scope === 'all' || f.counts.attention > 0),
+    [estate.data, names, props.scope],
+  )
+  if ((estate.loading && !estate.data) || (journeys.loading && !journeys.data)) return <Skeleton height={96} />
+  if (estate.error || journeys.error) return <p className="fm-askb-note">The frameworks could not load: {estate.error ?? journeys.error}</p>
+  if (!rows.length) return <p className="fm-askb-note">{props.scope === 'all' ? 'You follow no framework yet.' : 'No framework has requirements that need attention.'}</p>
+  return (
+    <section className="fm-askb-card fm-askb-frameworks" aria-label="Framework readiness">
+      {rows.map((f) => (
+        <div key={f.key}>
+          <Link href={`/frameworks/${encodeURIComponent(f.key)}`}>{f.name}</Link>
+          <ReadinessBar counts={f.counts} />
+        </div>
+      ))}
+    </section>
+  )
+}
+
 const library = buildAskLibrary({
   Board: ({ props, renderNode }) => <div className="fm-askb">{renderNode(props.widgets)}</div>,
   ReleaseMatrix,
   WaitingOnYou,
+  FrameworkReadiness,
   Note: ({ props }) => <p className="fm-askb-note">{props.text}</p>,
 })
 

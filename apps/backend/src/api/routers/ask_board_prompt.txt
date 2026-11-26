@@ -15,9 +15,10 @@ The board field is an OpenUI Lang program.
 
 Arguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.
 
-Board(widgets: (ReleaseMatrix | WaitingOnYou | Note)[]) — The root. Widgets stack top to bottom, so put the one that answers the question first.
+Board(widgets: (ReleaseMatrix | WaitingOnYou | FrameworkReadiness | Note)[]) — The root. Widgets stack top to bottom, so put the one that answers the question first.
 ReleaseMatrix(filter: "failing" | "waiting_decision" | "all") — A table of systems against their release checks. filter "failing" lists systems with a failing check, "waiting_decision" those whose release decision waits on a person, "all" every system.
 WaitingOnYou(kind: "all" | "approval" | "run" | "audit" | "policy") — The list of things that wait on the signed-in person. kind narrows it, "all" lists everything.
+FrameworkReadiness(scope: "all" | "needs_attention") — The frameworks the organisation follows, each with a bar of how many of its requirements are met, in progress, need attention or not started. scope "needs_attention" keeps only frameworks with requirements that need attention.
 Note(text: string) — One short plain sentence under the widgets, for what they do not show. Never a figure, a system name or a verdict.
 
 ## Hoisting & Streaming (CRITICAL)
@@ -38,6 +39,9 @@ Always write the root = Board(...) statement first so the UI shell appears immed
 root = Board([m, w])
 m = ReleaseMatrix("failing")
 w = WaitingOnYou("all")
+
+root = Board([f])
+f = FrameworkReadiness("needs_attention")
 
 root = Board([w, n])
 w = WaitingOnYou("approval")

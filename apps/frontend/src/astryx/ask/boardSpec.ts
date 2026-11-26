@@ -5,10 +5,11 @@ import { createLibrary, defineComponent } from '@openuidev/react-lang'
 import { z } from 'zod/v4'
 
 export const RELEASE_FILTERS = ['failing', 'waiting_decision', 'all'] as const
+export const FRAMEWORK_SCOPES = ['all', 'needs_attention'] as const
 export const WAITING_KINDS = ['all', 'approval', 'run', 'audit', 'policy'] as const
 
 // ponytail: loose on purpose, the real renderers are typed where they are written (AskBoard.tsx).
-export type BoardRenderers = Record<'Board' | 'ReleaseMatrix' | 'WaitingOnYou' | 'Note', (arg: { props: any; renderNode: any }) => any>
+export type BoardRenderers = Record<'Board' | 'ReleaseMatrix' | 'WaitingOnYou' | 'FrameworkReadiness' | 'Note', (arg: { props: any; renderNode: any }) => any>
 
 export function buildAskLibrary(r: BoardRenderers) {
   const ReleaseMatrix = defineComponent({
@@ -24,6 +25,13 @@ export function buildAskLibrary(r: BoardRenderers) {
     props: z.object({ kind: z.enum(WAITING_KINDS) }),
     component: r.WaitingOnYou,
   })
+  const FrameworkReadiness = defineComponent({
+    name: 'FrameworkReadiness',
+    description:
+      'The frameworks the organisation follows, each with a bar of how many of its requirements are met, in progress, need attention or not started. scope "needs_attention" keeps only frameworks with requirements that need attention.',
+    props: z.object({ scope: z.enum(FRAMEWORK_SCOPES) }),
+    component: r.FrameworkReadiness,
+  })
   const Note = defineComponent({
     name: 'Note',
     description: 'One short plain sentence under the widgets, for what they do not show. Never a figure, a system name or a verdict.',
@@ -33,14 +41,15 @@ export function buildAskLibrary(r: BoardRenderers) {
   const Board = defineComponent({
     name: 'Board',
     description: 'The root. Widgets stack top to bottom, so put the one that answers the question first.',
-    props: z.object({ widgets: z.array(z.union([ReleaseMatrix.ref, WaitingOnYou.ref, Note.ref])).max(4) }),
+    props: z.object({ widgets: z.array(z.union([ReleaseMatrix.ref, WaitingOnYou.ref, FrameworkReadiness.ref, Note.ref])).max(4) }),
     component: r.Board,
   })
-  return createLibrary({ root: 'Board', components: [Board, ReleaseMatrix, WaitingOnYou, Note] })
+  return createLibrary({ root: 'Board', components: [Board, ReleaseMatrix, WaitingOnYou, FrameworkReadiness, Note] })
 }
 
 export const BOARD_EXAMPLES = [
   'root = Board([m, w])\nm = ReleaseMatrix("failing")\nw = WaitingOnYou("all")',
+  'root = Board([f])\nf = FrameworkReadiness("needs_attention")',
   'root = Board([w, n])\nw = WaitingOnYou("approval")\nn = Note("Decisions open on each system\'s own page.")',
 ]
 

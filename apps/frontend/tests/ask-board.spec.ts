@@ -40,4 +40,11 @@ test.describe('Ask FairMind board', () => {
     await asking(page, '')
     await expect(page.getByRole('region', { name: 'Release checks' })).toHaveCount(0)
   })
+
+  test('framework readiness draws a bar per followed framework from the estate', async ({ page }) => {
+    await asking(page, 'root = Board([f])\nf = FrameworkReadiness("all")')
+    const board = page.getByRole('region', { name: 'Framework readiness' })
+    await expect(board.getByRole('link', { name: 'ISO/IEC 42001:2023' })).toHaveAttribute('href', /\/frameworks\//)
+    await expect(board.getByRole('img', { name: /met, .* in progress/ })).toBeVisible()
+  })
 })
