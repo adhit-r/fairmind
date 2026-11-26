@@ -33,7 +33,7 @@ Before deploying FairMind RBAC, ensure you have:
 
 **Application 1: fairmind-frontend**
 - Type: OAuth2 (Authorization Code flow)
-- Redirect URIs: `https://app.fairmind.io/auth/callback`
+- Redirect URIs: `https://app.fairmind.io/callback`
 - Client ID: `fairmind-frontend`
 - Client Secret: [generate and save]
 - Scopes: `openid`, `profile`, `email`
@@ -166,7 +166,7 @@ NEXT_PUBLIC_API_TIMEOUT=30000
 # Authentik OAuth2
 NEXT_PUBLIC_OAUTH_URL=https://auth.fairmind.io
 NEXT_PUBLIC_OAUTH_CLIENT_ID=fairmind-frontend
-NEXT_PUBLIC_OAUTH_REDIRECT_URI=https://app.fairmind.io/auth/callback
+NEXT_PUBLIC_OAUTH_REDIRECT_URI=https://app.fairmind.io/callback
 
 # Application
 NEXT_PUBLIC_APP_URL=https://app.fairmind.io
