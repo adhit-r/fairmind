@@ -4,6 +4,7 @@ import hashlib
 import json
 import uuid
 from collections import Counter
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -1348,10 +1349,18 @@ ASK_SYSTEM = (
     "what is missing instead of guessing. Answer in at most four short sentences of plain prose. In systems, "
     "list the systems your answer is about, by the id given in the facts, each with a reason of a few words."
 )
+ASK_BOARD_PROMPT = Path(__file__).with_name("ask_board_prompt.txt")  # generated: npm run gen:ask-board in apps/frontend
+ASK_BOARD_MAX = 4000
+ASK_BOARD_RULES = (
+    " Also fill board with an OpenUI Lang program that shows the facts as widgets, or an empty string when the "
+    "answer is plain prose or no widget fits. A board names widgets and fixed options only: never write a number, "
+    "a system name or a verdict into it, because each widget reads its own figures. "
+)
 ASK_SCHEMA = {
     "type": "object",
     "properties": {
         "answer": {"type": "string"},
+        "board": {"type": "string"},
         "systems": {
             "type": "array",
             "items": {
@@ -1362,7 +1371,7 @@ ASK_SCHEMA = {
             },
         },
     },
-    "required": ["answer", "systems"],
+    "required": ["answer", "board", "systems"],
     "additionalProperties": False,
 }
 ASK_MAX_SYSTEMS = 60  # ponytail: the first 60 systems by name; retrieve by question if estates outgrow one prompt
@@ -1399,6 +1408,14 @@ def _ask_facts(db: Session, org_id: str) -> dict:
     return {"systems": estate, "waitingRuns": runs}
 
 
+def _ask_board_library() -> str:
+    """The widget library's own prompt, generated from the frontend's definitions; empty where it is not shipped."""
+    try:
+        return ASK_BOARD_PROMPT.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 @router.post("/ask")
 async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     """One question about the estate, answered by the organisation's model from the gates and waiting runs alone."""
@@ -1412,7 +1429,7 @@ async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = 
     prompt = json.dumps({"question": body.question.strip(), "facts": facts}, default=str, sort_keys=True)
     db.rollback()  # hold no transaction open while the model works
     try:
-        data, meta = await llm.complete(conn, ASK_SYSTEM, prompt, ASK_SCHEMA)
+        data, meta = await llm.complete(conn, ASK_SYSTEM + ASK_BOARD_RULES + _ask_board_library(), prompt, ASK_SCHEMA)
     except llm.LLMError as e:
         raise HTTPException(status_code=502, detail=str(e))
     answer = str(data.get("answer") or "").strip()
@@ -1426,6 +1443,7 @@ async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = 
             cited.append({"id": sid, "name": names[sid], "reason": str(item.get("reason") or "")[:200]})
     return {
         "answer": answer[:4000],
+        "board": str(data.get("board") or "").strip()[:ASK_BOARD_MAX],  # the page parses and checks it; a bad board falls back to the answer
         "systems": cited,
         "provider": conn.provider.name,
         "model": meta["model"],

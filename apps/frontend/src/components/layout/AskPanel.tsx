@@ -73,6 +73,11 @@ export function AskPanel({ open, onOpenChange }: { open: boolean; onOpenChange: 
                       ))}
                     </div>
                   )}
+                  {t.answer.board?.trim() && (
+                    <Link href={`/ask?q=${encodeURIComponent(t.question)}`} onClick={() => onOpenChange(false)} className="self-start rounded-full border border-[var(--fm-line)] bg-white px-3 py-1.5 text-[12px] font-semibold hover:border-[var(--fm-ink)]">
+                      Open as a board
+                    </Link>
+                  )}
                   <small className="text-[11.5px] text-[var(--fm-ink3)]">
                     Read {t.answer.systemsRead} systems and {t.answer.runsRead} waiting runs · {t.answer.model}
                   </small>

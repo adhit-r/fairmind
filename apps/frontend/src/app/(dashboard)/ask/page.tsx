@@ -16,6 +16,7 @@ import { VStack, HStack } from '@astryxdesign/core/Layout'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 
+import { AskBoard } from '@/astryx/ask/AskBoard'
 import { useAIProvider, usePackActions, type AskAnswer } from '@/lib/api/hooks/usePacks'
 
 /** Prompts that work for any estate; they name no system. */
@@ -129,6 +130,7 @@ function Ask() {
                   ) : t.answer ? (
                     <>
                       <div className="fm-ask-answer"><Text>{t.answer.answer}</Text></div>
+                      <AskBoard board={t.answer.board} />
                       {t.answer.systems.length > 0 && (
                         <VStack gap={1}>
                           <Text color="secondary" size="sm">Systems it named</Text>
