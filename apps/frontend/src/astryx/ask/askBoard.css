@@ -22,3 +22,6 @@
 .fm-askb-frameworks > div { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--fm-line); font-size: 13px; }
 .fm-askb-frameworks > div:first-child { border-top: 0; }
 .fm-askb-frameworks a { color: var(--fm-ink); font-weight: 600; text-underline-offset: 2px; }
+.fm-askb-head { margin: 0; padding: 12px 0 0; font-size: 13px; color: var(--fm-ink2); }
+.fm-askb-head a { color: var(--fm-ink); font-weight: 600; text-underline-offset: 2px; }
+.fm-askb-list time { flex: 0 0 52px; font-size: 11.5px; color: var(--fm-ink2); }

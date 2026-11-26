@@ -9,7 +9,7 @@ export const FRAMEWORK_SCOPES = ['all', 'needs_attention'] as const
 export const WAITING_KINDS = ['all', 'approval', 'run', 'audit', 'policy'] as const
 
 // ponytail: loose on purpose, the real renderers are typed where they are written (AskBoard.tsx).
-export type BoardRenderers = Record<'Board' | 'ReleaseMatrix' | 'WaitingOnYou' | 'FrameworkReadiness' | 'Note', (arg: { props: any; renderNode: any }) => any>
+export type BoardRenderers = Record<'Board' | 'ReleaseMatrix' | 'WaitingOnYou' | 'FrameworkReadiness' | 'EvalCompare' | 'SystemTimeline' | 'Note', (arg: { props: any; renderNode: any }) => any>
 
 export function buildAskLibrary(r: BoardRenderers) {
   const ReleaseMatrix = defineComponent({
@@ -32,6 +32,22 @@ export function buildAskLibrary(r: BoardRenderers) {
     props: z.object({ scope: z.enum(FRAMEWORK_SCOPES) }),
     component: r.FrameworkReadiness,
   })
+  // A system is named by the id given in the facts, never by name. The widget reads that system through the
+  // signed-in user's own organisation, so an id from another organisation or a made-up one finds nothing.
+  const EvalCompare = defineComponent({
+    name: 'EvalCompare',
+    description:
+      'One system\'s latest fairness run and catalogue evaluations against the run before each, as a table of before, now and state. systemId is the id of the system from the facts.',
+    props: z.object({ systemId: z.string().max(80) }),
+    component: r.EvalCompare,
+  })
+  const SystemTimeline = defineComponent({
+    name: 'SystemTimeline',
+    description:
+      'One system\'s recent history, newest first: fairness runs, monitoring runs, evaluations and release decisions. systemId is the id of the system from the facts.',
+    props: z.object({ systemId: z.string().max(80) }),
+    component: r.SystemTimeline,
+  })
   const Note = defineComponent({
     name: 'Note',
     description: 'One short plain sentence under the widgets, for what they do not show. Never a figure, a system name or a verdict.',
@@ -41,20 +57,21 @@ export function buildAskLibrary(r: BoardRenderers) {
   const Board = defineComponent({
     name: 'Board',
     description: 'The root. Widgets stack top to bottom, so put the one that answers the question first.',
-    props: z.object({ widgets: z.array(z.union([ReleaseMatrix.ref, WaitingOnYou.ref, FrameworkReadiness.ref, Note.ref])).max(4) }),
+    props: z.object({ widgets: z.array(z.union([ReleaseMatrix.ref, WaitingOnYou.ref, FrameworkReadiness.ref, EvalCompare.ref, SystemTimeline.ref, Note.ref])).max(4) }),
     component: r.Board,
   })
-  return createLibrary({ root: 'Board', components: [Board, ReleaseMatrix, WaitingOnYou, FrameworkReadiness, Note] })
+  return createLibrary({ root: 'Board', components: [Board, ReleaseMatrix, WaitingOnYou, FrameworkReadiness, EvalCompare, SystemTimeline, Note] })
 }
 
 export const BOARD_EXAMPLES = [
   'root = Board([m, w])\nm = ReleaseMatrix("failing")\nw = WaitingOnYou("all")',
   'root = Board([f])\nf = FrameworkReadiness("needs_attention")',
+  'root = Board([c, t])\nc = EvalCompare("<system id from the facts>")\nt = SystemTimeline("<system id from the facts>")',
   'root = Board([w, n])\nw = WaitingOnYou("approval")\nn = Note("Decisions open on each system\'s own page.")',
 ]
 
 export const BOARD_RULES = [
   'Use at most 4 widgets. Use only the widgets listed here.',
-  'Never write a number, a system name or a verdict anywhere, including in Note: the widgets show the figures.',
+  'Never write a number, a system name or a verdict anywhere, including in Note: the widgets show the figures. A system is named only by its id from the facts, as the argument of EvalCompare or SystemTimeline.',
   'If no widget fits the question, leave the board empty rather than forcing one.',
 ]
