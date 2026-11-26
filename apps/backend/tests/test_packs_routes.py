@@ -926,7 +926,9 @@ def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_databa
 
     async def answer(conn, system_prompt, user, schema):
         seen["prompt"] = json.loads(user)
-        return {"answer": "Credit model fails fairness.", "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
+        seen["system"] = system_prompt
+        seen["schema"] = schema
+        return {"answer": "Credit model fails fairness.", "board": '  root = Board([m])\nm = ReleaseMatrix("failing")  ', "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
             "model": conn.model, "latencyMs": 5, "usage": {}}
 
     monkeypatch.setattr(llm, "complete", answer)
@@ -934,11 +936,19 @@ def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_databa
     assert body["answer"] == "Credit model fails fairness."
     assert body["systems"] == [{"id": system, "name": "Credit model", "reason": "Fairness fails"}]
     assert body["systemsRead"] == 1 and seen["prompt"]["question"] == "Which systems are blocked?"
+    assert body["board"] == 'root = Board([m])\nm = ReleaseMatrix("failing")'  # trimmed, passed on for the page to check
+    assert "ReleaseMatrix(filter:" in seen["system"] and "board" in seen["schema"]["required"]  # the model is told the widgets
     gate = seen["prompt"]["facts"]["systems"][0]
     assert gate["verdict"] and any(c["label"] for c in gate["checks"])
 
     async def failing(conn, system_prompt, user, schema):
         raise llm.LLMError("Anthropic is rate limiting this key")
+
+    async def prose_only(conn, system_prompt, user, schema):
+        return {"answer": "Nothing is blocked.", "systems": []}, {"model": conn.model, "latencyMs": 5, "usage": {}}
+
+    monkeypatch.setattr(llm, "complete", prose_only)
+    assert client.post(f"{PACKS}/ask", json={"question": "Anything?"}).json()["board"] == ""  # a model that skips the board still answers
 
     monkeypatch.setattr(llm, "complete", failing)
     failed = client.post(f"{PACKS}/ask", json={"question": "Anything?"})

@@ -422,6 +422,8 @@ export interface AIProviderOption {
 /** The organisation's saved provider. The key itself never comes back, only its last four characters. */
 export interface AskAnswer {
   answer: string
+  /** An OpenUI Lang program of FairMind widgets; empty when the answer is prose alone. */
+  board?: string
   systems: Array<{ id: string; name: string; reason: string }>
   provider: string
   model: string
