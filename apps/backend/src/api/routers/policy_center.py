@@ -175,6 +175,14 @@ def policy_gate(
     return _found(PolicyService(db).gate(membership.org_id, system_id), "System")
 
 
+@router.get("/gate/{system_id}/latest")
+def latest_policy_gate(
+    system_id: str, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)
+) -> dict:
+    """The latest stored evaluation for a system; reading it records nothing."""
+    return _found(PolicyService(db).latest_gate(membership.org_id, system_id), "System")
+
+
 @router.get("/{policy_id}")
 def get_policy(
     policy_id: str, membership: OrgMembership = Depends(organization_membership), db: Session = Depends(get_db)

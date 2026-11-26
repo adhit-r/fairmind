@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useOrg } from '@/context/OrgContext'
 import { evaluationScopeKey, readEvaluationScopeState, writeEvaluationScopeState, type EvaluationScopeState } from '@/lib/evaluation-scope-state'
 import { apiClient, type ApiResponse } from '../api-client'
+import { API_ENDPOINTS } from '../endpoints'
 import type { CellState } from '@/components/ui/matrix'
 import { withOrg, type EngineRun, type LiveRunSummary } from './usePacks'
 
@@ -179,6 +180,16 @@ export interface PolicyRuleFailure {
   ruleId: string
   ruleTitle: string
   detail: string
+}
+
+/** The latest stored policy gate for a system: allowed is false while a blocking rule fails. Reading it records no evaluation run. */
+export interface PolicyGate {
+  systemId: string
+  allowed: boolean
+  blocking: PolicyRuleFailure[]
+  warnings: PolicyRuleFailure[]
+  runId: string
+  evaluatedAt: string
 }
 
 export interface FairnessRunSummary {
@@ -401,6 +412,8 @@ export interface SystemFile {
   risks: RiskStatus | null
   reports: AuditReport[]
   gate: ReleaseGate | null
+  /** The latest stored policy gate; null before any evaluation run. */
+  policyGate: PolicyGate | null
   fairnessRuns: FairnessRunSummary[]
   /** Catalogue evaluation runs for this system, every evaluation, newest first. */
   evaluationRuns: EngineRun[]
@@ -424,7 +437,7 @@ export interface SystemFileView {
 /** System file state keyed by organisation and system. */
 export type SystemFileState = EvaluationScopeState<SystemFileView>
 
-const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, fairnessRuns: [], evaluationRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null, liveRuns: null }
+const EMPTY_FILE: SystemFile = { system: null, evidence: null, approval: null, remediation: null, risks: null, reports: [], gate: null, policyGate: null, fairnessRuns: [], evaluationRuns: [], monitoringRuns: [], monitoringPolicy: null, seals: [], clauseMap: null, liveRuns: null }
 const PENDING: SystemFileView = { file: EMPTY_FILE, loading: true, error: null }
 
 export const systemFileScopeKey = (organizationId: string | null | undefined, systemId: string | undefined) =>
@@ -453,13 +466,18 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     return
   }
   const q = `system_id=${encodeURIComponent(systemId)}`
-  const [evidence, approval, remediation, risks, reports, gate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, liveRuns] = await Promise.all([
+  // The policy gate is a read of the latest stored evaluation: no run is recorded.
+  const policyGateRequest = orgId
+    ? get<PolicyGate>(API_ENDPOINTS.aiGovernance.policyGate(orgId, systemId))
+    : Promise.resolve({ success: false, error: 'no organization' } as ApiResponse<PolicyGate>)
+  const [evidence, approval, remediation, risks, reports, gate, policyGate, fairnessRuns, evaluationRuns, monitoringRuns, monitoringPolicy, seals, clauseMap, liveRuns] = await Promise.all([
     get<EvidenceSummary>(`${GOV}/evidence/${systemId}/summary`),
     get<ApprovalStatus>(`${GOV}/approval/system/${systemId}`),
     get<RemediationStatus>(`${GOV}/remediation?${q}`),
     get<RiskStatus>(`${GOV}/dashboard/risk?${q}`),
     get<AuditReport[]>(`${GOV}/reports?${q}`),
     get<ReleaseGate>(`${GOV}/systems/${systemId}/gate`),
+    policyGateRequest,
     get<FairnessRunSummary[]>(`${GOV}/systems/${systemId}/fairness-runs`),
     orgId ? get<EngineRun[]>(withOrg(`/api/v1/packs/systems/${encodeURIComponent(systemId)}/evaluation-runs`, orgId)) : Promise.resolve<ApiResponse<EngineRun[]>>({ success: true, data: [] }),
     get<MonitoringRunSummary[]>(`${GOV}/systems/${systemId}/monitoring-runs`),
@@ -476,6 +494,7 @@ export async function loadSystemFile(get: Get, systemId: string, scopeKey: strin
     risks: unwrap(risks, null),
     reports: unwrap(reports, []),
     gate: unwrap(gate, null),
+    policyGate: unwrap(policyGate, null),
     fairnessRuns: unwrap(fairnessRuns, []),
     evaluationRuns: unwrap(evaluationRuns, []),
     monitoringRuns: unwrap(monitoringRuns, []),
