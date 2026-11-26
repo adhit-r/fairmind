@@ -956,6 +956,31 @@ def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_databa
     assert client.post(f"{PACKS}/ask", json={"question": ""}).status_code == 422
 
 
+def test_pinned_boards_are_private_to_the_person_and_capped(tmp_database):
+    from src.api.routers.packs import BOARDS_MAX
+
+    org_id, mine = _org(tmp_database)
+    colleague = _client(tmp_database, org_id)  # same organisation, another person
+    stranger = _org(tmp_database)[1]  # another organisation
+    board = {"question": "Which systems fail?", "board": 'root = Board([m])\nm = ReleaseMatrix("failing")'}
+
+    pinned = mine.post(f"{PACKS}/boards", json=board)
+    assert pinned.status_code == 200 and pinned.json()["question"] == board["question"]
+    assert [b["id"] for b in mine.get(f"{PACKS}/boards").json()["boards"]] == [pinned.json()["id"]]
+    assert colleague.get(f"{PACKS}/boards").json()["boards"] == []
+    assert stranger.get(f"{PACKS}/boards").json()["boards"] == []
+    assert colleague.delete(f"{PACKS}/boards/{pinned.json()['id']}").status_code == 404  # not theirs to unpin
+    assert stranger.delete(f"{PACKS}/boards/{pinned.json()['id']}").status_code == 404
+    assert mine.post(f"{PACKS}/boards", json={"question": "", "board": "x"}).status_code == 422
+    assert mine.post(f"{PACKS}/boards", json={"question": "q", "board": ""}).status_code == 422
+
+    for _ in range(BOARDS_MAX - 1):
+        assert mine.post(f"{PACKS}/boards", json=board).status_code == 200
+    assert mine.post(f"{PACKS}/boards", json=board).status_code == 409
+    assert mine.delete(f"{PACKS}/boards/{pinned.json()['id']}").status_code == 200
+    assert mine.post(f"{PACKS}/boards", json=board).status_code == 200  # room again
+
+
 def _finish(client, workflow, **body):
     """Run a workflow with no branching step to done, approving at its gate."""
     run = _start(client, workflow, **body)

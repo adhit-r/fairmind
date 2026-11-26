@@ -1452,6 +1452,54 @@ async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = 
     }
 
 
+# --- pinned boards: an Ask FairMind board kept on Home, private to the person ---
+
+BOARDS_MAX = 20  # per person; Home draws each one live, so the count is a cost cap
+
+
+class BoardBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    board: str = Field(min_length=1, max_length=ASK_BOARD_MAX)
+
+
+@router.get("/boards")
+def list_boards(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    rows = db.execute(
+        text("SELECT id, question, board, created_at FROM saved_boards WHERE org_id = :org AND user_id = :user ORDER BY created_at DESC LIMIT :n"),
+        {"org": m.org_id, "user": m.user_id, "n": BOARDS_MAX},
+    ).mappings().all()
+    return {"boards": [{"id": r["id"], "question": r["question"], "board": r["board"], "createdAt": r["created_at"]} for r in rows]}
+
+
+@router.post("/boards")
+def pin_board(body: BoardBody, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    owner = {"org": m.org_id, "user": m.user_id}
+    if db.execute(text("SELECT COUNT(*) FROM saved_boards WHERE org_id = :org AND user_id = :user"), owner).scalar() >= BOARDS_MAX:
+        raise HTTPException(status_code=409, detail=f"You can pin {BOARDS_MAX} boards; unpin one first")
+    board = {"id": str(uuid.uuid4()), "question": body.question.strip(), "board": body.board.strip(), "createdAt": _utc_now_iso()}
+    db.execute(
+        text("INSERT INTO saved_boards (id, org_id, user_id, question, board, created_at) VALUES (:id, :org, :user, :question, :board, :at)"),
+        {**owner, **{k: board[k] for k in ("id", "question", "board")}, "at": board["createdAt"]},
+    )
+    db.commit()
+    return board
+
+
+@router.delete("/boards/{board_id}")
+def unpin_board(board_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    deleted = db.execute(
+        text("DELETE FROM saved_boards WHERE id = :id AND org_id = :org AND user_id = :user"),
+        {"id": board_id, "org": m.org_id, "user": m.user_id},
+    ).rowcount
+    db.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Board not found")  # also what another person's board looks like
+    return {"deleted": board_id}
+
+
 # --- the organisation's model (bring your own key) -------------------------
 
 
