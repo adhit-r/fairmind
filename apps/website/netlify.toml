@@ -89,5 +89,5 @@
 [context."adhit/website-consent-and-navigation".environment]
   PUBLIC_OLAI_API = "https://olai.axonome.xyz"
   PUBLIC_OLAI_TENANT = "0f598d4e-054d-435c-8aa4-70099175ad26"
-  PUBLIC_OLAI_COLLECTION_POINT = "cp_T9cGcAdMRZsrUWPa"
+  PUBLIC_OLAI_COLLECTION_POINT = "cp_sivLnWJKSC5s5jrA"
   PUBLIC_OLAI_ANALYTICS_PURPOSE = "usage-analytics"
