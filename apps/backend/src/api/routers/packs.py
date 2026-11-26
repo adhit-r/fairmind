@@ -1354,7 +1354,8 @@ ASK_BOARD_MAX = 4000
 ASK_BOARD_RULES = (
     " Also fill board with an OpenUI Lang program that shows the facts as widgets, or an empty string when the "
     "answer is plain prose or no widget fits. A board names widgets and fixed options only: never write a number, "
-    "a system name or a verdict into it, because each widget reads its own figures. "
+    "a system name or a verdict into it, because each widget reads its own figures. A widget about one system takes "
+    "that system's id exactly as given in the facts. "
 )
 ASK_SCHEMA = {
     "type": "object",

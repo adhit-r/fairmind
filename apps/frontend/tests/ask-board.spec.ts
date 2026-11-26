@@ -10,8 +10,33 @@ const provider = {
 type Pinned = { id: string; question: string; board: string; createdAt: string }
 
 /** Answers the ask route with the given board; everything else comes from the shared grid fixtures. */
-async function asking(page: Page, board: string, pinned: Pinned[] = []) {
+/** One system's own file: the system record and its run history, newest dates last on purpose to prove the widgets sort. */
+async function withSystemFile(page: Page) {
+  const path = (route: Route) => new URL(route.request().url()).pathname.replace('/api/proxy', '')
+  await page.route(/\/api\/v1\/(ai-governance\/systems\/(sys-a|ghost)(\/[a-z-]+)?|packs\/systems\/sys-a\/evaluation-runs)(\?|$)/, (route) => {
+    const p = path(route)
+    if (p.endsWith('/ghost')) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ detail: 'Not found' }) })
+    if (p.endsWith('/systems/sys-a')) return json(route, { id: 'sys-a', workspaceId: 'ws-1', name: 'Grid system A', owner: 'owner-a', riskTier: 'high', lifecycleStage: 'govern', metadata: {} })
+    if (p.endsWith('/fairness-runs')) {
+      return json(route, [
+        { evidenceId: 'f1', title: 'Fairness run, May', rows: 900, allChecksPass: true, attributes: [{ attribute: 'gender', disparateImpactRatio: 0.91, checks: { di: true }, passedOnSignificance: [] }], confidence: 0.9, createdAt: '2026-11-01T10:00:00Z' },
+        { evidenceId: 'f2', title: 'Fairness run, Nov', rows: 950, allChecksPass: false, attributes: [{ attribute: 'gender', disparateImpactRatio: 0.78, checks: { di: false }, passedOnSignificance: [] }], confidence: 0.9, createdAt: '2026-11-20T10:00:00Z' },
+      ])
+    }
+    if (p.endsWith('/evaluation-runs')) {
+      return json(route, [
+        { id: 'e1', evaluationId: 'EV-DAT-01', systemId: 'sys-a', systemName: 'Grid system A', status: 'passed', summary: 'Data checks passed', metrics: {}, files: {}, source: 'upload', createdAt: '2026-11-05T10:00:00Z', createdBy: null },
+        { id: 'e2', evaluationId: 'EV-DAT-01', systemId: 'sys-a', systemName: 'Grid system A', status: 'failed', summary: 'Two columns drifted', metrics: {}, files: {}, source: 'upload', createdAt: '2026-11-22T10:00:00Z', createdBy: null },
+      ])
+    }
+    if (p.endsWith('/seals')) return json(route, [{ id: 's1', requestId: 'r1', decision: 'approved', chainHead: 'h', evidenceCount: 3, gate: {}, sealedBy: 'owner-a', createdAt: '2026-11-25T10:00:00Z', verification: { status: 'intact', changed: [], missing: [], addedSince: 0 } }])
+    return json(route, [])
+  })
+}
+
+async function asking(page: Page, board: string, pinned: Pinned[] = [], more?: (page: Page) => Promise<void>) {
   await installGridFixtures(page)
+  await more?.(page) // later routes win, so extra fixtures go after the shared ones
   // The pinned-boards route keeps its list in this array, as the server keeps it in saved_boards.
   await page.route(/\/api\/v1\/packs\/boards(\/|\?|$)/, async (route) => {
     const req = route.request()
@@ -82,5 +107,31 @@ test.describe('Ask FairMind board', () => {
   test('Pin to Home is not offered for a board that does not validate', async ({ page }) => {
     await asking(page, 'root = Board([m])\nm = Chart("revenue")')
     await expect(page.getByRole('button', { name: 'Pin to Home' })).toHaveCount(0)
+  })
+
+  test('eval comparison sets the latest run against the one before, per measure', async ({ page }) => {
+    await asking(page, 'root = Board([c])\nc = EvalCompare("sys-a")', [], withSystemFile)
+    const board = page.getByRole('region', { name: 'Latest run against the one before' })
+    const fairness = board.getByRole('row', { name: /Fairness, gender/ })
+    await expect(fairness).toContainText('0.91')
+    await expect(fairness).toContainText('0.78')
+    await expect(fairness).toContainText('Failed')
+    const evaluation = board.getByRole('row', { name: /EV-DAT-01/ })
+    await expect(evaluation).toContainText('Passed')
+    await expect(evaluation).toContainText('Failed')
+  })
+
+  test('the timeline lists a system\'s history newest first', async ({ page }) => {
+    await asking(page, 'root = Board([t])\nt = SystemTimeline("sys-a")', [], withSystemFile)
+    const items = page.getByRole('region', { name: 'System history' }).getByRole('listitem')
+    await expect(items.first()).toContainText('Release decision: approved')
+    await expect(items.nth(1)).toContainText('EV-DAT-01: failed')
+    await expect(items.last()).toContainText('Fairness run: passed')
+  })
+
+  test('a system id that is not found draws a plain note, not data', async ({ page }) => {
+    await asking(page, 'root = Board([t])\nt = SystemTimeline("ghost")', [], withSystemFile)
+    await expect(page.getByText(/That system could not be loaded/)).toBeVisible()
+    await expect(page.getByRole('region', { name: 'System history' })).toHaveCount(0)
   })
 })

@@ -15,10 +15,12 @@ The board field is an OpenUI Lang program.
 
 Arguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.
 
-Board(widgets: (ReleaseMatrix | WaitingOnYou | FrameworkReadiness | Note)[]) — The root. Widgets stack top to bottom, so put the one that answers the question first.
+Board(widgets: (ReleaseMatrix | WaitingOnYou | FrameworkReadiness | EvalCompare | SystemTimeline | Note)[]) — The root. Widgets stack top to bottom, so put the one that answers the question first.
 ReleaseMatrix(filter: "failing" | "waiting_decision" | "all") — A table of systems against their release checks. filter "failing" lists systems with a failing check, "waiting_decision" those whose release decision waits on a person, "all" every system.
 WaitingOnYou(kind: "all" | "approval" | "run" | "audit" | "policy") — The list of things that wait on the signed-in person. kind narrows it, "all" lists everything.
 FrameworkReadiness(scope: "all" | "needs_attention") — The frameworks the organisation follows, each with a bar of how many of its requirements are met, in progress, need attention or not started. scope "needs_attention" keeps only frameworks with requirements that need attention.
+EvalCompare(systemId: string) — One system's latest fairness run and catalogue evaluations against the run before each, as a table of before, now and state. systemId is the id of the system from the facts.
+SystemTimeline(systemId: string) — One system's recent history, newest first: fairness runs, monitoring runs, evaluations and release decisions. systemId is the id of the system from the facts.
 Note(text: string) — One short plain sentence under the widgets, for what they do not show. Never a figure, a system name or a verdict.
 
 ## Hoisting & Streaming (CRITICAL)
@@ -43,6 +45,10 @@ w = WaitingOnYou("all")
 root = Board([f])
 f = FrameworkReadiness("needs_attention")
 
+root = Board([c, t])
+c = EvalCompare("<system id from the facts>")
+t = SystemTimeline("<system id from the facts>")
+
 root = Board([w, n])
 w = WaitingOnYou("approval")
 n = Note("Decisions open on each system's own page.")
@@ -56,5 +62,5 @@ Before finishing, walk your output and verify:
 2. Every referenced name is defined. Every defined name (other than root) is reachable from root.
 
 - Use at most 4 widgets. Use only the widgets listed here.
-- Never write a number, a system name or a verdict anywhere, including in Note: the widgets show the figures.
+- Never write a number, a system name or a verdict anywhere, including in Note: the widgets show the figures. A system is named only by its id from the facts, as the argument of EvalCompare or SystemTimeline.
 - If no widget fits the question, leave the board empty rather than forcing one.
