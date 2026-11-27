@@ -1,0 +1,48 @@
+---
+// Olai shows the notice and keeps the consent record. This file loads the embed and hands each choice to Analytics.astro.
+const api = import.meta.env.PUBLIC_OLAI_API?.trim();
+const tenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim();
+const collectionPoint = import.meta.env.PUBLIC_OLAI_COLLECTION_POINT?.trim();
+const configured = Boolean(api && tenant && collectionPoint);
+---
+
+{configured && (
+  <script
+    is:inline
+    defer
+    src={`${api}/olai/admin/v1/widget.js`}
+    data-olai-api={api}
+    data-olai-tenant={tenant}
+    data-olai-collection-point={collectionPoint}
+    data-olai-theme="light"
+  ></script>
+)}
+
+<script>
+  // Purpose keys declared in Olai for this site.
+  const ANALYTICS = 'website-analytics';
+  const REPLAY = 'website-session-replay';
+
+  type Decision = Record<string, string>;
+  type OlaiInstance = { getConsent(): Decision | null; version(): { profileVersion: number | null } };
+
+  const instance = () => (window as Window & { Olai?: { instance?: OlaiInstance } }).Olai?.instance;
+
+  const apply = (decision: Decision | null | undefined) => {
+    if (!decision) return;
+    const analytics = decision[ANALYTICS] === 'granted';
+    (window as Window & { fairmindConsent?: { setConsent(value: object): void } }).fairmindConsent?.setConsent({
+      analytics,
+      replay: analytics && decision[REPLAY] === 'granted',
+      source: 'olai',
+      policyVersion: String(instance()?.version().profileVersion ?? 'unspecified'),
+    });
+  };
+
+  window.addEventListener('olai:consentSubmitted', ((event: CustomEvent) => apply(event.detail?.consentJson)) as EventListener);
+
+  // A returning visitor has a stored choice, so no consentSubmitted fires on load.
+  window.addEventListener('olai:bannerInitialized', ((event: CustomEvent) => {
+    if (event.detail?.hasExistingConsent) apply(instance()?.getConsent());
+  }) as EventListener);
+</script>

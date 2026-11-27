@@ -4,14 +4,17 @@
   Preferred integration:
     window.fairmindConsent.setConsent({
       analytics: true,
+      replay: false,
       source: 'your-cmp',
       policyVersion: '2026-08-01',
     })
 
   Event integration:
     window.dispatchEvent(new CustomEvent('fairmind:cmp-consent', {
-      detail: { analytics: true, source: 'your-cmp', policyVersion: '2026-08-01' },
+      detail: { analytics: true, replay: false, source: 'your-cmp', policyVersion: '2026-08-01' },
     }))
+
+  replay is a separate choice: session recording and heatmaps start only when analytics and replay are both true.
 
   This component deliberately renders no banner or preference UI. The CMP owns that surface.
 -->
@@ -22,6 +25,7 @@
       const input = typeof value === 'boolean' ? { analytics: value } : value || {};
       return {
         analytics: input.analytics === true,
+        replay: input.analytics === true && input.replay === true,
         source: String(input.source || 'external-cmp').slice(0, 80),
         policyVersion: String(input.policyVersion || 'unspecified').slice(0, 40),
       };
@@ -371,7 +375,14 @@
     };
   };
 
-  const enableAnalytics = async (consent: { source?: string; policyVersion?: string } = {}) => {
+  const applyReplay = (replay: boolean) => {
+    if (!posthogInstance) return;
+    posthogInstance.set_config({ disable_session_recording: !replay, capture_heatmaps: replay });
+    if (replay) posthogInstance.startSessionRecording();
+    else posthogInstance.stopSessionRecording();
+  };
+
+  const enableAnalytics = async (consent: { replay?: boolean; source?: string; policyVersion?: string } = {}) => {
     if (privacySignalEnabled) {
       setState('blocked-by-browser-privacy-signal');
       return false;
@@ -382,7 +393,10 @@
       return false;
     }
 
-    if (active && posthogInstance) return true;
+    if (active && posthogInstance) {
+      applyReplay(consent.replay === true);
+      return true;
+    }
     if (initialization) return initialization;
 
     initialization = (async () => {
@@ -412,7 +426,8 @@
           // the revocation boundary observable: nothing remains buffered at opt-out.
           request_batching: false,
           capture_dead_clicks: true,
-          capture_heatmaps: true,
+          // Heatmaps and replay are a separate consent: applyReplay turns them on.
+          capture_heatmaps: false,
           capture_performance: {
             network_timing: true,
             web_vitals: true,
@@ -423,7 +438,7 @@
             capture_unhandled_rejections: true,
             capture_console_errors: false,
           },
-          disable_session_recording: false,
+          disable_session_recording: true,
           session_recording: {
             maskAllInputs: true,
             maskTextSelector: '.route-form, [data-sensitive], [data-ph-no-capture]',
@@ -485,12 +500,13 @@
       storageCleanupGeneration += 1;
       posthogInstance.set_config({ disable_persistence: false });
       posthogInstance.opt_in_capturing();
-      posthogInstance.startSessionRecording();
+      applyReplay(consent.replay === true);
       active = true;
       installInstrumentation();
       setState('active');
       capture('website_analytics_consent_applied', {
         consent_source: String(consent.source || 'external-cmp').slice(0, 80),
+        replay: consent.replay === true,
         policy_version: String(consent.policyVersion || 'unspecified').slice(0, 40),
       });
       capture('website_page_loaded', {
@@ -552,7 +568,7 @@
     cleanupInstrumentation?.();
 
     if (posthogInstance) {
-      posthogInstance.stopSessionRecording();
+      applyReplay(false);
       posthogInstance.reset();
       posthogInstance.opt_out_capturing();
       posthogInstance.set_config({ disable_persistence: true });
@@ -563,7 +579,7 @@
     return true;
   };
 
-  const applyConsent = (detail: { analytics?: boolean; source?: string; policyVersion?: string } = {}) =>
+  const applyConsent = (detail: { analytics?: boolean; replay?: boolean; source?: string; policyVersion?: string } = {}) =>
     detail.analytics === true ? enableAnalytics(detail) : Promise.resolve(disableAnalytics());
 
   window.fairmindAnalytics = {
@@ -575,7 +591,7 @@
     void applyConsent(event.detail || {});
   }) as EventListener);
 
-  const queuedConsent = (window as Window & { __fairmindConsentState?: { analytics?: boolean; source?: string; policyVersion?: string } })
+  const queuedConsent = (window as Window & { __fairmindConsentState?: { analytics?: boolean; replay?: boolean; source?: string; policyVersion?: string } })
     .__fairmindConsentState;
 
   if (queuedConsent) {

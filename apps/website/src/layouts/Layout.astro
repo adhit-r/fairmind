@@ -2,6 +2,7 @@
 import { registryTotals } from '../lib/registry';
 import '../styles/global.css';
 import Analytics from '../components/marketing/Analytics.astro';
+import OlaiConsent from '../components/marketing/OlaiConsent.astro';
 import Footer from '../components/layout/Footer.astro';
 
 export interface Props {
@@ -106,6 +107,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'https://app.fairmind.xyz';
       <script type="application/ld+json" set:html={JSON.stringify(schema)} />
     ))}
     <Analytics />
+    <OlaiConsent />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>

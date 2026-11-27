@@ -65,6 +65,7 @@ const columns = [
             {column.links.map((link) => (
               <li><a href={link.href}>{link.label}</a></li>
             ))}
+            {column.title === 'Legal' && <li><a href="#" data-olai-open="preferences">Analytics settings</a></li>}
           </ul>
         </nav>
       ))}

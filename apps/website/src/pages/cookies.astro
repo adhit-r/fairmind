@@ -11,16 +11,17 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
   <Fragment slot="exact">
     <h2>1. The consent manager owns the choice</h2>
     <p>
-      FairMind does not render or store a separate cookie-banner preference. An external consent
-      management platform presents the choice, records it under its own controls, and passes the
-      current analytics decision to this website. The website keeps that decision in memory only
-      long enough to apply it to the analytics SDK.
+      FairMind does not render or store a separate cookie-banner preference. Olai, the consent
+      manager FairMind uses, presents the choice, records it, and passes the current decisions to
+      this website. There are two separate choices: website analytics, and session replay with
+      heatmaps. Replay needs analytics to be on as well. The website keeps the decision in memory
+      only long enough to apply it to the analytics SDK. Open Analytics settings in the footer to
+      change or withdraw either choice.
     </p>
 
     <h2>2. Analytics is off before opt-in</h2>
     <p>
-      PostHog analytics does not initialize unless the external consent manager explicitly passes
-      an analytics opt-in. The integration also requires a FairMind-specific PostHog project token
+      PostHog analytics does not initialize unless Olai explicitly passes an analytics opt-in. The integration also requires a FairMind-specific PostHog project token
       and regional ingestion host. Missing configuration, a denied choice, Global Privacy Control,
       or supported Do Not Track signals keep analytics inactive.
     </p>
@@ -51,10 +52,10 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
 
     <h2>5. Withdrawal</h2>
     <p>
-      When the consent manager passes a denial or withdrawal, FairMind removes its analytics event
-      listeners, stops session recording, opts the PostHog SDK out of capture, and resets the active
-      anonymous analytics state. The external consent manager remains responsible for presenting
-      and retaining the preference record.
+      When Olai passes a denial or withdrawal, FairMind removes its analytics event listeners, stops
+      session recording and heatmaps, opts the PostHog SDK out of capture, and resets the active
+      anonymous analytics state. Withdrawing replay alone stops recording and heatmaps and leaves
+      analytics on. Olai retains the record of each choice.
     </p>
 
     <h2>6. Consent-manager integration contract</h2>
@@ -62,7 +63,8 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
       The preferred handoff is
       <code>window.fairmindConsent.setConsent(&#123; analytics, source, policyVersion &#125;)</code>.
       A consent manager may instead dispatch <code>fairmind:cmp-consent</code> with the same fields in
-      the event detail. The <code>analytics</code> field must be a boolean. Neither interface receives
+      the event detail. The <code>analytics</code> and <code>replay</code> fields must be booleans,
+      and replay takes effect only when analytics is also true. Neither interface receives
       form data or a visitor identity.
     </p>
   </Fragment>
@@ -70,9 +72,9 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
   <Fragment slot="plain">
     <h2>The short version</h2>
     <p>
-      The website has no FairMind-made cookie banner. Your consent manager makes and remembers the
-      choice. FairMind only receives “analytics yes” or “analytics no,” plus the consent source and
-      policy version.
+      The website has no FairMind-made cookie banner. Olai asks you, and remembers your choices.
+      FairMind only receives “analytics yes or no” and “replay yes or no,” plus the consent source
+      and policy version.
     </p>
     <h2>Before yes</h2>
     <p>No PostHog analytics, replay, analytics cookie, or analytics local-storage record is created.</p>
@@ -83,7 +85,7 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
       started or submitted. The form contents have a different job and a different data path.
     </p>
     <h2>After no</h2>
-    <p>Capture and replay stop. A cookie preference still cannot promote itself to model approver.</p>
+    <p>Capture and replay stop. Say yes to analytics and no to replay, and only the page-level measures run: nothing is recorded on screen.</p>
   </Fragment>
 
   <Fragment slot="path">
