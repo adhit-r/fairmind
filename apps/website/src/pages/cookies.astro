@@ -5,21 +5,21 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
 <LegalDocument
   title="Cookie Policy"
   description="How FairMind uses cookies and consent controls, what PostHog may store, and how withdrawal reaches the SDK."
-  updated="1 August 2026"
+  updated="25 November 2026"
   readingTime="5 minutes"
 >
   <Fragment slot="exact">
     <h2>1. The consent manager owns the choice</h2>
     <p>
-      FairMind does not render or store a separate cookie-banner preference. An external consent
-      management platform presents the choice, records it under its own controls, and passes the
-      current analytics decision to this website. The website keeps that decision in memory only
+      FairMind does not render or store a separate cookie-banner preference. Olai, FairMind's consent
+      manager, presents the choice, records it in its consent ledger, and passes the current analytics
+      decision to this website. Reopen the choice at any time from Privacy choices in the footer. The website keeps that decision in memory only
       long enough to apply it to the analytics SDK.
     </p>
 
     <h2>2. Analytics is off before opt-in</h2>
     <p>
-      PostHog analytics does not initialize unless the external consent manager explicitly passes
+      PostHog analytics does not initialize unless Olai explicitly passes
       an analytics opt-in. The integration also requires a FairMind-specific PostHog project token
       and regional ingestion host. Missing configuration, a denied choice, Global Privacy Control,
       or supported Do Not Track signals keep analytics inactive.
@@ -49,11 +49,15 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
       <li>Consent-gated session replay with the masking rules described above.</li>
     </ul>
 
+    <p>Attribution begins when you allow analytics. FairMind can use the referring site or campaign
+      on that page, including campaign tags available from the immediately preceding FairMind page.
+      When the original source is unavailable, the consented entry source is marked unknown.
+      FairMind does not store a visitor trail while waiting for consent.</p>
     <h2>5. Withdrawal</h2>
     <p>
-      When the consent manager passes a denial or withdrawal, FairMind removes its analytics event
+      When Olai passes a denial or withdrawal, FairMind removes its analytics event
       listeners, stops session recording, opts the PostHog SDK out of capture, and resets the active
-      anonymous analytics state. The external consent manager remains responsible for presenting
+      anonymous analytics state. Olai remains responsible for presenting
       and retaining the preference record.
     </p>
 
@@ -70,8 +74,8 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
   <Fragment slot="plain">
     <h2>The short version</h2>
     <p>
-      The website has no FairMind-made cookie banner. Your consent manager makes and remembers the
-      choice. FairMind only receives “analytics yes” or “analytics no,” plus the consent source and
+      The website has no FairMind-made cookie banner. Olai, FairMind's consent manager, asks and
+      remembers the choice; reopen it from Privacy choices in the footer. FairMind only receives “analytics yes” or “analytics no,” plus the consent source and
       policy version.
     </p>
     <h2>Before yes</h2>
@@ -91,7 +95,7 @@ import LegalDocument from '../components/marketing/LegalDocument.astro';
     <table>
       <thead><tr><th>State</th><th>Website action</th><th>Browser storage</th><th>Network effect</th></tr></thead>
       <tbody>
-        <tr><td>No CMP decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
+        <tr><td>No Olai decision</td><td>Wait</td><td>No PostHog storage</td><td>No PostHog analytics</td></tr>
         <tr><td>Analytics denied</td><td>Keep capture off</td><td>No new analytics storage</td><td>No analytics events or replay</td></tr>
         <tr><td>Analytics allowed</td><td>Initialize and opt in PostHog</td><td>Anonymous SDK and session state may be stored</td><td>Privacy-filtered analytics may be sent</td></tr>
         <tr><td>Consent withdrawn</td><td>Stop, opt out, reset</td><td>Active analytics state is reset</td><td>Future analytics stops</td></tr>

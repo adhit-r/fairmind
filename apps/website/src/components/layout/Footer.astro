@@ -3,6 +3,7 @@ import { registryTotals } from '../../lib/registry';
 import { frameworks } from '../../lib/frameworks';
 
 const currentYear = new Date().getFullYear();
+const olaiConfigured = Boolean(import.meta.env.PUBLIC_OLAI_API?.trim() && import.meta.env.PUBLIC_OLAI_COLLECTION_POINT?.trim());
 
 const columns = [
   {
@@ -43,6 +44,8 @@ const columns = [
       { label: 'Terms', href: '/terms/' },
       { label: 'Cookies', href: '/cookies/' },
       { label: 'Data retention', href: '/data-retention/' },
+      // Olai opens its preferences dialog from this link; without Olai it is not shown.
+      ...(olaiConfigured ? [{ label: 'Privacy choices', href: '/cookies/', olai: true }] : []),
     ],
   },
 ];
@@ -63,7 +66,7 @@ const columns = [
           <h2>{column.title}</h2>
           <ul>
             {column.links.map((link) => (
-              <li><a href={link.href}>{link.label}</a></li>
+              <li><a href={link.href} data-olai-open={'olai' in link ? 'preferences' : undefined}>{link.label}</a></li>
             ))}
           </ul>
         </nav>

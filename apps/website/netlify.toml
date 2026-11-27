@@ -33,7 +33,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://us.i.posthog.com https://eu.i.posthog.com; worker-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://formspree.io;"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://olai.axonome.xyz; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://olai.axonome.xyz https://us.i.posthog.com https://eu.i.posthog.com; worker-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self' https://formspree.io;"
 
 # Cache static assets
 [[headers]]
@@ -76,6 +76,11 @@
 [context.production.environment]
   NODE_ENV = "production"
   SITE_URL = "https://fairmind.xyz"
+  # Olai consent embed. These are public identifiers that ship in the page anyway, not secrets.
+  PUBLIC_OLAI_API = "https://olai.axonome.xyz"
+  PUBLIC_OLAI_TENANT = "0f598d4e-054d-435c-8aa4-70099175ad26"
+  PUBLIC_OLAI_COLLECTION_POINT = "cp_sivLnWJKSC5s5jrA"
+  PUBLIC_OLAI_ANALYTICS_PURPOSE = "usage-analytics"
 
 [context.deploy-preview.environment]
   NODE_ENV = "preview"
@@ -84,3 +89,10 @@
 [context.branch-deploy.environment]
   NODE_ENV = "development"
   SITE_URL = "https://{branch}--fairmind-website-t41tz.netlify.app"
+
+# Use the FairMind website collection point only on this consent-integration branch.
+[context."adhit/website-consent-and-navigation".environment]
+  PUBLIC_OLAI_API = "https://olai.axonome.xyz"
+  PUBLIC_OLAI_TENANT = "0f598d4e-054d-435c-8aa4-70099175ad26"
+  PUBLIC_OLAI_COLLECTION_POINT = "cp_sivLnWJKSC5s5jrA"
+  PUBLIC_OLAI_ANALYTICS_PURPOSE = "usage-analytics"

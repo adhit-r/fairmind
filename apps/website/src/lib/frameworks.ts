@@ -474,6 +474,7 @@ export const frameworks: Framework[] = [
   },
   {
     slug: 'eu-ai-act',
+    sources: [{ label: 'Regulation (EU) 2024/1689 on EUR-Lex', url: 'https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng' }],
     name: 'EU AI Act (Regulation (EU) 2024/1689)',
     shortName: 'EU AI Act',
     region: 'European Union',
@@ -590,6 +591,7 @@ export const frameworks: Framework[] = [
   },
   {
     slug: 'nist-ai-rmf',
+    sources: [{ label: 'NIST AI Risk Management Framework', url: 'https://www.nist.gov/itl/ai-risk-management-framework' }],
     name: 'NIST AI Risk Management Framework (AI RMF 1.0)',
     shortName: 'NIST AI RMF',
     region: 'United States',
@@ -624,6 +626,7 @@ export const frameworks: Framework[] = [
   },
   {
     slug: 'iso-42001',
+    sources: [{ label: 'ISO/IEC 42001:2023 standard', url: 'https://www.iso.org/standard/42001' }],
     name: 'ISO/IEC 42001:2023 AI management system',
     shortName: 'ISO/IEC 42001',
     region: 'International',
@@ -694,6 +697,7 @@ export const frameworks: Framework[] = [
   },
   {
     slug: 'gdpr',
+    sources: [{ label: 'Regulation (EU) 2016/679 on EUR-Lex', url: 'https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng' }],
     name: 'General Data Protection Regulation (GDPR)',
     shortName: 'GDPR',
     region: 'European Union',
