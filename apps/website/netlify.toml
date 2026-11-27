@@ -80,7 +80,8 @@
   PUBLIC_OLAI_API = "https://olai.axonome.xyz"
   PUBLIC_OLAI_TENANT = "0f598d4e-054d-435c-8aa4-70099175ad26"
   PUBLIC_OLAI_COLLECTION_POINT = "cp_sivLnWJKSC5s5jrA"
-  PUBLIC_OLAI_ANALYTICS_PURPOSE = "usage-analytics"
+  PUBLIC_OLAI_ANALYTICS_PURPOSE = "website-analytics"
+  PUBLIC_OLAI_REPLAY_PURPOSE = "website-session-replay"
 
 [context.deploy-preview.environment]
   NODE_ENV = "preview"
@@ -95,4 +96,5 @@
   PUBLIC_OLAI_API = "https://olai.axonome.xyz"
   PUBLIC_OLAI_TENANT = "0f598d4e-054d-435c-8aa4-70099175ad26"
   PUBLIC_OLAI_COLLECTION_POINT = "cp_sivLnWJKSC5s5jrA"
-  PUBLIC_OLAI_ANALYTICS_PURPOSE = "usage-analytics"
+  PUBLIC_OLAI_ANALYTICS_PURPOSE = "website-analytics"
+  PUBLIC_OLAI_REPLAY_PURPOSE = "website-session-replay"

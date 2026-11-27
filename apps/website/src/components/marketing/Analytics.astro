@@ -10,13 +10,14 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
   Preferred integration:
     window.fairmindConsent.setConsent({
       analytics: true,
+      replay: false, // session replay and heatmaps need their own yes
       source: 'your-cmp',
       policyVersion: '2026-08-01',
     })
 
   Event integration:
     window.dispatchEvent(new CustomEvent('fairmind:cmp-consent', {
-      detail: { analytics: true, source: 'your-cmp', policyVersion: '2026-08-01' },
+      detail: { analytics: true, replay: false, source: 'your-cmp', policyVersion: '2026-08-01' },
     }))
 
   This component renders no banner. Olai's embed shows the notice and the preferences dialog.
@@ -39,6 +40,7 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
       const input = typeof value === 'boolean' ? { analytics: value } : value || {};
       return {
         analytics: input.analytics === true,
+        replay: input.analytics === true && input.replay === true,
         source: String(input.source || 'external-cmp').slice(0, 80),
         policyVersion: String(input.policyVersion || 'unspecified').slice(0, 40),
       };
@@ -73,6 +75,7 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
   let initialization: Promise<boolean> | null = null;
   let active = false;
   let consentAllowed = false;
+  let replayAllowed = false;
   let pageviewSent = false;
   let cleanupInstrumentation: (() => void) | null = null;
   let storageCleanupGeneration = 0;
@@ -390,6 +393,15 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
     };
   };
 
+  // Session replay, heatmaps and dead clicks follow their own consent, inside analytics consent.
+  const syncReplay = () => {
+    if (!posthogInstance) return;
+    const on = active && replayAllowed;
+    posthogInstance.set_config({ capture_heatmaps: on, capture_dead_clicks: on });
+    if (on) posthogInstance.startSessionRecording();
+    else posthogInstance.stopSessionRecording();
+  };
+
   const enableAnalytics = async (consent: { source?: string; policyVersion?: string } = {}) => {
     if (privacySignalEnabled) {
       setState('blocked-by-browser-privacy-signal');
@@ -401,7 +413,10 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
       return false;
     }
 
-    if (active && posthogInstance) return true;
+    if (active && posthogInstance) {
+      syncReplay();
+      return true;
+    }
     if (initialization) return initialization;
 
     initialization = (async () => {
@@ -431,8 +446,9 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
           // A queued batch can leave after a visitor withdraws. Immediate sends make
           // the revocation boundary observable: nothing remains buffered at opt-out.
           request_batching: false,
-          capture_dead_clicks: true,
-          capture_heatmaps: true,
+          // Heatmaps and replay belong to a separate consent purpose; syncReplay turns them on.
+          capture_dead_clicks: false,
+          capture_heatmaps: false,
           capture_performance: {
             network_timing: true,
             web_vitals: true,
@@ -443,7 +459,7 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
             capture_unhandled_rejections: true,
             capture_console_errors: false,
           },
-          disable_session_recording: false,
+          disable_session_recording: true,
           session_recording: {
             maskAllInputs: true,
             maskTextSelector: '.route-form, [data-sensitive], [data-ph-no-capture]',
@@ -522,8 +538,8 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
         });
       }
       posthogInstance.opt_in_capturing();
-      posthogInstance.startSessionRecording();
       active = true;
+      syncReplay();
       installInstrumentation();
       setState('active');
       capture('website_analytics_consent_applied', {
@@ -593,7 +609,7 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
     cleanupInstrumentation?.();
 
     if (posthogInstance) {
-      posthogInstance.stopSessionRecording();
+      syncReplay();
       posthogInstance.reset();
       posthogInstance.opt_out_capturing();
       posthogInstance.set_config({ disable_persistence: true });
@@ -604,8 +620,9 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
     return true;
   };
 
-  const applyConsent = (detail: { analytics?: boolean; source?: string; policyVersion?: string } = {}) => {
+  const applyConsent = (detail: { analytics?: boolean; replay?: boolean; source?: string; policyVersion?: string } = {}) => {
     consentAllowed = detail.analytics === true;
+    replayAllowed = consentAllowed && detail.replay === true;
     return consentAllowed ? enableAnalytics(detail) : Promise.resolve(disableAnalytics(detail.source === 'fairmind-choice-cleared'));
   };
 
@@ -620,25 +637,28 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
 
   // Olai bridge: its decision for the analytics purpose drives the contract above.
   const olaiPurpose = import.meta.env.PUBLIC_OLAI_ANALYTICS_PURPOSE?.trim();
+  const olaiReplayPurpose = import.meta.env.PUBLIC_OLAI_REPLAY_PURPOSE?.trim();
   if (olaiPurpose) {
     type OlaiInstance = { isPurposeGranted?: (key: string) => boolean };
     type OlaiDetail = { consentJson?: Record<string, string>; profileId?: string };
     // policyVersion carries Olai's notice profile, so PostHog records which notice was answered.
-    const fromOlai = (granted: boolean, detail: OlaiDetail = {}) =>
-      void applyConsent({ analytics: granted, source: 'olai', policyVersion: detail.profileId });
+    const fromOlai = (granted: boolean, replay: boolean, detail: OlaiDetail = {}) =>
+      void applyConsent({ analytics: granted, replay, source: 'olai', policyVersion: detail.profileId });
     // A stored decision is read once the embed has decided whether to show its banner.
     window.addEventListener('olai:bannerInitialized', ((event: CustomEvent<OlaiDetail>) => {
       const olai = (window as Window & { Olai?: { instance?: OlaiInstance } }).Olai?.instance;
-      fromOlai(olai?.isPurposeGranted?.(olaiPurpose) === true, event.detail);
+      const granted = (key?: string) => !!key && olai?.isPurposeGranted?.(key) === true;
+      fromOlai(granted(olaiPurpose), granted(olaiReplayPurpose), event.detail);
     }) as EventListener);
     // Every new decision, including withdrawal and decisions made in another tab.
     window.addEventListener('olai:consentSubmitted', ((event: CustomEvent<OlaiDetail>) => {
-      fromOlai(event.detail?.consentJson?.[olaiPurpose] === 'granted', event.detail);
+      const choices = event.detail?.consentJson || {};
+      fromOlai(choices[olaiPurpose] === 'granted', !!olaiReplayPurpose && choices[olaiReplayPurpose] === 'granted', event.detail);
     }) as EventListener);
-    window.addEventListener('olai:forgotten', () => fromOlai(false));
+    window.addEventListener('olai:forgotten', () => fromOlai(false, false));
   }
 
-  const queuedConsent = (window as Window & { __fairmindConsentState?: { analytics?: boolean; source?: string; policyVersion?: string } })
+  const queuedConsent = (window as Window & { __fairmindConsentState?: { analytics?: boolean; replay?: boolean; source?: string; policyVersion?: string } })
     .__fairmindConsentState;
 
   if (privacySignalEnabled) {
