@@ -31,6 +31,7 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
     data-olai-collection-point={olaiCollectionPoint}
     data-olai-api={olaiApi}
     data-olai-tenant={olaiTenant}
+    data-olai-theme="light"
   ></script>
 )}
 
@@ -544,6 +545,7 @@ const olaiTenant = import.meta.env.PUBLIC_OLAI_TENANT?.trim() || 'default';
       setState('active');
       capture('website_analytics_consent_applied', {
         consent_source: String(consent.source || 'external-cmp').slice(0, 80),
+        replay: replayAllowed,
         policy_version: String(consent.policyVersion || 'unspecified').slice(0, 40),
       });
       if (!pageviewSent) {
