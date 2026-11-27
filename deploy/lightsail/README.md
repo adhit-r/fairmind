@@ -107,42 +107,48 @@ production: `DATABASE_URL=<production url> uv run python scripts/setup_db.py ver
 There is no flag to skip the step: a backend on a schema that failed verify is the
 failure this step exists to prevent. The previous backend keeps serving meanwhile.
 
-## Database (Postgres on this box)
+## Database (Postgres on its own instance)
 
-The `postgres` service (PostgreSQL 18, volume `pgdata`, no published port) replaces Neon.
-Neon Auth, the Data API and Authentik are off in production, and live notes are not served,
-so nothing else depends on Neon. The frontend's `DATABASE_URL`/`NEON_REALTIME_*` are unused.
+Postgres 18 runs in Docker on `fairmind-db`, a second Lightsail instance (micro: 1 GB, 40 GB,
+$7/mo, us-east-1a, private IP `172.26.4.206`). It replaces Neon. Neon Auth, the Data API and
+Authentik are off in production, and live notes are not served, so nothing else depends on Neon.
+The frontend's `DATABASE_URL`/`NEON_REALTIME_*` are unused.
 
-You own backups and upgrades now. The nightly dump is the only copy off the Postgres volume:
-set `BACKUP_REMOTE` (an rclone remote, e.g. `r2:fairmind-backups`) before cutover, and take a
-Lightsail snapshot of the instance weekly.
+- Reachable only from `fairmind-app`: the Lightsail firewall allows 5432 from `172.26.1.149/32`
+  and nothing else, and Postgres binds the private IP. SSH is limited to the admin address ranges.
+- Files live in `~/db` on that instance: `docker-compose.yml`, `backup.sh` (copy them from
+  `deploy/lightsail/db/`), and `postgres.env` (`POSTGRES_USER`, `POSTGRES_DB`,
+  `POSTGRES_PASSWORD`; never committed). Builds run on `fairmind-app`, so a build spike cannot
+  starve the database.
+- You own backups and upgrades. The nightly dump is the only copy off the Postgres volume: set
+  `BACKUP_REMOTE` (an rclone remote, e.g. `r2:fairmind-backups`) in `~/db/.env` before cutover and
+  take a Lightsail snapshot of `fairmind-db` weekly.
 
 ### Cutover (from Neon)
 
-1. On the instance, in `deploy/lightsail/`: `docker builder prune -af` (the build cache is
-   tens of GB and dockerd holds ~800 MB RAM), then create `postgres.env` (gitignored):
-   `POSTGRES_USER=fairmind`, `POSTGRES_DB=fairmind`, `POSTGRES_PASSWORD=$(openssl rand -hex 24)`.
-   `docker compose up -d postgres`; check `free -m` leaves 300+ MB available.
-2. Dump Neon with the **unpooled** URL (`DATABASE_URL_UNPOOLED` in `frontend.env`). Neon must be
-   under quota: a project over its plan limit refuses every connection, dump included.
-   `docker run --rm postgres:18-alpine pg_dump "$URL" -Fc --no-owner --no-acl > ~/neon.dump`
-3. `docker compose stop backend frontend`, then
-   `docker compose exec -T postgres pg_restore -U fairmind -d fairmind --no-owner --no-acl < ~/neon.dump`.
-   Compare row counts of the big tables with Neon before going on.
-4. In `backend.env` set `DATABASE_URL=postgresql://fairmind:<password>@postgres:5432/fairmind?sslmode=disable`
-   (keep the Neon URL in a comment until the check below passes), then
-   `docker compose up -d` (runs `migrate`, which verifies the schema) and open the app.
-5. Add `depends_on: postgres: {condition: service_healthy}` to `migrate`, install the timer, run
-   one dump and one restore check:
-   ```bash
-   sudo cp systemd/fairmind-backup.service systemd/fairmind-backup.timer /etc/systemd/system/
-   sudo systemctl daemon-reload && sudo systemctl enable --now fairmind-backup.timer
-   ./backup.sh && ./backup.sh verify
-   ```
-6. After a week of clean backups, delete the Neon project (or leave it idle on the free plan).
+Neon must be under its plan quota: a project over quota refuses every connection, dump included.
 
-Restore after loss: recreate `postgres.env`, `docker compose up -d postgres`, then `pg_restore`
-the newest dump as in step 3. Upgrading Postgres across major versions needs a dump and restore.
+1. Dump Neon on `fairmind-app` with the **unpooled** URL (`DATABASE_URL_UNPOOLED` in `frontend.env`):
+   `docker run --rm -v ~:/out postgres:18-alpine pg_dump "$URL" -Fc --no-owner --no-acl -f /out/neon.dump`
+2. `docker compose stop backend frontend`. Restore into `fairmind-db` over the private network, with
+   the password from `~/db/postgres.env` on that instance:
+   `docker run --rm -v ~:/out -e PGPASSWORD="$PW" postgres:18-alpine pg_restore -h 172.26.4.206 -U fairmind -d fairmind --no-owner --no-acl /out/neon.dump`
+   Compare row counts of the big tables with Neon before going on.
+3. In `backend.env` set `DATABASE_URL=postgresql://fairmind:<password>@172.26.4.206:5432/fairmind?sslmode=disable`
+   (keep the Neon URL in a comment until the check below passes), then `docker compose up -d`
+   (runs `migrate`, which verifies the schema) and open the app.
+4. On `fairmind-db`, install the nightly dump and run one dump and one restore check:
+   ```bash
+   sudo cp ~/db/systemd/fairmind-backup.service ~/db/systemd/fairmind-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now fairmind-backup.timer
+   cd ~/db && ./backup.sh && ./backup.sh verify
+   ```
+5. Delete `neon.dump` from the instance. After a week of clean backups, delete the Neon project
+   (or leave it idle on the free plan). Update the Neon mentions at the top of this file and in
+   `docker-compose.yml`.
+
+Restore after loss: recreate `postgres.env` in `~/db`, `docker compose up -d`, then `pg_restore`
+the newest dump into it. Upgrading Postgres across major versions needs a dump and restore.
 
 ## Cloudflare controls
 

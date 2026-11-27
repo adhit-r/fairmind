@@ -1,0 +1,25 @@
+# Postgres for FairMind on its own Lightsail instance (fairmind-db, micro 1 GB, us-east-1a).
+# Lives in ~/db on that instance, next to postgres.env (gitignored) and backup.sh.
+# 5432 is published on the instance's private IP only; the Lightsail firewall allows it
+# from fairmind-app (172.26.1.149/32) and nothing else. Change the IP if the instance is recreated.
+services:
+  postgres:
+    image: postgres:18-alpine
+    env_file: postgres.env
+    command: >
+      postgres -c shared_buffers=256MB -c effective_cache_size=512MB -c work_mem=4MB
+      -c maintenance_work_mem=64MB -c max_connections=40 -c wal_compression=on
+      -c password_encryption=scram-sha-256
+    ports: ["172.26.4.206:5432:5432"]
+    mem_limit: 640m
+    shm_size: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes: ["pgdata:/var/lib/postgresql"]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
