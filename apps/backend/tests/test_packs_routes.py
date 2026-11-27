@@ -939,6 +939,7 @@ def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_databa
     assert body["board"] == 'root = Board([m])\nm = ReleaseMatrix("failing")'  # trimmed, passed on for the page to check
     assert "ReleaseMatrix(filter:" in seen["system"] and "board" in seen["schema"]["required"]  # the model is told the widgets
     assert "choose it even if the facts do not answer" in seen["system"]  # a widget may answer what the facts lack
+    assert "how FairMind works" in seen["system"]  # but how-to questions stay plain prose
     gate = seen["prompt"]["facts"]["systems"][0]
     assert gate["verdict"] and any(c["label"] for c in gate["checks"])
 
