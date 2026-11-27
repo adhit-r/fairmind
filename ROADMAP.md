@@ -1,111 +1,86 @@
-# FairMind Roadmap
+# FairMind roadmap
 
-> Last updated: November 2026. Checked against the code on `main`. For what works today, see [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md), the [README status section](README.md#current-status) and [docs/STATUS.md](docs/STATUS.md).
+Recalibrated on **24 November 2026** against [`main` at `dc2e730e`](https://github.com/adhit-r/fairmind/commit/dc2e730e1ef0650dfcf3cc1b5177d86b3ee8b961) and the live GitHub milestones. Merged changes, work verified in the dashboard branch, and remaining work have separate evidence below. The November 8 [feature audit](docs/FEATURE_STATUS.md) and [Assurance V2 scorecard](docs/STATUS.md#current-phase-2027-assurance-foundation) are dated snapshots. Milestone issue counts track the backlog.
 
-FairMind is open-source agentic AI governance: agents draft the governance work, FairMind runs the evaluations, and a person decides at every gate. This roadmap lists only what has been verified in the code as shipped, and puts everything else in Now, Next or Later with a linked issue.
+FairMind helps teams register AI systems, gather and test evidence, and record human decisions. The roadmap prioritises the path from a failed check to its source evidence, a fix, a release decision and a versioned record.
 
----
+## Merged product baseline
 
-## Shipped
+- The lifecycle dashboard covers inventory, candidate discovery, framework applicability, evaluations, findings, release decisions, and pushed monitoring snapshots. The system record retains the scope for review. [Product status](README.md#current-status)
+- The catalogue contains **21 packs, 90 workflows and 109 evaluations**. There are 104 registered engines and five evaluators that read stored runs. Valid inputs and execution modes vary. Some checks score evidence produced by an external sandbox, drill or detector. Independent benchmarking and managed sandbox execution remain open. [Evaluation coverage](README.md#evaluations) · [Evaluation depth changes](https://github.com/adhit-r/fairmind/pull/552)
+- The Reports hub has audience views at organisation and system scope, with sealed downloads. Inspection packs support read-only auditor links and offline verification. [Reports hub](https://github.com/adhit-r/fairmind/pull/550) · [Report correctness fixes](https://github.com/adhit-r/fairmind/pull/555) · [Evidence for auditors](README.md#works-today)
+- Assurance V2 signed evidence, trust policies and decision routes remain an internal alpha behind default-off gates. Wider availability depends on the pilot, sandbox, and capability-specific verification. [Assurance release gates](docs/STATUS.md#assurance-v2-claim-boundary)
 
-Verified end to end on `main`.
+## Now · Q4 2026
 
-- **AI system inventory**: register a system, or discover it from MLflow, GitHub or the Hugging Face Hub and promote it from a review queue. Each system has one page that walks it through Onboard, Assess, Govern, Remediate and Operate.
-- **Applicability**: suggested frameworks per system, with confirm and override.
-- **Packs and workflows**: 21 packs and 90 workflows. Install packs, start runs, record step outputs, decide at gates, and draft and publish your own workflow version.
-- **Agent step drafting**: the agent drafts a work step on request, using the organization's own model or built-in rules. It writes to the ledger only.
-- **Evaluations**: 61 of the 109 catalogue evaluations produce a result inside FairMind, on uploaded files, against a live system, or on agent platform configuration.
-- **Fairness runs and release gate**: disparate impact, demographic parity, equal opportunity, equalized odds and calibration, each with a bootstrap interval and a permutation p-value. The gate returns `go`, `conditional_go` or `no_go`, with seals, a clause map and attestations.
-- **Policies** mapped to framework controls and evaluated live.
-- **Evidence for auditors**: evidence hub, evidence-to-control mapping with four-eyes review, inspection packs, a read-only auditor link, and offline verification with `fairmind verify`.
-- **Assurance report studio** on `/reports`.
-- **Monitoring snapshots**: pushed from the CLI or SDK, with cadence tracking, stale-snapshot flags and drift findings.
-- **Remediation task tracker** on `/remediation`.
-- **CI and agent surfaces**: CLI, GitHub Action, Python SDK and MCP server.
-- **Accounts**: sign-up, sign-in, password reset, organization switcher, member list and removal.
-- **Assurance V2 signed-evidence control plane**: built and tested, off by default, internal alpha only (see [docs/STATUS.md](docs/STATUS.md)).
+| Order | Work | Completion evidence |
+|---|---|---|
+| **1. Release the verified dashboard and Reports work** | Integrate the dashboard UX changes and the one-system report workflow. The candidate release has local browser and database verification for the evidence handoff, Home and Discovery priority flows, the system review trail, report approval/export, saved setups, recurring preparation and assigned review. Rollout requires migrations 033–035. | In the target workspace, trace a failed check on a test system to its exact evidence and retest. Exercise one authorised, versioned report assignment through scheduled preparation, review, approval and export. Check owner and reviewer access on desktop and mobile, and show a clear missing-assignment state where applicable. |
+| **2. Close account and organisation blockers** | Surface invitation delivery results, verify the enabled SSO callback, and consolidate old admin entry points into Settings. [#362](https://github.com/adhit-r/fairmind/issues/362) · [#368](https://github.com/adhit-r/fairmind/issues/368) · [#369](https://github.com/adhit-r/fairmind/issues/369) | A member can join from an invite, recover access, and reach the right organisation. An administrator can see a delivery failure and retry it without creating a second invitation. |
+| **3. Make results and status reliable** | Replace obsolete evaluation preflight messaging. Reconcile estate monitoring with legacy endpoints, scope automation counts to one organisation, and remove remaining unsupported bias and compliance stubs. [#360](https://github.com/adhit-r/fairmind/issues/360) · [#361](https://github.com/adhit-r/fairmind/issues/361) · [#365](https://github.com/adhit-r/fairmind/issues/365) · [#366](https://github.com/adhit-r/fairmind/issues/366) · [#367](https://github.com/adhit-r/fairmind/issues/367) | Unavailable, empty, stale and failing states are distinguishable. Status shows the relevant tenant’s real records. Legacy links have a working destination or a specific unsupported-state explanation. |
+| **4. Bring claims and routes into line with the product** | Reconcile public copy and setup docs, then remove verified-unused surfaces. Review the current security alert queue with an authorised maintainer. [#135](https://github.com/adhit-r/fairmind/issues/135) · [#152](https://github.com/adhit-r/fairmind/issues/152) · [#370–375](https://github.com/adhit-r/fairmind/milestone/7) | Published capability claims name their scope and inputs. Remaining routes have identified callers or a removal decision. Current security status comes from the alert queue rather than the original issue counts. |
 
-Removed from this list because the code does not support them: multimodal bias detection, AI BOM, explainability studio, remediation wizard with code generation, real-time WebSocket monitoring, a model marketplace, Comet, DeepEval, Arize Phoenix and AWS Clarify integrations, GDPR and DPDP as catalogue frameworks, and automated compliance reports with email distribution. Each one is either tracked below or listed as unscoped.
+### Q4 issue reconciliation
 
----
+GitHub states below were read on 24 November. The assessment reflects merged code and the cited changes. Deployment acceptance remains a separate check.
 
-## Now: Q4 2026 (close gaps)
+| Issue | Assessment against `main` and remaining work |
+|---|---|
+| [#359](https://github.com/adhit-r/fairmind/issues/359) · Bias page | **Superseded.** The old address redirects to Evaluations, and the system file has the fairness run flow. Check old entry links and close the obsolete contract after verifying the replacement. [Redirect](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/frontend/next.config.js#L56-L59) |
+| [#360](https://github.com/adhit-r/fairmind/issues/360) · Evaluation preparation | **Partial.** The system action reaches Evaluations. Legacy preflight still points users to an unavailable trusted-evidence workflow. [Preflight](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/application/services/evaluation_runs_service.py#L620) |
+| [#361](https://github.com/adhit-r/fairmind/issues/361) · Monitoring | **Partial.** Estate Monitoring reads real system snapshots. Resolve or retire the legacy country-metrics stub and verify its callers. [Monitoring page](<https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/frontend/src/app/(dashboard)/monitoring/page.tsx#L58>) |
+| [#362](https://github.com/adhit-r/fairmind/issues/362) · Invitations | **Partial.** Creation, acceptance and an email sender exist. Surface a send failure to the inviter and verify delivery and retry. [Invite dispatch](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/api/routers/org_management.py#L616-L633) |
+| [#363](https://github.com/adhit-r/fairmind/issues/363) · Organisation settings | **Superseded.** The unsupported form was removed and its address redirects to Settings. Verify the supported organisation controls. [Redirect](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/frontend/next.config.js#L53) |
+| [#364](https://github.com/adhit-r/fairmind/issues/364) · Password and preferences | **Superseded in scope.** Preferences persist and sign-in offers password reset. The misleading password form was removed. Decide separately whether a signed-in reset shortcut is needed. [Settings service](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/application/services/settings_service.py#L29-L57) |
+| [#365](https://github.com/adhit-r/fairmind/issues/365) · Fabricated compliance results | **Partial.** Certificate generation uses recorded evidence. Compliance status still counts scheduler jobs across the process. Scope that count and verify the remaining empty and failed states. [Job count](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/domain/compliance/services/compliance_automation_service.py#L319) |
+| [#366](https://github.com/adhit-r/fairmind/issues/366) · Bias stubs | **Partial.** Unsupported image and text routes return 501. Review the legacy template stubs and consumers. [Bias router](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/api/routers/bias_detection.py#L341-L362) |
+| [#367](https://github.com/adhit-r/fairmind/issues/367) · Legacy monitoring and alerts | **Partial.** Durable metrics and alerts exist. Reconcile the separate health and streaming interfaces with supported snapshot monitoring. [Monitoring router](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/api/routers/monitoring.py#L395) |
+| [#368](https://github.com/adhit-r/fairmind/issues/368) · Organisation admin | **Partial.** Team and Audit log are in Settings. Migrate or redirect the remaining duplicate admin routes. |
+| [#369](https://github.com/adhit-r/fairmind/issues/369) · Auth links | **Partial.** The approval email points to sign-in. Verify and correct the enabled SSO callback. [SSO configuration](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/frontend/src/lib/api/hooks/useAuthentik.ts#L91) |
+| [#370](https://github.com/adhit-r/fairmind/issues/370) · Website claims | **Partial.** The timeline shipped. Feature and comparison claims still need review against reachable workflows and evidence modes. [Timeline PR](https://github.com/adhit-r/fairmind/pull/553) |
+| [#371](https://github.com/adhit-r/fairmind/issues/371) · Docs and OpenAPI | **Partial.** Several docs changed. Reconcile the remaining setup, route, and realtime claims with the supported contract. [Setup instructions](CONTRIBUTING.md) |
+| [#372](https://github.com/adhit-r/fairmind/issues/372) · Legacy pages | **Partial.** Many older tool URLs redirect and the legacy navigation constant is gone. Check remaining standalone views and bookmarks. [Redirects](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/frontend/next.config.js#L38-L59) |
+| [#373](https://github.com/adhit-r/fairmind/issues/373) · Frontend dead code | **Merged and closed.** [Cleanup PR](https://github.com/adhit-r/fairmind/pull/399) |
+| [#374](https://github.com/adhit-r/fairmind/issues/374) · Unused backend modules | **Open.** Check dependencies before removing the named routers, services and middleware. |
+| [#375](https://github.com/adhit-r/fairmind/issues/375) · Mounted routes | **Open.** Older compliance, dataset and provenance routes remain mounted. Identify consumers and choose canonical routes. [Mounted routes](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/api/main.py#L671-L693) |
+| [#152](https://github.com/adhit-r/fairmind/issues/152) · Frontend reliability | **Open.** Finish API-base consolidation, route-level error boundaries and noisy logging fixes. |
+| [#135](https://github.com/adhit-r/fairmind/issues/135) · Security alerts | **Unverified.** The current alert list requires repository security access. Use the live queue to confirm outstanding findings. |
 
-Milestone: **Q4 2026 - Close gaps**. Fix the user-facing breakage on reachable pages first, then remove what misleads.
+## Next · Q1 2027
 
-### Broken or misleading on reachable pages (p0)
+| Workstream | Remaining scope and completion evidence |
+|---|---|
+| **Audit reporting and auditor handoff** | Confirm the organisation audit export’s required dataset and CSV/PDF/JSON contract in [#381](https://github.com/adhit-r/fairmind/issues/381). Existing audience snapshots and the local one-system report cover different scopes. Build from the approved-version contract. Validate explicit auditor-pack scope, expiry and revocation. For recurring delivery, record preparation, approval and each recipient outcome separately and retry failures without changing the approved artifact. |
+| **Legacy compliance automation** | Scheduling and Run now have handlers. Finish truthful dispatch and violations, persisted report history and tenant-scoped status. The history endpoint still returns 501. Keep the legacy certificate job distinct from System Assurance Report preparation. [#382](https://github.com/adhit-r/fairmind/issues/382) · [History endpoint](https://github.com/adhit-r/fairmind/blob/dc2e730e/apps/backend/src/api/routers/compliance_automation.py#L612-L615) |
+| **Requirements and evidence** | Prove requirement → named check → accepted evidence in one system context. Evidence Passport intake remains open alongside existing inspection-pack exports. Define the app path for India checks and the scope of DPDP/GDPR catalogue additions. [#378](https://github.com/adhit-r/fairmind/issues/378) · [#379](https://github.com/adhit-r/fairmind/issues/379) |
+| **System lifecycle and decisions** | Finish environmental approval from the existing assessment history. Material edits and signed retirement exist. Recheck workspace reuse and lifecycle permissions. Define the remaining approval editor and workflow version history around existing decisions and version APIs. [#376](https://github.com/adhit-r/fairmind/issues/376) · [#380](https://github.com/adhit-r/fairmind/issues/380) · [#383](https://github.com/adhit-r/fairmind/issues/383) · [#388](https://github.com/adhit-r/fairmind/issues/388) |
+| **Evaluation and risk quality** | Finish the LLM judge’s reachable workflow, comparison and evidence handoff. Validate supported evaluator modes with benchmarks. Expand guided risk assessment only where the taxonomy and scoring are defined. [#377](https://github.com/adhit-r/fairmind/issues/377) · [#149](https://github.com/adhit-r/fairmind/issues/149) |
+| **Assurance V2 pilot** | Complete the default-off workbench and evaluator/trust administration around existing backend contracts. A private pilot must exercise exact scope, permission boundaries, evidence admission, reviewer decisions and failure recovery before rollout. [#385](https://github.com/adhit-r/fairmind/issues/385) · [#386](https://github.com/adhit-r/fairmind/issues/386) · [Gate A](docs/STATUS.md#current-phase-2027-assurance-foundation) |
+| **Product quality gates** | Complete representative keyboard and accessibility checks, establish a measured bundle budget, and cover the main journeys and failure states in CI. [#103](https://github.com/adhit-r/fairmind/issues/103) · [#101](https://github.com/adhit-r/fairmind/issues/101) · [#154](https://github.com/adhit-r/fairmind/issues/154) |
 
-- Wire the Bias Detection page `/bias` to a real fairness endpoint, and fix its links to `/models` and `/datasets`. #359
-- Stop the Evaluation Runs page `/tests` from promising run preparation it cannot do. #360
-- Replace the `/monitoring` placeholder with the system's real monitoring snapshots, and delete the placeholder routes that hide the honest 501. #361
-- Fix the invitation accept flow and send invitation emails. #362
-- Build the organization settings API, or remove the org-info form. #363
-- Make Settings "Update Password" change the password, and persist user preferences. #364
+Three open Q1 tickets have superseding implementation to accept and reconcile with the tracker. The access-request form and API-key controls exist ([#384](https://github.com/adhit-r/fairmind/issues/384)). The system file shows policy failures in the release workflow and blocking policies can force `no_go` ([#387](https://github.com/adhit-r/fairmind/issues/387)). All 109 catalogue checks now have a registered engine or stored-run evaluator ([#389](https://github.com/adhit-r/fairmind/issues/389) · [evaluation changes](https://github.com/adhit-r/fairmind/pull/552)). Each still needs confirmation against its original acceptance scope before tracker closure.
 
-### Trust and correctness (p1)
+## Later · Dependency-based
 
-- Remove fabricated compliance results: hardcoded Pass rows in certificates, the sample stakeholder dashboard, and the placeholder gap-remediation plan. #365
-- Remove the placeholder 0.0 bias scores and no-op stubs from the bias-detection router. #366
-- Decide the fate of the in-memory per-model monitoring API, alerts and WebSocket. #367
-- Organization admin: fix the broken calls, add it to the sidebar, and remove the `/admin` duplicates. #368
-- Fix the SSO callback path and the access-approved email link. #369
-- Bring the website roadmap, features and comparison pages in line with the code. #370
-- Correct the repository docs, the docs site and the OpenAPI text. #371
-- Close the remaining OpenSSF Scorecard findings. #135
+- **Isolated workers and sandbox.** Prove worker identity, execution isolation, leases, recovery and measured evaluator integrity before enabling managed execution. [#390](https://github.com/adhit-r/fairmind/issues/390) · [Assurance gates](docs/STATUS.md#current-phase-2027-assurance-foundation)
+- **Automatic workflow starts.** Add trigger identity, idempotent runs and observability around workflow starts. Report preparation has its own schedule and human review path. [#391](https://github.com/adhit-r/fairmind/issues/391)
+- **Ask and explained decisions.** Live decision explanations have merged. Complete the remaining measured checks and extend system and finding questions with source citation and access checks. [#392](https://github.com/adhit-r/fairmind/issues/392) · [PR #547](https://github.com/adhit-r/fairmind/pull/547)
+- **Scoped follow-ons.** Define the maintained ML pipeline scope after the old DVC configuration’s removal. Start internationalisation after the priority workflows stabilise and evaluate an optional content-safety evaluator. [#393](https://github.com/adhit-r/fairmind/issues/393) · [#104](https://github.com/adhit-r/fairmind/issues/104) · [#143](https://github.com/adhit-r/fairmind/issues/143)
 
-### Cleanup (p2)
+The numeric distribution robustness item was merged and closed. [#147](https://github.com/adhit-r/fairmind/issues/147) · [PR #408](https://github.com/adhit-r/fairmind/pull/408)
 
-- Remove orphan legacy frontend pages and the unused `navigation.ts`. #372
-- Remove dead API endpoint keys, hooks and service modules in the frontend. #373
-- Delete unmounted routers, unimported services and unused middleware in the backend. #374
-- Remove or consolidate mounted backend routes that nothing calls. #375
-- Frontend code quality: one API base, a route-level error boundary, and fewer `any` and `console.error` calls. #152
+### GitHub issue snapshot
 
----
+Counts include issues only. Open issues can contain work already merged or superseded. The evidence above determines what remains.
 
-## Next: Q1 2027
+| Milestone | Open | Closed |
+|---|---:|---:|
+| [Q4 2026 · Close gaps](https://github.com/adhit-r/fairmind/milestone/7) | 18 | 1 |
+| [Q1 2027](https://github.com/adhit-r/fairmind/milestone/8) | 18 | 0 |
+| [Later](https://github.com/adhit-r/fairmind/milestone/9) | 6 | 1 |
 
-Milestone: **Q1 2027**. Give working backend features a frontend, and finish the half-built ones.
+### Research backlog
 
-- Environmental assessment and approval flow on the system page. #376
-- LLM judge: use the organization's own model key, add it to the navigation, add judge comparison, and save results as evidence. #377
-- India compliance: expose the DPDP, NITI Aayog and RBI checks, and add DPDP and GDPR to the framework catalogue. #378
-- Evidence Passport upload and inspection-pack export from the UI, SDK and CLI. #379
-- Edit, re-tier and archive an AI system; reuse workspaces. #380
-- Org audit-report export from `/reports`. #381
-- Wire the compliance automation page: schedules, Run now, violations, and persisted reports. #382
-- Approval workflow editor and decision history. #383
-- Access-request form and API key management. #384
-- Assurance V2 evaluation workbench UI, behind its existing flags. #385
-- Assurance V2 admin UI: evaluator catalog and trust administration. #386
-- Show the policy gate next to the release gate on the system page. #387
-- Workflow version history on the workflow page. #388
-- Build engines for the catalogue evaluations marked Partial. #389
-- Risk taxonomy API and the `/risks` page extension (IBM, MIT and OECD taxonomies). #149
-- Accessibility audit and keyboard navigation on the lifecycle-shell pages. #103
-- Bundle size baseline and budgets. #101
-- Dashboard end-to-end test hardening. #154
+Causal DAGs, bias propagation across agents, regulatory change ingestion, fairness/performance trade-offs, SEBI disclosure mapping, FRIA/DPIA generation, multi-jurisdiction simulation, model bias lineage, privacy-preserving and federated auditing, bounds under missing demographics, synthetic-data fairness and community red teaming remain research topics. Propose a scope and evaluation method in [Discussions](https://github.com/adhit-r/fairmind/discussions) before assigning a delivery milestone.
 
----
-
-## Later: 2027 and beyond
-
-Milestone: **Later**. Scoped, but after the gaps above are closed.
-
-- Sandboxed evaluation workers (Assurance Gate B). #390
-- Automatic workflow starts from schedules and triggers. #391
-- Ask about any system or finding, and measured VerdictExplainer checks (both labelled Coming soon today). #392
-- Decide the scope of `apps/ml` and fix or archive `dvc.yaml`. #393
-- Make the numeric distribution plot robust to bad input. #147
-- Internationalization, phase 1 (next-intl, nav shell and one page). #104
-- Optional ShieldGemma content-safety evaluator. #143
-
-### Unscoped research ideas
-
-These ideas carried over from the earlier roadmap have no issue yet. Propose them in [Discussions](https://github.com/adhit-r/fairmind/discussions) with a scope before they get a milestone: a causal DAG builder, bias propagation across agent chains, ingesting regulatory changes, a fairness-performance Pareto explorer, SEBI disclosure mapping, FRIA and DPIA generation, a multi-jurisdiction what-if simulator, bias lineage across model components, privacy-preserving fairness auditing, fairness bounds under missing demographics, synthetic-data fairness, federated fairness, and a community red-team module.
-
----
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup. The [good first issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) are a good place to start.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and [good first issues](https://github.com/adhit-r/fairmind/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for bounded contributions.
