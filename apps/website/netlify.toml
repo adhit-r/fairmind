@@ -76,6 +76,11 @@
 [context.production.environment]
   NODE_ENV = "production"
   SITE_URL = "https://fairmind.xyz"
+  # Olai consent embed. These are public identifiers that ship in the page anyway, not secrets.
+  PUBLIC_OLAI_API = "https://olai.axonome.xyz"
+  PUBLIC_OLAI_TENANT = "0f598d4e-054d-435c-8aa4-70099175ad26"
+  PUBLIC_OLAI_COLLECTION_POINT = "cp_sivLnWJKSC5s5jrA"
+  PUBLIC_OLAI_ANALYTICS_PURPOSE = "usage-analytics"
 
 [context.deploy-preview.environment]
   NODE_ENV = "preview"
