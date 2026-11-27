@@ -109,6 +109,8 @@ jobs:
         run: npm run lint
       - name: Unit tests
         run: npx --yes tsx@4.23.15 --test 'src/**/*.test.ts'
+      - name: Ask board prompt matches the widget list (npm run gen:ask-board)
+        run: npm run check:ask-board
 
   boundaries:
     runs-on: ubuntu-24.04
