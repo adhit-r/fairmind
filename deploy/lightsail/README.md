@@ -146,6 +146,7 @@ Neon must be under its plan quota: a project over quota refuses every connection
 5. Delete `neon.dump` from the instance. After a week of clean backups, delete the Neon project
    (or leave it idle on the free plan). Update the Neon mentions at the top of this file and in
    `docker-compose.yml`.
+   Restore the "FairMind is updating" copy in `maintenance/worker.js` and run `npx wrangler deploy`.
 
 Restore after loss: recreate `postgres.env` in `~/db`, `docker compose up -d`, then `pg_restore`
 the newest dump into it. Upgrading Postgres across major versions needs a dump and restore.
