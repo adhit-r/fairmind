@@ -1355,7 +1355,10 @@ ASK_BOARD_RULES = (
     " Also fill board with an OpenUI Lang program that shows the facts as widgets, or an empty string when the "
     "answer is plain prose or no widget fits. A board names widgets and fixed options only: never write a number, "
     "a system name or a verdict into it, because each widget reads its own figures. A widget about one system takes "
-    "that system's id exactly as given in the facts. "
+    "that system's id exactly as given in the facts. Each widget reads its own figures from the person's records, "
+    "which are not all in the facts. So when a widget would show what was asked, choose it even if the facts do not "
+    "answer the question, and let the answer say that the board shows it. Leave the board empty only for a question "
+    "no widget fits. "
 )
 ASK_SCHEMA = {
     "type": "object",
