@@ -59,7 +59,7 @@ export interface Candidate {
 
 export interface CandidateDetail extends Candidate {
   members: DiscoveredAsset[]
-  checks: { type: 'name' | 'service' | 'repo' | 'person'; label: string; sources: IntegrationKind[] }[]
+  checks: { type: 'name' | 'service' | 'repo' | 'resource' | 'person'; label: string; sources: IntegrationKind[] }[]
   reach: ReachFact[]
   tierReasons: string[]
   frameworks: string[]
@@ -130,6 +130,10 @@ export interface Decision {
 
 export async function decide(id: string, body: Decision) {
   return unwrap(await apiClient.post<{ decision: string; systemId: string | null }>(`${D}/candidates/${encodeURIComponent(id)}/decide`, body))
+}
+
+export async function linkCandidate(id: string, systemId: string) {
+  return unwrap(await apiClient.post<{ decision: 'link'; systemId: string }>(`${D}/candidates/${encodeURIComponent(id)}/link`, { system_id: systemId }))
 }
 
 export async function ignoreCandidate(id: string) {

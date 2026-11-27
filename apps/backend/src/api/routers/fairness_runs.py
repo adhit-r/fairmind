@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
@@ -674,6 +674,46 @@ def get_estate_gates(
             "checks": [{k: v for k, v in c.items() if k != "detail"} for c in gate["checks"]],
         })
     return out
+
+
+FAILED_RUN_WEEKS = 8
+
+
+@router.get("/estate/failed-runs")
+def get_estate_failed_runs(
+    http: Request,
+    current_user: TokenData = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Failed fairness, monitoring and evaluation runs per week (Monday start), oldest first, over the caller's org.
+
+    This counts runs that failed, not gate checks that were failing: the gate is worked out fresh on each read and is not stored.
+    """
+    _ensure_tables(db)
+    today = datetime.now(timezone.utc).date()
+    first = today - timedelta(days=today.weekday(), weeks=FAILED_RUN_WEEKS - 1)
+    weeks = {(first + timedelta(weeks=i)).isoformat(): 0 for i in range(FAILED_RUN_WEEKS)}
+    rows = db.execute(
+        text(
+            "SELECT e.evidence_type, e.content_json, e.created_at FROM governance_evidence e JOIN governance_ai_systems s ON s.id = e.system_id "
+            "WHERE s.org_id = :org AND COALESCE(s.lifecycle_stage, '') <> 'retired' AND e.created_at >= :since "
+            "AND (e.evidence_type IN ('fairness_test', 'evaluation_run') OR (e.evidence_type = 'monitoring' AND e.source = 'fairmind.monitoring'))"
+        ),
+        {"org": _caller_org(http), "since": first.isoformat()},
+    ).fetchall()
+    for kind, content_json, created_at in rows:
+        content = json.loads(content_json or "{}")
+        if kind == "evaluation_run":
+            failed = content.get("status") == "failed"
+        else:
+            status = point_estimate_status(content) if kind == "fairness_test" else None  # the same rule as the run lists and the gate
+            failed = content.get("all_checks_pass") is False if status is None else status == "failed"
+        if failed:
+            at = datetime.fromisoformat(str(created_at).replace("Z", "+00:00")).date()
+            monday = (at - timedelta(days=at.weekday())).isoformat()
+            if monday in weeks:
+                weeks[monday] += 1
+    return [{"weekStart": week, "failed": n} for week, n in weeks.items()]
 
 
 WEAKEST_FIRST = ("fails", "stale", "open", "none", "planned", "estimated", "partial", "attested", "excluded", "proven")  # none: nothing reaches the clause

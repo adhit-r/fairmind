@@ -13,7 +13,7 @@ set -euo pipefail
 
 AUTHENTIK_URL="${AUTHENTIK_URL:-http://localhost:9000}"
 TOKEN="${AUTHENTIK_BOOTSTRAP_TOKEN:-fairmind-setup-token-dev}"
-REDIRECT_URI="${AUTHENTIK_OAUTH_REDIRECT_URI:-http://localhost:3000/auth/callback}"
+REDIRECT_URI="${AUTHENTIK_OAUTH_REDIRECT_URI:-http://localhost:3000/callback}"
 CLIENT_ID="${AUTHENTIK_OAUTH_CLIENT_ID:-fairmind-frontend}"
 CLIENT_SECRET="${AUTHENTIK_OAUTH_CLIENT_SECRET:-fairmind-frontend-secret-change-in-production}"
 

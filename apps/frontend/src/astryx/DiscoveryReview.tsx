@@ -14,13 +14,14 @@ import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Token } from '@astryxdesign/core/Token'
-import { useSystemContext } from '@/components/workflow/SystemContext'
+import { useSystemContext, type AISystemSummary } from '@/components/workflow/SystemContext'
 import { SourceMark, detail } from '@/astryx/DiscoveryParts'
 import { KIND_LABEL, SOURCE_LABEL, ago, when } from '@/astryx/data/discovery'
 import {
   askOwner,
   decide,
   ignoreCandidate,
+  linkCandidate,
   splitSighting,
   useCandidate,
   type Candidate,
@@ -32,7 +33,7 @@ import {
 const KIND: Record<string, string> = { ...KIND_LABEL, agent: 'Agent' }
 const STRENGTH_LABEL = { strong: 'Strong match', fair: 'Fair match', single: 'One sighting' } as const
 const STRENGTH_BARS = { strong: 3, fair: 2, single: 1 } as const
-const CHECK_LABEL = { name: 'Same name', service: 'Same service', repo: 'Same repo', person: 'Same person' } as const
+const CHECK_LABEL = { name: 'Same name', service: 'Same service', repo: 'Same repo', resource: 'Same resource ID', person: 'Same person' } as const
 
 function Conf({ strength }: { strength: Candidate['strength'] }) {
   return (
@@ -121,10 +122,10 @@ function Merge({ d, onSplit, busy }: { d: CandidateDetail; onSplit: (assetId: st
       <VStack gap={3}>
         <div>
           <Heading level={3} id="merge-title">
-            {d.sightings === 1 ? 'Seen once' : `One system, seen ${d.sightings} times`}
+            {d.sightings === 1 ? 'Seen once' : `${d.sightings} related sightings`}
           </Heading>
           <Text size="sm" color="secondary">
-            {d.sightings === 1 ? 'Only one source has seen it so far.' : 'Each source saw a piece of it. Together they describe one system.'}
+            {d.sightings === 1 ? 'Only one source has seen it so far.' : 'These records share identifiers. Confirm they belong to one AI system before deciding.'}
           </Text>
         </div>
         <div className={`dv-merge${d.sightings === 1 ? ' one' : ''}`}>
@@ -343,9 +344,12 @@ function suggestedConditions(d: CandidateDetail): { text: string; from: string; 
 
 const TIERS: Tier[] = ['low', 'medium', 'high', 'critical']
 
-function DecisionCard({ d, onDone }: { d: CandidateDetail; onDone: (systemId: string | null) => void }) {
+function DecisionCard({ d, systems, onDone }: { d: CandidateDetail; systems: AISystemSummary[]; onDone: (systemId: string | null) => void }) {
   const suggested = useMemo(() => suggestedConditions(d), [d])
-  const [choice, setChoice] = useState<Decision['decision']>(suggested.length ? 'conditions' : 'approve')
+  const [choice, setChoice] = useState<Decision['decision'] | 'link'>(suggested.length ? 'conditions' : 'approve')
+  const [selectedTarget, setSelectedTarget] = useState('')
+  const linkable = systems.filter((system) => system.id && system.stage !== 'retired')
+  const targetId = selectedTarget || linkable[0]?.id || ''
   const [picked, setPicked] = useState<Record<string, boolean>>(() => Object.fromEntries(suggested.map((s) => [s.text, s.on])))
   const [extra, setExtra] = useState('')
   const [review, setReview] = useState<Decision['review_days']>(90)
@@ -359,7 +363,9 @@ function DecisionCard({ d, onDone }: { d: CandidateDetail; onDone: (systemId: st
     setBusy(true)
     setError(null)
     try {
-      const out = await decide(d.id, { decision: choice, conditions: choice === 'conditions' ? conditions : [], review_days: review, risk_tier: tier, owner: owner.trim() || undefined })
+      const out = choice === 'link'
+        ? await linkCandidate(d.id, targetId)
+        : await decide(d.id, { decision: choice, conditions: choice === 'conditions' ? conditions : [], review_days: review, risk_tier: tier, owner: owner.trim() || undefined })
       onDone(out.systemId)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the decision')
@@ -377,11 +383,15 @@ function DecisionCard({ d, onDone }: { d: CandidateDetail; onDone: (systemId: st
             Kept as a record with who decided and when
           </Text>
         </HStack>
-        <RadioList label="Decision" isLabelHidden value={choice} onChange={(v) => setChoice(v as Decision['decision'])}>
+        <RadioList label="Decision" isLabelHidden value={choice} onChange={(v) => setChoice(v as Decision['decision'] | 'link')}>
           <RadioListItem value="approve" label="Approve" description="Register it as it is" />
           <RadioListItem value="conditions" label="Approve with conditions" description="Register it, with each condition recorded" />
+          {linkable.length > 0 && <RadioListItem value="link" label="Link to an existing AI system" description="Choose the governed system this sighting actually belongs to" />}
           <RadioListItem value="retire" label="Retire" description="Do not register it; ask the owner to shut it down" />
         </RadioList>
+        {choice === 'link' && (
+          <Selector label="Existing AI system" value={targetId} options={linkable.map((system) => ({ value: system.id, label: `${system.name} · ${system.owner}` }))} onChange={setSelectedTarget} />
+        )}
         {choice === 'conditions' && (
           <VStack gap={2}>
             {suggested.map((s) => (
@@ -390,7 +400,7 @@ function DecisionCard({ d, onDone }: { d: CandidateDetail; onDone: (systemId: st
             <TextInput label="Another condition" isOptional value={extra} onChange={setExtra} />
           </VStack>
         )}
-        {choice !== 'retire' && (
+        {choice !== 'retire' && choice !== 'link' && (
           <div className="dv-fields">
             <Selector label="Risk tier" value={tier} options={TIERS.map((t) => ({ value: t, label: t === d.suggestedTier ? `${t} (suggested)` : t }))} onChange={(v: string) => setTier(v as Tier)} />
             <Selector
@@ -409,12 +419,14 @@ function DecisionCard({ d, onDone }: { d: CandidateDetail; onDone: (systemId: st
           <Text size="sm" color="secondary">
             {choice === 'retire'
               ? `Every sighting of ${d.name} is set aside, and the decision is recorded.`
+              : choice === 'link'
+                ? `Adds this sighting to ${linkable.find((system) => system.id === targetId)?.name ?? 'the selected AI system'} without changing that system's owner or risk tier.`
               : `Adds ${d.name} to AI systems with tier ${tier}${owner ? `, owner ${owner}` : ''}${choice === 'conditions' ? ` and ${conditions.length} condition${conditions.length === 1 ? '' : 's'}` : ''}.`}
           </Text>
           <Button
             variant="primary"
-            label={busy ? 'Saving' : choice === 'retire' ? 'Retire it' : 'Add to AI systems'}
-            isDisabled={busy || (choice === 'conditions' && conditions.length === 0)}
+            label={busy ? 'Saving' : choice === 'retire' ? 'Retire it' : choice === 'link' ? 'Link to AI system' : 'Add to AI systems'}
+            isDisabled={busy || (choice === 'conditions' && conditions.length === 0) || (choice === 'link' && !targetId)}
             onClick={() => void submit()}
           />
         </div>
@@ -426,7 +438,7 @@ function DecisionCard({ d, onDone }: { d: CandidateDetail; onDone: (systemId: st
 /** One waiting system: how it was merged, what it can reach, its owner, and the decision. */
 export function CandidatePanel({ id, onChanged }: { id: string; onChanged: () => void }) {
   const router = useRouter()
-  const { refreshSystems } = useSystemContext()
+  const { systems, refreshSystems } = useSystemContext()
   const { detail: d, loading, error, refresh } = useCandidate(id)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -471,6 +483,7 @@ export function CandidatePanel({ id, onChanged }: { id: string; onChanged: () =>
         <DecisionCard
           key={`${d.id}:${d.ownerCheck?.answeredAt ?? ''}`}
           d={d}
+          systems={systems}
           onDone={async (systemId) => {
             onChanged()
             if (systemId) {

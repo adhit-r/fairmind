@@ -4218,7 +4218,7 @@ class GovernanceDiscoveryDecision(Base):
     id = Column(String, primary_key=True, default=_new_id)
     org_id = Column(String, nullable=False, index=True)
     anchor_asset_id = Column(String, nullable=False, index=True)
-    decision = Column(String, nullable=False)  # approve | conditions | retire
+    decision = Column(String, nullable=False)  # approve | conditions | retire | link
     system_id = Column(String, nullable=True)
     risk_tier = Column(String, nullable=True)
     owner = Column(String, nullable=True)
@@ -4450,6 +4450,19 @@ class WorkflowVersion(Base):
     __table_args__ = (
         Index("idx_workflow_versions_org_wf_version", "org_id", "workflow_id", "version", unique=True),
     )
+
+
+class SavedBoard(Base):
+    """A board pinned from Ask FairMind: the question and the widget layout, private to one person in one organization."""
+
+    __tablename__ = "saved_boards"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    org_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False)
+    question = Column(Text, nullable=False)
+    board = Column(Text, nullable=False)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 
 class OrgAIProvider(Base):

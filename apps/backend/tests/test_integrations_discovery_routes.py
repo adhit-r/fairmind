@@ -71,6 +71,35 @@ def test_github_finds_mcp_servers(client, monkeypatch):  # noqa: F811
     assert "env-value-must-not-be-kept" not in json.dumps(found)
 
 
+def test_github_detects_repos_with_only_a_langchain_provider_package(client, monkeypatch):  # noqa: F811
+    manifests = {
+        "python-openai": ("requirements.txt", "langchain-openai>=0.3", "langchain-openai"),
+        "python-anthropic": ("pyproject.toml", '[project]\ndependencies = ["langchain-anthropic>=0.3"]', "langchain-anthropic"),
+        "node-openai": ("package.json", json.dumps({"dependencies": {"@langchain/openai": "^0.5.0"}}), "@langchain/openai"),
+    }
+
+    def gh(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/orgs/acme/repos":
+            return httpx.Response(200, json=[{"name": repo, "full_name": f"acme/{repo}"} for repo in manifests])
+        for repo, (filename, content, _) in manifests.items():
+            download = f"/{repo}/{filename}"
+            if path == f"/repos/acme/{repo}/contents/":
+                return httpx.Response(200, json=[{"name": filename, "download_url": f"https://raw.example.com{download}"}])
+            if path == download:
+                return httpx.Response(200, text=content)
+        return httpx.Response(404, json={})
+
+    monkeypatch.setattr(integrations.httpx, "AsyncClient", functools.partial(httpx.AsyncClient, transport=httpx.MockTransport(gh)))
+    iid = _add(client, "github", owner="acme")
+    sync = client.post(f"/api/v1/integrations/{iid}/sync")
+    assert sync.status_code == 200, sync.text
+    assets = client.get("/api/v1/integrations/discovered").json()
+    assert {a["externalId"]: (a["kind"], a["metadata"]["signals"]["llm_sdks"]) for a in assets} == {
+        f"acme/{repo}": ("llm_app", [package]) for repo, (_, _, package) in manifests.items()
+    }
+
+
 def _mcp_registry(monkeypatch, status=200):
     def reg(request: httpx.Request) -> httpx.Response:
         if status != 200:
@@ -101,6 +130,29 @@ def test_schedule_set_and_validated(client):  # noqa: F811
     logs = _add(client, "proxy_logs")
     assert client.patch(f"/api/v1/integrations/{logs}", json={"schedule_minutes": 60}).status_code == 400
     assert client.post("/api/v1/integrations", json={"kind": "github", "name": "x", "config": {"owner": "a", "schedule_minutes": 5}}).status_code == 422
+
+
+def test_source_settings_can_be_edited_without_reentering_credential(client):  # noqa: F811
+    created = client.post("/api/v1/integrations", json={
+        "kind": "github", "name": "Original", "config": {"owner": "old-org", "schedule_minutes": 60}, "token": "old-token",
+    })
+    assert created.status_code == 201, created.text
+    iid = created.json()["id"]
+    route = f"/api/v1/integrations/{iid}"
+
+    edited = client.patch(route, json={"name": "GitHub production", "config": {"owner": "new-org", "repos": "api,web"}})
+    assert edited.status_code == 200, edited.text
+    source = edited.json()
+    assert source["name"] == "GitHub production"
+    assert source["config"]["owner"] == "new-org" and source["config"]["repos"] == "api,web"
+    assert source["scheduleMinutes"] == 60 and source["hasToken"] is True
+    assert "old-token" not in json.dumps(source)
+
+    assert client.patch(route, json={"name": " "}).status_code == 422
+    assert client.patch(route, json={"config": {"schedule_minutes": 7}}).status_code == 422
+    assert client.patch(route, json={"token": "new-token", "clear_token": True}).status_code == 422
+    assert client.patch(route, json={"token": "new-token"}).json()["hasToken"] is True
+    assert client.patch(route, json={"clear_token": True}).json()["hasToken"] is False
 
 
 def test_preview_saves_nothing(client, monkeypatch):  # noqa: F811

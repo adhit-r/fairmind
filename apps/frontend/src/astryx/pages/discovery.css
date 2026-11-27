@@ -41,6 +41,7 @@
 .dv-pill b { color: var(--color-text-primary); font-weight: 600; margin-right: 4px; }
 /* Connect flow */
 .dv-connect { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.dv-edit { width: min(100%, 900px); }
 .dv-cat { display: flex; flex-direction: column; gap: 14px; }
 .dv-cat h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); display: flex; justify-content: space-between; }
 .dv-cat .gap { color: var(--color-text-warning); font-weight: 600; }

@@ -1,0 +1,71 @@
+The board field is an OpenUI Lang program.
+
+## Syntax Rules
+
+1. Each statement is on its own line: `identifier = Expression`
+2. `root` is the entry point — every program must define `root = Board(...)`
+3. Expressions are: strings ("..."), numbers, booleans (true/false), null, arrays ([...]), objects ({...}), or component calls TypeName(arg1, arg2, ...)
+4. Use references for readability: define `name = ...` on one line, then use `name` later
+5. EVERY variable (except root) MUST be referenced by at least one other variable. Unreferenced variables are silently dropped and will NOT render. Always include defined variables in their parent's children/items array.
+6. Arguments are POSITIONAL (order matters, not names). Write `SomeComp([children], "row", "l")` NOT `SomeComp([children], direction: "row", gap: "l")` — colon syntax is NOT supported and silently breaks
+7. Optional arguments can be omitted from the end
+- Strings use double quotes with backslash escaping
+
+## Component Signatures
+
+Arguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.
+
+Board(widgets: (ReleaseMatrix | WaitingOnYou | FrameworkReadiness | FailedRunsTrend | EvalCompare | SystemTimeline | Note)[]) — The root. Widgets stack top to bottom, so put the one that answers the question first.
+ReleaseMatrix(filter: "failing" | "waiting_decision" | "all") — A table of systems against their release checks. filter "failing" lists systems with a failing check, "waiting_decision" those whose release decision waits on a person, "all" every system.
+WaitingOnYou(kind: "all" | "approval" | "run" | "audit" | "policy") — The list of things that wait on the signed-in person. kind narrows it, "all" lists everything.
+FrameworkReadiness(scope: "all" | "needs_attention") — The frameworks the organisation follows, each with a bar of how many of its requirements are met, in progress, need attention or not started. scope "needs_attention" keeps only frameworks with requirements that need attention.
+FailedRunsTrend() — A bar chart of how many fairness, monitoring and evaluation runs failed in each of the last eight weeks, across all systems. It counts failed runs, not failing checks.
+EvalCompare(systemId: string) — One system's latest fairness run and catalogue evaluations against the run before each, as a table of before, now and state. systemId is the id of the system from the facts.
+SystemTimeline(systemId: string) — One system's recent history, newest first: fairness runs, monitoring runs, evaluations and release decisions. systemId is the id of the system from the facts.
+Note(text: string) — One short plain sentence under the widgets, for what they do not show. Never a figure, a system name or a verdict.
+
+## Hoisting & Streaming (CRITICAL)
+
+openui-lang supports hoisting: a reference can be used BEFORE it is defined. The parser resolves all references after the full input is parsed.
+
+During streaming, the output is re-parsed on every chunk. Undefined references are temporarily unresolved and appear once their definitions stream in. This creates a progressive top-down reveal — structure first, then data fills in.
+
+**Recommended statement order for optimal streaming:**
+1. `root = Board(...)` — UI shell appears immediately
+2. Component definitions — fill in as they stream
+3. Data values — leaf content last
+
+Always write the root = Board(...) statement first so the UI shell appears immediately, even before child data has streamed in.
+
+## Examples
+
+root = Board([m, w])
+m = ReleaseMatrix("failing")
+w = WaitingOnYou("all")
+
+root = Board([f])
+f = FrameworkReadiness("needs_attention")
+
+root = Board([m, k])
+m = ReleaseMatrix("failing")
+k = FailedRunsTrend()
+
+root = Board([c, t])
+c = EvalCompare("<system id from the facts>")
+t = SystemTimeline("<system id from the facts>")
+
+root = Board([w, n])
+w = WaitingOnYou("approval")
+n = Note("Decisions open on each system's own page.")
+
+## Important Rules
+- Choose components that best represent the content (tables for comparisons, charts for trends, forms for input, etc.)
+
+## Final Verification
+Before finishing, walk your output and verify:
+1. root = Board(...) is the FIRST line (for optimal streaming).
+2. Every referenced name is defined. Every defined name (other than root) is reachable from root.
+
+- Use at most 4 widgets. Use only the widgets listed here.
+- Never write a number, a system name or a verdict anywhere, including in Note: the widgets show the figures. A system is named only by its id from the facts, as the argument of EvalCompare or SystemTimeline.
+- If no widget fits the question, leave the board empty rather than forcing one.

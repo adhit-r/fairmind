@@ -4,6 +4,7 @@ import hashlib
 import json
 import uuid
 from collections import Counter
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -1348,10 +1349,23 @@ ASK_SYSTEM = (
     "what is missing instead of guessing. Answer in at most four short sentences of plain prose. In systems, "
     "list the systems your answer is about, by the id given in the facts, each with a reason of a few words."
 )
+ASK_BOARD_PROMPT = Path(__file__).with_name("ask_board_prompt.txt")  # generated: npm run gen:ask-board in apps/frontend
+ASK_BOARD_MAX = 4000
+ASK_BOARD_RULES = (
+    " Also fill board with an OpenUI Lang program that shows the facts as widgets, or an empty string when the "
+    "answer is plain prose or no widget fits. A board names widgets and fixed options only: never write a number, "
+    "a system name or a verdict into it, because each widget reads its own figures. A widget about one system takes "
+    "that system's id exactly as given in the facts. Each widget reads its own figures from the person's records, "
+    "which are not all in the facts. So when a widget would show what was asked, choose it even if the facts do not "
+    "answer the question, and let the answer say that the board shows it. Leave the board empty only for a question "
+    "no widget fits. A question about how FairMind works or how to do something, rather than about this "
+    "organisation's own systems, runs or waiting items, gets a plain answer and an empty board. "
+)
 ASK_SCHEMA = {
     "type": "object",
     "properties": {
         "answer": {"type": "string"},
+        "board": {"type": "string"},
         "systems": {
             "type": "array",
             "items": {
@@ -1362,7 +1376,7 @@ ASK_SCHEMA = {
             },
         },
     },
-    "required": ["answer", "systems"],
+    "required": ["answer", "board", "systems"],
     "additionalProperties": False,
 }
 ASK_MAX_SYSTEMS = 60  # ponytail: the first 60 systems by name; retrieve by question if estates outgrow one prompt
@@ -1399,6 +1413,14 @@ def _ask_facts(db: Session, org_id: str) -> dict:
     return {"systems": estate, "waitingRuns": runs}
 
 
+def _ask_board_library() -> str:
+    """The widget library's own prompt, generated from the frontend's definitions; empty where it is not shipped."""
+    try:
+        return ASK_BOARD_PROMPT.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 @router.post("/ask")
 async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
     """One question about the estate, answered by the organisation's model from the gates and waiting runs alone."""
@@ -1412,7 +1434,7 @@ async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = 
     prompt = json.dumps({"question": body.question.strip(), "facts": facts}, default=str, sort_keys=True)
     db.rollback()  # hold no transaction open while the model works
     try:
-        data, meta = await llm.complete(conn, ASK_SYSTEM, prompt, ASK_SCHEMA)
+        data, meta = await llm.complete(conn, ASK_SYSTEM + ASK_BOARD_RULES + _ask_board_library(), prompt, ASK_SCHEMA)
     except llm.LLMError as e:
         raise HTTPException(status_code=502, detail=str(e))
     answer = str(data.get("answer") or "").strip()
@@ -1426,12 +1448,61 @@ async def ask(body: AskBody, m: OrgMembership = Depends(_member), db: Session = 
             cited.append({"id": sid, "name": names[sid], "reason": str(item.get("reason") or "")[:200]})
     return {
         "answer": answer[:4000],
+        "board": str(data.get("board") or "").strip()[:ASK_BOARD_MAX],  # the page parses and checks it; a bad board falls back to the answer
         "systems": cited,
         "provider": conn.provider.name,
         "model": meta["model"],
         "systemsRead": len(facts["systems"]),
         "runsRead": len(facts["waitingRuns"]),
     }
+
+
+# --- pinned boards: an Ask FairMind board kept on Home, private to the person ---
+
+BOARDS_MAX = 20  # per person; Home draws each one live, so the count is a cost cap
+
+
+class BoardBody(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    board: str = Field(min_length=1, max_length=ASK_BOARD_MAX)
+
+
+@router.get("/boards")
+def list_boards(m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    rows = db.execute(
+        text("SELECT id, question, board, created_at FROM saved_boards WHERE org_id = :org AND user_id = :user ORDER BY created_at DESC LIMIT :n"),
+        {"org": m.org_id, "user": m.user_id, "n": BOARDS_MAX},
+    ).mappings().all()
+    return {"boards": [{"id": r["id"], "question": r["question"], "board": r["board"], "createdAt": r["created_at"]} for r in rows]}
+
+
+@router.post("/boards")
+def pin_board(body: BoardBody, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    owner = {"org": m.org_id, "user": m.user_id}
+    if db.execute(text("SELECT COUNT(*) FROM saved_boards WHERE org_id = :org AND user_id = :user"), owner).scalar() >= BOARDS_MAX:
+        raise HTTPException(status_code=409, detail=f"You can pin {BOARDS_MAX} boards; unpin one first")
+    board = {"id": str(uuid.uuid4()), "question": body.question.strip(), "board": body.board.strip(), "createdAt": _utc_now_iso()}
+    db.execute(
+        text("INSERT INTO saved_boards (id, org_id, user_id, question, board, created_at) VALUES (:id, :org, :user, :question, :board, :at)"),
+        {**owner, **{k: board[k] for k in ("id", "question", "board")}, "at": board["createdAt"]},
+    )
+    db.commit()
+    return board
+
+
+@router.delete("/boards/{board_id}")
+def unpin_board(board_id: str, m: OrgMembership = Depends(_member), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    deleted = db.execute(
+        text("DELETE FROM saved_boards WHERE id = :id AND org_id = :org AND user_id = :user"),
+        {"id": board_id, "org": m.org_id, "user": m.user_id},
+    ).rowcount
+    db.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Board not found")  # also what another person's board looks like
+    return {"deleted": board_id}
 
 
 # --- the organisation's model (bring your own key) -------------------------

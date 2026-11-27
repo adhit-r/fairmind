@@ -926,7 +926,9 @@ def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_databa
 
     async def answer(conn, system_prompt, user, schema):
         seen["prompt"] = json.loads(user)
-        return {"answer": "Credit model fails fairness.", "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
+        seen["system"] = system_prompt
+        seen["schema"] = schema
+        return {"answer": "Credit model fails fairness.", "board": '  root = Board([m])\nm = ReleaseMatrix("failing")  ', "systems": [{"id": system, "reason": "Fairness fails"}, {"id": "not-ours", "reason": "x"}]}, {
             "model": conn.model, "latencyMs": 5, "usage": {}}
 
     monkeypatch.setattr(llm, "complete", answer)
@@ -934,16 +936,51 @@ def test_ask_answers_from_the_estate_and_cites_only_this_orgs_systems(tmp_databa
     assert body["answer"] == "Credit model fails fairness."
     assert body["systems"] == [{"id": system, "name": "Credit model", "reason": "Fairness fails"}]
     assert body["systemsRead"] == 1 and seen["prompt"]["question"] == "Which systems are blocked?"
+    assert body["board"] == 'root = Board([m])\nm = ReleaseMatrix("failing")'  # trimmed, passed on for the page to check
+    assert "ReleaseMatrix(filter:" in seen["system"] and "board" in seen["schema"]["required"]  # the model is told the widgets
+    assert "choose it even if the facts do not answer" in seen["system"]  # a widget may answer what the facts lack
+    assert "how FairMind works" in seen["system"]  # but how-to questions stay plain prose
     gate = seen["prompt"]["facts"]["systems"][0]
     assert gate["verdict"] and any(c["label"] for c in gate["checks"])
 
     async def failing(conn, system_prompt, user, schema):
         raise llm.LLMError("Anthropic is rate limiting this key")
 
+    async def prose_only(conn, system_prompt, user, schema):
+        return {"answer": "Nothing is blocked.", "systems": []}, {"model": conn.model, "latencyMs": 5, "usage": {}}
+
+    monkeypatch.setattr(llm, "complete", prose_only)
+    assert client.post(f"{PACKS}/ask", json={"question": "Anything?"}).json()["board"] == ""  # a model that skips the board still answers
+
     monkeypatch.setattr(llm, "complete", failing)
     failed = client.post(f"{PACKS}/ask", json={"question": "Anything?"})
     assert failed.status_code == 502 and failed.json()["detail"] == "Anthropic is rate limiting this key"
     assert client.post(f"{PACKS}/ask", json={"question": ""}).status_code == 422
+
+
+def test_pinned_boards_are_private_to_the_person_and_capped(tmp_database):
+    from src.api.routers.packs import BOARDS_MAX
+
+    org_id, mine = _org(tmp_database)
+    colleague = _client(tmp_database, org_id)  # same organisation, another person
+    stranger = _org(tmp_database)[1]  # another organisation
+    board = {"question": "Which systems fail?", "board": 'root = Board([m])\nm = ReleaseMatrix("failing")'}
+
+    pinned = mine.post(f"{PACKS}/boards", json=board)
+    assert pinned.status_code == 200 and pinned.json()["question"] == board["question"]
+    assert [b["id"] for b in mine.get(f"{PACKS}/boards").json()["boards"]] == [pinned.json()["id"]]
+    assert colleague.get(f"{PACKS}/boards").json()["boards"] == []
+    assert stranger.get(f"{PACKS}/boards").json()["boards"] == []
+    assert colleague.delete(f"{PACKS}/boards/{pinned.json()['id']}").status_code == 404  # not theirs to unpin
+    assert stranger.delete(f"{PACKS}/boards/{pinned.json()['id']}").status_code == 404
+    assert mine.post(f"{PACKS}/boards", json={"question": "", "board": "x"}).status_code == 422
+    assert mine.post(f"{PACKS}/boards", json={"question": "q", "board": ""}).status_code == 422
+
+    for _ in range(BOARDS_MAX - 1):
+        assert mine.post(f"{PACKS}/boards", json=board).status_code == 200
+    assert mine.post(f"{PACKS}/boards", json=board).status_code == 409
+    assert mine.delete(f"{PACKS}/boards/{pinned.json()['id']}").status_code == 200
+    assert mine.post(f"{PACKS}/boards", json=board).status_code == 200  # room again
 
 
 def _finish(client, workflow, **body):

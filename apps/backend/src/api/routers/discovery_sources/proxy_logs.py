@@ -19,6 +19,7 @@ from .catalog import SERVICES, asset_kind, by_host
 
 _HOST = re.compile(r"(?<![\w.-])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}(?![\w-])", re.I)
 _USER_KEYS = ("user", "username", "user_name", "userName", "src_user", "login", "email", "client_ip", "src_ip", "source_ip", "clientIP")
+_DEST_KEYS = ("destination_host", "dest_host", "dst_host", "hostname", "host", "destination_url", "dest_url", "request_url", "url", "uri", "domain", "dest", "destination")
 MAX_USERS_LISTED = 2000  # Shadow AI matches these against sign-ins; a log export rarely names more
 
 
@@ -32,8 +33,19 @@ def _user_of(row: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _destination_of(row: Dict[str, Any]) -> str:
+    values = {re.sub(r"[^a-z0-9]", "", str(k).lower()): v for k, v in row.items()}
+    for key in _DEST_KEYS:
+        value = values.get(key.replace("_", ""))
+        if isinstance(value, dict):
+            value = _destination_of(value)
+        if value:
+            return str(value)
+    return ""
+
+
 def _rows(text: str) -> Iterable[tuple]:
-    """(line text, user or None) for each record, whatever the format."""
+    """(destination, user or None); unstructured lines have no destination field."""
     lines = text.splitlines()
     first = next((l for l in lines if l.strip()), "")
     if first.lstrip().startswith("{"):
@@ -43,11 +55,11 @@ def _rows(text: str) -> Iterable[tuple]:
             except ValueError:
                 yield line, None
                 continue
-            yield (json.dumps(row) if isinstance(row, dict) else line), (_user_of(row) if isinstance(row, dict) else None)
+            yield (_destination_of(row), _user_of(row)) if isinstance(row, dict) else (line, None)
         return
     if "," in first and not _HOST.search(first) and any(k.lower() in first.lower() for k in ("host", "url", "dest", "domain", "uri")):
         for row in csv.DictReader(io.StringIO(text)):
-            yield ",".join(str(v) for v in row.values() if v), _user_of(row)
+            yield _destination_of(row), _user_of(row)
         return
     for line in lines:
         yield line, None

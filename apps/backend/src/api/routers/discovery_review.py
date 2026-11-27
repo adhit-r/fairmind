@@ -6,6 +6,7 @@ GET  /discovery/candidates                  every waiting system, merged
 GET  /discovery/candidates/{id}             one, with reach, owner, owner check and mismatches
 POST /discovery/candidates/{id}/ask         send the likely owner a link (the link is returned once)
 POST /discovery/candidates/{id}/decide      approve, approve with conditions, or retire
+POST /discovery/candidates/{id}/link        attach sightings to an existing governed system
 POST /discovery/candidates/{id}/ignore      ignore every sighting of it
 POST /discovery/assets/{asset_id}/split     take one sighting out of the system it was merged into
 GET  /api/v1/public/owner-check/{token}     no session: the token is the credential
@@ -43,7 +44,6 @@ _TIER_ORDER = ["low", "medium", "high", "critical"]
 # Names too common to say two sightings are the same thing.
 _STOP = {"default", "defaultproject", "main", "test", "testing", "dev", "prod", "production", "staging", "api", "app", "key", "apikey", "secretkey", "mykey", "new", "demo"}
 _INDIA_REGIONS = {"ap-south-1", "ap-south-2", "centralindia", "southindia", "westindia", "jioindiawest", "jioindiacentral", "asia-south1", "asia-south2"}
-_INDIAN_VENDORS = {"Sarvam AI", "Ola"}
 _SOURCE_VENDOR = {"openai": "OpenAI", "anthropic": "Anthropic", "claude_enterprise": "Anthropic", "m365_copilot": "Microsoft"}
 # Which sighting names the system, best first. A repo or model registry knows its real name; a key or a log line does not.
 _NAME_ORDER = ["github", "mlflow", "huggingface", "aws", "azure", "gcp", "m365_copilot", "claude_enterprise", "litellm", "openai", "anthropic", "mcp_registry", "cursor", "github_copilot", "chatgpt_enterprise", "jamf", "intune", "defender", "crowdstrike", "chrome", "okta", "entra", "proxy_logs"]
@@ -68,6 +68,11 @@ def _norm(value: Any) -> str:
 def _keys(a: Dict[str, Any]) -> List[Tuple[str, str, str]]:
     """(check, normalised key, label) for what this sighting can be matched on."""
     m = a["metadata"]
+    if m.get("cloud") in {"aws", "azure", "gcp"}:
+        # A provider label or display name is not a system identity. The same cloud
+        # resource may be reported by two connections, but distinct IDs stay apart.
+        external_id = str(a.get("externalId") or "")
+        return [("resource", f"{a['source']}:{external_id}", external_id)] if external_id else []
     out: List[Tuple[str, str, str]] = []
     for raw in (a["name"], m.get("project"), m.get("server_name")):
         k = _norm(raw)
@@ -141,7 +146,7 @@ def group_assets(assets: List[Dict[str, Any]], splits: Set[str]) -> List[Dict[st
 
 def _name(members: List[Dict[str, Any]]) -> str:
     for a in members:
-        service = a["metadata"].get("service") or (a["name"] if str(a["externalId"]).startswith("service:") else "")
+        service = (a["metadata"].get("service") if a["kind"] == "ai_service" else None) or (a["name"] if str(a["externalId"]).startswith("service:") else "")
         if service:
             return str(service)
     rank = {s: i for i, s in enumerate(_NAME_ORDER)}
@@ -190,15 +195,13 @@ def reach(members: List[Dict[str, Any]], answers: Dict[str, Any]) -> List[Dict[s
     tools = tools_of(members)
     vendors = sorted({str(a["metadata"].get("vendor")) for a in members if a["metadata"].get("vendor")} | {_SOURCE_VENDOR[a["source"]] for a in members if a["source"] in _SOURCE_VENDOR})
     regions = sorted({str(a["metadata"].get("region") or a["metadata"].get("location")).lower() for a in members if a["metadata"].get("region") or a["metadata"].get("location")})
-    abroad = [v for v in vendors if v not in _INDIAN_VENDORS]
-    if abroad:
-        leaves = _fact("leaves_india", "Data leaves India", "yes", ", ".join(abroad), "source")
-    elif regions and all(r in _INDIA_REGIONS for r in regions):
+    if regions and all(r in _INDIA_REGIONS for r in regions):
         leaves = _fact("leaves_india", "Data leaves India", "no", f"Runs in {', '.join(regions)}", "source")
     elif regions:
         leaves = _fact("leaves_india", "Data leaves India", "yes", f"Runs in {', '.join(regions)}", "source")
     else:
-        leaves = _fact("leaves_india", "Data leaves India", "unknown", "No vendor or region found", None)
+        detail = f"{', '.join(vendors)} found; hosting region is unknown" if vendors else "No hosting region found"
+        leaves = _fact("leaves_india", "Data leaves India", "unknown", detail, None)
     data_in = str(answers.get("data_in") or "").strip()
     decides = _owner_says(answers, "decides_about_people", "Decides about people", "The owner says it does", "The owner says it does not")
     if decides["value"] == "unknown":
@@ -486,6 +489,60 @@ def decide(candidate_id: str, body: DecideRequest, http: Request, db: Session = 
     if system_id:
         ensure_plan_assignments(db, org, [system_id])
     return {"decision": body.decision, "systemId": system_id}
+
+
+class LinkRequest(BaseModel):
+    system_id: str = Field(min_length=1)
+
+
+@router.post("/candidates/{candidate_id}/link")
+def link_candidate(candidate_id: str, body: LinkRequest, http: Request, db: Session = Depends(get_db), who: Any = Depends(org_mutator)):
+    """A reviewer, not a shared provider label, decides which system owns these sightings."""
+    org = _caller_org(http)
+    members = _find(db, org, candidate_id)["members"]
+    # Serialize links before reading the metadata each request will extend.
+    system = db.execute(
+        text(
+            "SELECT id, metadata_json, risk_tier, owner, lifecycle_stage FROM governance_ai_systems "
+            "WHERE id = :id AND org_id = :org FOR UPDATE"
+        ),
+        {"id": body.system_id, "org": org},
+    ).fetchone()
+    if not system:
+        raise HTTPException(status_code=404, detail="AI system not found")
+    if system[4] == "retired":
+        raise HTTPException(status_code=409, detail="A retired AI system cannot receive new sightings")
+
+    now = _now()
+    sightings = [{"source": a["source"], "externalId": a["externalId"], "name": a["name"], "assetId": a["id"]} for a in members]
+    metadata = hub._load_json_value(system[1], {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+    linked = metadata.get("merged_sightings")
+    if not isinstance(linked, list):
+        linked = []
+    known = {a.get("assetId") for a in linked if isinstance(a, dict)}
+    metadata["merged_sightings"] = linked + [a for a in sightings if a["assetId"] not in known]
+    marks = ", ".join(f":i{n}" for n in range(len(members)))
+    ids = {f"i{n}": a["id"] for n, a in enumerate(members)}
+    db.execute(
+        text("UPDATE governance_ai_systems SET metadata_json = :meta, updated_at = :now WHERE id = :id AND org_id = :org"),
+        {"meta": json.dumps(metadata), "now": now, "id": system[0], "org": org},
+    )
+    db.execute(
+        text(f"UPDATE governance_discovered_assets SET status = 'promoted', system_id = :sid, updated_at = :now WHERE org_id = :org AND id IN ({marks})"),
+        {"sid": system[0], "now": now, "org": org, **ids},
+    )
+    db.execute(
+        text(
+            "INSERT INTO governance_discovery_decisions (id, org_id, anchor_asset_id, decision, system_id, risk_tier, owner, conditions_json, "
+            "members_json, review_due, decided_by, decided_at) VALUES (:id, :org, :anchor, 'link', :sid, :tier, :owner, '[]', :members, NULL, :by, :now)"
+        ),
+        {"id": str(uuid.uuid4()), "org": org, "anchor": members[0]["id"], "sid": system[0], "tier": system[2],
+         "owner": system[3], "members": json.dumps(sightings), "by": _actor(who), "now": now},
+    )
+    db.commit()
+    return {"decision": "link", "systemId": system[0]}
 
 
 @router.post("/candidates/{candidate_id}/ignore", dependencies=[Depends(org_mutator)])

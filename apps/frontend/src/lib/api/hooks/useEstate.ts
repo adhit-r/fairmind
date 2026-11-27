@@ -71,6 +71,9 @@ export interface EstateFrameworks {
 }
 
 export const useEstateFrameworks = () => useOrgResource<EstateFrameworks>(API_ENDPOINTS.aiGovernance.estateFrameworks)
+/** Failed runs per week, oldest first; weekStart is the Monday. */
+export type FailedRunsWeek = { weekStart: string; failed: number }
+export const useEstateFailedRuns = () => useOrgResource<FailedRunsWeek[]>(API_ENDPOINTS.aiGovernance.estateFailedRuns)
 export const useEstateGates = () => useOrgResource<EstateGate[]>(API_ENDPOINTS.aiGovernance.estateGates)
 export const useFrameworkSystems = (frameworkKey: string | undefined) =>
   useOrgResource<FrameworkSystems>(frameworkKey ? API_ENDPOINTS.aiGovernance.frameworkSystems(frameworkKey) : null)

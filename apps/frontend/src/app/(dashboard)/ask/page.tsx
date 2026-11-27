@@ -16,6 +16,7 @@ import { VStack, HStack } from '@astryxdesign/core/Layout'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 
+import { AskBoard } from '@/astryx/ask/AskBoard'
 import { useAIProvider, usePackActions, type AskAnswer } from '@/lib/api/hooks/usePacks'
 
 /** Prompts that work for any estate; they name no system. */
@@ -46,11 +47,18 @@ export default function AskPage() {
 function Ask() {
   const prefill = useSearchParams().get('q')
   const provider = useAIProvider()
-  const { ask } = usePackActions()
+  const { ask, pinBoard } = usePackActions()
+  const [pinned, setPinned] = useState<Record<number, 'saving' | 'saved' | string>>({})
   const [draft, setDraft] = useState(prefill ?? '')
   const [turns, setTurns] = useState<Turn[]>([])
   const [pending, setPending] = useState(false)
   const nextId = useRef(1)
+  const pin = async (turn: Turn) => {
+    if (!turn.answer?.board) return
+    setPinned((p) => ({ ...p, [turn.id]: 'saving' }))
+    const res = await pinBoard(turn.question, turn.answer.board)
+    setPinned((p) => ({ ...p, [turn.id]: res.data ? 'saved' : res.error || 'Could not pin the board' }))
+  }
   const prefilled = useRef(false)
 
   const enabled = provider.data?.config?.enabled === true
@@ -129,6 +137,20 @@ function Ask() {
                   ) : t.answer ? (
                     <>
                       <div className="fm-ask-answer"><Text>{t.answer.answer}</Text></div>
+                      <AskBoard
+                        board={t.answer.board}
+                        actions={
+                          <HStack gap={2} vAlign="center">
+                            <Button
+                              label={pinned[t.id] === 'saved' ? 'Pinned to Home' : 'Pin to Home'}
+                              variant="secondary"
+                              isDisabled={pinned[t.id] === 'saving' || pinned[t.id] === 'saved'}
+                              onClick={() => void pin(t)}
+                            />
+                            {pinned[t.id] && pinned[t.id] !== 'saving' && pinned[t.id] !== 'saved' && <Text color="secondary" size="sm">{pinned[t.id]}</Text>}
+                          </HStack>
+                        }
+                      />
                       {t.answer.systems.length > 0 && (
                         <VStack gap={1}>
                           <Text color="secondary" size="sm">Systems it named</Text>
