@@ -313,6 +313,33 @@ def _freeze_native_postgresql_catalog(
     return major, digest, frozen
 
 
+def test_evaluation_review_migration_replays_and_rejects_guard_drift() -> None:
+    from config.migration_integrity import FROZEN_EVALUATION_REVIEW_MIGRATION
+    from scripts.setup_db import apply_evaluation_review_migration
+
+    engine = pg.fresh_engine()
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ALTER SCHEMA public OWNER TO CURRENT_USER")
+        connection.exec_driver_sql("REVOKE ALL ON SCHEMA public FROM PUBLIC")
+        connection.exec_driver_sql(
+            "CREATE TABLE public.fairmind_operator_migration_ledger "
+            "(migration_key TEXT PRIMARY KEY, migration_checksum TEXT NOT NULL)"
+        )
+
+    apply_evaluation_review_migration(engine)
+    apply_evaluation_review_migration(engine)
+    with engine.begin() as connection:
+        verify_postgresql_migration_ledger(
+            connection, trusted_schema="public", expected=(FROZEN_EVALUATION_REVIEW_MIGRATION,),
+        )
+        connection.exec_driver_sql(
+            "ALTER TABLE public.governance_evaluation_reviews DISABLE TRIGGER governance_evaluation_reviews_no_update"
+        )
+
+    with pytest.raises(MigrationIntegrityError, match="disabled required triggers"):
+        apply_evaluation_review_migration(engine)
+
+
 def test_postgresql_ledger_requires_every_exact_frozen_checksum() -> None:
     expected = (
         FrozenMigration("migration-a", "a" * 64, Path("a.sql")),

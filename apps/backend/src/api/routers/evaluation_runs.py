@@ -9,6 +9,8 @@ POST /evaluations/{id}/runs          multipart: system_id, params (JSON), source
                                      mode=live runs an evaluation's alternate behaviour test
 GET  /evaluations/{id}/runs          recent runs, optionally for one AI system
 GET  /evaluation-runs/{evidence_id}  one run in full
+POST /evaluation-runs/{evidence_id}/reviews  a person's review of one flagged item on a run that awaits review; once every
+                                     item is decided the verdict is stored as a new run naming the reviewed one (reviewOf)
 GET  /systems/{system_id}/evaluation-runs   recent runs of every evaluation for one AI system
 GET  /evaluation-jobs/{job_id}       a behaviour test in progress
 GET  /evaluation-jobs/{job_id}/prompts   for a runner: the job and the prompts waiting for the system's answer
@@ -55,9 +57,9 @@ from api.routes.packs import AGENT_SCHEMA, AGENT_SYSTEM, _ai_row, _manager, _mem
 from api.routes.pack_catalogue import EVALUATIONS, VERSION as CATALOGUE_VERSION
 from api.routes.system_targets import MAX_ANSWER_BYTES, TIMEOUT_S, Target, TargetError, ask, runner_command, stored_target
 from database.connection import get_db
-from database.governance_models import GovernanceEvidenceRun
+from database.governance_models import GovernanceEvaluationReview, GovernanceEvidenceRun
 from src.application.services.eval_engines import ALTERNATES, ENGINE_VERSION, REGISTRY, EngineError, Judge
-from src.application.services.eval_engines.common import matches_schema, result
+from src.application.services.eval_engines.common import REVIEW_DECISIONS, matches_schema, result, reviewed
 from src.application.services.eval_engines.behaviour import GEN_SYSTEM, CallError, Live
 from src.application.services.eval_engines.platform import load_export
 from src.application.services.eval_engines.stored import READERS as STORED_READERS
@@ -180,10 +182,11 @@ def _run_json(row, full: bool) -> Dict[str, Any]:
     if content.get("judge"):
         out.update({"judge": content["judge"], "target": content.get("target")})
     # runs stored before provenance classes carry none
-    out.update({"provenance": content.get("provenance"), "thresholdLoosened": content.get("thresholdLoosened"), "partialRead": bool(content.get("partialRead"))})
+    out.update({"provenance": content.get("provenance"), "thresholdLoosened": content.get("thresholdLoosened"), "partialRead": bool(content.get("partialRead")),
+                "reviewOf": content.get("reviewOf")})
     if full:
         out.update({"params": content.get("params", {}), "detail": content.get("detail", []), "detailTotal": content.get("detailTotal", 0),
-                    "inputs": content.get("inputs"), "engine": content.get("engine"), "probes": content.get("probes")})
+                    "inputs": content.get("inputs"), "engine": content.get("engine"), "probes": content.get("probes"), "review": content.get("review")})
     return out
 
 
@@ -340,7 +343,7 @@ async def create_run(
     }
     evidence_id = _store_run(db, m.org_id, m.user_id, system_id, evaluation_id, outcome)
     row = db.execute(text(_RUN_COLS + "WHERE e.id = :id"), {"id": evidence_id}).mappings().fetchone()
-    return _run_json(row, full=True)
+    return _with_reviews(db, _run_json(row, full=True), m)
 
 
 def _store_run(db: Session, org_id: str, user_id: str, system_id: str, evaluation_id: str, outcome: Dict[str, Any]) -> str:
@@ -500,7 +503,7 @@ def _start_job(db, background, m, evaluation_id, engine, system, system_id, file
 def make_live(target: Optional[Target], judge, facts: Dict[str, Any], progress, previous=None, ask_override=None) -> Live:
     """The calls an engine makes: the system under test, the judge (the organisation's model) and FairMind's agent."""
 
-    async def call_target(prompt: str) -> str:
+    async def call_target(prompt) -> str:
         try:
             return await ask(target, prompt, attempts=llm.RETRY_ATTEMPTS)
         except (TargetError, llm.LLMError) as e:
@@ -529,6 +532,8 @@ def make_live(target: Optional[Target], judge, facts: Dict[str, Any], progress, 
         intended_use=target.intended_use if target else "",
         previous=previous,
         agent=call_agent,
+        # only an openai connection FairMind calls itself carries a message list; the runner relays one prompt
+        chat=bool(target) and target.kind == "openai" and not target.via_runner and ask_override is None,
     )
     return live
 
@@ -695,7 +700,85 @@ def get_run(evidence_id: str, m: OrgMembership = Depends(_member), db: Session =
     ).mappings().fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Run not found")
-    return _run_json(row, full=True)
+    return _with_reviews(db, _run_json(row, full=True), m)
+
+
+def _reviews(db: Session, evidence_id: str) -> List[Dict[str, Any]]:
+    rows = db.execute(
+        text("SELECT item, decision, note, reviewed_by, created_at FROM governance_evaluation_reviews WHERE evidence_id = :id ORDER BY created_at, id"),
+        {"id": evidence_id},
+    ).mappings().all()
+    return [{"item": r["item"], "decision": r["decision"], "note": r["note"], "by": r["reviewed_by"], "at": r["created_at"]} for r in rows]
+
+
+def _review_superseded(db: Session, system_id: str, evaluation_id: str, created_at: str) -> bool:
+    return db.execute(
+        text("SELECT 1 FROM governance_evidence WHERE system_id = :sys AND evidence_type = :type "
+             "AND content_json LIKE :tag AND created_at > :at LIMIT 1"),
+        {"sys": system_id, "type": EVIDENCE_TYPE, "tag": f'%"evaluationId": "{evaluation_id}"%', "at": created_at},
+    ).first() is not None
+
+
+def _with_reviews(db: Session, out: Dict[str, Any], membership: OrgMembership) -> Dict[str, Any]:
+    if out.get("review") and not out.get("reviewOf"):
+        choices = REVIEW_DECISIONS.get(out["evaluationId"], {})
+        state = "read_only"
+        if out["status"] == "insufficient" and choices:
+            if _review_superseded(db, out["systemId"], out["evaluationId"], out["createdAt"]):
+                state = "superseded"
+            elif GovernanceAssuranceService.may_mutate(membership):
+                state = "ready"
+        out["review"] = {**out["review"], "decisions": _reviews(db, out["id"]), "choices": list(choices), "state": state}
+    return out
+
+
+class ReviewBody(BaseModel):
+    item: str = Field(min_length=1, max_length=500)
+    decision: str = Field(min_length=1, max_length=20)
+    note: str = Field(min_length=1, max_length=4000)
+
+
+@router.post("/evaluation-runs/{evidence_id}/reviews")
+def review_item(evidence_id: str, body: ReviewBody, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    _ensure_tables(db)
+    note = body.note.strip()
+    if not note:
+        raise HTTPException(status_code=422, detail="Say what you checked in the note")
+    # the row lock makes the review that decides the last item store the verdict once
+    row = db.execute(
+        text(_RUN_COLS + "WHERE e.id = :id AND s.org_id = :org AND e.evidence_type = :type FOR UPDATE OF e"),
+        {"id": evidence_id, "org": m.org_id, "type": EVIDENCE_TYPE},
+    ).mappings().fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Run not found")
+    content = json.loads(row["content_json"] or "{}")
+    evaluation_id, review = content.get("evaluationId"), content.get("review")
+    if not review or content.get("reviewOf") or content.get("status") != "insufficient" or evaluation_id not in REVIEW_DECISIONS:
+        raise HTTPException(status_code=409, detail="This run has nothing waiting for review")
+    if _review_superseded(db, row["system_id"], evaluation_id, row["created_at"]):
+        raise HTTPException(status_code=409, detail="A newer run of this evaluation stands for the system; review that one")
+    items = [i["item"] for i in review["items"]]
+    if body.item not in items:
+        raise HTTPException(status_code=422, detail="That item is not flagged on this run")
+    if body.decision not in REVIEW_DECISIONS[evaluation_id]:
+        raise HTTPException(status_code=422, detail=f"decision must be one of {', '.join(REVIEW_DECISIONS[evaluation_id])}")
+    db.add(GovernanceEvaluationReview(org_id=m.org_id, evidence_id=evidence_id, item=body.item, decision=body.decision, note=note,
+                                      reviewed_by=m.user_id, created_at=_utc_now_iso()))
+    db.flush()
+    decisions = _reviews(db, evidence_id)
+    latest = {d["item"]: d["decision"] for d in decisions}  # oldest first, so a later review of an item wins
+    status, left = reviewed(evaluation_id, items, latest)
+    if status == "insufficient":
+        db.commit()
+        return get_run(evidence_id, m, db)
+    confirmed = sum(not REVIEW_DECISIONS[evaluation_id][d] for d in latest.values())
+    told = (f"A person confirmed {confirmed} of the {len(items)} flagged items." if status == "failed"
+            else f"A person reviewed and cleared all {len(items)} flagged items.")
+    outcome = {k: v for k, v in content.items() if k != "evaluationId"}
+    outcome.update({"status": status, "summary": f"{review['measured']} {told}", "metrics": {**content.get("metrics", {}), "unreviewed": left},
+                    "reviewOf": evidence_id, "review": {**review, "decisions": decisions}})
+    verdict = _store_run(db, m.org_id, m.user_id, row["system_id"], evaluation_id, outcome)  # commits the review with it
+    return get_run(verdict, m, db)
 
 
 @router.get("/systems/{system_id}/evaluation-runs")

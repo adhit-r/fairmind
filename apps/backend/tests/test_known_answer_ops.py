@@ -267,6 +267,26 @@ def test_mon05_runaway_boundaries():
     assert run("EV-MON-05", {"max_calls": 4}, calls=rows_csv(header, five[:4]))["status"] == "passed"
 
 
+@known_answer("EV-MON-05")
+def test_mon05_spend_per_run_against_the_limit():
+    header = ["run_id", "tool", "args", "cost", "run_cost"]
+    # r1: calls cost 0.4 + 0.35 + 0.3 = 1.05 > 1.0 -> a spend runaway. r2: its own run_cost 0.9 (the per-call 5 is ignored) <= 1.0.
+    # r3: exactly 1.0, at the limit (strict >). No alerted column, so the r1 episode is undetected -> failed.
+    rows = [["r1", "t", "a", 0.4, ""], ["r1", "t", "b", 0.35, ""], ["r1", "t", "c", 0.3, ""], ["r2", "t", "a", 5, 0.9], ["r2", "t", "b", "", 0.9],
+            ["r3", "t", "a", 1.0, ""]]
+    out = run("EV-MON-05", {"max_cost": 1.0}, calls=rows_csv(header, rows))
+    assert out["status"] == "failed" and out["metrics"]["runawayEpisodes"] == 1 and out["metrics"]["runsWithoutCost"] == 0
+    assert out["detail"][0]["run_id"] == "r1" and out["detail"][0]["spend"] == pytest.approx(1.05)
+    # Without the r1 run, every run is within 1.0 and priced -> passed; add a run with no cost -> its spend is unknown -> insufficient.
+    assert run("EV-MON-05", {"max_cost": 1.0}, calls=rows_csv(header, rows[3:]))["status"] == "passed"
+    unpriced = run("EV-MON-05", {"max_cost": 1.0}, calls=rows_csv(header, rows[3:] + [["r4", "t", "a", "", ""]]))
+    assert unpriced["status"] == "insufficient" and unpriced["metrics"]["runsWithoutCost"] == 1
+    # No limit: spend is not checked, so r1 passes as before; a negative cost is refused.
+    assert run("EV-MON-05", {}, calls=rows_csv(header, rows))["status"] == "passed"
+    with pytest.raises(EngineError, match="cost"):
+        run("EV-MON-05", {"max_cost": 1.0}, calls=rows_csv(header, [["r1", "t", "a", -1, ""]]))
+
+
 # --- EV-PRV-03: share of calls in approved regions must be 100% -----------------------------------
 
 @known_answer("EV-PRV-03")

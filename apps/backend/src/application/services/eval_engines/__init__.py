@@ -10,7 +10,7 @@ evaluation_results reads the latest run per system back onto the evaluations pag
 from dataclasses import replace
 from typing import Dict, List
 
-from .common import Engine, EngineError, Judge, Param, Slot
+from .common import REVIEW_DECISIONS, Engine, EngineError, Judge, Param, Slot
 from . import agentic, assess, behaviour, data, model, ops, platform, suites
 
 REGISTRY: Dict[str, Engine] = {}
@@ -37,11 +37,16 @@ ENGINE_VERSION = "2026.11.23"
 JUDGED = frozenset(e.id for d in (REGISTRY, ALTERNATES) for e in d.values() if e.live or e.judge or e.file_judge)
 
 # Paths whose code differs from the engine's main one, each earning L4 on its own known-answer test.
-EXTRA_PATHS = {"EV-DAT-01": ("text",)}  # text features are judged by an in-distribution share, not PSI
+EXTRA_PATHS = {
+    "EV-DAT-01": ("text",),  # text features are judged by an in-distribution share, not PSI
+    "EV-SEC-02": ("retrieved",),  # the document as retrieved content, or the labelled user-turn fallback
+    "EV-SEC-03": ("conversation",), "EV-RSK-02": ("conversation",),  # multi-turn probes, as chat messages or a transcript
+    **{e: ("review",) for e in REVIEW_DECISIONS},  # a run awaiting review reaches its verdict from reviews
+}
 
 
 def paths(evaluation_id: str, rules=()) -> frozenset:
-    """The ways one evaluation can produce a verdict: file, live, platform, rule (rules: evaluation_results.RULES),
+    """The ways one evaluation can produce a verdict: file, live, platform, rule (rules: evaluation_results.RULES), review,
     generated (probes the judge model writes) and cyberseceval (the vendored benchmark)."""
     engine, alternate = REGISTRY.get(evaluation_id), ALTERNATES.get(evaluation_id)
     out = set(EXTRA_PATHS.get(evaluation_id, ()))

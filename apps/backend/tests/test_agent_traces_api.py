@@ -336,6 +336,31 @@ def test_runaway_detection_counts_repeated_identical_tool_calls_per_run(tmp_data
     assert [(d["run_id"], d["longestRepeat"], d["undetected"]) for d in run["detail"]] == [("loop", 7, True)]
 
 
+def test_runs_and_steps_carry_a_cost_that_runaway_detection_checks_against_a_spend_limit(tmp_database):
+    org, client = _org(tmp_database)
+    system = _system(tmp_database, org)
+    for bad in (-1, "lots", float("inf")):
+        body = json.dumps({"traceId": "x", "cost": bad}).replace("Infinity", "1e999")  # 1e999 parses as infinity
+        assert client.post(_url(system), content=body, headers={"content-type": "application/json"}).status_code == 422, bad
+    assert client.post(_url(system), json={"traceId": "x", "steps": [{"id": "s", "cost": -0.5}]}).status_code == 422
+    # spend 2.5 by the run's own cost; 0.4 + 0.3 = 0.7 by its steps' (the model call counts); none recorded on the third
+    client.post(_url(system), json=_tools("costly", [("search", {"q": "a"}, "ok")], cost=2.5))
+    steps = _tools("cheap", [("search", {"q": "b"}, "ok")])["steps"]
+    client.post(_url(system), json={"traceId": "cheap", "status": "ok", "steps": [{**steps[0], "cost": 0.4}, {"id": "m", "kind": "llm", "cost": 0.3}]})
+    trace = client.get(_url(system, "cheap")).json()["trace"]
+    assert trace["cost"] is None and [s["cost"] for s in trace["steps"]] == [0.4, 0.3]
+    assert client.get(_url(system, "costly")).json()["trace"]["cost"] == 2.5
+
+    unchecked = _live(client, "EV-MON-05", system).json()  # no limit: spend is not a signal, as before
+    assert unchecked["status"] == "passed" and unchecked["metrics"]["spendLimit"] is None
+    over = _live(client, "EV-MON-05", system, {"max_cost": 1}).json()
+    assert over["status"] == "failed" and [(d["run_id"], d["spend"]) for d in over["detail"]] == [("costly", 2.5)]
+    assert over["detail"][0]["reason"] == "spent 2.5 (limit 1)"
+    client.post(_url(system), json=_tools("unpriced", [("search", {"q": "c"}, "ok")]))
+    open_ = _live(client, "EV-MON-05", system, {"max_cost": 3}).json()  # every priced run within 3, one run with no cost
+    assert open_["status"] == "insufficient" and open_["metrics"]["runsWithoutCost"] == 1, open_
+
+
 def test_secrets_in_run_context_are_found_and_shown_masked(tmp_database):
     org, client = _org(tmp_database)
     system = _system(tmp_database, org)
@@ -380,13 +405,17 @@ def test_a_secret_scan_bounds_the_text_it_reads_and_a_partial_pass_proves_nothin
         assert conn.execute(text("SELECT status FROM governance_risks WHERE system_id = :s AND metadata_json LIKE '%EV-SEC-16%'"), {"s": system}).scalar() == "open"
 
 
-def test_prompt_drift_samples_mask_secrets_and_personal_data(tmp_database):
+def test_prompt_drift_samples_keep_the_run_id_and_a_hash_never_the_prompt(tmp_database):
+    import hashlib
+
     org, client = _org(tmp_database)
     system = _system(tmp_database, org)
-    for i in range(25):
-        client.post(_url(system), json={"traceId": f"now-{i}", "status": "ok", "input": f"Email ravi{i}@acme.example the refund for order {i}"})
+    prompts = {f"0{i}": f"Email ravi{i}@acme.example the refund for order {i}" for i in range(25)}  # ids read as written: 07 stays 07
+    for tid, prompt in prompts.items():
+        client.post(_url(system), json={"traceId": tid, "status": "ok", "input": prompt})
     poems = "prompt\n" + "\n".join(f"Translate poem number {i} into French verse" for i in range(25))
     created = _live(client, "EV-DAT-01", system, files={"reference": ("poems.csv", poems.encode(), "text/csv")}).json()
     run = client.get(f"{PACKS}/evaluation-runs/{created['id']}").json()
-    samples = [d["prompt"] for d in run["detail"] if d["kind"] == "sample"]
-    assert samples and all("@acme.example" not in p and "rav..." in p for p in samples), samples
+    samples = [d for d in run["detail"] if d["kind"] == "sample"]
+    assert samples and all(d["prompt"] == "sha256:" + hashlib.sha256(prompts[d["traceId"]].encode()).hexdigest() for d in samples), samples
+    assert "ravi" not in json.dumps(run["detail"]) and run["params"]["id_column"] == "traceId"

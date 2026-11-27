@@ -30,20 +30,20 @@ def test_code_scan_counts_high_severity_findings_in_a_file_and_in_an_archive():
     ok = _run("EV-DEV-03", code=CLEAN)
     assert ok["status"] == "passed" and ok["metrics"]["high"] == 0 and ok["metrics"]["files"] == 1
     bad = _run("EV-DEV-03", code=SHELL)
-    assert bad["status"] == "failed" and bad["metrics"]["high"] == 1 and bad["detail"][0]["test"].startswith("B602")
+    assert bad["status"] == "insufficient" and bad["metrics"]["high"] == 1 and bad["detail"][0]["test"].startswith("B602")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("pkg/ok.py", CLEAN)
         z.writestr("pkg/deploy.py", SHELL)
         z.writestr("README.md", "not code")
     out = _run("EV-DEV-03", code=buf.getvalue())
-    assert out["status"] == "failed" and out["metrics"]["files"] == 2 and out["detail"][0]["file"].endswith("deploy.py")
+    assert out["status"] == "insufficient" and out["metrics"]["files"] == 2 and out["detail"][0]["file"].endswith("deploy.py")
 
 
 def test_code_scan_ignores_nosec_comments():
     hidden = SHELL.replace("shell=True)", "shell=True)  # nosec")
     out = _run("EV-DEV-03", code=hidden)
-    assert out["status"] == "failed" and out["metrics"]["high"] == 1
+    assert out["status"] == "insufficient" and out["metrics"]["high"] == 1
 
 
 def test_code_scan_refuses_an_archive_that_escapes_its_folder_and_one_without_python():

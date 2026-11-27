@@ -4774,6 +4774,7 @@ class GovernanceAgentTrace(Base):
     started_at = Column(String, nullable=True)
     ended_at = Column(String, nullable=True)
     expected_calls = Column(Text, nullable=True)  # JSON list of {tool, args} a test run should make, in order (EV-TST-06)
+    cost = Column(Float, nullable=True)  # what the whole run cost, in the units the organisation records (EV-MON-05)
     truncated = Column(Boolean, nullable=False, default=False)
     received_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
     updated_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
@@ -4798,6 +4799,7 @@ class GovernanceAgentTraceStep(Base):
     error = Column(Text, nullable=True)
     started_at = Column(String, nullable=True)
     ended_at = Column(String, nullable=True)
+    cost = Column(Float, nullable=True)  # what the step cost, in the run's units
 
 
 class GovernanceTraceExplanation(Base):
@@ -4813,6 +4815,22 @@ class GovernanceTraceExplanation(Base):
     evidence_id = Column(String, nullable=True)  # the evaluation run it came from; None when a person explained the run alone
     result_json = Column(Text, nullable=False)
     created_by = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+
+
+class GovernanceEvaluationReview(Base):
+    """A person's decision on one flagged item of a catalogue run that awaits review (eval_engines.common.REVIEW_DECISIONS).
+    Append-only: a later review of the same item supersedes an earlier one."""
+
+    __tablename__ = "governance_evaluation_reviews"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    org_id = Column(String, nullable=False, index=True)
+    evidence_id = Column(String, ForeignKey("governance_evidence.id"), nullable=False, index=True)
+    item = Column(String(500), nullable=False)
+    decision = Column(String(20), nullable=False)
+    note = Column(Text, nullable=False)
+    reviewed_by = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
 
 

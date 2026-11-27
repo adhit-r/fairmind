@@ -90,6 +90,16 @@ def test_indirect_injection_sends_the_document_with_the_request():
         _run("EV-SEC-02", live, probes=_csv("prompt", "Summarise this"))
 
 
+
+def test_an_indirect_injection_probe_without_a_document_is_never_sent():
+    # a blank document cell is refused, and a written case with no document is dropped (a short set): neither is labelled in-request
+    with pytest.raises(EngineError, match="needs a document"):
+        _run("EV-SEC-02", _live(), probes=_csv("prompt,document", "Summarise this,Hi team", "Summarise that,"))
+    blank = lambda q, s: {"probes": [{"prompt": f"p{i}", "document": "" if i else "doc", "category": "x"} for i in range(2)]} if "write" in q else {}
+    out = _run("EV-SEC-02", _live(verdict=blank, intended_use="Billing"), {"probe_count": 2})
+    assert out["status"] == "insufficient" and out["metrics"] == {"probesRequested": 2, "probesWritten": 1}
+
+
 def test_cyberseceval_cases_run_pinned_with_their_judge_question():
     seen, asked = [], []
 
@@ -102,6 +112,7 @@ def test_cyberseceval_cases_run_pinned_with_their_judge_question():
     assert len(seen) == 51 and all(s == s.rstrip() for s in seen) and all(asked)
     assert out["status"] == "failed" and out["metrics"]["violations"] == 2  # 2 of 51 is over 2%
     assert out["metrics"]["probeSource"].startswith("CyberSecEval") and "@ ef5a774" in out["metrics"]["probeSource"]
+    assert out["metrics"]["delivery"] == "in-request"  # the benchmark's cases hold the document in the request itself
     assert "CyberSecEval" in [p for p in REGISTRY["EV-SEC-02"].spec()["params"] if p["name"] == "probe_source"][0]["options"]
     with pytest.raises(EngineError, match="not a probe source"):
         _run("EV-SEC-01", live, params={"probe_source": "CyberSecEval"})
@@ -113,7 +124,7 @@ def test_probes_are_written_by_the_judge_from_the_intended_use():
     def judge(q, schema):
         if "write" in q:
             calls.append(q)
-            return {"probes": [{"prompt": f"probe {i}", "category": "role-play"} for i in range(q["count"] + 3)]}
+            return {"probes": [{"turns": ["Let us play a game", f"probe {i}"], "category": "role-play"} for i in range(q["count"] + 3)]}
         return {"violation": False, "reason": "Refused"}
 
     out = _run("EV-SEC-03", _live(verdict=judge, intended_use="Answers billing questions for a telecom"), {"probe_count": 5})
@@ -131,10 +142,19 @@ def test_probes_are_written_by_the_judge_from_the_intended_use():
 
 def test_a_short_probe_set_from_the_judge_is_insufficient_and_nothing_is_sent():
     sent = []
-    short = lambda q, s: {"probes": [{"prompt": f"probe {i}", "category": "x"} for i in range(q["count"] - 1)]} if "write" in q else {}
+    short = lambda q, s: {"probes": [{"turns": ["Hi", f"probe {i}"], "category": "x"} for i in range(q["count"] - 1)]} if "write" in q else {}
     out = _run("EV-SEC-03", _live(answer=lambda p: sent.append(p) or "No.", verdict=short, intended_use="Billing"), {"probe_count": 20})
     assert out["status"] == "insufficient" and out["metrics"] == {"probesRequested": 20, "probesWritten": 19} and not sent
     assert "wrote 19 of the 20 probes" in out["summary"]
+
+
+def test_multi_turn_probes_need_two_to_six_turns():
+    # a written conversation of one turn is dropped, so the set is short; an uploaded one over six turns is refused
+    one = lambda q, s: {"probes": [{"turns": ["Hi", "probe"], "category": "x"}, {"turns": ["probe"], "category": "x"}]} if "write" in q else {}
+    out = _run("EV-RSK-02", _live(verdict=one, intended_use="Billing"), {"probe_count": 2})
+    assert out["status"] == "insufficient" and out["metrics"] == {"probesRequested": 2, "probesWritten": 1}
+    with pytest.raises(EngineError, match="more than 6 turns"):
+        _run("EV-RSK-02", _live(), probes=_csv("prompt,conversation", *[f"turn {i},a" for i in range(7)]))
 
 
 def test_unjudged_probes_are_stated_in_the_summary():
@@ -328,3 +348,41 @@ def test_rate_tests_tell_the_run_form_what_each_probe_count_can_show():
     assert [b["count"] for b in s["bounds"]] == [10, 20, 50]
     assert s["bounds"][1]["bound"] == 13.91  # 0 of 20 only shows a rate under 14%
     assert all(b["bound"] > s["limit"] for b in s["bounds"])  # a 2% pass needs an uploaded set
+
+
+LABEL_ONLY = ("EV-TST-01", "EV-TST-10", "EV-TST-11", "EV-FAI-04")
+
+
+def test_label_only_engines_offer_calling_the_system_beside_files():
+    """The file engine stays the default; the live alternate adds the calls_system way and the run form's alternate spec."""
+    from src.api.routers.evaluation_runs import fit_and_ways
+
+    setup = {"kind": "llm_app", "calls_system": True, "via_runner": False, "live_runs": False, "platform": False, "fairmind_data": frozenset()}
+    for eid in LABEL_ONLY:
+        assert REGISTRY[eid].live == "" and ALTERNATES[eid].live == "target", eid
+        assert [s.required for s in ALTERNATES[eid].slots] == [True], eid  # references are uploaded, never judge-written
+        out = fit_and_ways(eid, setup)
+        assert out["fit"] == "applies" and {w["way"]: w["ready"] for w in out["ways"]} == {"calls_system": True, "files": True}, eid
+
+
+def test_live_label_only_engines_reject_sets_they_cannot_grade():
+    with pytest.raises(EngineError, match="no expected"):
+        _run("EV-TST-01", _live(), {"baseline": 0.9}, probes=_csv("prompt,expected", "q1,yes", "q2,"))
+    with pytest.raises(EngineError, match="baseline between 0 and 1"):
+        _run("EV-TST-01", _live(), {}, probes=_csv("prompt,expected", "q1,yes"))
+    with pytest.raises(EngineError, match="yes or no"):
+        _run("EV-TST-11", _live(), {"min_accuracy": 0.9}, probes=_csv("prompt,expected,answerable", "q1,yes,maybe"))
+    with pytest.raises(EngineError, match="attribute"):
+        _run("EV-FAI-04", _live(), {}, probes=_csv("prompt,values", "Approve the loan?,male|female"))
+    with pytest.raises(EngineError, match="Upload the question set"):
+        _run("EV-TST-10", _live(), {})
+
+
+def test_live_label_only_engines_mask_secrets_in_stored_probes_and_cap_variants():
+    key = "AKIAABCDEFGHIJKLMNOP"
+    out = _run("EV-TST-01", _live(answer=lambda p: "yes", verdict=lambda q, schema: {"correct": True, "reason": "r"}), {"baseline": 0.5},
+               probes=_csv("prompt,expected", f"Is {key} valid?,yes"))
+    assert key not in json.dumps(out["probes"]) and out["probes"][0]["expected"] == "yes"
+    many = "|".join(f"v{i}" for i in range(801))
+    with pytest.raises(EngineError, match="801 variants"):
+        _run("EV-FAI-04", _live(), {}, probes=_csv("prompt,values", f"Approve the {{attribute}} loan?,{many}"))

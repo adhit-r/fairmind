@@ -442,6 +442,29 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
     }
 )
 
+# Catalogue flag reviews ship through the runtime setup script, independently
+# of the Assurance V2 operator chain.
+FROZEN_EVALUATION_REVIEW_MIGRATION = FrozenMigration(
+    "034-evaluation-reviews-v1",
+    "fac00bd9c175ea6ff668aba3ffccc29bd1bb86e63e387620051bfa9e87bc341b",
+    _MIGRATIONS / "034_evaluation_reviews.sql",
+)
+_EVALUATION_REVIEW_CATALOG_SPEC = PostgreSQLCatalogSpec(
+    frozenset({"governance_evaluation_reviews"}),
+    frozenset({"reject_governance_evaluation_review_mutation"}),
+    frozenset({"governance_evaluation_reviews_no_update", "governance_evaluation_reviews_no_delete"}),
+)
+FROZEN_POSTGRESQL_EVALUATION_REVIEW_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = MappingProxyType(
+    {
+        major: FrozenPostgreSQLCatalog(_EVALUATION_REVIEW_CATALOG_SPEC, major, digest)
+        for major, digest in {
+            14: "b2a778f009e66f585ce0c5bf30f633bb4009bee4041567b2b22225ae4c756915",
+            17: "6109bff4d85ea6ee519fc3807e868cdd9ed5f5a2ec76d01ff51c27631e5d5128",
+            18: "7a8b7b297eda01cb9ab100684bc52695d1601941fd1bad63516c3e0489623227",
+        }.items()
+    }
+)
+
 _TRUSTED_SCHEMA_SENTINEL = "__fairmind_trusted_schema__"
 
 

@@ -11,6 +11,7 @@ import { FileInput } from '@astryxdesign/core/FileInput'
 import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
 import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { Selector } from '@astryxdesign/core/Selector'
+import { TextArea } from '@astryxdesign/core/TextArea'
 import { Token } from '@astryxdesign/core/Token'
 import {
   useAIProvider,
@@ -132,6 +133,70 @@ function RunResult({ run, onTrace }: { run: EngineRun; onTrace?: (row: Record<st
         <p className={`m-0 text-xs ${MUTED}`}>Showing {run.detail?.length} of {run.detailTotal} rows.</p>
       )}
     </div>
+  )
+}
+
+const DECISION_LABEL: Record<string, string> = { benign: 'Reviewed: not poisoning', poisoned: 'Confirmed poisoning', resolved: 'Resolved', accepted: 'Accepted' }
+
+/** The flagged items of a run that waits for review, each with its latest decision, and a form to review the next. */
+function ReviewList({ run, onReviewed }: { run: EngineRun; onReviewed: (run: EngineRun) => void }) {
+  const { reviewRunItem } = usePackActions()
+  const items = run.review?.items ?? []
+  const latest = useMemo(() => new Map((run.review?.decisions ?? []).map((d) => [d.item, d])), [run.review?.decisions])
+  const choices = run.review?.choices ?? []
+  const [item, setItem] = useState<string | undefined>()
+  const [decision, setDecision] = useState<string | undefined>()
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const open = items.filter((i) => !latest.has(i.item))
+  const chosen = item ?? open[0]?.item
+  const state = run.review?.state
+  async function save() {
+    if (state !== 'ready' || !chosen || !decision || !note.trim()) return
+    setBusy(true)
+    setError(null)
+    const res = await reviewRunItem(run.id, chosen, decision, note.trim())
+    setBusy(false)
+    if (res.error || !res.data) return setError(res.error ?? 'Could not save the review')
+    setItem(undefined)
+    setNote('')
+    onReviewed(res.data)
+  }
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="ev-review">
+      <h3 id="ev-review" className="m-0 text-[13px] font-semibold text-[var(--fm-ink)]">Review ({items.length - open.length} of {items.length} reviewed)</h3>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {items.map((i) => {
+          const d = latest.get(i.item)
+          return (
+            <li key={i.item} className="flex flex-wrap items-baseline gap-2 border-t border-[var(--fm-line)] pt-1.5 text-[12.5px]">
+              <Token size="sm" color={!d ? 'gray' : d.decision === 'poisoned' ? 'red' : 'green'} label={d ? DECISION_LABEL[d.decision] ?? d.decision : 'Not reviewed'} />
+              <span className="font-mono font-semibold text-[var(--fm-ink)]">{i.item}</span>
+              <span className={MUTED}>{i.label}</span>
+              {d && <span className={MUTED}>{d.note} ({d.by}, {when(d.at)})</span>}
+            </li>
+          )
+        })}
+      </ul>
+      {state === 'ready' ? (
+        <>
+          {error && <Banner status="error" title="Review not saved" description={error} />}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Selector label="Item" options={items.map((i) => ({ value: i.item, label: `${i.item}${latest.has(i.item) ? ' (reviewed)' : ''}` }))} value={chosen} onChange={setItem} />
+            <Selector label="Decision" placeholder="Choose a decision" options={choices.map((c) => ({ value: c, label: DECISION_LABEL[c] ?? c }))} value={decision} onChange={setDecision} />
+          </div>
+          <TextArea label="Note" rows={2} value={note} onChange={(v) => setNote(v)} description="What you checked; kept with the run as evidence, under your name." />
+          <div>
+            <Button label="Save review" variant="primary" isDisabled={!chosen || !decision || !note.trim() || busy} isLoading={busy} onClick={() => void save()} />
+          </div>
+        </>
+      ) : (
+        <p className={`m-0 text-sm ${MUTED}`}>
+          {state === 'superseded' ? 'This run was superseded. Open the latest result under Runs.' : 'You have read-only access to this review.'}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -835,6 +900,11 @@ export default function EvaluationPage() {
               <ExplanationResult run={shown} onTrace={(id, flag) => setTrace({ id, flag })} />
             </div>
           ) : <RunResult run={shown} onTrace={(row) => setTrace({ id: String(row.traceId), flag: typeof row.reason === 'string' && row.verdict !== 'grounded' ? row.reason : Array.isArray(row.reasons) ? row.reasons.join('; ') : undefined })} />}
+          {shown.review && !shown.reviewOf && shown.status === 'insufficient' && (
+            <div className="mt-4">
+              <ReviewList key={shown.id} run={shown} onReviewed={(run) => { setFresh(run); setOpenId(run.id); runs.reload() }} />
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href={`/systems/${encodeURIComponent(shown.systemId)}`} className={BTN_P}>Open the system file</Link>
             <Link href={`/risks?system=${encodeURIComponent(shown.systemId)}`} className={BTN}>Open findings</Link>

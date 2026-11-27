@@ -87,6 +87,7 @@ class StepBody(_Body):
     error: Optional[str] = None
     startedAt: Optional[str] = Field(default=None, max_length=40)
     endedAt: Optional[str] = Field(default=None, max_length=40)
+    cost: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)  # in the units the organisation records; no currency assumed
 
 
 class ExpectedCall(_Body):
@@ -103,6 +104,7 @@ class TraceBody(_Body):
     rationale: Optional[str] = None
     startedAt: Optional[str] = Field(default=None, max_length=40)
     endedAt: Optional[str] = Field(default=None, max_length=40)
+    cost: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)  # the whole run's; EV-MON-05 sums the steps' when it is left out
     steps: List[StepBody] = Field(default_factory=list, max_length=MAX_STEPS)
     expectedCalls: Optional[List[ExpectedCall]] = Field(default=None, max_length=MAX_STEPS)
 
@@ -147,6 +149,7 @@ def _trace_json(row, steps: int, decisions: int, explained: int) -> Dict[str, An
         "rationale": row["rationale"],
         "startedAt": row["started_at"],
         "endedAt": row["ended_at"],
+        "cost": row["cost"],
         "receivedAt": row["received_at"],
         "updatedAt": row["updated_at"],
         "truncated": bool(row["truncated"]),
@@ -173,6 +176,7 @@ def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_ma
         "started_at": body.startedAt,
         "ended_at": body.endedAt,
         "expected_calls": expected,
+        "cost": body.cost,
     }
     # A later call that leaves a field out keeps what an earlier call stored.
     # status reads the parameter: excluded.status already holds the insert's 'running' default.
@@ -182,8 +186,8 @@ def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_ma
     pk = db.execute(
         text(
             "INSERT INTO governance_agent_traces (id, org_id, system_id, trace_id, name, status, input, output, rationale, "
-            "started_at, ended_at, expected_calls, truncated, received_at, updated_at) VALUES (:id, :org, :sid, :tid, :name, COALESCE(:status, 'running'), "
-            ":input, :output, :rationale, :started_at, :ended_at, :expected_calls, :cut, :now, :now) "
+            "started_at, ended_at, expected_calls, cost, truncated, received_at, updated_at) VALUES (:id, :org, :sid, :tid, :name, COALESCE(:status, 'running'), "
+            ":input, :output, :rationale, :started_at, :ended_at, :expected_calls, :cost, :cut, :now, :now) "
             f"ON CONFLICT (system_id, trace_id) DO UPDATE SET {keep}, updated_at = excluded.updated_at RETURNING id"
         ),
         {"id": _new_id(), "org": m.org_id, "sid": system_id, "tid": body.traceId, "cut": False, "now": now, **sent},
@@ -196,14 +200,14 @@ def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_ma
         raise HTTPException(status_code=413, detail=f"A trace holds at most {MAX_TRACE_STEPS} steps; start a new trace id")
     step_keep = ", ".join(
         f"{c} = COALESCE(" + (f"CAST(:{c} AS TEXT)" if c in ("kind", "name", "status") else f"excluded.{c}") + f", governance_agent_trace_steps.{c})"
-        for c in ("parent_id", "kind", "name", "input", "output", "rationale", "status", "error", "started_at", "ended_at")
+        for c in ("parent_id", "kind", "name", "input", "output", "rationale", "status", "error", "started_at", "ended_at", "cost")
     )
     for i, step in enumerate(body.steps, start=1):
         db.execute(
             text(
                 "INSERT INTO governance_agent_trace_steps (trace_pk, step_id, org_id, parent_id, seq, kind, name, input, output, "
-                "rationale, status, error, started_at, ended_at) VALUES (:pk, :step, :org, :parent_id, :seq, COALESCE(:kind, 'other'), "
-                "COALESCE(:name, ''), :input, :output, :rationale, COALESCE(:status, 'ok'), :error, :started_at, :ended_at) "
+                "rationale, status, error, started_at, ended_at, cost) VALUES (:pk, :step, :org, :parent_id, :seq, COALESCE(:kind, 'other'), "
+                "COALESCE(:name, ''), :input, :output, :rationale, COALESCE(:status, 'ok'), :error, :started_at, :ended_at, :cost) "
                 # A re-sent step keeps its place and whatever this call left out.
                 f"ON CONFLICT (trace_pk, step_id) DO UPDATE SET {step_keep}"
             ),
@@ -222,6 +226,7 @@ def record_trace(system_id: str, body: TraceBody, m: OrgMembership = Depends(_ma
                 "error": _text(step.error, cut),
                 "started_at": step.startedAt,
                 "ended_at": step.endedAt,
+                "cost": step.cost,
             },
         )
     if cut[0]:
@@ -401,8 +406,8 @@ def _prompts(db: Session, system_id: str, start: str, end: str):
     where = "FROM governance_agent_traces WHERE system_id = :sid AND received_at >= :start AND received_at < :end AND input IS NOT NULL AND input <> '\"\"'"
     args = {"sid": system_id, "start": start, "end": end}
     total = db.execute(text(f"SELECT COUNT(*) {where}"), args).scalar()
-    rows = db.execute(text(f"SELECT input {where} ORDER BY received_at DESC LIMIT :n"), {**args, "n": MAX_PROMPTS}).scalars().all()
-    return [[_as_text(_value(r))] for r in rows], total
+    rows = db.execute(text(f"SELECT input, trace_id {where} ORDER BY received_at DESC LIMIT :n"), {**args, "n": MAX_PROMPTS}).fetchall()
+    return [[_as_text(_value(r)), tid] for r, tid in rows], total
 
 
 def _dat01_files(db: Session, system_id: str, params: Dict[str, Any], uploaded=frozenset()) -> Dict[str, bytes]:
@@ -411,15 +416,15 @@ def _dat01_files(db: Session, system_id: str, params: Dict[str, Any], uploaded=f
     current, total = _prompts(db, system_id, week, _utc_now_iso())
     if not current:
         raise _lacking(db, system_id, "input to compare")
-    files = {"current": _csv(["prompt"], current)}
+    files = {"current": _csv(["prompt", "traceId"], current)}  # a sample row keeps the run's id and a hash; the run shows the text while it exists
     notes = [f"the newest {len(current):,} of {total:,} prompts"] if total > len(current) else []
     if "reference" not in uploaded:
         older, before = _prompts(db, system_id, _since(WEEK + BASELINE), week)
         if not older:
             raise HTTPException(status_code=422, detail="Add a reference set of prompts, or send live runs for longer: the four weeks before this one have none")
-        files["reference"] = _csv(["prompt"], older)
+        files["reference"] = _csv(["prompt"], [[p] for p, _ in older])
         notes.append(f"reference: {f'the newest {len(older):,} of {before:,}' if before > len(older) else f'{len(older):,}'} prompts from the four weeks before")
-    params.update({"features": "prompt", "ignore": ""})
+    params.update({"features": "prompt", "ignore": "", "id_column": "traceId"})
     params[NOTE] = "; ".join(notes) or None
     return files
 
@@ -444,12 +449,14 @@ def _agt02_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[st
 
 
 def _mon05_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
-    """Every tool call of the week by run, in order; two calls repeat when the tool and its input are the same (compared by hash)."""
-    rows, total = _tool_steps(db, system_id, "t.trace_id, s.name, md5(COALESCE(s.input, ''))")
+    """Every tool call of the week by run, in order; two calls repeat when the tool and its input are the same (compared by hash).
+    Each row carries its run's spend: the run's own cost, else the sum of its steps' (every kind), blank when none was sent."""
+    spend = "COALESCE(t.cost, (SELECT SUM(c.cost) FROM governance_agent_trace_steps c WHERE c.trace_pk = t.id))"
+    rows, total = _tool_steps(db, system_id, f"t.trace_id, s.name, md5(COALESCE(s.input, '')), {spend}")
     if not rows:
         raise _lacking(db, system_id, "tool calls")
     params[PARTIAL] = _capped(params, len(rows), total, "tool calls")
-    return {"calls": _csv(["run_id", "tool", "args"], rows)}
+    return {"calls": _csv(["run_id", "tool", "args", "run_cost"], rows)}
 
 
 def _tst06_files(db: Session, system_id: str, params: Dict[str, Any]) -> Dict[str, bytes]:
@@ -728,6 +735,7 @@ def get_trace(system_id: str, trace_id: str, m: OrgMembership = Depends(_member)
             "error": s["error"],
             "startedAt": s["started_at"],
             "endedAt": s["ended_at"],
+            "cost": s["cost"],
         }
         for s in steps
     ]
