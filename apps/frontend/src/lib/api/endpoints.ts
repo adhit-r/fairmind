@@ -180,6 +180,7 @@ export const API_ENDPOINTS = {
       `/api/v1/ai-governance/organizations/${orgId}/evidence-mappings/${mappingId}/review`,
     estateGates: '/api/v1/ai-governance/estate/gates',
     estateFrameworks: '/api/v1/ai-governance/estate/frameworks',
+    estateFailedRuns: '/api/v1/ai-governance/estate/failed-runs',
     frameworkSystems: (frameworkKey: string) => `/api/v1/ai-governance/frameworks/${encodeURIComponent(frameworkKey)}/systems`,
   },
 

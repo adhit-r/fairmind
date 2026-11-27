@@ -9,7 +9,7 @@ export const FRAMEWORK_SCOPES = ['all', 'needs_attention'] as const
 export const WAITING_KINDS = ['all', 'approval', 'run', 'audit', 'policy'] as const
 
 // ponytail: loose on purpose, the real renderers are typed where they are written (AskBoard.tsx).
-export type BoardRenderers = Record<'Board' | 'ReleaseMatrix' | 'WaitingOnYou' | 'FrameworkReadiness' | 'EvalCompare' | 'SystemTimeline' | 'Note', (arg: { props: any; renderNode: any }) => any>
+export type BoardRenderers = Record<'Board' | 'ReleaseMatrix' | 'WaitingOnYou' | 'FrameworkReadiness' | 'FailedRunsTrend' | 'EvalCompare' | 'SystemTimeline' | 'Note', (arg: { props: any; renderNode: any }) => any>
 
 export function buildAskLibrary(r: BoardRenderers) {
   const ReleaseMatrix = defineComponent({
@@ -31,6 +31,12 @@ export function buildAskLibrary(r: BoardRenderers) {
       'The frameworks the organisation follows, each with a bar of how many of its requirements are met, in progress, need attention or not started. scope "needs_attention" keeps only frameworks with requirements that need attention.',
     props: z.object({ scope: z.enum(FRAMEWORK_SCOPES) }),
     component: r.FrameworkReadiness,
+  })
+  const FailedRunsTrend = defineComponent({
+    name: 'FailedRunsTrend',
+    description: 'A bar chart of how many fairness, monitoring and evaluation runs failed in each of the last eight weeks, across all systems. It counts failed runs, not failing checks.',
+    props: z.object({}),
+    component: r.FailedRunsTrend,
   })
   // A system is named by the id given in the facts, never by name. The widget reads that system through the
   // signed-in user's own organisation, so an id from another organisation or a made-up one finds nothing.
@@ -57,15 +63,16 @@ export function buildAskLibrary(r: BoardRenderers) {
   const Board = defineComponent({
     name: 'Board',
     description: 'The root. Widgets stack top to bottom, so put the one that answers the question first.',
-    props: z.object({ widgets: z.array(z.union([ReleaseMatrix.ref, WaitingOnYou.ref, FrameworkReadiness.ref, EvalCompare.ref, SystemTimeline.ref, Note.ref])).max(4) }),
+    props: z.object({ widgets: z.array(z.union([ReleaseMatrix.ref, WaitingOnYou.ref, FrameworkReadiness.ref, FailedRunsTrend.ref, EvalCompare.ref, SystemTimeline.ref, Note.ref])).max(4) }),
     component: r.Board,
   })
-  return createLibrary({ root: 'Board', components: [Board, ReleaseMatrix, WaitingOnYou, FrameworkReadiness, EvalCompare, SystemTimeline, Note] })
+  return createLibrary({ root: 'Board', components: [Board, ReleaseMatrix, WaitingOnYou, FrameworkReadiness, FailedRunsTrend, EvalCompare, SystemTimeline, Note] })
 }
 
 export const BOARD_EXAMPLES = [
   'root = Board([m, w])\nm = ReleaseMatrix("failing")\nw = WaitingOnYou("all")',
   'root = Board([f])\nf = FrameworkReadiness("needs_attention")',
+  'root = Board([m, k])\nm = ReleaseMatrix("failing")\nk = FailedRunsTrend()',
   'root = Board([c, t])\nc = EvalCompare("<system id from the facts>")\nt = SystemTimeline("<system id from the facts>")',
   'root = Board([w, n])\nw = WaitingOnYou("approval")\nn = Note("Decisions open on each system\'s own page.")',
 ]

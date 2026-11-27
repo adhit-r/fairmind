@@ -6,7 +6,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Renderer } from '@openuidev/react-lang'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { useSystemContext } from '@/components/workflow/SystemContext'
-import { useEstateFrameworks, useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
+import { useEstateFailedRuns, useEstateFrameworks, useEstateGates, type EstateGate } from '@/lib/api/hooks/useEstate'
 import { useNeedsYou } from '@/astryx/data/needsYou'
 import { checkCell, type CellState } from '@/components/ui/matrix'
 import '@/astryx/pages/frameworks.css'
@@ -142,6 +142,30 @@ function FrameworkReadiness({ props }: { props: { scope: (typeof FRAMEWORK_SCOPE
   )
 }
 
+function FailedRunsTrend() {
+  const { data, loading, error } = useEstateFailedRuns()
+  if (loading && !data) return <Skeleton height={96} />
+  if (error) return <p className="fm-askb-note">The weekly counts could not load: {error}</p>
+  const weeks = data ?? []
+  const top = Math.max(1, ...weeks.map((w) => w.failed))
+  const total = weeks.reduce((n, w) => n + w.failed, 0)
+  return (
+    <section className="fm-askb-card fm-askb-trend" aria-label="Failed runs by week">
+      <h3>Failed runs by week</h3>
+      <div className="fm-askb-bars" role="img" aria-label={`Failed runs per week: ${weeks.map((w) => w.failed).join(', ')}`}>
+        {weeks.map((w) => (
+          <div key={w.weekStart}>
+            <span>{w.failed}</span>
+            <i style={{ height: `${Math.round((w.failed / top) * 100)}%`, minHeight: w.failed ? 4 : 1 }} />
+            <time dateTime={w.weekStart}>{day(`${w.weekStart}T12:00:00`)}</time>
+          </div>
+        ))}
+      </div>
+      {!total && <p className="fm-askb-note">No run failed in these eight weeks.</p>}
+    </section>
+  )
+}
+
 const RUN_TEXT: Record<Exclude<ResultStatus, 'not_run'>, Pill> = {
   passed: { text: 'Passed', tone: 'ok' },
   failed: { text: 'Failed', tone: 'fail' },
@@ -258,6 +282,7 @@ const library = buildAskLibrary({
   ReleaseMatrix,
   WaitingOnYou,
   FrameworkReadiness,
+  FailedRunsTrend,
   EvalCompare,
   SystemTimeline,
   Note: ({ props }) => <p className="fm-askb-note">{props.text}</p>,

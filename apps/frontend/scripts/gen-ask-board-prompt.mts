@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { BOARD_EXAMPLES, BOARD_RULES, buildAskLibrary } from '../src/astryx/ask/boardSpec.ts'
 
 const none = () => null
-const library = buildAskLibrary({ Board: none, ReleaseMatrix: none, WaitingOnYou: none, Note: none })
+const library = buildAskLibrary({ Board: none, ReleaseMatrix: none, WaitingOnYou: none, FrameworkReadiness: none, FailedRunsTrend: none, EvalCompare: none, SystemTimeline: none, Note: none })
 const prompt = library.prompt({
   preamble: 'The board field is an OpenUI Lang program.',
   additionalRules: BOARD_RULES,
