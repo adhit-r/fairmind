@@ -1,11 +1,12 @@
 // Passes every request to the app. When the app is down (tunnel or container restarting),
 // a browser page load gets a calm 503 page that retries on its own; API calls get the error as is.
+// Temporary outage copy for the database move; restore the "updating" copy after cutover (README, Database).
 // ponytail: free plan allows 100k Worker requests a day; past that, set the route to fail open.
 const DOWN = new Set([502, 503, 504, 520, 521, 522, 523, 524, 530])
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FairMind is updating</title>
+<title>FairMind is offline for maintenance</title>
 <style>
 :root{--bg:#f4f4f2;--card:#fff;--ink:#15171a;--ink2:#5a5f68;--line:rgba(21,23,26,.08);--brand:#ff6b35}
 @media (prefers-color-scheme:dark){:root{--bg:#121315;--card:#1b1d20;--ink:#f1f1ef;--ink2:#a3a8b0;--line:rgba(255,255,255,.1)}}
@@ -21,8 +22,8 @@ small{display:block;margin-top:18px;color:var(--ink2);font-size:12px}
 </style></head>
 <body><main role="status" aria-live="polite">
 <div class="mark" aria-hidden="true"></div>
-<h1>FairMind is updating</h1>
-<p>A new version is being installed. This usually takes under a minute.</p>
+<h1>FairMind is offline for maintenance</h1>
+<p>We are moving our database to new hosting. We expect FairMind to be back on 1 December.</p>
 <small id="s">This page reloads by itself when FairMind is back.</small>
 </main>
 <script>
