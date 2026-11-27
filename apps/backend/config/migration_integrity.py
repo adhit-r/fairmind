@@ -445,9 +445,9 @@ FROZEN_POSTGRESQL_ASSURANCE_CATALOGS: Mapping[int, FrozenPostgreSQLCatalog] = Ma
 # Catalogue flag reviews ship through the runtime setup script, independently
 # of the Assurance V2 operator chain.
 FROZEN_EVALUATION_REVIEW_MIGRATION = FrozenMigration(
-    "033-evaluation-reviews-v1",
-    "c73b5d99e75f86803dbd88acb8e9638ebb24127a24e0ddc2cf7f78fb2b3f3750",
-    _MIGRATIONS / "033_evaluation_reviews.sql",
+    "034-evaluation-reviews-v1",
+    "fac00bd9c175ea6ff668aba3ffccc29bd1bb86e63e387620051bfa9e87bc341b",
+    _MIGRATIONS / "034_evaluation_reviews.sql",
 )
 _EVALUATION_REVIEW_CATALOG_SPEC = PostgreSQLCatalogSpec(
     frozenset({"governance_evaluation_reviews"}),

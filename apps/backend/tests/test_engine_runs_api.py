@@ -719,7 +719,7 @@ def test_flagged_items_wait_for_a_persons_review_and_the_verdict_is_stored_as_a_
     # 033's triggers make the review record append-only: no decision can be rewritten or removed
     raw = tmp_database.raw_connection()  # the driver's own execute: the plpgsql body's % is not a bind placeholder
     try:
-        raw.cursor().execute((Path(__file__).resolve().parents[1] / "migrations" / "033_evaluation_reviews.sql").read_text())
+        raw.cursor().execute((Path(__file__).resolve().parents[1] / "migrations" / "034_evaluation_reviews.sql").read_text())
         raw.commit()
     finally:
         raw.close()
