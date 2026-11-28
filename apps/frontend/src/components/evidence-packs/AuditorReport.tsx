@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { PackManifest } from '@/lib/api/hooks/useEvidencePacks'
 import { READINESS_LABEL, READINESS_OF, READINESS_ORDER, ReadinessBar, readinessCounts, type ReqState } from '@/app/(dashboard)/frameworks/parts'
 import { PackSummaryView } from './PackSummaryView'
+import { LedgerCard, LedgerCheckCard, useLedgerCheck } from './LedgerSection'
 
 const WEAKEST: ReqState[] = ['fails', 'stale', 'open', 'none', 'planned', 'estimated', 'partial', 'attested', 'excluded', 'proven']
 const weaker = (a: ReqState, b: ReqState) => (WEAKEST.indexOf(a) <= WEAKEST.indexOf(b) ? a : b)
@@ -70,6 +71,7 @@ const PILL: Record<string, string> = { met: 'ar-pill met', progress: 'ar-pill pr
 export function AuditorReport({ manifest, manifestHash, expiresAt, verifyHint }: { manifest: PackManifest; manifestHash: string; expiresAt?: string | null; verifyHint?: React.ReactNode }) {
   const statement = useMemo(() => statementOf(manifest), [manifest])
   const integrity = useIntegrity(manifest, manifestHash)
+  const ledger = useLedgerCheck(manifest)
   const [filter, setFilter] = useState<'all' | 'notmet'>('all')
   const org = manifest.organisation
   const excluded = manifest.systems.flatMap((s) => (s.controlApplicability ?? []).filter((c) => c.applicability === 'not_applicable').map((c) => ({ ...c, system: s.system.name })))
@@ -78,7 +80,7 @@ export function AuditorReport({ manifest, manifestHash, expiresAt, verifyHint }:
   return (
     <div className="ar">
       <section className="ar-top">
-        <div className="ar-card ar-cover">
+        <div className="ar-card ar-cover" style={{ gridColumn: '1 / -1' }}>
           <span className="ar-eyebrow">{statement.map((f) => f.name).join(' · ') || manifest.frameworks.join(' · ')}</span>
           <h1>{manifest.title}</h1>
           <dl className="ar-facts">
@@ -102,6 +104,7 @@ export function AuditorReport({ manifest, manifestHash, expiresAt, verifyHint }:
           </p>
           <code className="ar-hash">sha256 {manifestHash.slice(0, 12)}…{manifestHash.slice(-6)}</code>
         </div>
+        <LedgerCheckCard state={ledger} />
       </section>
 
       {statement.map((fw) => {
@@ -164,6 +167,8 @@ export function AuditorReport({ manifest, manifestHash, expiresAt, verifyHint }:
         </section>
       )}
 
+      {manifest.ledger && ledger.status !== 'none' && ledger.status !== 'empty' && <LedgerCard chain={manifest.ledger} state={ledger} />}
+
       <section className="ar-two">
         <div className="ar-card">
           <h2>Systems in scope {manifest.systems.length}</h2>
@@ -177,7 +182,7 @@ export function AuditorReport({ manifest, manifestHash, expiresAt, verifyHint }:
           <h2>Check it yourself, offline</h2>
           <p className="ar-muted">You do not have to trust this page. Save the pack as pack.json, then on any machine:</p>
           <pre className="ar-pre">{`pipx install fairmind-cli\nfairmind verify pack.json`}</pre>
-          <p className="ar-muted">It recomputes the manifest hash and each system’s evidence chain with no network, and exits 0 only when both match.</p>
+          <p className="ar-muted">It recomputes the manifest hash, each system’s evidence chain and, for packs that carry one, the organisation ledger, with no network, and exits 0 only when all of them match.</p>
           {verifyHint}
         </div>
       </section>
