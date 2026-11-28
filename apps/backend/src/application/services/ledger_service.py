@@ -2,7 +2,7 @@
 
 Each entry's hash is SHA-256 over its own fields and the previous entry's hash, so changing or removing an entry
 breaks every hash after it. append() runs in the caller's transaction (the caller commits), so an entry exists only if
-the change it records does. Keep payloads to ids, hashes and counts: the ledger is permanent, so no names or emails.
+the change it records does. Keep payloads to ids, hashes, counts and text: the ledger is permanent, so no names or emails, and no floats (a pack saved by a browser rewrites 1.0 as 1, which would break the hash).
 """
 
 from __future__ import annotations
@@ -69,14 +69,35 @@ def entries(db: Session, org_id: str, subject_type: Optional[str] = None, subjec
     ]
 
 
-def verify(db: Session, org_id: str) -> Dict[str, Any]:
-    """Walk the whole chain from the start. brokenAt is the first seq that no longer matches, else None."""
+def export(db: Session, org_id: str) -> List[Dict[str, Any]]:
+    """The whole chain with every field its hashes cover, oldest first, so a reader can recompute it without the database."""
     rows = db.execute(text("SELECT * FROM ledger_entries WHERE org_id = :o ORDER BY seq"), {"o": org_id}).mappings().all()
+    return [
+        {"org_id": r["org_id"], "seq": r["seq"], "kind": r["kind"], "subject_type": r["subject_type"], "subject_id": r["subject_id"], "actor": r["actor"],
+         "payload": json.loads(r["payload_json"]), "created_at": r["created_at"], "prev_hash": r["prev_hash"], "hash": r["hash"]}
+        for r in rows
+    ]
+
+
+def check(chain: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Pure walk of an exported chain from the start. brokenAt is the first seq that no longer matches, else None."""
     prev, broken = GENESIS, None
-    for index, r in enumerate(rows, start=1):
-        rebuilt = _canonical(r["org_id"], r["seq"], r["kind"], r["subject_type"], r["subject_id"], r["actor"], json.loads(r["payload_json"]), r["created_at"], r["prev_hash"])
-        if r["seq"] != index or r["prev_hash"] != prev or rebuilt != r["canonical_json"] or hashlib.sha256(rebuilt.encode()).hexdigest() != r["hash"]:
-            broken = r["seq"]
+    for index, e in enumerate(chain, start=1):
+        rebuilt = _canonical(e["org_id"], e["seq"], e["kind"], e["subject_type"], e["subject_id"], e["actor"], e["payload"], e["created_at"], e["prev_hash"])
+        if e["seq"] != index or e["prev_hash"] != prev or hashlib.sha256(rebuilt.encode()).hexdigest() != e["hash"]:
+            broken = e["seq"]
             break
-        prev = r["hash"]
-    return {"valid": broken is None, "count": len(rows), "head": prev, "brokenAt": broken}
+        prev = e["hash"]
+    return {"valid": broken is None, "count": len(chain), "head": prev, "brokenAt": broken}
+
+
+def verify(db: Session, org_id: str) -> Dict[str, Any]:
+    """The stored chain, checked from the start, including that each stored canonical form is the one its fields give."""
+    rows = db.execute(text("SELECT seq, canonical_json FROM ledger_entries WHERE org_id = :o ORDER BY seq"), {"o": org_id}).all()
+    chain = export(db, org_id)
+    result = check(chain)
+    if result["valid"]:
+        for e, (_, stored) in zip(chain, rows):
+            if stored != _canonical(e["org_id"], e["seq"], e["kind"], e["subject_type"], e["subject_id"], e["actor"], e["payload"], e["created_at"], e["prev_hash"]):
+                return {**result, "valid": False, "brokenAt": e["seq"]}
+    return result

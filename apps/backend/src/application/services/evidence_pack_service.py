@@ -9,7 +9,8 @@ workflow runs, and the AI policies with their version history. Canonical form:
 ``json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()``;
 from version 2 every float with an integral value is written as an integer first, so a pack
 re-saved by a browser (``JSON.stringify`` writes 0.0 as 0) still verifies.
-``manifest_hash`` is its SHA-256. The chain head of each system is recomputed from its
+From version 3 the manifest also holds the organisation's ledger, every entry with the fields its hash covers
+(see ``ledger_service.check``). ``manifest_hash`` is its SHA-256. The chain head of each system is recomputed from its
 entries with the same fold as ``decision_seal_service.chain_head``, and each entry's hash
 from its fields with ``decision_seal_service.entry_hash``.
 """
@@ -29,10 +30,11 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from src.application.services import ledger_service
 from src.application.services.clause_map_service import CATALOGUE_PATH, _csv_cell as _csv_text, clause_map
 from src.application.services.decision_seal_service import chain_head, entry_hash, evidence_records, list_seals
 
-MANIFEST_VERSION = 2
+MANIFEST_VERSION = 3
 SHARE_TTL = timedelta(days=30)
 
 
@@ -175,6 +177,8 @@ def build_manifest(
         "createdAt": datetime.now(timezone.utc).isoformat(),
         "createdBy": created_by,
         "systems": out,
+        # The organisation's whole ledger from its first entry: shared views, pinned boards and whatever else was recorded.
+        "ledger": ledger_service.export(db, org_id),
     }
 
 
@@ -246,7 +250,8 @@ def verify_manifest(manifest: Dict[str, Any], expected_hash: str) -> Dict[str, A
             "entriesNotMatchingHash": bad,
         })
     hash_ok = hmac.compare_digest(str(expected_hash), actual)
-    return {"intact": hash_ok and all(s["chainIntact"] and not s["entriesNotMatchingHash"] for s in systems), "hashMatches": hash_ok, "expectedHash": expected_hash, "actualHash": actual, "systems": systems}
+    ledger = ledger_service.check(manifest["ledger"]) if manifest.get("version", 1) >= 3 else None  # versions before 3 carry none
+    return {"intact": hash_ok and all(s["chainIntact"] and not s["entriesNotMatchingHash"] for s in systems) and (ledger is None or ledger["valid"]), "ledger": ledger, "hashMatches": hash_ok, "expectedHash": expected_hash, "actualHash": actual, "systems": systems}
 
 
 def new_share_token() -> Dict[str, str]:
