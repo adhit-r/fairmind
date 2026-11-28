@@ -4506,6 +4506,30 @@ class SharedViewReader(Base):
     __table_args__ = (Index("ix_shared_view_readers_view_email", "view_id", "email", unique=True),)
 
 
+class LedgerEntry(Base):
+    """One entry on an organisation's hash-chained ledger. Written only through ledger_service.append."""
+
+    __tablename__ = "ledger_entries"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    org_id = Column(String, nullable=False)
+    seq = Column(Integer, nullable=False)
+    kind = Column(String, nullable=False)
+    subject_type = Column(String, nullable=False)
+    subject_id = Column(String, nullable=False)
+    actor = Column(String, nullable=True)
+    payload_json = Column(Text, nullable=False)
+    canonical_json = Column(Text, nullable=False)
+    prev_hash = Column(String, nullable=False)
+    hash = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        Index("ix_ledger_entries_org_seq", "org_id", "seq", unique=True),
+        Index("ix_ledger_entries_subject", "org_id", "subject_type", "subject_id"),
+    )
+
+
 class OrgAIProvider(Base):
     """The model an organization brings for the packs agent: one per organization, key encrypted at rest."""
 
