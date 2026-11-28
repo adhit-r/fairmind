@@ -589,7 +589,17 @@ export class ApiClient {
     return makeRequest()
   }
 
+  /** While set, every GET path is added to it: how a board says which figures it reads. */
+  recorder: Set<string> | null = null
+  /** Set on the page of a shared view: GETs are answered from the sealed responses and never reach the network. */
+  replay: Record<string, unknown> | null = null
+
   async get<T>(endpoint: string, options?: RequestOptions): Promise<ApiResponse<T>> {
+    this.recorder?.add(endpoint)
+    if (this.replay) {
+      const data = this.replay[endpoint] as T | undefined
+      return data === undefined ? { success: false, error: 'This figure is not in the shared view' } : { success: true, data }
+    }
     return this.request<T>(endpoint, { ...options, method: 'GET' })
   }
 

@@ -235,6 +235,8 @@ export const API_ENDPOINTS = {
     ask: '/api/v1/packs/ask',
     boards: '/api/v1/packs/boards',
     board: (id: string) => `/api/v1/packs/boards/${encodeURIComponent(id)}`,
+    sharedViews: '/api/v1/packs/shared-views',
+    sharedView: (id: string) => `/api/v1/packs/shared-views/${encodeURIComponent(id)}`,
     aiProviders: '/api/v1/packs/ai-providers',
     aiProvider: '/api/v1/packs/ai-provider',
     aiProviderTest: '/api/v1/packs/ai-provider/test',

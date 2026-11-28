@@ -122,6 +122,13 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
 }
 
+/** The organisation of a shared view: fixed, with no sign-in and nothing to switch. */
+export function OrgSnapshotProvider({ orgId, children }: { orgId: string; children: ReactNode }) {
+  const org: Organization = { id: orgId, name: 'Shared view', slug: '', owner_id: '', created_at: '', role: 'viewer', permissions: [] };
+  const value: OrgContextType = { organizations: [org], selectedOrg: org, isLoading: false, error: null, selectOrg: () => {}, refreshOrgs: async () => {} };
+  return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
+}
+
 /**
  * Hook to use organization context
  *

@@ -1,8 +1,8 @@
 'use client'
 
 import './askBoard.css'
-import Link from 'next/link'
-import { useMemo, useState, type ReactNode } from 'react'
+import NextLink from 'next/link'
+import { createContext, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import { Renderer } from '@openuidev/react-lang'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { useSystemContext } from '@/components/workflow/SystemContext'
@@ -14,6 +14,14 @@ import { ReadinessBar, readinessCounts } from '@/app/(dashboard)/frameworks/part
 import { useJourneys, type EngineRun, type ResultStatus } from '@/lib/api/hooks/usePacks'
 import { useSystemFile } from '@/lib/api/hooks/useSystemFile'
 import { buildAskLibrary, type FRAMEWORK_SCOPES, type RELEASE_FILTERS, type WAITING_KINDS } from './boardSpec'
+
+/** True inside a shared view: the reader has no sign-in, so a link to a page of the app would lead nowhere and shows as plain text. */
+export const ReadOnlyBoard = createContext(false)
+
+function Link(props: ComponentProps<typeof NextLink>) {
+  if (useContext(ReadOnlyBoard)) return <span className={props.className}>{props.children}</span>
+  return <NextLink {...props} />
+}
 
 type Pill = { text: string; tone: 'fail' | 'ok' | 'part' | 'na' }
 
@@ -93,6 +101,12 @@ function ReleaseMatrix({ props }: { props: { filter: (typeof RELEASE_FILTERS)[nu
 }
 
 function WaitingOnYou({ props }: { props: { kind: (typeof WAITING_KINDS)[number] } }) {
+  // What waits on the person who shared is theirs, not the reader's, so a shared view leaves it out.
+  if (useContext(ReadOnlyBoard)) return <p className="fm-askb-note">Items waiting on the person who shared this board are not part of a shared view.</p>
+  return <WaitingOnYouList props={props} />
+}
+
+function WaitingOnYouList({ props }: { props: { kind: (typeof WAITING_KINDS)[number] } }) {
   const { items, loading } = useNeedsYou()
   const shown = props.kind === 'all' ? items : items.filter((i) => i.kind === props.kind)
   if (loading && !items.length) return <Skeleton height={64} />

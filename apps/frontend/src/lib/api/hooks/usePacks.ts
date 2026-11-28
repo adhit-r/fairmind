@@ -490,6 +490,27 @@ export interface AIProviderTest {
 
 export const useAIProviders = () => useOrgResource<AIProviderOption[]>(API_ENDPOINTS.packs.aiProviders)
 export const useBoards = () => useOrgResource<{ boards: SavedBoard[] }>(API_ENDPOINTS.packs.boards)
+
+export interface SharedViewRow {
+  id: string
+  question: string
+  access: 'named' | 'link'
+  seal: string
+  sealedAt: string
+  expiresAt: string
+  revoked: boolean
+  expired: boolean
+  readers: { email: string; opens: number; lastOpenedAt: string | null }[]
+}
+export interface ShareViewBody {
+  question: string
+  board: string
+  paths: string[]
+  access: 'named' | 'link'
+  emails: string[]
+  days: 7 | 30 | 90
+}
+export const useSharedViews = () => useOrgResource<{ views: SharedViewRow[] }>(API_ENDPOINTS.packs.sharedViews)
 export const useAIProvider = () => useOrgResource<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider)
 
 /** An agent platform the organisation lets FairMind read for configuration audits. The key never comes back. */
@@ -784,6 +805,9 @@ export function usePackActions() {
       ask: (question: string) => send<AskAnswer>(API_ENDPOINTS.packs.ask, (p) => apiClient.post(p, { question }, { timeout: 90_000 })),
       pinBoard: (question: string, board: string) => send<SavedBoard>(API_ENDPOINTS.packs.boards, (p) => apiClient.post(p, { question, board })),
       unpinBoard: (id: string) => send<{ deleted: string }>(API_ENDPOINTS.packs.board(id), (p) => apiClient.delete(p)),
+      shareView: (body: ShareViewBody) =>
+        send<{ id: string; link: string; expiresAt: string; sealedAt: string }>(API_ENDPOINTS.packs.sharedViews, (p) => apiClient.post(p, body, { timeout: 60_000, enableRetry: false })),
+      revokeView: (id: string) => send<{ revoked: string }>(API_ENDPOINTS.packs.sharedView(id), (p) => apiClient.delete(p)),
       saveAIProvider: (body: AIProviderBody) =>
         send<{ config: AIProviderConfig | null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.put(p, body)),
       deleteAIProvider: () => send<{ config: null }>(API_ENDPOINTS.packs.aiProvider, (p) => apiClient.delete(p)),

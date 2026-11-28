@@ -654,6 +654,8 @@ if settings.assurance_v2_enabled:
 else:
     logger.info("Assurance-contract v2 routes are disabled")
 _include_router("api.routes.packs", prefix="/api/v1/packs", tags=["packs"], required=True)
+_include_router("api.routes.shared_views", prefix="/api/v1/packs", tags=["shared-views"], required=True)
+_include_router("api.routes.shared_views", prefix="/api/v1/public", tags=["shared-views-public"], attr="public_router", required=True)
 _include_router("api.routes.evaluation_runs", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.system_targets", prefix="/api/v1/packs", tags=["packs"], required=True)
 _include_router("api.routes.agent_traces", prefix="/api/v1/packs", tags=["packs"], required=True)
