@@ -111,17 +111,33 @@ Present before the first item; collect an explicit affirmative.
 > academic publication and the underlying anonymised response data may be
 > published alongside it for replication.
 >
-> **Questions or withdrawal.** Contact the study team at the address on this
-> page. You may request removal of your responses until the analysis is
-> published.
+> **Questions or withdrawal.** Contact the study team at
+> adhi.r@axonome.xyz. You may request removal of your responses until the
+> analysis is published.
 >
 > Do you consent to take part on these terms? (yes / no)
 
-Institutional review: confirm whether your institution requires ethics
-approval for this study before recruiting. A low-risk professional-judgment
-study with no personal data often qualifies for exemption or expedited
-review, but that determination belongs to the review body, not the study
-team. Record the outcome here before data collection begins.
+**Institutional review: recorded 2026-11-24.** The study team are
+independent researchers with no institutional affiliation, so there is no
+institutional review board to submit to. The team carried out and recorded
+a documented self-review instead, on these grounds:
+
+- Participants are adult professionals giving a professional judgment on
+  fictional system profiles. There is no deception, no vulnerable group, no
+  incentive that could pressure participation, and no risk beyond that of
+  ordinary work.
+- No personal data is stored with responses. Rater identifiers are assigned
+  by the study team; the name-to-identifier linking list is held outside the
+  repository and destroyed when collection closes (RECRUITMENT.md, Section 5).
+- Informed consent is collected before the first item with the text above,
+  and participants may withdraw at any point and request removal until
+  publication.
+
+The paper states that the study had no institutional ethics review, gives
+this rationale, and names the consent and anonymisation measures, so a
+reviewer can judge it. If a co-author gains an institutional affiliation
+before collection opens, submit there for an exemption determination and
+record the outcome here.
 
 ## 5. Operator procedure
 
@@ -145,6 +161,7 @@ team. Record the outcome here before data collection begins.
 
 4. Build the survey to the question spec in Section 2 and the export contract
    in Section 3. The packet is the stimulus; the form collects the answers.
+   For Google Forms, follow Section 5a.
 
 5. Raters must work independently. Do not show one rater another's answers,
    and ask them not to discuss the items until the study closes. H3 is an
@@ -168,6 +185,47 @@ team. Record the outcome here before data collection begins.
        --panel ../../research/fairmind-e/panel/responses/panel_responses.csv \
        --coverage ../../research/fairmind-e/panel/responses/coverage_pre_post.csv
    ```
+
+## 5a. Building the form in Google Forms
+
+One form serves every rater, because each rater's packet already fixes which
+profile is item 1 to item 8. `google_forms_to_long.py` maps each rater's item
+positions back to profiles through `assignment_plan_arms.csv`, so the form
+never asks for a profile reference.
+
+1. Settings: collect no email addresses, do not limit to one response per
+   signed-in account (that requires a Google sign-in, which ties responses to
+   an identity), and turn off "edit after submit".
+2. Section 1: the consent text from Section 4 as a description, then a
+   required question **Consent** (yes / no) that ends the form on "no", then
+   a required short-answer question titled exactly **Rater ID**.
+3. Sections 2 to 9, one per item, each titled "Item N" with the instruction
+   "Answer for item N of your packet". In each, four questions with these
+   titles exactly:
+   - **Item N: release recommendation**: multiple choice, required, options
+     `go`, `conditional_go`, `no_go`, with the rubric from Section 2 as the
+     question description.
+   - **Item N: required evidence**: checkboxes, not required, the six
+     `ENV-1` to `ENV-6` labels from Section 2 in that order.
+   - **Item N: decision confidence**: linear scale 1 to 5, required, labelled
+     "not at all confident in my decision" and "very confident in my
+     decision".
+   - **Item N: confidence score shown**: multiple choice `yes` / `no`, not
+     required, description "Answer only if the item showed a FairMind-E
+     output section". The importer uses it on module-arm items only.
+4. Test end to end with a throwaway response for `R01`, download the CSV
+   (Responses, then the spreadsheet menu, then Download as CSV), and run:
+
+   ```bash
+   python3 research/fairmind-e/panel/google_forms_to_long.py \
+       --export forms_export.csv --out raw_export.csv
+   python3 research/fairmind-e/panel/import_responses.py --responses raw_export.csv
+   ```
+
+   Delete the throwaway response before sending the form to anyone.
+
+Google Forms cannot time individual items, so `time_to_decision_s` is empty
+for every row. No hypothesis uses it; report it as not collected.
 
 ## 6. What each hypothesis draws on
 

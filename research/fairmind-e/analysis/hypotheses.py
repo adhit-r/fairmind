@@ -121,7 +121,8 @@ PANEL_SCHEMA: dict[str, dict[str, Any]] = {
     "recommendation": {"kind": "enum", "values": RECOMMENDATION_LABELS},
     "decision_confidence_1_5": {"kind": "int", "min": 1, "max": 5},
     "decisive_controls": {"kind": "controls"},
-    "time_to_decision_s": {"kind": "float", "min": 0.0},
+    # Google Forms cannot time individual items, so this may be empty.
+    "time_to_decision_s": {"kind": "nullable_float", "min": 0.0},
 }
 
 # 2. Measurement runs: the smoke-harness CSV contract documented in

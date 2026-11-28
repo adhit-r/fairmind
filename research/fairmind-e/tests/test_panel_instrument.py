@@ -30,6 +30,7 @@ def _load(name: str):
 
 build_instrument = _load("build_instrument")
 import_responses = _load("import_responses")
+google_forms_to_long = _load("google_forms_to_long")
 
 
 class ArmAssignmentTest(unittest.TestCase):
@@ -304,6 +305,34 @@ class ImporterTest(unittest.TestCase):
         self.assertEqual(import_responses.parse_controls("env-1, env-2"), ["ENV-1", "ENV-2"])
         self.assertEqual(import_responses.parse_controls(""), [])
         self.assertEqual(import_responses.parse_controls(None), [])
+
+
+class GoogleFormsReshapeTest(unittest.TestCase):
+    def test_wide_export_becomes_one_row_per_item_from_the_plan(self) -> None:
+        plan = {("R01", 1): "P05", ("R01", 2): "P06"}
+        row = {
+            "Timestamp": "2027-01-20 10:00",
+            "Rater ID": " r01 ",
+            "Item 1: release recommendation": "conditional_go",
+            "Item 1: required evidence": "ENV-5 Evidence confidence, ENV-1 Assessment boundary declared",
+            "Item 1: decision confidence": "4",
+            "Item 1: confidence score shown": "No",
+            "Item 2: release recommendation": "",
+        }
+        rows, problems = google_forms_to_long.convert([row], plan)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["profile_id"], "P05")
+        self.assertEqual(rows[0]["controls_required"], "ENV-1;ENV-5")
+        self.assertEqual(rows[0]["confidence_shown"], "no")
+        self.assertEqual(rows[0]["time_to_decision_s"], "")
+        self.assertTrue(any("item 2" in p for p in problems))
+
+    def test_unknown_rater_is_reported_not_guessed(self) -> None:
+        rows, problems = google_forms_to_long.convert(
+            [{"Rater ID": "R99", "Item 1: release recommendation": "go"}], {("R01", 1): "P05"}
+        )
+        self.assertEqual(rows, [])
+        self.assertIn("R99", problems[0])
 
 
 if __name__ == "__main__":

@@ -198,17 +198,35 @@ Working backwards from a target close date:
 | 5 | Mid-window reminder to anyone who has not submitted. |
 | 6 | Close collection. Final reminder 48 hours before close, then import. |
 
+### 6a. Dates for this run
+
+| Dates | Activity |
+| --- | --- |
+| 24 Nov to 11 Dec 2026 | First-wave invitations, screening and confirmation as replies arrive. |
+| 14 Dec 2026 to 8 Jan 2027 | One reminder to non-responders; referral requests to confirmed raters; second wave for short role groups. |
+| 11 Jan 2027 | Identifiers assigned; packets and the form link sent. |
+| 18 Jan to 1 Feb 2027 | Completion window (two weeks), closing 1 Feb 23:59 AoE. |
+| 25 Jan 2027 | Mid-window reminder to anyone who has not submitted. |
+| 30 Jan 2027 | Final reminder, 48 hours before close. |
+
+The panel lands after the ICT4S 2027 paper deadline (20 Jan), so its results
+go to the extended version, not that submission.
+
 Two reminders per person, maximum, ever. A third is pressure, and pressured
 raters produce careless ratings that damage the agreement statistics you are
 trying to measure.
 
 ## 7. Before you send anything
 
-- [ ] Institutional review decision recorded (see `INSTRUMENT.md` Section 4).
-      Do not begin recruiting until this is settled.
-- [ ] Consent text finalised with a real contact address.
-- [ ] Study window dates fixed.
+- [x] Institutional review decision recorded (see `INSTRUMENT.md` Section 4):
+      documented self-review, 2026-11-24.
+- [x] Consent text finalised with a real contact address (adhi.r@axonome.xyz).
+- [x] Study window dates fixed (Section 6a).
 - [ ] Survey form built to the question spec and tested end to end with a
-      throwaway response, which is then deleted before real collection.
-- [ ] `build_instrument.py` run, so packets exist to send.
+      throwaway response, which is then deleted before real collection
+      (Google Forms; `INSTRUMENT.md` Section 5a).
+- [x] `build_instrument.py` run, so packets exist to send.
 - [ ] Linking-list location chosen, outside the repository.
+
+Invitations may go out before the form exists; packets and the form link go
+out only once the form has passed its end-to-end test.
