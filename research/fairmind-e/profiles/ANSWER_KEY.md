@@ -13,13 +13,13 @@ and `tests/test_profiles.py`.
 | P01 | low+measured | measured | 0.93 | measured | low | go | false |
 | P02 | low+estimated | vendor_reported | 0.50 | estimated | low | go | false |
 | P03 | low+unknown | manual | 0.30 | unknown | low | conditional_go | true |
-| P04 | medium+measured | measured | 0.93 | measured | medium | conditional_go | false |
-| P05 | medium+estimated | vendor_reported | 0.50 | estimated | medium | conditional_go | false |
+| P04 | medium+measured | measured | 0.93 | measured | medium | conditional_go | true |
+| P05 | medium+estimated | vendor_reported | 0.50 | estimated | medium | conditional_go | true |
 | P06 | medium+unknown | manual | 0.30 | unknown | medium | no_go | true |
-| P07 | high+measured | measured | 0.93 | measured | high | conditional_go | false |
+| P07 | high+measured | measured | 0.93 | measured | high | conditional_go | true |
 | P08 | high+estimated | vendor_reported | 0.50 | estimated | high | no_go | true |
 | P09 | high+unknown | unknown | 0.00 | unknown | high | no_go | true |
-| P10 | low+unknown | manual | 0.30 | unknown | low | conditional_go | false |
+| P10 | low+unknown | manual | 0.30 | unknown | low | conditional_go | true |
 | P11 | high+measured | measured | 0.93 | measured | high | conditional_go | false |
 | P12 | medium+estimated | vendor_reported | 0.50 | estimated | medium | conditional_go | true |
 
@@ -81,12 +81,12 @@ A manual FLOP worksheet caps evidence at 0.30, inside the unknown band, while im
 - Expected recommendation: conditional_go
 - Expected risk tier: medium
 - Expected confidence: 0.93 (measured band, provenance measured)
-- Expected approval blocking: false
+- Expected approval blocking: true
 - Dated mitigation: true
 - Owned exception: false
-- Control coverage: ENV-1 present | ENV-2 present | ENV-3 present | ENV-4 missing | ENV-5 present | ENV-6 present
-- Coverage rate: 0.8333
-- Mitigation design: Dated mitigation documented: approval_blocking is false.
+- Control coverage: ENV-1 present | ENV-2 present | ENV-3 present | ENV-4 missing | ENV-5 present | ENV-6 missing
+- Coverage rate: 0.6667
+- Mitigation design: Dated mitigation plan only: approval_blocking stays true until it is re-measured.
 
 Metered fine-tune evidence scores 0.93 in the measured band and 1350 kgCO2e sits mid-range in the medium tier, so the (medium, measured) cell returns conditional_go. The dated solar-PPA migration plan documents mitigation, so the conditional release is not approval-blocking.
 
@@ -96,12 +96,12 @@ Metered fine-tune evidence scores 0.93 in the measured band and 1350 kgCO2e sits
 - Expected recommendation: conditional_go
 - Expected risk tier: medium
 - Expected confidence: 0.50 (estimated band, provenance vendor_reported)
-- Expected approval blocking: false
+- Expected approval blocking: true
 - Dated mitigation: true
 - Owned exception: false
-- Control coverage: ENV-1 present | ENV-2 missing | ENV-3 present | ENV-4 present | ENV-5 present | ENV-6 present
-- Coverage rate: 0.8333
-- Mitigation design: Dated mitigation documented: approval_blocking is false (contrast with P12).
+- Control coverage: ENV-1 present | ENV-2 missing | ENV-3 present | ENV-4 present | ENV-5 present | ENV-6 missing
+- Coverage rate: 0.6667
+- Mitigation design: Dated mitigation plan only: approval_blocking stays true until it is re-measured (as P12, which has none).
 
 The claimed 0.88 confidence is recorded but not used: vendor-reported dashboard evidence is scored at the 0.50 class midpoint, landing in the estimated band, while 0.0038 kgCO2e per 1000 requests is medium impact. The (medium, estimated) cell returns conditional_go and the dated hydro-region migration keeps it from blocking approval. The undisclosed kilowatt-hours leave ENV-2 uncovered.
 
@@ -126,12 +126,12 @@ The manual estimate scores 0.30, in the unknown band, while 4.6 kgCO2e per milli
 - Expected recommendation: conditional_go
 - Expected risk tier: high
 - Expected confidence: 0.93 (measured band, provenance measured)
-- Expected approval blocking: false
+- Expected approval blocking: true
 - Dated mitigation: true
 - Owned exception: false
-- Control coverage: ENV-1 present | ENV-2 present | ENV-3 present | ENV-4 missing | ENV-5 present | ENV-6 present
-- Coverage rate: 0.8333
-- Mitigation design: Dated mitigation documented: approval_blocking is false (contrast with the P11 exception path in the same cell).
+- Control coverage: ENV-1 present | ENV-2 present | ENV-3 present | ENV-4 missing | ENV-5 present | ENV-6 missing
+- Coverage rate: 0.6667
+- Mitigation design: Dated mitigation plan only: approval_blocking stays true until it is re-measured (contrast with the P11 exception path in the same cell).
 
 IPMI-metered training evidence scores 0.93 in the measured band and 62,320 kgCO2e is high impact, so the (high, measured) cell returns conditional_go. The dated scheduling and energy-budget plan documents mitigation, so approval is not blocked.
 
@@ -171,12 +171,12 @@ The vendor discloses nothing, so provenance is unknown and confidence is forced 
 - Expected recommendation: conditional_go
 - Expected risk tier: low
 - Expected confidence: 0.30 (unknown band, provenance manual)
-- Expected approval blocking: false
+- Expected approval blocking: true
 - Dated mitigation: true
 - Owned exception: false
-- Control coverage: ENV-1 present | ENV-2 present | ENV-3 present | ENV-4 present | ENV-5 present | ENV-6 present
-- Coverage rate: 1
-- Mitigation design: Dated evidence-improvement mitigation documented: approval_blocking is false (contrast with P03).
+- Control coverage: ENV-1 present | ENV-2 present | ENV-3 present | ENV-4 present | ENV-5 present | ENV-6 missing
+- Coverage rate: 0.8333
+- Mitigation design: Dated evidence-improvement plan only: approval_blocking stays true until it is re-measured (as P03, which has none).
 
 A documented manual worksheet scores 0.30, in the unknown band, with low impact, so the (low, unknown) cell returns conditional_go. Unlike P03, the dated CodeCarbon instrumentation commitment documents mitigation, so the conditional release is not approval-blocking.
 

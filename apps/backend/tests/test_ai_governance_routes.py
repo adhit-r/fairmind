@@ -356,13 +356,12 @@ def test_ai_governance_lifecycle_summary_persists_stage_progression(authenticate
                 "provenance_class": "measured",
                 "uncertainty_pct": 8.0,
                 "confidence_score": 0.92,
-                "mitigation_readiness": "documented",
-                "mitigations_json": [
-                    {
-                        "description": "Shift next run to a lower-carbon region.",
-                        "target_date": "2026-12-31",
-                    }
-                ],
+                "mitigation_readiness": "planned",
+                "exception": {
+                    "owner": "platform",
+                    "expiry": "2099-12-31",
+                    "rationale": "Next run moves to a lower-carbon region; reviewed.",
+                },
             },
         },
     )

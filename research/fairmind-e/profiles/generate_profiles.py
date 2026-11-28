@@ -371,7 +371,7 @@ PROFILES: list[dict[str, Any]] = [
             "confidence_band": "measured",
             "risk_tier": "medium",
             "recommendation": "conditional_go",
-            "approval_blocking": False,
+            "approval_blocking": True,
             "has_dated_mitigation": True,
             "has_exception": False,
             "coverage": {
@@ -380,9 +380,9 @@ PROFILES: list[dict[str, Any]] = [
                 "ENV-3": "present",
                 "ENV-4": "missing",
                 "ENV-5": "present",
-                "ENV-6": "present",
+                "ENV-6": "missing",
             },
-            "coverage_rate": 0.8333,
+            "coverage_rate": 0.6667,
         },
         "rationale": (
             "Metered fine-tune evidence scores 0.93 in the measured band and 1350 "
@@ -390,7 +390,7 @@ PROFILES: list[dict[str, Any]] = [
             "returns conditional_go. The dated solar-PPA migration plan documents "
             "mitigation, so the conditional release is not approval-blocking."
         ),
-        "mitigation_design": "Dated mitigation documented: approval_blocking is false.",
+        "mitigation_design": "Dated mitigation plan only: approval_blocking stays true until it is re-measured.",
     },
     {
         "id": "P05",
@@ -454,7 +454,7 @@ PROFILES: list[dict[str, Any]] = [
             "confidence_band": "estimated",
             "risk_tier": "medium",
             "recommendation": "conditional_go",
-            "approval_blocking": False,
+            "approval_blocking": True,
             "has_dated_mitigation": True,
             "has_exception": False,
             "coverage": {
@@ -463,9 +463,9 @@ PROFILES: list[dict[str, Any]] = [
                 "ENV-3": "present",
                 "ENV-4": "present",
                 "ENV-5": "present",
-                "ENV-6": "present",
+                "ENV-6": "missing",
             },
-            "coverage_rate": 0.8333,
+            "coverage_rate": 0.6667,
         },
         "rationale": (
             "The claimed 0.88 confidence is recorded but not used: vendor-reported "
@@ -475,7 +475,7 @@ PROFILES: list[dict[str, Any]] = [
             "hydro-region migration keeps it from blocking approval. The undisclosed "
             "kilowatt-hours leave ENV-2 uncovered."
         ),
-        "mitigation_design": "Dated mitigation documented: approval_blocking is false (contrast with P12).",
+        "mitigation_design": "Dated mitigation plan only: approval_blocking stays true until it is re-measured (as P12, which has none).",
     },
     {
         "id": "P06",
@@ -618,7 +618,7 @@ PROFILES: list[dict[str, Any]] = [
             "confidence_band": "measured",
             "risk_tier": "high",
             "recommendation": "conditional_go",
-            "approval_blocking": False,
+            "approval_blocking": True,
             "has_dated_mitigation": True,
             "has_exception": False,
             "coverage": {
@@ -627,9 +627,9 @@ PROFILES: list[dict[str, Any]] = [
                 "ENV-3": "present",
                 "ENV-4": "missing",
                 "ENV-5": "present",
-                "ENV-6": "present",
+                "ENV-6": "missing",
             },
-            "coverage_rate": 0.8333,
+            "coverage_rate": 0.6667,
         },
         "rationale": (
             "IPMI-metered training evidence scores 0.93 in the measured band and "
@@ -638,8 +638,8 @@ PROFILES: list[dict[str, Any]] = [
             "mitigation, so approval is not blocked."
         ),
         "mitigation_design": (
-            "Dated mitigation documented: approval_blocking is false "
-            "(contrast with the P11 exception path in the same cell)."
+            "Dated mitigation plan only: approval_blocking stays true until it is "
+            "re-measured (contrast with the P11 exception path in the same cell)."
         ),
     },
     {
@@ -855,7 +855,7 @@ PROFILES: list[dict[str, Any]] = [
             "confidence_band": "unknown",
             "risk_tier": "low",
             "recommendation": "conditional_go",
-            "approval_blocking": False,
+            "approval_blocking": True,
             "has_dated_mitigation": True,
             "has_exception": False,
             "coverage": {
@@ -864,9 +864,9 @@ PROFILES: list[dict[str, Any]] = [
                 "ENV-3": "present",
                 "ENV-4": "present",
                 "ENV-5": "present",
-                "ENV-6": "present",
+                "ENV-6": "missing",
             },
-            "coverage_rate": 1.0,
+            "coverage_rate": 0.8333,
         },
         "rationale": (
             "A documented manual worksheet scores 0.30, in the unknown band, with low "
@@ -874,7 +874,7 @@ PROFILES: list[dict[str, Any]] = [
             "the dated CodeCarbon instrumentation commitment documents mitigation, so "
             "the conditional release is not approval-blocking."
         ),
-        "mitigation_design": "Dated evidence-improvement mitigation documented: approval_blocking is false (contrast with P03).",
+        "mitigation_design": "Dated evidence-improvement plan only: approval_blocking stays true until it is re-measured (as P03, which has none).",
     },
     {
         "id": "P11",

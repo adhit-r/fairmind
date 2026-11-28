@@ -23,6 +23,7 @@ from src.domain.environmental import (
     get_thresholds,
     run_assessment,
 )
+from src.domain.environmental.confidence import normalize_provenance
 from src.domain.environmental.controls import CONTROLS
 
 ENV_EVIDENCE_TYPE = "environmental_impact"
@@ -94,11 +95,66 @@ def _normalise_payload(raw: Any, *, system_id: str | None = None) -> dict[str, A
         payload["measurement_source"] = payload["source"]
 
     # Validate and apply the domain schema's compatibility mapping.
-    return EnvironmentalAssessment(**payload).normalized_payload()
+    normalised = EnvironmentalAssessment(**payload).normalized_payload()
+    # A measured reduction is derived from a baseline assessment, never declared.
+    for mitigation in normalised.get("mitigations_json") or []:
+        mitigation["measured_reduction_pct"] = None
+    return normalised
 
 
-def evaluate_assessment(raw: Any, *, system_id: str | None = None) -> tuple[dict[str, Any], EnvironmentalEngineResult]:
+# Per-functional-unit figures a re-measurement is compared on, in order of preference.
+_REDUCTION_METRICS = ("kg_co2e_per_1m_tokens", "kg_co2e_per_1000_requests")  # ggignore: metric field names, not a secret
+# Only a fresh measurement can show a mitigation worked; a manual figure is a claim.
+_REMEASUREMENT_PROVENANCE = {"measured", "tool_estimated"}
+
+
+def _measured_reduction_pct(current: Mapping[str, Any], baseline: Mapping[str, Any]) -> float | None:
+    """Percent reduction of the current assessment against its baseline, or None if not comparable."""
+    if (
+        current.get("lifecycle_phase") != baseline.get("lifecycle_phase")
+        or current.get("functional_unit") != baseline.get("functional_unit")
+    ):
+        return None
+    now, before = current.get("metrics") or {}, baseline.get("metrics") or {}
+    for key in _REDUCTION_METRICS:
+        a, b = _to_float(now.get(key)), _to_float(before.get(key))
+        if a is not None and b:
+            return round((1.0 - a / b) * 100.0, 2)
+    return None
+
+
+def _measure_mitigations(
+    db: Session, system_id: str, org_id: str, assessment: dict[str, Any]
+) -> None:
+    """Fill measured_reduction_pct on completed mitigations that name a baseline."""
+    provenance = normalize_provenance(
+        assessment.get("provenance_class")
+        or assessment.get("measurement_source")
+        or assessment.get("source")
+    )
+    if provenance not in _REMEASUREMENT_PROVENANCE:
+        return
+    for mitigation in assessment.get("mitigations_json") or []:
+        baseline_id = mitigation.get("baseline_assessment_id")
+        if mitigation.get("status") != "completed" or not baseline_id:
+            continue
+        baseline = get_assessment_by_id(db, system_id, str(baseline_id), org_id=org_id)
+        if baseline is not None:
+            mitigation["measured_reduction_pct"] = _measured_reduction_pct(
+                assessment, baseline.get("assessment") or {}
+            )
+
+
+def evaluate_assessment(
+    raw: Any,
+    *,
+    system_id: str | None = None,
+    db: Session | None = None,
+    org_id: str | None = None,
+) -> tuple[dict[str, Any], EnvironmentalEngineResult]:
     assessment = _normalise_payload(raw, system_id=system_id)
+    if db is not None and system_id and org_id:
+        _measure_mitigations(db, system_id, org_id, assessment)
     result = run_assessment(assessment)
     assessment.update(
         {
@@ -351,7 +407,9 @@ def save_assessment(
     """Evaluate, append, and mirror one environmental assessment."""
     resolved_org_id = resolve_system_org(db, system_id, org_id=org_id)
 
-    assessment, result = evaluate_assessment(assessment_input, system_id=system_id)
+    assessment, result = evaluate_assessment(
+        assessment_input, system_id=system_id, db=db, org_id=resolved_org_id
+    )
     version = _next_version(db, resolved_org_id, system_id)
     assessment_id = str(uuid.uuid4())
     evidence_id = str(uuid.uuid4())
@@ -592,7 +650,6 @@ def update_mitigation(
     mitigations = list(assessment.get("mitigations_json") or [])
     mitigations.append(dict(mitigation))
     assessment["mitigations_json"] = mitigations
-    assessment["mitigation_readiness"] = "documented"
     return save_assessment(
         db,
         system_id,
@@ -697,16 +754,17 @@ def env_gate_status(
         }
     if reco == "conditional_go":
         result = latest.get("result") or {}
-        if (
-            latest.get("mitigationReadiness") != "documented"
-            and not result.get("has_dated_mitigation")
-            and not _valid_exception(latest.get("exception"))
+        if not result.get("has_remeasured_mitigation") and not _valid_exception(
+            latest.get("exception")
         ):
             return {
                 **base,
                 "blocked": True,
                 "code": "environmental_mitigation_required",
-                "reason": "conditional_go requires documented mitigation or a valid owner/expiry/rationale exception.",
+                "reason": (
+                    "conditional_go requires a completed mitigation re-measured against "
+                    "a baseline assessment, or a valid owner/expiry/rationale exception."
+                ),
             }
     return {**base, "blocked": False, "code": "pass", "reason": ""}
 

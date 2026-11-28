@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "claim": "FairMind-E makes environmental release decisions machine-checkable from provenance, impact, mitigation, exceptions, and offset disclosure.",
   "cases": [
     {
@@ -57,7 +57,7 @@
     },
     {
       "id": "measured_training_high_documented",
-      "description": "Measured high-impact training can proceed only as conditional with documented mitigation.",
+      "description": "Measured high-impact training can proceed only as conditional with a re-measured mitigation.",
       "expected": {
         "recommendation": "conditional_go",
         "approval_blocking": false,
@@ -78,7 +78,7 @@
         "uncertainty_pct": 5.0,
         "confidence_score": 0.94,
         "mitigation_readiness": "documented",
-        "mitigations_json": [{"description": "Region shift and quantization required", "target_date": "2026-11-30"}],
+        "mitigations_json": [{"description": "Region shift and quantization applied, then the run re-measured", "status": "completed", "baseline_assessment_id": "baseline-measured_training_high_documented", "measured_reduction_pct": 18.0}],
         "evidence_refs_json": ["evidence://metered/training-high"]
       }
     },
@@ -267,7 +267,7 @@
         "confidence_score": 0.92,
         "intensity_vs_baseline": 1.4,
         "mitigation_readiness": "documented",
-        "mitigations_json": [{"description": "Reduce request amplification", "target_date": "2026-10-31"}],
+        "mitigations_json": [{"description": "Request amplification reduced, then re-measured", "status": "completed", "baseline_assessment_id": "baseline-baseline_bump_low_to_medium", "measured_reduction_pct": 12.0}],
         "evidence_refs_json": ["evidence://metered/baseline-bump"]
       }
     },

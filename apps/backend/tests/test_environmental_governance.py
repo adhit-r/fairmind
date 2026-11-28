@@ -60,7 +60,7 @@ def _assessment(**overrides):
         "provenance_class": "measured",
         "uncertainty_pct": 8.0,
         "confidence_score": 0.92,
-        "mitigation_readiness": "documented",
+        "mitigation_readiness": "planned",
         "mitigations_json": [
             {
                 "description": "Shift the next run to the lowest-carbon region.",
@@ -68,6 +68,12 @@ def _assessment(**overrides):
                 "owner": "platform",
             }
         ],
+        # A dated plan no longer unblocks a conditional_go; the owned exception does.
+        "exception": {
+            "owner": "platform",
+            "expiry": "2099-12-31",
+            "rationale": "Next run moves to the lowest-carbon region; reviewed by platform.",
+        },
     }
     payload.update(overrides)
     return payload

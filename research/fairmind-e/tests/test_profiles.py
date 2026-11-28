@@ -61,12 +61,14 @@ class ProfileMatrixDesignTest(unittest.TestCase):
         generator = load_generator()
         by_id = {p["id"]: p for p in generator.PROFILES}
 
-        # Doubled cells flip blocking (or the unblocking path) inside the cell.
+        # Only an owned exception (P11) or a re-measured mitigation unblocks a
+        # conditional_go; P03, P10 and P12 carry neither.
         self.assertTrue(by_id["P03"]["expected"]["approval_blocking"])
-        self.assertFalse(by_id["P10"]["expected"]["approval_blocking"])
+        self.assertTrue(by_id["P10"]["expected"]["approval_blocking"])
         self.assertTrue(by_id["P12"]["expected"]["approval_blocking"])
-        self.assertFalse(by_id["P05"]["expected"]["approval_blocking"])
-        self.assertFalse(by_id["P07"]["expected"]["approval_blocking"])
+        # A dated plan no longer unblocks: P05 and P07 carry plans only.
+        self.assertTrue(by_id["P05"]["expected"]["approval_blocking"])
+        self.assertTrue(by_id["P07"]["expected"]["approval_blocking"])
         self.assertTrue(by_id["P07"]["expected"]["has_dated_mitigation"])
         self.assertFalse(by_id["P11"]["expected"]["approval_blocking"])
         self.assertTrue(by_id["P11"]["expected"]["has_exception"])

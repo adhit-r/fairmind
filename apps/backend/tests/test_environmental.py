@@ -318,11 +318,20 @@ def test_env6_conditional_go_mitigation_or_exception():
     }
     # No mitigation / exception -> ENV-6 missing.
     assert coverage(assessment)["ENV-6"] == "missing"
-    # Dated mitigation -> present.
-    with_mit = {**assessment, "mitigations_json": [
+    # A dated plan or a declared readiness is not evidence -> still missing.
+    with_plan = {**assessment, "mitigation_readiness": "documented", "mitigations_json": [
         {"description": "Shift training to a low-carbon region", "target_date": "2026-09-01"}
     ]}
-    assert coverage(with_mit)["ENV-6"] == "present"
+    assert coverage(with_plan)["ENV-6"] == "missing"
+    # Completed and re-measured against a baseline with a reduction -> present.
+    remeasured = {"description": "Shifted region", "status": "completed",
+                  "baseline_assessment_id": "a-1", "measured_reduction_pct": 30.0}
+    assert coverage({**assessment, "mitigations_json": [remeasured]})["ENV-6"] == "present"
+    # No baseline, or a measured increase (the bfloat16 case), does not count.
+    no_baseline = {**remeasured, "baseline_assessment_id": None}
+    assert coverage({**assessment, "mitigations_json": [no_baseline]})["ENV-6"] == "missing"
+    worse = {**remeasured, "measured_reduction_pct": -4071.0}
+    assert coverage({**assessment, "mitigations_json": [worse]})["ENV-6"] == "missing"
     # Owned, dated, justified exception -> present.
     with_exc = {**assessment, "exception": {
         "owner": "grc-lead", "expiry": "2026-12-31", "rationale": "One-off research run"
@@ -347,7 +356,7 @@ def test_engine_high_impact_estimated_confidence_is_no_go():
     assert result.recommendation == "no_go"
 
 
-def test_engine_conditional_go_blocks_without_dated_mitigation():
+def test_engine_conditional_go_blocks_until_mitigation_is_remeasured():
     payload = {
         "lifecycle_phase": "training",
         "boundary": "scope 2",
@@ -364,8 +373,19 @@ def test_engine_conditional_go_blocks_without_dated_mitigation():
     payload["mitigations"] = [
         {"description": "Quantise to 4-bit and re-measure", "target_date": "2026-12-01"}
     ]
-    result2 = run_assessment(payload)
-    assert result2.mitigation_blocking is False
+    planned = run_assessment(payload)
+    assert planned.has_dated_mitigation is True
+    assert planned.mitigation_blocking is True
+    assert planned.mitigation_readiness == "planned"
+
+    payload["mitigations"] = [{
+        "description": "Quantised to 4-bit", "status": "completed",
+        "baseline_assessment_id": "a-1", "measured_reduction_pct": 22.0,
+    }]
+    remeasured = run_assessment(payload)
+    assert remeasured.has_remeasured_mitigation is True
+    assert remeasured.mitigation_blocking is False
+    assert remeasured.mitigation_readiness == "documented"
 
 
 def test_engine_exception_unblocks_without_relabeling_mitigation():
