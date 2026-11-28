@@ -272,7 +272,9 @@ CANONICAL_FORM = (
     'Chain head per system: h = sha256("fairmind-evidence-chain-v1"); for each evidence entry in order, '
     'h = sha256(f"{h}:{entry.hash}"). From version 2 each entry hash is also recomputed: sha256 of json.dumps('
     '{id, type, title, source, content, confidence as float, status, metadata, created_at}, sort_keys=True, '
-    'separators=(",", ":")). The file is {"manifest": {...}, "manifestHash": "..."}.'
+    'separators=(",", ":")). From version 3 the manifest holds the organisation ledger: entry i must have seq i, prev_hash equal to the '
+    'hash before it (64 zeros for the first), and hash = sha256(json.dumps({org_id, seq, kind, subject_type, subject_id, actor, payload, '
+    'created_at, prev_hash}, sort_keys=True, separators=(",", ":"))). The file is {"manifest": {...}, "manifestHash": "..."}.'
 )
 
 
@@ -303,6 +305,18 @@ def _chain_head(entries: Sequence[Dict[str, Any]]) -> str:
     return head
 
 
+def _ledger_check(chain: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    prev, broken = "0" * 64, None
+    for index, e in enumerate(chain, start=1):
+        fields = {k: e[k] for k in ("org_id", "seq", "kind", "subject_type", "subject_id", "actor", "payload", "created_at", "prev_hash")}
+        rebuilt = hashlib.sha256(json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if e["seq"] != index or e["prev_hash"] != prev or not hmac.compare_digest(str(e["hash"]), rebuilt):
+            broken = e["seq"]
+            break
+        prev = e["hash"]
+    return {"entries": len(chain), "intact": broken is None, "brokenAt": broken}
+
+
 def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
     """Pure check of a downloaded pack; no network."""
     manifest, expected = document.get("manifest"), document.get("manifestHash")
@@ -321,8 +335,15 @@ def verify_pack(document: Dict[str, Any]) -> Dict[str, Any]:
         system = item.get("system") or {}
         chain_ok = hmac.compare_digest(str(item.get("chainHead")), recomputed)
         systems.append({"name": system.get("name") or system.get("id"), "evidence": len(entries), "chainOk": chain_ok, "entriesNotMatchingHash": bad, "intact": chain_ok and not bad})
+    ledger = None
+    if isinstance(manifest.get("version"), int) and manifest["version"] >= 3:  # earlier packs carry no ledger
+        try:
+            ledger = _ledger_check(manifest["ledger"])
+        except (KeyError, TypeError, AttributeError, ValueError) as exc:
+            raise CliError(f"Malformed ledger entry: {exc!r}") from exc
     hash_ok = hmac.compare_digest(expected, actual)
-    return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "intact": hash_ok and all(s["intact"] for s in systems)}
+    return {"title": manifest.get("title"), "hashOk": hash_ok, "expected": expected, "actual": actual, "systems": systems, "ledger": ledger,
+            "intact": hash_ok and all(s["intact"] for s in systems) and (ledger is None or ledger["intact"])}
 
 
 def _fetch_shared(link: str, args: argparse.Namespace, factory: ClientFactory) -> Dict[str, Any]:
@@ -361,6 +382,9 @@ def cmd_verify(args: argparse.Namespace, factory: ClientFactory, out: Callable[[
             out(f"  {'ok' if s['intact'] else 'BROKEN':<9}{s['name']}  {s['evidence']} evidence records, chain head {'matches' if s['chainOk'] else 'does not match'}")
             if s["entriesNotMatchingHash"]:
                 out(f"           records that do not match their hash: {', '.join(map(str, s['entriesNotMatchingHash']))}")
+        if result["ledger"]:
+            led = result["ledger"]
+            out(f"  {'ok' if led['intact'] else 'BROKEN':<9}organisation ledger  {led['entries']} entries" + ("" if led["intact"] else f", the chain breaks at entry {led['brokenAt']}"))
         out("")
         out("Pack intact" if result["intact"] else "Pack does NOT verify: it was changed after it was built")
     return EXIT_GO if result["intact"] else EXIT_NO_GO

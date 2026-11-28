@@ -39,7 +39,7 @@ def test_pack_hash_matches_verify_manifest_and_tampering_is_caught():
     pack = _pack(client, sid)
     detail = client.get(f"{GOV}/packs/{pack['id']}").json()
     manifest = detail["manifest"]
-    assert manifest["version"] == 2 and manifest["frameworks"] == ["EUAIA", "ISO42001"]
+    assert manifest["version"] == 3 and manifest["frameworks"] == ["EUAIA", "ISO42001"]
     system = manifest["systems"][0]
     assert system["system"]["id"] == sid and len(system["evidence"]) == 1 and len(system["chainHead"]) == 64
     assert {f["key"] for f in system["clauseMap"]["frameworks"]} <= {"EUAIA", "ISO42001"}
@@ -55,6 +55,28 @@ def test_pack_hash_matches_verify_manifest_and_tampering_is_caught():
     manifest["systems"][0]["evidence"][0]["hash"] = "0" * 64
     tampered = verify_manifest(manifest, detail["manifestHash"])
     assert not tampered["intact"] and not tampered["hashMatches"] and not tampered["systems"][0]["chainIntact"]
+
+
+def test_the_organisation_ledger_is_in_the_pack_and_a_changed_entry_is_caught():
+    from src.application.services import ledger_service
+
+    client = _client("pack-ledger")
+    sid = _system_with_attestation(client)
+    with db_manager.SessionLocal() as session:
+        org_id = session.execute(sql("SELECT org_id FROM governance_ai_systems WHERE id = :id"), {"id": sid}).scalar()
+        ledger_service.append(session, str(org_id), "view.sealed", "shared_view", "v1", "u1", {"readers": 2})
+        ledger_service.append(session, str(org_id), "view.revoked", "shared_view", "v1", "u1", {})
+        session.commit()
+    detail = client.get(f"{GOV}/packs/{_pack(client, sid)['id']}").json()
+    ledger = detail["manifest"]["ledger"]
+    assert [e["kind"] for e in ledger] == ["view.sealed", "view.revoked"] and ledger[1]["prev_hash"] == ledger[0]["hash"]
+    result = verify_manifest(detail["manifest"], detail["manifestHash"])
+    assert result["intact"] and result["ledger"] == {"valid": True, "count": 2, "head": ledger[1]["hash"], "brokenAt": None}
+
+    changed = json.loads(json.dumps(detail["manifest"]))
+    changed["ledger"][0]["payload"]["readers"] = 9
+    outside = verify_manifest(changed, manifest_digest(changed))  # the pack hash recomputed, so only the ledger can show it
+    assert outside["hashMatches"] and not outside["intact"] and outside["ledger"]["brokenAt"] == 1
 
 
 def _browser_round_trip(manifest: dict) -> dict:

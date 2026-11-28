@@ -198,6 +198,32 @@ def test_verify_catches_a_tampered_manifest_field(tmp_path):
     assert code == EXIT_NO_GO and "MISMATCH" in text and "does NOT verify" in text
 
 
+def _ledger_pack(tmp_path):
+    import hashlib
+
+    chain, prev = [], "0" * 64
+    for seq, kind in enumerate(["view.sealed", "view.revoked"], start=1):
+        e = {"org_id": "o1", "seq": seq, "kind": kind, "subject_type": "shared_view", "subject_id": "v1", "actor": "u1", "payload": {"readers": 2}, "created_at": f"2026-11-0{seq}T10:00:00+00:00", "prev_hash": prev}
+        e["hash"] = hashlib.sha256(json.dumps(e, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        chain.append(e)
+        prev = e["hash"]
+    manifest = {"version": 3, "title": "Q4", "systems": [], "ledger": chain}
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    return manifest, digest
+
+
+def test_verify_v3_checks_the_organisation_ledger_and_names_the_broken_entry(tmp_path):
+    manifest, digest = _ledger_pack(tmp_path)
+    code, text, _ = run_cli(["verify", _write(tmp_path, {"manifest": manifest, "manifestHash": digest})], _no_network)
+    assert code == EXIT_GO and "organisation ledger  2 entries" in text and "Pack intact" in text
+
+    import hashlib
+    manifest["ledger"][0]["payload"]["readers"] = 9  # changed, with the pack hash recomputed so only the ledger shows it
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+    code, text, _ = run_cli(["verify", _write(tmp_path, {"manifest": manifest, "manifestHash": digest})], _no_network)
+    assert code == EXIT_NO_GO and "BROKEN" in text and "breaks at entry 1" in text
+
+
 def test_verify_v2_recomputes_entry_hashes_and_survives_a_browser_round_trip(tmp_path):
     import hashlib
 
