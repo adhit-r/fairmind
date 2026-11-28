@@ -159,6 +159,20 @@ export interface PackOrganisation {
   policies?: PackPolicy[]
 }
 
+/** One entry of the organisation ledger, with every field its hash covers (manifest version 3 and later). */
+export interface LedgerEntry {
+  org_id: string
+  seq: number
+  kind: string
+  subject_type: string
+  subject_id: string
+  actor: string | null
+  payload: Record<string, unknown>
+  created_at: string
+  prev_hash: string
+  hash: string
+}
+
 export interface PackManifest {
   version: number
   title: string
@@ -167,6 +181,7 @@ export interface PackManifest {
   createdAt: string
   createdBy: string | null
   systems: PackSystemEntry[]
+  ledger?: LedgerEntry[]
 }
 
 export interface PackDetail extends PackSummary {
