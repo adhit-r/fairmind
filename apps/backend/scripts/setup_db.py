@@ -87,6 +87,7 @@ ALWAYS = (
     "029_internal_audits.sql",
     "033_saved_boards.sql",
     "036_shared_views.sql",
+    "037_ledger.sql",
 )
 
 

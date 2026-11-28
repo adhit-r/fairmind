@@ -30,6 +30,7 @@ async function reading(page: Page, access: 'named' | 'link', reached: string[]) 
     if (step === 'code') return json(route, { sent: true })
     if (step === 'verify') return json(route, { token: 't' }, route.request().postDataJSON().code === '123456' ? 200 : 401)
     if (step === 'open') return json(route, { token: 't' })
+    if (step === 'seal') return json(route, { matchesStored: true, onLedger: true, ledgerSeq: 3, ledgerHash: 'h', ledgerAt: '2026-11-28T14:02:01Z', chainValid: true })
     return route.request().headers()['x-view-token'] ? json(route, content) : json(route, { detail: 'Open the view again to continue' }, 401)
   })
 }
@@ -53,6 +54,8 @@ test.describe('Shared view', () => {
     await expect(page.getByText('Sealed snapshot')).toBeVisible()
     await expect(page.getByText(/sha256 8f3a9c1d/)).toBeVisible()
     await expect(page.getByText('does not certify compliance')).toBeVisible()
+    await page.getByRole('button', { name: 'Verify seal' }).click()
+    await expect(page.getByText("matches entry 3 on the organisation's ledger")).toBeVisible()
     expect(reached).toEqual([]) // every figure came from the seal
   })
 

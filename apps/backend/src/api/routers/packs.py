@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.application.services import ledger_service
 from api.routes.ai_governance import _ensure_tables, _load_json_value, _utc_now_iso
 from src.application.services import evaluation_results
 from api.routes import llm
@@ -1488,6 +1489,7 @@ def pin_board(body: BoardBody, m: OrgMembership = Depends(_member), db: Session 
         text("INSERT INTO saved_boards (id, org_id, user_id, question, board, created_at) VALUES (:id, :org, :user, :question, :board, :at)"),
         {**owner, **{k: board[k] for k in ("id", "question", "board")}, "at": board["createdAt"]},
     )
+    ledger_service.append(db, m.org_id, "board.pinned", "saved_board", board["id"], m.user_id, {"layoutSha256": hashlib.sha256(board["board"].encode()).hexdigest()})
     db.commit()
     return board
 
@@ -1499,10 +1501,19 @@ def unpin_board(board_id: str, m: OrgMembership = Depends(_member), db: Session 
         text("DELETE FROM saved_boards WHERE id = :id AND org_id = :org AND user_id = :user"),
         {"id": board_id, "org": m.org_id, "user": m.user_id},
     ).rowcount
+    if deleted:
+        ledger_service.append(db, m.org_id, "board.unpinned", "saved_board", board_id, m.user_id, {})
     db.commit()
     if not deleted:
         raise HTTPException(status_code=404, detail="Board not found")  # also what another person's board looks like
     return {"deleted": board_id}
+
+
+@router.get("/ledger")
+def read_ledger(subject_type: Optional[str] = None, subject_id: Optional[str] = None, m: OrgMembership = Depends(_manager), db: Session = Depends(get_db)):
+    """The organisation's ledger (newest 200 entries, oldest first) and whether the whole chain still checks out."""
+    _ensure_tables(db)
+    return {"entries": ledger_service.entries(db, m.org_id, subject_type, subject_id), "chain": ledger_service.verify(db, m.org_id)}
 
 
 # --- the organisation's model (bring your own key) -------------------------

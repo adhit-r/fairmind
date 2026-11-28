@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from api.routes.packs import ASK_BOARD_MAX, _manager
 from config.settings import settings
 from database.connection import get_db
+from src.application.services import ledger_service
 from src.application.services.governance_assurance_service import OrgMembership
 from src.application.services.reviewer_notify import decision_email, send_in_background
 
@@ -155,6 +156,10 @@ async def share_view(body: ShareBody, request: Request, m: OrgMembership = Depen
             "data": json.dumps(data), "seal": _seal(question, board, data, sealed_at), "at": sealed_at, "exp": _iso(now + timedelta(days=body.days)),
         },
     )
+    ledger_service.append(
+        db, m.org_id, "view.sealed", "shared_view", view_id, m.user_id,
+        {"seal": _seal(question, board, data, sealed_at), "access": body.access, "readers": len(emails), "expiresAt": _iso(now + timedelta(days=body.days))},
+    )
     if body.access == "named":
         for email in emails:
             db.execute(text("INSERT INTO shared_view_readers (id, view_id, email) VALUES (:id, :v, :e)"), {"id": str(uuid.uuid4()), "v": view_id, "e": email})
@@ -195,6 +200,8 @@ def revoke_view(view_id: str, m: OrgMembership = Depends(_manager), db: Session 
         text("UPDATE shared_views SET revoked_at = :at WHERE id = :id AND org_id = :org AND user_id = :user AND revoked_at IS NULL"),
         {"at": _iso(_now()), "id": view_id, "org": m.org_id, "user": m.user_id},
     ).rowcount
+    if done:
+        ledger_service.append(db, m.org_id, "view.revoked", "shared_view", view_id, m.user_id, {})
     db.commit()
     if not done:
         raise HTTPException(status_code=404, detail="View not found")  # also what another person's view looks like
@@ -284,4 +291,19 @@ def view_content(view_id: str, x_view_token: Optional[str] = Header(default=None
     return {
         "question": row["question"], "board": row["board"], "orgId": row["org_id"], "data": json.loads(row["data_json"]),
         "sealedAt": row["sealed_at"], "seal": row["seal"], "expiresAt": row["expires_at"], "email": email or None,
+    }
+
+
+@public_router.get("/shared-views/{view_id}/seal")
+def view_seal(view_id: str, x_view_token: Optional[str] = Header(default=None), db: Session = Depends(get_db)):
+    """Recompute the seal from what is stored and compare it with the one the ledger took when the view was sealed."""
+    _token_email(view_id, x_view_token)
+    row = _view(db, view_id)
+    recomputed = _seal(row["question"], row["board"], json.loads(row["data_json"]), row["sealed_at"])
+    sealed = next((e for e in ledger_service.entries(db, row["org_id"], "shared_view", view_id) if e["kind"] == "view.sealed"), None)
+    return {
+        "matchesStored": recomputed == row["seal"],
+        "onLedger": bool(sealed) and sealed["payload"].get("seal") == recomputed,  # false for a view sealed before the ledger recorded views
+        "ledgerSeq": sealed["seq"] if sealed else None, "ledgerHash": sealed["hash"] if sealed else None, "ledgerAt": sealed["createdAt"] if sealed else None,
+        "chainValid": ledger_service.verify(db, row["org_id"])["valid"],
     }

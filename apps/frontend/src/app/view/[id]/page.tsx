@@ -58,6 +58,8 @@ export default function SharedViewPage() {
   const [code, setCode] = useState('')
   const [content, setContent] = useState<Content | null>(null)
   const [busy, setBusy] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
+  const [check, setCheck] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(
@@ -66,6 +68,7 @@ export default function SharedViewPage() {
       if (!res.ok) throw new Error(res.status === 404 ? 'gone' : 'Open the view again to continue')
       const c: Content = await res.json()
       apiClient.replay = c.data // the board reads the sealed figures, never the network
+      setToken(token)
       setContent(c)
     },
     [base],
@@ -116,6 +119,28 @@ export default function SharedViewPage() {
     }
   }
 
+  // Recompute the seal on the server and compare it with the entry the ledger took when the view was sealed.
+  const verifySeal = async () => {
+    setBusy(true)
+    setCheck(null)
+    try {
+      const res = await fetch(`${base}/seal`, { headers: { Accept: 'application/json', 'X-View-Token': token ?? '' }, referrerPolicy: 'no-referrer' })
+      if (!res.ok) throw new Error()
+      const r: { matchesStored: boolean; onLedger: boolean; ledgerSeq: number | null; ledgerAt: string | null; chainValid: boolean } = await res.json()
+      setCheck(
+        !r.matchesStored || !r.chainValid
+          ? 'The seal does not match. Do not rely on this view.'
+          : r.onLedger
+            ? `The seal matches entry ${r.ledgerSeq} on the organisation's ledger, recorded ${r.ledgerAt ? day(r.ledgerAt) : ''}. The ledger chain checks out.`
+            : 'The figures match their seal, but the ledger has no entry for this view because it was sealed before views were recorded.',
+      )
+    } catch {
+      setCheck('The seal could not be checked. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (content) {
     return (
       <Frame>
@@ -131,8 +156,12 @@ export default function SharedViewPage() {
               <VStack gap={0}><Text color="secondary" size="sm">Seal</Text><Text weight="semibold">sha256 {content.seal.slice(0, 8)}...{content.seal.slice(-4)}</Text></VStack>
               <VStack gap={0}><Text color="secondary" size="sm">Link expires</Text><Text weight="semibold">{day(content.expiresAt)}</Text></VStack>
             </HStack>
-            <Button label="Print" variant="secondary" onClick={() => window.print()} />
+            <HStack gap={2}>
+              <Button label="Verify seal" onClick={() => void verifySeal()} isDisabled={busy} />
+              <Button label="Print" variant="secondary" onClick={() => window.print()} />
+            </HStack>
           </HStack>
+          {check && <Text role="status">{check}</Text>}
           <ReadOnlyBoard.Provider value>
             <OrgSnapshotProvider orgId={content.orgId}>
               <SystemContextProvider>
