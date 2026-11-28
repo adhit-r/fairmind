@@ -17,6 +17,7 @@ import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Heading, Text } from '@astryxdesign/core/Text'
 
 import { AskBoard } from '@/astryx/ask/AskBoard'
+import { ShareView, SharedViews } from '@/astryx/ask/ShareView'
 import { useAIProvider, usePackActions, type AskAnswer } from '@/lib/api/hooks/usePacks'
 
 /** Prompts that work for any estate; they name no system. */
@@ -147,6 +148,7 @@ function Ask() {
                               isDisabled={pinned[t.id] === 'saving' || pinned[t.id] === 'saved'}
                               onClick={() => void pin(t)}
                             />
+                            {t.answer.board && <ShareView question={t.question} board={t.answer.board} />}
                             {pinned[t.id] && pinned[t.id] !== 'saving' && pinned[t.id] !== 'saved' && <Text color="secondary" size="sm">{pinned[t.id]}</Text>}
                           </HStack>
                         }
@@ -176,6 +178,7 @@ function Ask() {
             ))}
           </>
         )}
+        <SharedViews />
       </VStack>
     </div>
   )

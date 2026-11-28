@@ -4465,6 +4465,47 @@ class SavedBoard(Base):
     created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
 
 
+class SharedView(Base):
+    """A sealed snapshot of an Ask FairMind board, shared read-only with named people or by link.
+
+    data_json holds the responses of the GET paths the board reads, fetched on the server as the person who shared it;
+    seal is the SHA-256 of the question, layout, data and sealed_at."""
+
+    __tablename__ = "shared_views"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    org_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=False)
+    question = Column(Text, nullable=False)
+    board = Column(Text, nullable=False)
+    access = Column(String, nullable=False)  # named | link
+    data_json = Column(Text, nullable=False)
+    seal = Column(String, nullable=False)
+    sealed_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    revoked_at = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=lambda: _utc_now().isoformat())
+
+    __table_args__ = (Index("ix_shared_views_owner", "org_id", "user_id", "created_at"),)
+
+
+class SharedViewReader(Base):
+    """A person a shared view names, with their current one-time code (hash only) and how often they opened it."""
+
+    __tablename__ = "shared_view_readers"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    view_id = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    code_hash = Column(String, nullable=True)
+    code_expires_at = Column(String, nullable=True)
+    code_attempts = Column(Integer, nullable=False, default=0, server_default="0")
+    opens = Column(Integer, nullable=False, default=0, server_default="0")
+    last_opened_at = Column(String, nullable=True)
+
+    __table_args__ = (Index("ix_shared_view_readers_view_email", "view_id", "email", unique=True),)
+
+
 class OrgAIProvider(Base):
     """The model an organization brings for the packs agent: one per organization, key encrypted at rest."""
 

@@ -86,6 +86,7 @@ ALWAYS = (
     "028_framework_scope.sql",
     "029_internal_audits.sql",
     "033_saved_boards.sql",
+    "036_shared_views.sql",
 )
 
 
